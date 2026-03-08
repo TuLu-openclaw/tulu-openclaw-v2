@@ -37,6 +37,31 @@ ClawPanel 是 [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslatio
 
 > 🌐 **官网**: [claw.qt.cool](https://claw.qt.cool/)  |  📦 **下载**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
+## 社区交流
+
+<p align="center">
+  <img src="docs/qr-qq.png" width="140" alt="QQ 群">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/qr-wechat.png" width="140" alt="微信群">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/qr-dy.png" width="140" alt="抖音群">
+</p>
+<p align="center">
+  <a href="https://qt.cool/c/OpenClaw"><strong>QQ 群</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://qt.cool/c/OpenClawWx"><strong>微信群</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://qt.cool/c/OpenClawDY"><strong>抖音群</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://discord.gg/U9AttmsNHh"><strong>Discord</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://yb.tencent.com/gp/i/LsvIw7mdR7Lb"><strong>元宝派</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/qingchencloud/clawpanel/discussions"><strong>Discussions</strong></a>
+</p>
+
+> 💡 一群对 AI Agent 充满热情的开发者和玩家，欢迎加入交流。
+
 ## 下载安装
 
 前往 [Releases](https://github.com/qingchencloud/clawpanel/releases/latest) 页面下载最新版本，根据你的系统选择对应安装包：
@@ -454,35 +479,6 @@ npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.
     </td>
   </tr>
 </table>
-
-## 社区交流
-
-加入社区，交流使用心得、反馈问题、获取最新动态。
-
-<p align="center">
-  <img src="docs/qr-qq.png" width="180" alt="QQ 群二维码">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/qr-wechat.png" width="180" alt="微信群二维码">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/qr-dy.png" width="180" alt="抖音群二维码">
-</p>
-<p align="center">
-  <strong>QQ 交流群</strong>
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <strong>微信交流群</strong>
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <strong>抖音交流群</strong>
-</p>
-
-| 渠道 | 链接 |
-|------|------|
-| QQ 群 | [点击加入](https://qt.cool/c/OpenClaw) |
-| 微信群 | [点击加入](https://qt.cool/c/OpenClawWx) |
-| 抖音群 | [点击加入](https://qt.cool/c/OpenClawDY) |
-| Discord | [加入 Discord](https://discord.gg/U9AttmsNHh) |
-| 元宝派 | [加入元宝派](https://yb.tencent.com/gp/i/LsvIw7mdR7Lb) |
-| GitHub Discussions | [参与讨论](https://github.com/qingchencloud/clawpanel/discussions) |
-| 反馈 Issue | [提交 Issue](https://github.com/qingchencloud/clawpanel/issues/new) |
 
 ## 贡献
 
