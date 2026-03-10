@@ -5,6 +5,21 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.7.3] - 2026-03-10
+
+### 修复 (Fixes)
+
+- **#32 Cookie 解析崩溃** — 修复 Authelia 等反代注入的非法 percent-encoding cookie 导致服务崩溃
+- **#31 Gateway 重启丢失 CORS 配置** — `allowedOrigins` 改为合并模式，不再覆盖用户已有配置
+- **#25 Windows 终端窗口闪烁** — 补全 Skills 安装/搜索、进程列表、端口检测的 `CREATE_NO_WINDOW` 标志
+- **#33 模型测试误报失败** — 非认证 HTTP 错误（400/422）不再误报为失败，兼容阿里 Coding Plan 等提供商
+- **#29 反代 WebSocket 协议不适配** — 自动检测 HTTPS 环境使用 `wss://`，龙虾军团面板链接协议自适应
+- **#23 实时聊天会话列表自动收起** — 切换会话后侧边栏保持展开，提升多会话切换效率
+
+### 改进 (Improvements)
+
+- **模型测试响应格式兼容** — 新增 DashScope `output.text` 格式支持，reasoning 模型兼容增强
+
 ## [0.7.2] - 2026-03-10
 
 ### 新功能 (Features)
