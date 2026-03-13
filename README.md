@@ -406,6 +406,143 @@ npm run tauri build -- --bundles nsis
 
 产物位于 `src-tauri/target/release/` 目录。
 
+## 快速上手
+
+安装完成后，按以下步骤即可开始使用：
+
+### 1. 初始设置
+
+首次启动 ClawPanel 会自动进入**初始设置**页面，引导你完成环境检测：
+
+- ✅ **Node.js** — 自动检测，未安装时提供一键安装
+- ✅ **Git** — 自动检测并配置 HTTPS 模式（解决 SSH 不通问题）
+- ✅ **OpenClaw** — 一键安装，可选汉化版或原版
+
+> 所有步骤均有绿色勾标记，全部通过后点击「前往模型配置」。
+
+### 2. 配置 AI 模型
+
+进入**模型配置**页面，添加至少一个 AI 服务商：
+
+| 服务商 | 获取 API Key |
+|--------|-------------|
+| DeepSeek | [platform.deepseek.com](https://platform.deepseek.com/) |
+| OpenAI | [platform.openai.com](https://platform.openai.com/) |
+| 阿里通义 | [dashscope.console.aliyun.com](https://dashscope.console.aliyun.com/) |
+| Ollama（本地） | 免费，无需 Key，安装后自动检测 |
+
+填入 `Base URL` 和 `API Key`，点击「测试连接」确认可用，然后保存。
+
+### 3. 启动 Gateway
+
+前往**服务管理**页面，点击「启动」按钮启动 Gateway。状态变为绿色即可。
+
+> Gateway 是 OpenClaw 的核心服务，负责处理 AI 对话请求。
+
+### 4. 开始聊天
+
+前往**实时聊天**页面，选择模型后即可开始对话。支持流式输出、Markdown 渲染、多模态图片识别。
+
+---
+
+## Web 版部署指南
+
+Web 版适用于 Linux 服务器（无桌面环境），通过浏览器远程管理 OpenClaw。
+
+### 环境要求
+
+- **Node.js** >= 18（推荐 22 LTS）
+- **Git**（用于 OpenClaw 依赖安装）
+- **端口** 1420（ClawPanel）+ 18789（Gateway）
+
+### 一键部署
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
+```
+
+部署完成后访问 `http://服务器IP:1420`。
+
+### 安全注意事项
+
+> ⚠️ **公网暴露风险**：Web 版默认监听所有网卡。请务必：
+
+1. **设置访问密码** — 首次登录会提示修改默认密码，或在「安全设置」页面配置
+2. **防火墙限制** — 仅开放 1420 端口给可信 IP
+3. **Nginx 反向代理 + HTTPS** — 生产环境强烈建议使用 HTTPS
+
+<details>
+<summary><strong>Nginx 反向代理配置示例</strong></summary>
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name openclaw.example.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:1420;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # WebSocket 支持（实时聊天需要）
+    location /ws {
+        proxy_pass http://127.0.0.1:18789;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+```
+
+</details>
+
+### API Key 安全
+
+- API Key 存储在服务器的 `~/.openclaw/openclaw.json` 中，**不会**传输到外部
+- 建议为 `~/.openclaw/` 目录设置 `chmod 700` 权限
+- 多人共用时，每人应使用独立的 OpenClaw 实例
+
+---
+
+## 消息渠道配置
+
+ClawPanel 支持将 AI 接入多种即时通讯平台，在「消息渠道」页面统一管理。
+
+### 支持的平台
+
+| 平台 | 类型 | 配置难度 | 说明 |
+|------|------|---------|------|
+| 飞书 / Lark | 企业内部应用 | ⭐⭐ | 支持内置插件和官方插件两种模式 |
+| 钉钉 | 企业内部应用 | ⭐⭐ | Stream 模式，需创建机器人应用 |
+| Telegram | Bot | ⭐ | 通过 @BotFather 创建 Bot |
+| Discord | Bot | ⭐⭐ | 需创建 Application + Bot |
+| QQ 机器人 | 官方 Bot | ⭐⭐⭐ | 需在 QQ 开放平台注册 |
+
+### 配置步骤（以飞书为例）
+
+1. 在飞书开放平台创建**企业自建应用**，开启**机器人**能力
+2. 获取 `App ID` 和 `App Secret`
+3. 在 ClawPanel「消息渠道」页面选择飞书，填入凭证
+4. 点击「校验」确认连接，然后「保存」
+5. Gateway 会自动重载，飞书机器人即刻可用
+
+> 📖 详细教程：[飞书接入指南](docs/dingtalk-integration.md) | [钉钉接入指南](docs/dingtalk-integration.md)
+
+### 注意事项
+
+- 消息渠道需要 **Gateway 正在运行**才能接收消息
+- 每个平台需要**配对审批**才能连接（在渠道设置中完成）
+- 飞书/钉钉需要在对应平台**发布应用版本**后，机器人才对其他人可见
+
+---
+
 ## 常见问题
 
 ### macOS 提示"已损坏，无法打开"
@@ -466,6 +603,52 @@ npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.
 安装 Node.js 后需要**重启 ClawPanel**，新的 PATH 环境变量才能生效。
 
 如果安装在非默认路径（如 `D:\nodejs`、`F:\AI\Node`），请确认该目录已加入系统 PATH 环境变量。**v0.4.2+ 已自动扫描常见安装路径。**
+
+### Gateway 启动失败
+
+常见原因和解决方案：
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 端口 18789 被占用 | 另一个 Gateway 进程残留 | 终端执行 `pkill -f openclaw` 后重启 |
+| 配置文件损坏 | openclaw.json 格式错误 | 前往「服务管理」→「从备份恢复」 |
+| 反复崩溃 | API Key 或模型配置异常 | 用 AI 助手「🔨 一键排障」自动诊断 |
+| 提示 "auth mode" 错误 | 认证配置不兼容 | 在「安全设置」重置 Gateway 认证 |
+
+如果仍无法解决，查看「日志查看」页面的 Gateway 日志获取详细错误信息。
+
+### 模型连接超时 / 测试失败
+
+1. **检查 API Key** — 确认 Key 未过期、余额充足
+2. **检查 Base URL** — 不同服务商 URL 格式不同，注意结尾不要多 `/v1`（ClawPanel 会自动处理）
+3. **网络问题** — 国内访问 OpenAI 需要代理；DeepSeek / 阿里通义 / Ollama 国内直连
+4. **Ollama 特殊处理** — URL 填 `http://127.0.0.1:11434`（不加 `/v1`，ClawPanel 自动补全）
+
+### WebSocket 断连 / 聊天无响应
+
+1. 确认 Gateway 正在运行（顶部状态栏显示绿色）
+2. 反向代理需要配置 WebSocket 支持（参见上方 Nginx 配置）
+3. 如果使用 HTTPS，WebSocket 需要 `wss://` 协议（v0.7.3+ 已自动适配）
+4. 清除浏览器缓存后刷新页面
+
+### Web 版报"未实现的命令"
+
+升级到 **v0.8.5+**。旧版本的 Web 后端缺少部分命令实现，v0.8.5 已补全所有 handler。
+
+```bash
+cd /opt/clawpanel  # 替换为实际安装目录
+git pull origin main
+npm install
+npm run build
+sudo systemctl restart clawpanel  # 或 pm2 restart clawpanel
+```
+
+### 消息渠道保存后不生效
+
+1. 确认 Gateway 正在运行
+2. 飞书/钉钉：需要在对应开放平台**发布应用版本**
+3. 飞书：私聊测试需在「工作台」搜索机器人名称；群聊需通过「群设置 → 智能群助手」添加
+4. 钉钉：消息接收模式必须选择 **Stream 模式**
 
 ## 相关项目
 
