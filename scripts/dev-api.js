@@ -560,17 +560,29 @@ function getUid() {
 }
 
 function stripUiFields(config) {
+  // 清理根层级 ClawPanel 内部字段（version info 等），避免污染 openclaw.json
+  // Issue #89: 这些字段被写入 openclaw.json 后导致 Gateway 无法启动（Unknown config keys）
+  const uiRootKeys = [
+    'current', 'latest', 'recommended', 'update_available',
+    'latest_update_available', 'is_recommended', 'ahead_of_recommended',
+    'panel_version', 'source',
+  ]
+  for (const key of uiRootKeys) {
+    delete config[key]
+  }
+  // 清理模型测试相关的临时字段
   const providers = config?.models?.providers
-  if (!providers) return config
-  for (const p of Object.values(providers)) {
-    if (!Array.isArray(p.models)) continue
-    for (const m of p.models) {
-      if (typeof m !== 'object') continue
-      delete m.lastTestAt
-      delete m.latency
-      delete m.testStatus
-      delete m.testError
-      if (!m.name && m.id) m.name = m.id
+  if (providers) {
+    for (const p of Object.values(providers)) {
+      if (!Array.isArray(p.models)) continue
+      for (const m of p.models) {
+        if (typeof m !== 'object') continue
+        delete m.lastTestAt
+        delete m.latency
+        delete m.testStatus
+        delete m.testError
+        if (!m.name && m.id) m.name = m.id
+      }
     }
   }
   return config

@@ -565,10 +565,24 @@ fn has_ui_fields(val: &Value) -> bool {
     false
 }
 
-/// 递归清理 models 数组中的 UI 专属字段（lastTestAt, latency, testStatus, testError）
-/// 并为缺少 name 字段的模型自动补上 name = id
+/// 清理 ClawPanel 内部字段，避免污染 openclaw.json 导致 Gateway 启动失败
+/// Issue #89: version info 字段被写入 openclaw.json → Unknown config keys
 fn strip_ui_fields(mut val: Value) -> Value {
     if let Some(obj) = val.as_object_mut() {
+        // 清理根层级 ClawPanel 内部字段（version info 等）
+        for key in &[
+            "current",
+            "latest",
+            "recommended",
+            "update_available",
+            "latest_update_available",
+            "is_recommended",
+            "ahead_of_recommended",
+            "panel_version",
+            "source",
+        ] {
+            obj.remove(*key);
+        }
         // 处理 models.providers.xxx.models 结构
         if let Some(models_val) = obj.get_mut("models") {
             if let Some(models_obj) = models_val.as_object_mut() {
