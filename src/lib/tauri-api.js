@@ -321,18 +321,16 @@ export const api = {
   assistantWebSearch: (query, maxResults) => invoke('assistant_web_search', { query, max_results: maxResults || 5 }),
   assistantFetchUrl: (url) => invoke('assistant_fetch_url', { url }),
 
-  // Skills 管理（openclaw skills CLI）
+  // Skills 管理
   skillsList: () => invoke('skills_list'),
   skillsInfo: (name) => invoke('skills_info', { name }),
   skillsCheck: () => invoke('skills_check'),
   skillsInstallDep: (kind, spec) => invoke('skills_install_dep', { kind, spec }),
-  skillsSkillHubCheck: () => invoke('skills_skillhub_check'),
-  skillsSkillHubSetup: (cliOnly = true) => invoke('skills_skillhub_setup', { cliOnly }),
-  skillsSkillHubSearch: (query) => invoke('skills_skillhub_search', { query }),
-  skillsSkillHubInstall: (slug) => invoke('skills_skillhub_install', { slug }),
-  skillsClawHubSearch: (query) => invoke('skills_clawhub_search', { query }),
-  skillsClawHubInstall: (slug) => invoke('skills_clawhub_install', { slug }),
   skillsUninstall: (name) => invoke('skills_uninstall', { name }),
+  // SkillHub SDK（内置 HTTP，不依赖 CLI）
+  skillhubSearch: (query, limit) => invoke('skillhub_search', { query, limit }),
+  skillhubIndex: () => invoke('skillhub_index'),
+  skillhubInstall: (slug) => invoke('skillhub_install', { slug }),
 
   // 实例管理
   instanceList: () => cachedInvoke('instance_list', {}, 10000),

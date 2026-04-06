@@ -23,6 +23,7 @@ pub mod memory;
 pub mod messaging;
 pub mod pairing;
 pub mod service;
+pub mod skillhub;
 pub mod skills;
 pub mod update;
 

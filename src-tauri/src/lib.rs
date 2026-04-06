@@ -193,19 +193,17 @@ pub fn run() {
             messaging::save_agent_binding,
             messaging::delete_agent_binding,
             messaging::delete_agent_all_bindings,
-            // Skills 管理（openclaw skills CLI）
+            // Skills 管理
             skills::skills_list,
             skills::skills_info,
             skills::skills_check,
             skills::skills_install_dep,
-            skills::skills_skillhub_check,
-            skills::skills_skillhub_setup,
-            skills::skills_skillhub_search,
-            skills::skills_skillhub_install,
-            skills::skills_clawhub_search,
-            skills::skills_clawhub_install,
             skills::skills_uninstall,
             skills::skills_validate,
+            // SkillHub SDK（内置 HTTP，不依赖 CLI）
+            skills::skillhub_search,
+            skills::skillhub_index,
+            skills::skillhub_install,
             // 前端热更新
             update::check_frontend_update,
             update::download_frontend_update,

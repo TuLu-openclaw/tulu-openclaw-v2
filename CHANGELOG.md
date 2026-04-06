@@ -5,6 +5,23 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.11.5] - 2026-04-07
+
+### 新功能 (Features)
+
+- **SkillHub 技能商店（SDK 化）** — Skills 页面新增"搜索安装"商店 tab，支持浏览全量索引、客户端实时过滤、一键安装；底层从 CLI 调用全面迁移到内置 HTTP SDK（Rust + Node.js 双端），不再依赖 OpenClaw CLI 即可搜索和安装社区 Skill
+
+### 改进 (Improvements)
+
+- **Skills 命令层精简** — 移除 6 个旧 CLI 依赖命令，新增 3 个 SkillHub SDK 命令（search / index / install），本地扫描命令改为纯文件系统操作
+- **AI 助手工具迁移** — 晴辰助手的 Skill 搜索/安装工具从 ClawHub CLI 调用迁移到 SkillHub SDK，工具定义、系统提示、handler、显示标签全部更新
+- **前端 CSS 清理** — 移除 13 条不再使用的旧 Skills 页面样式（hero 展示区、tips 区域）
+
+### 修复 (Fixes)
+
+- **技能索引加载失败** — 修复 SkillHub 索引 API 返回 `{total, skills}` 包装对象导致 JSON 解码失败的问题（Rust 端新增 `IndexResponse` 包装结构体，Node.js 端提取 `.skills` 字段）
+- **技能名称显示** — 修复商店列表因 API 字段名不匹配（`name` vs `display_name`）导致只显示 slug 的问题
+
 ## [0.11.4] - 2026-04-06
 
 ### 新功能 (Features)

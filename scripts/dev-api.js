@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url'
 import net from 'net'
 import http from 'http'
 import crypto from 'crypto'
+import * as skillhubSdk from './lib/skillhub-sdk.js'
 const DOCKER_TASK_TIMEOUT_MS = 10 * 60 * 1000
 
 const __dev_dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -5348,38 +5349,23 @@ const handlers = {
     return true
   },
 
-  // Skills 管理（模拟 openclaw skills CLI JSON 输出）
+  // Skills 管理（纯本地扫描，不依赖 CLI）
   skills_list() {
-    try {
-      const out = execOpenclawSync(['skills', 'list', '--json'], { encoding: 'utf8', timeout: 30000, cwd: homedir(), windowsHide: true }, '读取 Skills 列表失败')
-      return extractCliJson(out)
-    } catch (e) {
-      return scanLocalSkillsFallback(e)
-    }
+    return scanLocalSkillsFallback()
   },
   skills_info({ name }) {
-    try {
-      const out = execOpenclawSync(['skills', 'info', String(name || '').trim(), '--json'], { encoding: 'utf8', timeout: 30000, cwd: homedir(), windowsHide: true }, '查看 Skill 详情失败')
-      return extractCliJson(out)
-    } catch (e) {
-      const fallback = scanLocalSkillsFallback(e).skills.find(skill => skill.name === String(name || '').trim())
-      if (fallback) return fallback
-      throw new Error('查看详情失败: ' + (e.message || e))
-    }
+    const n = String(name || '').trim()
+    const fallback = scanLocalSkillsFallback().skills.find(skill => skill.name === n)
+    if (fallback) return fallback
+    throw new Error(`Skill「${n}」不存在`)
   },
   skills_check() {
-    try {
-      const out = execOpenclawSync(['skills', 'check', '--json'], { encoding: 'utf8', timeout: 30000, cwd: homedir(), windowsHide: true }, '检查 Skills 依赖失败')
-      return extractCliJson(out)
-    } catch (e) {
-      const fallback = scanLocalSkillsFallback(e)
-      return {
-        summary: fallback.summary,
-        eligible: fallback.eligible,
-        disabled: fallback.disabled,
-        blocked: fallback.blocked,
-        missingRequirements: fallback.missingRequirements,
-      }
+    const data = scanLocalSkillsFallback()
+    return {
+      total: data.skills.length,
+      ready: (data.eligible || []).length,
+      missingDeps: (data.missingRequirements || []).length,
+      skills: data.skills,
     }
   },
   skills_install_dep({ kind, spec }) {
@@ -5398,69 +5384,6 @@ const handlers = {
       throw new Error(`安装失败: ${e.message || e}`)
     }
   },
-  skills_skillhub_check() {
-    try {
-      const out = execSync('skillhub --cli-version', { encoding: 'utf8', timeout: 5000 })
-      return { installed: true, version: out.trim() }
-    } catch {
-      return { installed: false }
-    }
-  },
-  skills_skillhub_setup({ cliOnly }) {
-    const flag = cliOnly ? '--cli-only' : '--no-skills'
-    try {
-      const out = execSync(
-        `curl -fsSL https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/install/install.sh | bash -s -- ${flag}`,
-        { encoding: 'utf8', timeout: 120000 }
-      )
-      return { success: true, output: out.trim() }
-    } catch (e) {
-      throw new Error('SkillHub 安装失败: ' + (e.message || e))
-    }
-  },
-  skills_skillhub_search({ query }) {
-    const q = String(query || '').trim()
-    if (!q) return []
-    try {
-      const out = execSync(`skillhub search ${JSON.stringify(q)}`, { encoding: 'utf8', timeout: 30000 })
-      // 解析格式: [N]   owner/repo/name   状态\n     统计  描述...
-      const lines = out.split('\n')
-      const items = []
-      for (let i = 0; i < lines.length; i++) {
-        const trimmed = lines[i].trim()
-        if (!trimmed.startsWith('[')) continue
-        const bracketEnd = trimmed.indexOf(']')
-        if (bracketEnd < 0) continue
-        const afterBracket = trimmed.slice(bracketEnd + 1).trim()
-        const slug = (afterBracket.split(/\s/)[0] || '').trim()
-        if (!slug.includes('/')) continue
-        let desc = ''
-        if (i + 1 < lines.length) {
-          const next = lines[i + 1].trim()
-          const starIdx = next.indexOf('⭐')
-          if (starIdx >= 0) {
-            const afterStar = next.slice(starIdx + 2).trim()
-            desc = afterStar.replace(/^[\d.]+[kKmM]?\s*/, '').trim()
-          }
-        }
-        items.push({ slug, description: desc, source: 'skillhub' })
-      }
-      return items
-    } catch (e) {
-      throw new Error('搜索失败: ' + (e.message || e) + '。请先安装 SkillHub CLI')
-    }
-  },
-  skills_skillhub_install({ slug }) {
-    const skillsDir = path.join(OPENCLAW_DIR, 'skills')
-    if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true })
-    try {
-      const out = execSync(`skillhub install ${JSON.stringify(slug)} --force`, { cwd: homedir(), encoding: 'utf8', timeout: 120000 })
-      return { success: true, slug, output: out.trim() }
-    } catch (e) {
-      throw new Error('安装失败: ' + (e.message || e) + '。请先安装 SkillHub CLI')
-    }
-  },
-
   skills_uninstall({ name }) {
     if (!name || name.includes('..') || name.includes('/') || name.includes('\\')) throw new Error('无效的 Skill 名称')
     const skillDir = path.join(OPENCLAW_DIR, 'skills', name)
@@ -5468,32 +5391,18 @@ const handlers = {
     fs.rmSync(skillDir, { recursive: true, force: true })
     return { success: true, name }
   },
-  skills_clawhub_search({ query }) {
-    const q = String(query || '').trim()
-    if (!q) return []
-    try {
-      const out = execSync(`npx -y clawhub search ${JSON.stringify(q)}`, { encoding: 'utf8', timeout: 30000 })
-      return out.split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('-') && !line.startsWith('Search'))
-        .map(line => {
-          const parts = line.split(/\s{2,}/).filter(Boolean)
-          return { slug: parts[0] || '', description: parts.slice(1).join(' ').trim(), source: 'clawhub' }
-        })
-        .filter(item => item.slug)
-    } catch (e) {
-      throw new Error('搜索失败: ' + (e.message || e))
-    }
+  // SkillHub SDK（内置 HTTP，不依赖 CLI）
+  async skillhub_search({ query, limit }) {
+    return await skillhubSdk.search(query, limit || 20)
   },
-  skills_clawhub_install({ slug }) {
+  async skillhub_index() {
+    return await skillhubSdk.fetchIndex()
+  },
+  async skillhub_install({ slug }) {
     const skillsDir = path.join(OPENCLAW_DIR, 'skills')
     if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true })
-    try {
-      const out = execSync(`npx -y clawhub install ${JSON.stringify(slug)}`, { cwd: homedir(), encoding: 'utf8', timeout: 120000 })
-      return { success: true, slug, output: out.trim() }
-    } catch (e) {
-      throw new Error('安装失败: ' + (e.message || e))
-    }
+    const installedPath = await skillhubSdk.install(slug, skillsDir)
+    return { success: true, slug, path: installedPath }
   },
 
   // 设备配对 + Gateway 握手

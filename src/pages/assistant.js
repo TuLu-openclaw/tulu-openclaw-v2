@@ -153,7 +153,7 @@ ${personality}
 - openclaw skills info <name> — 查看某个 Skill 详情
 - openclaw skills check — 检查所有 Skills 的依赖是否满足
 - Skill 依赖安装: 根据 install spec 执行 brew/npm/go/uv 安装缺少的命令行工具
-- ClawHub (clawhub.com): 社区 Skill 市场，可搜索和安装新 Skill
+- SkillHub: 技能商店，可搜索和安装新 Skill（内置 HTTP，不依赖 CLI）
 - Skills 目录: 捆绑 Skills 在 openclaw 安装包内，自定义 Skills 通常位于 ~/.openclaw/skills/<name>/ 或 ~/.claude/skills/<name>/
 
 ### 聊天与调试
@@ -432,8 +432,8 @@ const TOOL_DEFS = {
     {
       type: 'function',
       function: {
-        name: 'skills_clawhub_search',
-        description: '在 ClawHub 社区市场中搜索 Skills。返回匹配的 Skill 列表（slug 和描述）。',
+        name: 'skillhub_search',
+        description: '在 SkillHub 技能商店中搜索 Skills。返回匹配的 Skill 列表（slug 和描述）。',
         parameters: {
           type: 'object',
           properties: {
@@ -446,12 +446,12 @@ const TOOL_DEFS = {
     {
       type: 'function',
       function: {
-        name: 'skills_clawhub_install',
-        description: '从 ClawHub 社区市场安装一个 Skill 到本地自定义 Skills 目录（通常为 ~/.openclaw/skills/ 或 ~/.claude/skills/）。',
+        name: 'skillhub_install',
+        description: '从 SkillHub 技能商店安装一个 Skill 到本地自定义 Skills 目录（通常为 ~/.openclaw/skills/ 或 ~/.claude/skills/）。',
         parameters: {
           type: 'object',
           properties: {
-            slug: { type: 'string', description: 'ClawHub 上的 Skill slug（名称标识）' },
+            slug: { type: 'string', description: 'SkillHub 上的 Skill slug（名称标识）' },
           },
           required: ['slug'],
         },
@@ -507,7 +507,7 @@ const TOOL_DEFS = {
 
 // 危险工具（需要用户确认）
 const INTERACTIVE_TOOLS = new Set(['ask_user']) // 交互式工具，不走 confirmToolCall
-const DANGEROUS_TOOLS = new Set(['run_command', 'write_file', 'skills_install_dep', 'skills_clawhub_install'])
+const DANGEROUS_TOOLS = new Set(['run_command', 'write_file', 'skills_install_dep', 'skillhub_install'])
 
 // 安全围栏：极端危险命令模式（任何模式都必须确认，包括无限模式）
 const CRITICAL_PATTERNS = [
@@ -710,7 +710,7 @@ const BUILTIN_SKILLS = [
 注意：
 - 安装依赖可能需要特定的包管理器（brew 仅限 macOS，Windows 用 npm/go 等）
 - 先调用 get_system_info 判断操作系统，过滤出适合当前平台的安装选项
-- 如果用户想从 ClawHub 搜索安装新 Skill，使用 skills_clawhub_search 和 skills_clawhub_install`,
+- 如果用户想从 SkillHub 搜索安装新 Skill，使用 skillhub_search 和 skillhub_install`,
   },
 ]
 
@@ -742,7 +742,7 @@ function getEnabledTools() {
 
   // Skills 管理工具：始终启用（规划模式下排除安装操作）
   if (mode.readOnly) {
-    tools.push(...TOOL_DEFS.skills.filter(td => !['skills_install_dep', 'skills_clawhub_install'].includes(td.function.name)))
+    tools.push(...TOOL_DEFS.skills.filter(td => !['skills_install_dep', 'skillhub_install'].includes(td.function.name)))
   } else {
     tools.push(...TOOL_DEFS.skills)
   }
@@ -1880,14 +1880,14 @@ async function executeTool(name, args) {
       const result = await api.skillsInstallDep(args.kind, args.spec)
       return result?.success ? `${t('assistant.toolInstallSuccess')}\n${result.output || ''}` : t('assistant.toolInstallFail')
     }
-    case 'skills_clawhub_search': {
-      const items = await api.skillsClawHubSearch(args.query)
+    case 'skillhub_search': {
+      const items = await api.skillhubSearch(args.query)
       if (!items?.length) return t('assistant.toolNoSkillFound')
-      return items.map(i => `- **${i.slug}**: ${i.description || t('assistant.toolNoDesc')}`).join('\n')
+      return items.map(i => `- **${i.slug}**: ${i.description || i.summary || t('assistant.toolNoDesc')}`).join('\n')
     }
-    case 'skills_clawhub_install': {
-      const result = await api.skillsClawHubInstall(args.slug)
-      return result?.success ? `Skill "${args.slug}" ${t('assistant.toolInstallSuccess')}\n${result.output || ''}` : t('assistant.toolInstallFail')
+    case 'skillhub_install': {
+      const result = await api.skillhubInstall(args.slug)
+      return result?.success ? `Skill "${args.slug}" ${t('assistant.toolInstallSuccess')}\n${result.path || ''}` : t('assistant.toolInstallFail')
     }
     default:
       return `${t('assistant.toolUnknown')}: ${name}`
@@ -2275,8 +2275,8 @@ function renderToolBlocks(toolHistory) {
     // ask_user 工具不显示在工具块中（它有自己的交互卡片）
     if (tc.name === 'ask_user') return ''
 
-    const tcIcon = { run_command: icon('terminal', 14), write_file: icon('edit', 14), read_file: icon('file', 14), list_directory: icon('folder', 14), get_system_info: icon('monitor', 14), list_processes: icon('list', 14), check_port: icon('plug', 14), skills_list: icon('box', 14), skills_info: icon('box', 14), skills_check: icon('box', 14), skills_install_dep: icon('download', 14), skills_clawhub_search: icon('search', 14), skills_clawhub_install: icon('download', 14) }[tc.name] || icon('wrench', 14)
-    const label = { run_command: t('assistant.toolRunCmd'), read_file: t('assistant.toolReadFile'), write_file: t('assistant.toolWriteFile'), list_directory: t('assistant.toolListDir'), get_system_info: t('assistant.toolSysInfo'), list_processes: t('assistant.toolProcessList'), check_port: t('assistant.toolCheckPort'), skills_list: t('assistant.toolSkillsList'), skills_info: t('assistant.toolSkillInfo'), skills_check: t('assistant.toolSkillsCheck'), skills_install_dep: t('assistant.toolInstallDep'), skills_clawhub_search: t('assistant.toolClawHubSearch'), skills_clawhub_install: t('assistant.toolClawHubInstall') }[tc.name] || tc.name
+    const tcIcon = { run_command: icon('terminal', 14), write_file: icon('edit', 14), read_file: icon('file', 14), list_directory: icon('folder', 14), get_system_info: icon('monitor', 14), list_processes: icon('list', 14), check_port: icon('plug', 14), skills_list: icon('box', 14), skills_info: icon('box', 14), skills_check: icon('box', 14), skills_install_dep: icon('download', 14), skillhub_search: icon('search', 14), skillhub_install: icon('download', 14) }[tc.name] || icon('wrench', 14)
+    const label = { run_command: t('assistant.toolRunCmd'), read_file: t('assistant.toolReadFile'), write_file: t('assistant.toolWriteFile'), list_directory: t('assistant.toolListDir'), get_system_info: t('assistant.toolSysInfo'), list_processes: t('assistant.toolProcessList'), check_port: t('assistant.toolCheckPort'), skills_list: t('assistant.toolSkillsList'), skills_info: t('assistant.toolSkillInfo'), skills_check: t('assistant.toolSkillsCheck'), skills_install_dep: t('assistant.toolInstallDep'), skillhub_search: t('assistant.toolSkillHubSearch'), skillhub_install: t('assistant.toolSkillHubInstall') }[tc.name] || tc.name
     const argsStr = tc.name === 'run_command' ? escHtml(tc.args.command || '')
       : tc.name === 'read_file' ? escHtml(tc.args.path || '')
       : tc.name === 'write_file' ? escHtml(tc.args.path || '')
@@ -2286,8 +2286,8 @@ function renderToolBlocks(toolHistory) {
       : tc.name === 'check_port' ? escHtml(String(tc.args.port || ''))
       : tc.name === 'skills_info' ? escHtml(tc.args.name || '')
       : tc.name === 'skills_install_dep' ? escHtml(`${tc.args.kind}: ${tc.args.spec?.formula || tc.args.spec?.package || tc.args.spec?.module || ''}`)
-      : tc.name === 'skills_clawhub_search' ? escHtml(tc.args.query || '')
-      : tc.name === 'skills_clawhub_install' ? escHtml(tc.args.slug || '')
+      : tc.name === 'skillhub_search' ? escHtml(tc.args.query || '')
+      : tc.name === 'skillhub_install' ? escHtml(tc.args.slug || '')
       : ['skills_list', 'skills_check'].includes(tc.name) ? ''
       : escHtml(JSON.stringify(tc.args))
 

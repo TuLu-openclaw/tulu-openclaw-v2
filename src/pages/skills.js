@@ -1,6 +1,6 @@
 /**
  * Skills 页面
- * 基于 openclaw skills CLI，按状态分组展示所有 Skills
+ * 本地扫描已安装 Skills + SkillHub SDK 技能商店
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
@@ -30,20 +30,12 @@ export async function render() {
     </div>
     <div id="skills-tab-store" class="config-section" style="display:none">
       <div class="clawhub-toolbar" style="margin-bottom:var(--space-sm)">
-        <select class="form-input" id="install-source-select" style="width:auto;min-width:160px">
-          <option value="skillhub">${t('skills.sourceSkillHub')}</option>
-          <option value="clawhub">${t('skills.sourceClawHub')}</option>
-        </select>
-        <input class="input clawhub-search-input" id="skill-install-search" placeholder="${t('skills.searchPlaceholder')}" type="text" style="flex:1">
-        <button class="btn btn-primary btn-sm" data-action="install-source-search">${t('skills.search')}</button>
-        <button class="btn btn-secondary btn-sm" data-action="skillhub-setup" id="btn-skillhub-setup" style="display:none">${t('skills.installCLI')}</button>
-        <a class="btn btn-secondary btn-sm" id="btn-browse-source" href="https://skillhub.tencent.com" target="_blank" rel="noopener">${t('skills.browse')}</a>
+        <input class="input clawhub-search-input" id="skill-store-search" placeholder="${t('skills.searchPlaceholder')}" type="text" style="flex:1">
+        <button class="btn btn-primary btn-sm" data-action="store-search">${t('skills.search')}</button>
+        <a class="btn btn-secondary btn-sm" href="https://skillhub.tencent.com" target="_blank" rel="noopener">${t('skills.browse')}</a>
       </div>
-      <div class="form-hint" id="store-hint" style="margin-bottom:var(--space-sm);display:flex;align-items:center;gap:var(--space-xs)">
-        <span id="skillhub-status"></span>
-      </div>
-      <div id="install-source-results" class="clawhub-list" style="max-height:calc(100vh - 320px);overflow-y:auto">
-        <div class="clawhub-empty" style="padding:var(--space-xl);text-align:center">${t('skills.searchEmpty')}</div>
+      <div id="store-results" class="clawhub-list" style="max-height:calc(100vh - 300px);overflow-y:auto">
+        <div class="form-hint" style="padding:var(--space-xl);text-align:center">${t('skills.storeLoading')}</div>
       </div>
     </div>
   `
@@ -87,22 +79,11 @@ function renderSkills(el, data) {
   const blocked = skills.filter(s => s.blockedByAllowlist && !s.disabled)
 
   const summary = t('skills.summaryDetail', { eligible: eligible.length, missing: missing.length, disabled: disabled.length })
-  let sourceHint = ''
-  if (source === 'local-scan') {
-    if (cliDiag?.status === 'timeout') sourceHint = t('skills.sourceLocalScanTimeout')
-    else if (cliDiag?.status === 'parse-failed') sourceHint = t('skills.sourceLocalScanParseFailed')
-    else if (cliDiag?.status === 'exec-failed') sourceHint = t('skills.sourceLocalScanExecFailed')
-    else sourceHint = cliAvailable ? t('skills.sourceLocalScan') : t('skills.sourceLocalScanNoCli')
-  } else if (cliAvailable) {
-    sourceHint = t('skills.sourceCLI')
-  }
 
   el.innerHTML = `
     <div class="clawhub-toolbar">
       <input class="input clawhub-search-input" id="skill-filter-input" placeholder="${t('skills.filterPlaceholder')}" type="text">
       <button class="btn btn-secondary btn-sm" data-action="skill-retry">${t('skills.refresh')}</button>
-      <a class="btn btn-secondary btn-sm" href="https://clawhub.ai/skills" target="_blank" rel="noopener">ClawHub</a>
-      ${sourceHint ? `<span class="form-hint" style="margin-left:auto;color:${source === 'local-scan' ? 'var(--warning)' : 'var(--text-tertiary)'}">${esc(sourceHint)}</span>` : ''}
     </div>
 
     <div class="skills-summary" style="margin-bottom:var(--space-lg);color:var(--text-secondary);font-size:var(--font-size-sm)">
@@ -279,76 +260,98 @@ async function handleInstallDep(page, btn) {
   }
 }
 
-// ===== 统一源搜索/安装系统 =====
-let _installSource = 'skillhub' // 当前选中的安装源
-let _skillhubInstalled = false // SkillHub CLI 是否已安装
+// ===== 技能商店（SkillHub SDK）=====
+let _storeIndex = null // 缓存的全量索引
+let _installedNames = new Set() // 已安装的 skill 名称
 
-function getInstallSource() { return _installSource }
-
-async function handleSourceSearch(page) {
-  const input = page.querySelector('#skill-install-search')
-  const results = page.querySelector('#install-source-results')
-  if (!input || !results) return
-  const q = input.value.trim()
-  if (!q) { results.innerHTML = `<div class="clawhub-empty">${t('skills.searchKeyword')}</div>`; return }
-  const source = getInstallSource()
-  // SkillHub 未安装时友好提示（先实时检测一次，避免竞态误判）
-  if (source === 'skillhub' && !_skillhubInstalled) {
-    try {
-      const info = await api.skillsSkillHubCheck()
-      _skillhubInstalled = !!info.installed
-    } catch { /* ignore */ }
-  }
-  if (source === 'skillhub' && !_skillhubInstalled) {
-    results.innerHTML = `<div style="padding:var(--space-lg);text-align:center">
-      <div style="color:var(--warning);margin-bottom:8px">${t('skills.skillhubNeedCLI')}</div>
-      <div class="form-hint" style="margin-bottom:12px">${t('skills.skillhubNeedCLIHint')}</div>
-      <button class="btn btn-primary btn-sm" data-action="skillhub-setup">${t('skills.skillhubSetup')}</button>
-    </div>`
-    return
-  }
-  results.innerHTML = `<div class="form-hint">${t('skills.searching')}</div>`
+async function loadStore(page) {
+  const results = page.querySelector('#store-results')
+  if (!results) return
+  results.innerHTML = `<div class="form-hint" style="padding:var(--space-xl);text-align:center">${t('skills.storeLoading')}</div>`
   try {
-    const items = source === 'skillhub' ? await api.skillsSkillHubSearch(q) : await api.skillsClawHubSearch(q)
-    if (!items?.length) { results.innerHTML = `<div class="clawhub-empty">${t('skills.noResults')}</div>`; return }
-    const installAction = source === 'skillhub' ? 'source-install-skillhub' : 'source-install-clawhub'
-    results.innerHTML = items.map(item => `
-      <div class="clawhub-item">
-        <div class="clawhub-item-main">
-          <div class="clawhub-item-title">${esc(item.slug || item.name || '')}</div>
-          <div class="clawhub-item-desc">${esc(item.description || item.summary || '')}</div>
-        </div>
-        <div class="clawhub-item-actions">
-          <button class="btn btn-primary btn-sm" data-action="${installAction}" data-slug="${esc(item.slug || item.name || '')}">${t('skills.install')}</button>
-        </div>
-      </div>
-    `).join('')
+    _storeIndex = await api.skillhubIndex()
+    // 获取已安装列表用于标记
+    try {
+      const data = await api.skillsList()
+      _installedNames = new Set((data?.skills || []).map(s => s.name))
+    } catch { _installedNames = new Set() }
+    renderStoreItems(results, _storeIndex)
   } catch (e) {
-    const errMsg = String(e?.message || e)
-    const isRateLimit = /rate.?limit|429|too many/i.test(errMsg)
-    if (isRateLimit) {
-      results.innerHTML = `<div style="padding:var(--space-lg);text-align:center">
-        <div style="color:var(--warning);margin-bottom:8px">${t('skills.rateLimited')}</div>
-        <div class="form-hint">${source === 'clawhub' ? t('skills.rateLimitClawHub') : t('skills.rateLimitRetry')}</div>
-      </div>`
-    } else {
-      results.innerHTML = `<div style="color:var(--error);padding:var(--space-sm)">${t('skills.searchFailed')}: ${esc(errMsg)}</div>`
-    }
+    results.innerHTML = `<div style="color:var(--error);padding:var(--space-lg);text-align:center">${t('skills.storeLoadFailed')}: ${esc(e?.message || e)}</div>`
   }
 }
 
-async function handleSourceInstall(page, btn, source) {
+function renderStoreItems(el, items) {
+  if (!items?.length) {
+    el.innerHTML = `<div class="clawhub-empty" style="padding:var(--space-xl);text-align:center">${t('skills.noResults')}</div>`
+    return
+  }
+  el.innerHTML = items.map(item => {
+    const slug = item.slug || ''
+    const name = item.display_name || item.displayName || item.name || slug
+    const desc = item.summary || item.description || ''
+    const installed = _installedNames.has(slug)
+    return `
+      <div class="clawhub-item store-item" data-slug="${esc(slug)}" data-name="${esc(name)}" data-desc="${esc(desc)}">
+        <div class="clawhub-item-main">
+          <div class="clawhub-item-title">📦 ${esc(name)}</div>
+          <div class="clawhub-item-desc">${esc(desc)}</div>
+          ${item.version ? `<div class="clawhub-item-meta">v${esc(item.version)}${item.author ? ` · ${esc(item.author)}` : ''}</div>` : ''}
+        </div>
+        <div class="clawhub-item-actions">
+          ${installed
+            ? `<span class="clawhub-badge installed">${t('skills.installed')}</span>`
+            : `<button class="btn btn-primary btn-sm" data-action="store-install" data-slug="${esc(slug)}">${t('skills.install')}</button>`
+          }
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+async function handleStoreSearch(page) {
+  const input = page.querySelector('#skill-store-search')
+  const results = page.querySelector('#store-results')
+  if (!input || !results) return
+  const q = input.value.trim().toLowerCase()
+  if (!q && _storeIndex) {
+    renderStoreItems(results, _storeIndex)
+    return
+  }
+  if (!q) return
+  // 客户端过滤已有索引
+  if (_storeIndex) {
+    const filtered = _storeIndex.filter(item => {
+      const slug = (item.slug || '').toLowerCase()
+      const name = (item.display_name || item.displayName || '').toLowerCase()
+      const desc = (item.summary || item.description || '').toLowerCase()
+      const tags = (item.tags || []).join(' ').toLowerCase()
+      return slug.includes(q) || name.includes(q) || desc.includes(q) || tags.includes(q)
+    })
+    renderStoreItems(results, filtered)
+    return
+  }
+  // 没有索引时走服务端搜索
+  results.innerHTML = `<div class="form-hint" style="padding:var(--space-sm)">${t('skills.searching')}</div>`
+  try {
+    const items = await api.skillhubSearch(input.value.trim())
+    renderStoreItems(results, items)
+  } catch (e) {
+    results.innerHTML = `<div style="color:var(--error);padding:var(--space-sm)">${t('skills.searchFailed')}: ${esc(e?.message || e)}</div>`
+  }
+}
+
+async function handleStoreInstall(page, btn) {
   const slug = btn.dataset.slug
   btn.disabled = true
   btn.textContent = t('skills.installing')
   try {
-    if (source === 'skillhub') await api.skillsSkillHubInstall(slug)
-    else await api.skillsClawHubInstall(slug)
+    await api.skillhubInstall(slug)
     toast(t('skills.skillInstalled', { name: slug }), 'success')
     btn.textContent = t('skills.installed')
     btn.classList.remove('btn-primary')
     btn.classList.add('btn-secondary')
-    // 后台刷新已安装列表（不阻塞 UI）
+    _installedNames.add(slug)
     loadSkills(page).catch(() => {})
   } catch (e) {
     toast(`${t('skills.installFailed')}: ${e?.message || e}`, 'error')
@@ -374,57 +377,6 @@ async function handleSkillUninstall(page, btn) {
   }
 }
 
-async function handleSkillHubSetup(page) {
-  const statusEl = page.querySelector('#skillhub-status')
-  if (statusEl) statusEl.textContent = t('skills.skillhubInstalling')
-  try {
-    await api.skillsSkillHubSetup(true)
-    _skillhubInstalled = true
-    toast(t('skills.skillhubInstalled'), 'success')
-    if (statusEl) statusEl.textContent = '✅'
-    // 隐藏安装按钮
-    const setupBtn = page.querySelector('#btn-skillhub-setup')
-    if (setupBtn) setupBtn.style.display = 'none'
-  } catch (e) {
-    toast(`${t('skills.skillhubInstallFailed')}: ${e?.message || e}`, 'error')
-    if (statusEl) statusEl.textContent = '❌'
-  }
-}
-
-async function checkSkillHubStatus(page) {
-  const statusEl = page.querySelector('#skillhub-status')
-  const setupBtn = page.querySelector('#btn-skillhub-setup')
-  if (!statusEl) return
-  try {
-    const info = await api.skillsSkillHubCheck()
-    _skillhubInstalled = !!info.installed
-    if (info.installed) {
-      statusEl.innerHTML = `<span style="color:var(--success)">✅ v${info.version}</span>`
-      if (setupBtn) setupBtn.style.display = 'none'
-    } else {
-      statusEl.innerHTML = `<span style="color:var(--warning)">${t('skills.skillhubNeedCLI')}</span>`
-      if (setupBtn && _installSource === 'skillhub') setupBtn.style.display = ''
-    }
-  } catch {
-    statusEl.textContent = ''
-  }
-}
-
-function switchInstallSource(page, source) {
-  _installSource = source
-  const results = page.querySelector('#install-source-results')
-  const setupBtn = page.querySelector('#btn-skillhub-setup')
-  const browseBtn = page.querySelector('#btn-browse-source')
-  if (results) results.innerHTML = `<div class="clawhub-empty">${t('skills.searchKeyword')}</div>`
-  if (source === 'skillhub') {
-    if (browseBtn) browseBtn.href = 'https://skillhub.tencent.com'
-    checkSkillHubStatus(page)
-  } else {
-    if (setupBtn) setupBtn.style.display = 'none'
-    if (browseBtn) browseBtn.href = 'https://clawhub.ai/skills'
-  }
-}
-
 function bindEvents(page) {
   // 主 Tab 切换（已安装 / 搜索安装）
   page.querySelectorAll('#skills-main-tabs .tab').forEach(tab => {
@@ -434,16 +386,10 @@ function bindEvents(page) {
       const key = tab.dataset.mainTab
       page.querySelector('#skills-tab-installed').style.display = key === 'installed' ? '' : 'none'
       page.querySelector('#skills-tab-store').style.display = key === 'store' ? '' : 'none'
-      // 切到商店 tab 时检测 SkillHub 状态
-      if (key === 'store') checkSkillHubStatus(page)
+      // 切到商店 tab 时加载全量索引
+      if (key === 'store') loadStore(page)
     }
   })
-
-  // 安装源下拉切换
-  const sourceSelect = page.querySelector('#install-source-select')
-  if (sourceSelect) {
-    sourceSelect.onchange = () => switchInstallSource(page, sourceSelect.value)
-  }
 
   page.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-action]')
@@ -458,17 +404,11 @@ function bindEvents(page) {
       case 'skill-install-dep':
         await handleInstallDep(page, btn)
         break
-      case 'install-source-search':
-        await handleSourceSearch(page)
+      case 'store-search':
+        await handleStoreSearch(page)
         break
-      case 'source-install-skillhub':
-        await handleSourceInstall(page, btn, 'skillhub')
-        break
-      case 'source-install-clawhub':
-        await handleSourceInstall(page, btn, 'clawhub')
-        break
-      case 'skillhub-setup':
-        await handleSkillHubSetup(page)
+      case 'store-install':
+        await handleStoreInstall(page, btn)
         break
       case 'skill-uninstall':
         await handleSkillUninstall(page, btn)
@@ -484,9 +424,9 @@ function bindEvents(page) {
   })
 
   page.addEventListener('keydown', async (e) => {
-    if (e.key === 'Enter' && e.target?.id === 'skill-install-search') {
+    if (e.key === 'Enter' && e.target?.id === 'skill-store-search') {
       e.preventDefault()
-      await handleSourceSearch(page)
+      await handleStoreSearch(page)
     }
   })
 }

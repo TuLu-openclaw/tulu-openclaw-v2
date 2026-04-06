@@ -493,100 +493,6 @@
   font-size: var(--font-size-sm);
 }
 
-.skills-hero-panel {
-  position: relative;
-  overflow: hidden;
-}
-
-.skills-hero-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
-.skill-hero-card {
-  position: relative;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  background:
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 32%),
-    linear-gradient(180deg, rgba(255,255,255,0.02), transparent),
-    var(--bg-card);
-  box-shadow: 0 12px 30px rgba(0,0,0,0.12);
-}
-
-.skill-hero-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-md);
-  margin-bottom: var(--space-md);
-}
-
-.skill-hero-title {
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.skill-hero-meta {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.skill-hero-badges {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.clawhub-badge.hot {
-  background: rgba(99, 102, 241, 0.14);
-  color: #6366f1;
-}
-
-.skill-hero-desc {
-  color: var(--text-secondary);
-  line-height: 1.6;
-  min-height: 48px;
-}
-
-.skill-hero-actions {
-  margin-top: var(--space-lg);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  flex-wrap: wrap;
-}
-
-.skill-hero-installed {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-}
-
-.skills-tips-panel {
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.06), transparent), var(--bg-secondary);
-}
-
-.skills-tip-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.skills-tip-item {
-  color: var(--text-secondary);
-  line-height: 1.7;
-  padding: var(--space-sm) 0;
-  border-bottom: 1px dashed var(--border-secondary);
-}
-
-.skills-tip-item:last-child {
-  border-bottom: none;
-}
 
 .skills-loading-panel,
 .skills-load-error {
@@ -597,8 +503,7 @@
 }
 
 @media (max-width: 900px) {
-  .clawhub-grid,
-  .skills-hero-grid {
+  .clawhub-grid {
     grid-template-columns: 1fr;
   }
 
