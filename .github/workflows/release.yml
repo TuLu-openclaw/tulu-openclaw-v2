@@ -100,8 +100,9 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install mingw -y --no-progress --ignore-checksums
-          cmd /c "set PATH=C:\hostedtoolcache\Node\22\x64;%PATH% && npm run tauri build"
-        shell: cmd
+          $env:PATH = "C:\ProgramData\mingw64\mingw64\bin;$env:PATH"
+          npm run tauri build
+        shell: powershell
 
       - name: Build Tauri app (macOS/Linux)
         if: runner.os != 'Windows'

@@ -846,12 +846,21 @@ function startUpdateChecker() {
     }
   }
 
+  // === 微验卡密验证（启动时必须通过，失败时循环重试）===
+  let kamiVerified = false
+  while (!kamiVerified) {
+    try {
+      const { showKamiVerifyModal } = await import('./components/kami-modal.js')
+      await showKamiVerifyModal()
+      kamiVerified = true
+    } catch (err) {
+      console.error('[kami] 验证模块加载失败，将重试:', err)
+      await new Promise(r => setTimeout(r, 1000))
+    }
+  }
+
   const auth = await checkAuth()
   if (!auth.ok) await showLoginOverlay(auth.defaultPw)
-
-  // === 微验卡密验证（启动时必须通过）===
-  const { showKamiVerifyModal } = await import('./components/kami-modal.js')
-  await showKamiVerifyModal()
 
   try {
     await boot()

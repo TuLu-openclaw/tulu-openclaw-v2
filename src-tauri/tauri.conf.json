@@ -44,10 +44,10 @@
     },
     "nsis": {
       "languages": [
-        "SimpChinese",
-        "English"
+        "SimpChinese"
       ],
-      "displayLanguageSelector": true
+      "defaultLang": "SimpChinese",
+      "displayLanguageSelector": false
     }
   }
 }
