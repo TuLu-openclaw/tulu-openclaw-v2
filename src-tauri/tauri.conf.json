@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
-  "productName": "屠戮OpenClaw_v2.0",
+  "productName": "TuLuOpenClaw_v2",
   "version": "2.0.0",
   "identifier": "ai.openclaw.tulu-openclaw-v2",
   "build": {
