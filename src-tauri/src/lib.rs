@@ -10,7 +10,7 @@ use commands::{
 
 pub fn run() {
     let hot_update_dir = commands::openclaw_dir()
-        .join("屠戮OpenClaw")
+        .join("TuLuOpenClaw")
         .join("web-update");
 
     tauri::Builder::default()
