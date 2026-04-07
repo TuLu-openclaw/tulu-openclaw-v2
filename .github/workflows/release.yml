@@ -54,13 +54,8 @@ jobs:
 
       - name: Install frontend dependencies
         run: |
+          npm cache clean --force
           npm ci --prefer-offline
-
-      - name: Build Tauri app
-        run: |
-          npm run tauri build ${{ matrix.platform.args && format('-- {0}', matrix.platform.args) || '' }}
-        env:
-          HOME: /home/runner
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
