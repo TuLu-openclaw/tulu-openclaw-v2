@@ -4,15 +4,31 @@
  */
 
 const TV_SOURCES = [
-  { name: '肥猫', url: 'http://肥猫.com/', type: 'tvbox', icon: '🐱' },
-  { name: '小米', url: 'https://mpanso.me/DEMO.json', type: 'tvbox', icon: '📺' },
-  { name: '南风', url: 'https://ghproxy.net/https://raw.githubusercontent.com/yoursmile66/TVBox/main/XC.json', type: 'tvbox', icon: '🌬️' },
+  { name: '💫林中小屋💫', url: 'https://gitee.com/lzxw66/lzxw9/raw/master/Ace', type: 'tvbox', icon: '🏠' },
+  { name: '🐼肥猫🐼', url: 'http://肥猫.com/', type: 'tvbox', icon: '🐱' },
+  { name: '🤓OK🤓', url: 'https://10352.kstore.vip/tv', type: 'tvbox', icon: '✅' },
+  { name: '🐂王二小🐮', url: 'https://9280.kstore.vip/newwex.json', type: 'tvbox', icon: '🐂' },
+  { name: '💫潇洒💫', url: 'https://9877.kstore.space/AnotherD/api.json', type: 'tvbox', icon: '💫' },
+  { name: '😁天天开心😁', url: 'http://rihou.cc:55/天天开心', type: 'tvbox', icon: '😁' },
+  { name: '🐟摸鱼儿🐟', url: 'http://我不是.摸鱼儿.com', type: 'tvbox', icon: '🐟' },
+  { name: '🐂放牛娃😎', url: 'http://tvbox.王二小放牛娃.top', type: 'tvbox', icon: '🐂' },
+  { name: '👽饭太硬👽', url: 'https://www.饭太硬.com/tv', type: 'tvbox', icon: '👽' },
+  { name: '👿小米👿', url: 'https://cnb.cool/xiaomideyun/xiaomideyun/-/git/raw/main/mi.json', type: 'tvbox', icon: '👿' },
+  { name: '🔮巧记🔮', url: 'http://cdn.qiaoji8.com/tvbox.json', type: 'tvbox', icon: '🔮' },
+  { name: '🐯小虎斑🐯', url: 'http://hb.小虎斑.site:25252/仅供测试', type: 'tvbox', icon: '🐯' },
+  { name: '🌈欧歌🌈', url: 'https://欧歌.v.nxog.top/m/', type: 'tvbox', icon: '🌈' },
+  { name: '🍎南风🍎', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/yoursmile66/TVBox/main/XC.json', type: 'tvbox', icon: '🍎' },
+  { name: '🍅香雅情🍅', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/xyq254245/xyqonlinerule/main/XYQTVBox.json', type: 'tvbox', icon: '🍅' },
+  { name: '⚪PG⚪', url: 'https://www.252035.xyz/p/jsm.json', type: 'tvbox', icon: '⚪' },
+  { name: '🌱真心🌱', url: 'https://www.252035.xyz/z/FongMi.json', type: 'tvbox', icon: '🌱' },
+  { name: '📚教育📚', url: 'https://gitee.com/zybal/tv/raw/master/教育接口.json', type: 'tvbox', icon: '📚' },
+  { name: '🌟影视仓VIP', url: 'https://gh.llkk.cc/https://raw.githubusercontent.com/tushen6/Tomorrow/master/tvbox.json', type: 'tvbox', icon: '🌟' },
 ]
 
 export default function render(el) {
   el.innerHTML = `
     <div class="page-header">
-      <div class="page-title">影视工具</div>
+      <div class="page-title">屠戮影视</div>
       <div class="page-desc">多个公开 TVBox 接口 · 影视搜索播放</div>
     </div>
     <div class="movie-container">
