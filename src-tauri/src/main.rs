@@ -1,6 +1,6 @@
-// 屠戮OpenClaw 入口
+// TuLuOpenClaw
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    屠戮OpenClaw_lib::run()
+    TuLuOpenClaw_lib::run()
 }
