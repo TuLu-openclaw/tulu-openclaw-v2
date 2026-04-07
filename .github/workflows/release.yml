@@ -96,6 +96,8 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
+            # Add MinGW bin (dlltool) to PATH - does not conflict with MSVC cl.exe
+            export PATH="/c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH"
             npm run tauri build
           elif [ -n "${{ matrix.platform.rust_target }}" ]; then
             npm run tauri build -- --target ${{ matrix.platform.rust_target }}
