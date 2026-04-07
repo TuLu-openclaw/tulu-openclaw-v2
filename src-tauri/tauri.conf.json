@@ -40,14 +40,17 @@
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
-      },
-      "nsis": {
-        "languages": [
-          "SimpChinese",
-          "English"
-        ],
-        "displayLanguageSelector": true
       }
+    },
+    "nsis": {
+      "languages": [
+        "SimpChinese",
+        "English"
+      ],
+      "displayLanguageSelector": true
+    },
+    "wix": {
+      "language": "zh-CN"
     }
   }
 }
