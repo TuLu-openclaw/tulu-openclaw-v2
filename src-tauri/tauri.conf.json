@@ -48,9 +48,6 @@
         "English"
       ],
       "displayLanguageSelector": true
-    },
-    "wix": {
-      "language": "zh-CN"
     }
   }
 }
