@@ -82,8 +82,16 @@ jobs:
             cmake \
             clang
 
-      # Windows (x64) uses MSVC toolchain pre-installed on windows-latest
-      # MinGW removed - was causing dlltool.exe conflicts with windows-sys crate
+      # windows-sys crate (pulled in by tauri core) needs dlltool on Windows MSVC
+      # Install MinGW solely to provide dlltool.exe - does NOT change PATH or conflict with MSVC
+      - name: Install MinGW dlltool (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install mingw --version 13.2.0 -y --no-progress
+          # Find dlltool.exe and add its bin dir to PATH for this step only
+          DLLTOOL_PATH=$(find "C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin" -name "dlltool.exe" 2>$null | Select-Object -First 1)
+          echo "Found dlltool at: $DLLTOOL_PATH"
+          echo "DLLTOOL_PATH=$DLLTOOL_PATH" >> $env:GITHUB_ENV
       - name: Build Tauri app
         shell: bash
         run: |
