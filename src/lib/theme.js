@@ -1,7 +1,7 @@
 /**
  * 主题管理（日间/夜间模式）
  */
-const THEME_KEY = 'clawpanel-theme'
+const THEME_KEY = '屠戮OpenClaw-theme'
 
 export function initTheme() {
   const saved = localStorage.getItem(THEME_KEY)

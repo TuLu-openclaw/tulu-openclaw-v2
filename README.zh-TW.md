@@ -32,12 +32,12 @@ ClawPanel 是 [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslatio
 
 > 🌐 **官網**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **下載**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
-### 🎁 晴辰雲 AI 介面
+### 🎁 屠戮雲 AI 介面
 
 > 內部技術測試平台，面向部分使用者開放體驗。簽到領額度，邀請得更多。
 
 <p align="center">
-  <a href="https://gpt.qt.cool"><img src="https://img.shields.io/badge/🔑 晴辰雲 AI-gpt.qt.cool-6366f1?style=for-the-badge" alt="晴辰雲 AI"></a>
+  <a href="https://gpt.qt.cool"><img src="https://img.shields.io/badge/🔑 屠戮雲 AI-gpt.qt.cool-6366f1?style=for-the-badge" alt="屠戮雲 AI"></a>
 </p>
 
 - **簽到領測試額度** — 每日簽到 + 邀請好友，持續獲取測試額度
@@ -82,7 +82,7 @@ ClawPanel 是 [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslatio
 - **定時任務** — Cron 定時執行，多頻道投遞
 - **日誌檢視** — 多來源即時日誌與關鍵字搜尋
 - **記憶管理** — 記憶檔案檢視/編輯、ZIP 匯出、Agent 切換
-- **晴辰雲 AI 介面** — 內部測試平台，相容 OpenAI
+- **屠戮雲 AI 介面** — 內部測試平台，相容 OpenAI
 - **擴充工具** — cftunnel 隧道管理、ClawApp 狀態監控
 - **關於** — 版本資訊、社群入口、相關專案連結
 

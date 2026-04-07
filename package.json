@@ -1,18 +1,18 @@
 {
-  "name": "clawpanel",
+  "name": "屠戮OpenClaw",
   "version": "0.11.5",
   "private": true,
-  "description": "ClawPanel - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
+  "description": "屠戮OpenClaw - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
   "type": "module",
   "author": "qingchencloud",
   "license": "AGPL-3.0",
-  "homepage": "https://github.com/qingchencloud/clawpanel",
+  "homepage": "https://github.com/qingchencloud/屠戮OpenClaw",
   "repository": {
     "type": "git",
-    "url": "https://github.com/qingchencloud/clawpanel.git"
+    "url": "https://github.com/qingchencloud/屠戮OpenClaw.git"
   },
   "bugs": {
-    "url": "https://github.com/qingchencloud/clawpanel/issues"
+    "url": "https://github.com/qingchencloud/屠戮OpenClaw/issues"
   },
   "keywords": [
     "openclaw",

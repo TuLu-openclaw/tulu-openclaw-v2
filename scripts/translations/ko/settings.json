@@ -1,6 +1,6 @@
 {
   "title": "패널 설정",
-  "desc": "ClawPanel 네트워크, 프록시 및 다운로드 소스 설정 관리",
+  "desc": "屠戮OpenClaw 네트워크, 프록시 및 다운로드 소스 설정 관리",
   "networkProxy": "네트워크 프록시",
   "modelProxy": "모델 요청 프록시",
   "npmRegistry": "npm 레지스트리",

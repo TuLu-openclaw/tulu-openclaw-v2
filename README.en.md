@@ -328,4 +328,4 @@ If you find this project useful, consider supporting us via USDT (BNB Smart Chai
 
 This project is licensed under [AGPL-3.0](LICENSE). For commercial/proprietary use without open-source requirements, contact us for a commercial license.
 
-© 2026 QingchenCloud (武汉晴辰天下网络科技有限公司) | [claw.qt.cool](https://claw.qt.cool)
+© 2026 QingchenCloud (武汉屠戮天下网络科技有限公司) | [claw.qt.cool](https://claw.qt.cool)

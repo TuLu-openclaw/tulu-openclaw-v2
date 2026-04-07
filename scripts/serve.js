@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClawPanel 独立 Web 服务器（Headless 模式）
+ * 屠戮OpenClaw 独立 Web 服务器（Headless 模式）
  * 无需 Tauri / Rust / GUI，纯 Node.js 运行
  * 适用于 Linux 服务器、Docker 等无桌面环境
  *
@@ -32,7 +32,7 @@ function parseArgs() {
     if (args[i] === '-p' && args[i + 1]) port = parseInt(args[++i], 10)
     if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
-ClawPanel Web Server (Headless)
+屠戮OpenClaw Web Server (Headless)
 
 用法: node scripts/serve.js [选项]
 
@@ -184,7 +184,7 @@ async function main() {
     console.log('')
     console.log('  ┌─────────────────────────────────────────┐')
     console.log('  │                                         │')
-    console.log('  │   🦀 ClawPanel Web Server (Headless)    │')
+    console.log('  │   🦀 屠戮OpenClaw Web Server (Headless)    │')
     console.log('  │                                         │')
     console.log(`  │   http://${host === '0.0.0.0' ? 'localhost' : host}:${port}/`.padEnd(44) + '│')
     if (host === '0.0.0.0') {

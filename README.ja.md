@@ -32,7 +32,7 @@ ClawPanel は [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslatio
 
 > 🌐 **ウェブサイト**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **ダウンロード**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
-### 🎁 晴辰クラウド AI API
+### 🎁 屠戮クラウド AI API
 
 > 内部技術テストプラットフォーム、一部のユーザーに開放。毎日サインインでクレジット獲得。
 
@@ -82,7 +82,7 @@ AI Agent に情熱を持つ開発者とユーザーのコミュニティ — ぜ
 - **定時タスク** — Cron ベースのスケジュール実行、マルチチャンネル配信
 - **ログビューア** — マルチソースリアルタイムログとキーワード検索
 - **メモリ管理** — メモリファイルの表示/編集、ZIP エクスポート、Agent 切替
-- **晴辰クラウド AI API** — 内部テストプラットフォーム、OpenAI 互換
+- **屠戮クラウド AI API** — 内部テストプラットフォーム、OpenAI 互換
 - **拡張ツール** — cftunnel トンネル管理、ClawApp ステータス監視
 - **バージョン情報** — バージョン、コミュニティリンク、関連プロジェクト
 

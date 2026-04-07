@@ -5,7 +5,7 @@
 import { buildLocales } from '../locales/index.js'
 
 const LANGS = buildLocales()
-const LANG_KEY = 'clawpanel_lang'
+const LANG_KEY = '屠戮OpenClaw_lang'
 const FALLBACK = 'zh-CN'
 
 let _lang = FALLBACK

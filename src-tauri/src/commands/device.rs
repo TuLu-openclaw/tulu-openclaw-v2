@@ -4,7 +4,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
 
-const DEVICE_KEY_FILE: &str = "clawpanel-device-key.json";
+const DEVICE_KEY_FILE: &str = "屠戮OpenClaw-device-key.json";
 const SCOPES: &[&str] = &[
     "operator.admin",
     "operator.approvals",
@@ -136,7 +136,7 @@ pub fn create_connect_frame(nonce: String, gateway_token: String) -> Result<Valu
                 "signature": sig_b64,
             },
             "locale": "zh-CN",
-            "userAgent": format!("ClawPanel/{}", env!("CARGO_PKG_VERSION")),
+            "userAgent": format!("屠戮OpenClaw/{}", env!("CARGO_PKG_VERSION")),
         }
     });
 

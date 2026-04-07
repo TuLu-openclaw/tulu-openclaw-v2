@@ -43,6 +43,9 @@ function NAV_ITEMS_FULL() { return [
     section: t('sidebar.sectionExtension'),
     items: [
       { route: '/skills', label: t('sidebar.skills'), icon: 'skills' },
+      { route: '/miaogu-verify', label: '喵咕验证', icon: 'verify' },
+      { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
+      { route: '/movie-tool', label: '影视工具', icon: 'movie' },
     ]
   },
   {
@@ -93,6 +96,8 @@ const ICONS = {
   'bar-chart': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
   debug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>',
+  verify: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>',
+  movie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
 }
 
 let _delegated = false
@@ -109,7 +114,7 @@ function _checkMultiInstances(el) {
   }).catch(() => {})
 }
 
-const LS_SIDEBAR_COLLAPSED = 'clawpanel_sidebar_collapsed'
+const LS_SIDEBAR_COLLAPSED = '屠戮OpenClaw_sidebar_collapsed'
 
 function _isDesktopSidebarCollapsed() {
   try { return localStorage.getItem(LS_SIDEBAR_COLLAPSED) === '1' } catch { return false }
@@ -136,9 +141,9 @@ export function renderSidebar(el) {
   let html = `
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <img src="/images/logo.png" alt="ClawPanel">
+        <img src="/images/logo.png" alt="屠戮OpenClaw">
       </div>
-      <span class="sidebar-title">ClawPanel</span>
+      <span class="sidebar-title">屠戮OpenClaw</span>
       <button class="sidebar-collapse-btn" id="btn-sidebar-collapse" title="${t('sidebar.collapse')}">${collapsed ? '»' : '«'}</button>
       <button class="sidebar-close-btn" id="btn-sidebar-close" title="${t('sidebar.closeMenu')}">&times;</button>
     </div>
@@ -208,7 +213,7 @@ export function renderSidebar(el) {
         </div>
       </div>
       <div class="sidebar-meta">
-        <a href="https://claw.qt.cool" target="_blank" rel="noopener" class="sidebar-link">claw.qt.cool</a>
+        <a href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener" class="sidebar-link">反馈交流群</a>
         <span class="sidebar-version">v${APP_VERSION}</span>
       </div>
     </div>

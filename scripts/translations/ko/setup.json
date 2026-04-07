@@ -1,7 +1,7 @@
 {
   "title": "초기 설정",
   "desc": "OpenClaw 설치 및 설정",
-  "headerTitle": "ClawPanel에 오신 것을 환영합니다",
+  "headerTitle": "屠戮OpenClaw에 오신 것을 환영합니다",
   "headerDesc": "OpenClaw AI Agent 프레임워크의 데스크톱 관리 패널",
   "recheck": "재감지",
   "stepNode": "Node.js 환경",

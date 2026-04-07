@@ -1,7 +1,7 @@
 {
   "title": "初期設定",
   "desc": "OpenClaw のインストールと設定",
-  "headerTitle": "ClawPanel へようこそ",
+  "headerTitle": "屠戮OpenClaw へようこそ",
   "headerDesc": "OpenClaw AI Agent フレームワークのデスクトップ管理パネル",
   "recheck": "再検出",
   "stepNode": "Node.js 環境",

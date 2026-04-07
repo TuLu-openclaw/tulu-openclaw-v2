@@ -85,8 +85,8 @@ const targets = [
     update(content) {
       // JSON-LD softwareVersion
       let result = content.replace(/"softwareVersion":\s*"[^"]*"/, `"softwareVersion": "${version}"`)
-      // 下载链接中的版本号: ClawPanel_x.y.z_xxx
-      result = result.replace(/ClawPanel_\d+\.\d+\.\d+_/g, `ClawPanel_${version}_`)
+      // 下载链接中的版本号: 屠戮OpenClaw_x.y.z_xxx
+      result = result.replace(/屠戮OpenClaw_\d+\.\d+\.\d+_/g, `屠戮OpenClaw_${version}_`)
       // 版本徽标: v0.x.x 最新版
       result = result.replace(/v\d+\.\d+\.\d+\s*最新版/, `v${version} 最新版`)
       return result

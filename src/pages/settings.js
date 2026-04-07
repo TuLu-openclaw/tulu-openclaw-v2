@@ -1,6 +1,6 @@
 /**
  * 面板设置页面
- * 统一管理 ClawPanel 的网络代理、npm 源、模型代理等配置
+ * 统一管理 屠戮OpenClaw 的网络代理、npm 源、模型代理等配置
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'

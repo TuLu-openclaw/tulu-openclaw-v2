@@ -1,6 +1,6 @@
 {
   "title": "パネル設定",
-  "desc": "ClawPanel のネットワーク、プロキシ、ダウンロードソース設定を管理",
+  "desc": "屠戮OpenClaw のネットワーク、プロキシ、ダウンロードソース設定を管理",
   "networkProxy": "ネットワークプロキシ",
   "modelProxy": "モデルリクエストプロキシ",
   "npmRegistry": "npm レジストリ",

@@ -6,14 +6,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢你提出功能建议！请详细描述你的想法，帮助我们让 ClawPanel 变得更好。
+        感谢你提出功能建议！请详细描述你的想法，帮助我们让 屠戮OpenClaw 变得更好。
 
   - type: textarea
     id: description
     attributes:
       label: 功能描述
       description: 清晰简洁地描述你希望添加的功能。
-      placeholder: 我希望 ClawPanel 能够...
+      placeholder: 我希望 屠戮OpenClaw 能够...
     validations:
       required: true
 
@@ -23,7 +23,7 @@ body:
       label: 使用场景
       description: 描述这个功能会在什么场景下使用，解决什么问题。
       placeholder: |
-        当我在使用 ClawPanel 时，经常需要...
+        当我在使用 屠戮OpenClaw 时，经常需要...
         目前的做法是...
         如果有这个功能，我就可以...
     validations:

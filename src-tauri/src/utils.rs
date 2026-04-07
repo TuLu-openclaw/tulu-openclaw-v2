@@ -6,7 +6,7 @@ pub fn is_rejected_cli_path(cli_path: &str) -> bool {
     lower.contains("/.cherrystudio/") || lower.contains("cherry-studio")
 }
 
-/// 读取 clawpanel.json 中用户绑定的 CLI 路径
+/// 读取 屠戮OpenClaw.json 中用户绑定的 CLI 路径
 fn bound_cli_path() -> Option<std::path::PathBuf> {
     let config = crate::commands::read_panel_config_value()?;
     let raw = config.get("openclawCliPath")?.as_str()?;

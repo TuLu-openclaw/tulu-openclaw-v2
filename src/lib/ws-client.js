@@ -663,5 +663,5 @@ export class WsClient {
 }
 
 const _g = typeof window !== 'undefined' ? window : globalThis
-if (!_g.__clawpanelWsClient) _g.__clawpanelWsClient = new WsClient()
-export const wsClient = _g.__clawpanelWsClient
+if (!_g.__屠戮OpenClawWsClient) _g.__屠戮OpenClawWsClient = new WsClient()
+export const wsClient = _g.__屠戮OpenClawWsClient

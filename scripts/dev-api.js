@@ -1,5 +1,5 @@
 /**
- * ClawPanel 开发模式 API 插件
+ * 屠戮OpenClaw 开发模式 API 插件
  * 在 Vite 开发服务器上提供真实 API 端点，替代 mock 数据
  * 使浏览器模式能真正管理 OpenClaw 实例
  */
@@ -22,15 +22,15 @@ let CONFIG_PATH = path.join(OPENCLAW_DIR, 'openclaw.json')
 let MCP_CONFIG_PATH = path.join(OPENCLAW_DIR, 'mcp.json')
 let LOGS_DIR = path.join(OPENCLAW_DIR, 'logs')
 let BACKUPS_DIR = path.join(OPENCLAW_DIR, 'backups')
-let DEVICE_KEY_FILE = path.join(OPENCLAW_DIR, 'clawpanel-device-key.json')
+let DEVICE_KEY_FILE = path.join(OPENCLAW_DIR, '屠戮OpenClaw-device-key.json')
 let DEVICES_DIR = path.join(OPENCLAW_DIR, 'devices')
 let PAIRED_PATH = path.join(DEVICES_DIR, 'paired.json')
 const isWindows = process.platform === 'win32'
 const isMac = process.platform === 'darwin'
 const isLinux = process.platform === 'linux'
 const SCOPES = ['operator.admin', 'operator.approvals', 'operator.pairing', 'operator.read', 'operator.write']
-const CLUSTER_TOKEN = 'clawpanel-cluster-secret-2026'
-const PANEL_CONFIG_PATH = path.join(DEFAULT_OPENCLAW_DIR, 'clawpanel.json')
+const CLUSTER_TOKEN = '屠戮OpenClaw-cluster-secret-2026'
+const PANEL_CONFIG_PATH = path.join(DEFAULT_OPENCLAW_DIR, '屠戮OpenClaw.json')
 const PANEL_STATE_DIR = path.dirname(PANEL_CONFIG_PATH)
 const DOCKER_NODES_PATH = path.join(PANEL_STATE_DIR, 'docker-nodes.json')
 const INSTANCES_PATH = path.join(PANEL_STATE_DIR, 'instances.json')
@@ -59,7 +59,7 @@ function applyOpenclawPathConfig(panelConfig) {
   MCP_CONFIG_PATH = path.join(OPENCLAW_DIR, 'mcp.json')
   LOGS_DIR = path.join(OPENCLAW_DIR, 'logs')
   BACKUPS_DIR = path.join(OPENCLAW_DIR, 'backups')
-  DEVICE_KEY_FILE = path.join(OPENCLAW_DIR, 'clawpanel-device-key.json')
+  DEVICE_KEY_FILE = path.join(OPENCLAW_DIR, '屠戮OpenClaw-device-key.json')
   DEVICES_DIR = path.join(OPENCLAW_DIR, 'devices')
   PAIRED_PATH = path.join(DEVICES_DIR, 'paired.json')
   process.env.OPENCLAW_HOME = OPENCLAW_DIR
@@ -1325,7 +1325,7 @@ function isAuthenticated(req) {
   const pw = getAccessPassword()
   if (!pw) return true // 未设密码，放行
   const cookies = parseCookies(req)
-  const token = cookies.clawpanel_session
+  const token = cookies.屠戮OpenClaw_session
   if (!token) return false
   const session = _sessions.get(token)
   if (!session || Date.now() > session.expires) {
@@ -1339,7 +1339,7 @@ function checkPasswordStrength(pw) {
   if (!pw || pw.length < 6) return '密码至少 6 位'
   if (pw.length > 64) return '密码不能超过 64 位'
   if (/^\d+$/.test(pw)) return '密码不能是纯数字'
-  const weak = ['123456', '654321', 'password', 'admin', 'qwerty', 'abc123', '111111', '000000', 'letmein', 'welcome', 'clawpanel', 'openclaw']
+  const weak = ['123456', '654321', 'password', 'admin', 'qwerty', 'abc123', '111111', '000000', 'letmein', 'welcome', '屠戮OpenClaw', 'openclaw']
   if (weak.includes(pw.toLowerCase())) return '密码太常见，请换一个更安全的密码'
   return null // 通过
 }
@@ -1373,7 +1373,7 @@ function getUid() {
 
 function stripUiFields(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return config
-  // 清理根层级 ClawPanel 内部字段（version info 等），避免污染 openclaw.json
+  // 清理根层级 屠戮OpenClaw 内部字段（version info 等），避免污染 openclaw.json
   // Issue #89: 这些字段被写入 openclaw.json 后导致 Gateway 无法启动（Unknown config keys）
   const uiRootKeys = [
     'current', 'latest', 'recommended', 'update_available',
@@ -1809,7 +1809,7 @@ function patchGatewayOrigins() {
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
   const origins = requiredControlUiOrigins()
   const existing = config?.gateway?.controlUi?.allowedOrigins || []
-  // 合并：保留用户已有的 origins，只追加 ClawPanel 需要的
+  // 合并：保留用户已有的 origins，只追加 屠戮OpenClaw 需要的
   const merged = [...new Set([...existing, ...origins])]
   // 幂等：已包含所有需要的 origin 时跳过写入
   if (origins.every(o => existing.includes(o))) return false
@@ -2263,7 +2263,7 @@ function winStartGateway() {
 
   // 写入启动标记到日志
   const timestamp = new Date().toISOString()
-  fs.appendFileSync(logPath, `\n[${timestamp}] [ClawPanel] Starting Gateway on Windows...\n`)
+  fs.appendFileSync(logPath, `\n[${timestamp}] [屠戮OpenClaw] Starting Gateway on Windows...\n`)
 
   // 用 cmd.exe /c 启动，不用 shell: true（避免额外 cmd.exe 进程链导致终端闪烁）
   const child = spawnOpenclaw(['gateway'], {
@@ -2352,7 +2352,7 @@ function currentGatewayOwnerSignature() {
 }
 
 function matchesCurrentGatewayOwnerSignature(owner) {
-  if (!owner || owner.startedBy !== 'clawpanel') return false
+  if (!owner || owner.startedBy !== '屠戮OpenClaw') return false
   const current = currentGatewayOwnerSignature()
   if (Number(owner.port || 0) !== current.port) return false
   if (!owner.openclawDir || path.resolve(owner.openclawDir) !== current.openclawDir) return false
@@ -2381,7 +2381,7 @@ function writeGatewayOwner(pid = null) {
     ...current,
     pid: Number.isInteger(pid) && pid > 0 ? pid : null,
     startedAt: new Date().toISOString(),
-    startedBy: 'clawpanel',
+    startedBy: '屠戮OpenClaw',
   }, null, 2))
 }
 
@@ -2563,7 +2563,7 @@ function linuxStartGateway() {
   const err = fs.openSync(errPath, 'a')
 
   const timestamp = new Date().toISOString()
-  fs.appendFileSync(logPath, `\n[${timestamp}] [ClawPanel] Starting Gateway on Linux...\n`)
+  fs.appendFileSync(logPath, `\n[${timestamp}] [屠戮OpenClaw] Starting Gateway on Linux...\n`)
 
   const child = spawnOpenclaw(['gateway'], {
     detached: true,
@@ -2672,17 +2672,17 @@ function dockerExecRun(containerId, cmd, endpoint = null, timeout = DOCKER_TASK_
   })
 }
 
-// 查找 clawpanel-agent.cjs 脚本并注入到容器（.cjs 避免容器内 ESM 冲突）
+// 查找 屠戮OpenClaw-agent.cjs 脚本并注入到容器（.cjs 避免容器内 ESM 冲突）
 function findAgentScript() {
   const candidates = [
-    path.resolve(__dev_dirname, '../openclaw-docker/full/clawpanel-agent.cjs'),
-    path.resolve(__dev_dirname, '../openclaw-docker/full/clawpanel-agent.js'),
-    path.resolve(__dev_dirname, '../../openclaw-docker/full/clawpanel-agent.cjs'),
-    path.resolve(__dev_dirname, '../../openclaw-docker/full/clawpanel-agent.js'),
-    path.resolve(__dev_dirname, '../clawpanel-agent.cjs'),
-    path.resolve(__dev_dirname, '../clawpanel-agent.js'),
-    path.resolve(__dev_dirname, 'clawpanel-agent.cjs'),
-    path.resolve(__dev_dirname, 'clawpanel-agent.js'),
+    path.resolve(__dev_dirname, '../openclaw-docker/full/屠戮OpenClaw-agent.cjs'),
+    path.resolve(__dev_dirname, '../openclaw-docker/full/屠戮OpenClaw-agent.js'),
+    path.resolve(__dev_dirname, '../../openclaw-docker/full/屠戮OpenClaw-agent.cjs'),
+    path.resolve(__dev_dirname, '../../openclaw-docker/full/屠戮OpenClaw-agent.js'),
+    path.resolve(__dev_dirname, '../屠戮OpenClaw-agent.cjs'),
+    path.resolve(__dev_dirname, '../屠戮OpenClaw-agent.js'),
+    path.resolve(__dev_dirname, '屠戮OpenClaw-agent.cjs'),
+    path.resolve(__dev_dirname, '屠戮OpenClaw-agent.js'),
   ]
   for (const p of candidates) {
     if (!fs.existsSync(p)) continue
@@ -2716,11 +2716,11 @@ function createContainerShellExec(containerId, endpoint) {
 async function injectAgentToContainer(containerId, endpoint, cExecFn, agentScript = null) {
   const source = agentScript || findAgentScript()
   if (!source) {
-    console.warn('[agent] clawpanel-agent.cjs 未找到，跳过注入')
+    console.warn('[agent] 屠戮OpenClaw-agent.cjs 未找到，跳过注入')
     return false
   }
   const b64 = Buffer.from(source.content, 'utf8').toString('base64')
-  await cExecFn(`echo '${b64}' | base64 -d > /app/clawpanel-agent.cjs`)
+  await cExecFn(`echo '${b64}' | base64 -d > /app/屠戮OpenClaw-agent.cjs`)
   console.log(`[agent] agent 已同步 → ${containerId.slice(0, 12)} (${source.hash.slice(0, 8)})`)
   _agentScriptSyncCache.set(getAgentSyncCacheKey(containerId, endpoint), source.hash)
   return true
@@ -3877,7 +3877,7 @@ const handlers = {
     const runAgent = async () => {
       const execResult = await dockerExecRun(
         containerId,
-        ['node', '/app/clawpanel-agent.cjs', cmdJson],
+        ['node', '/app/屠戮OpenClaw-agent.cjs', cmdJson],
         node.endpoint,
         timeout,
       )
@@ -4151,7 +4151,7 @@ const handlers = {
 
       // 每个兵种独立的 AGENTS.md（操作指令）
       const ROLE_AGENTS = {
-        general: '# 操作指令\n\n你是龙虾军团的步兵，接受统帅通过 ClawPanel 下达的任务指令。\n\n## 规则\n- 收到任务后立即执行，完成后简要汇报结果\n- 如果任务不清楚，先确认再行动\n- 保持回复简洁，重点突出\n- 你有独立的记忆空间，会自动记录重要信息',
+        general: '# 操作指令\n\n你是龙虾军团的步兵，接受统帅通过 屠戮OpenClaw 下达的任务指令。\n\n## 规则\n- 收到任务后立即执行，完成后简要汇报结果\n- 如果任务不清楚，先确认再行动\n- 保持回复简洁，重点突出\n- 你有独立的记忆空间，会自动记录重要信息',
         coder: '# 操作指令\n\n你是龙虾军团的突击兵，专精编程作战。\n\n## 规则\n- 收到编程任务后，先分析需求再写代码\n- 代码必须可运行，包含必要的注释\n- 主动进行错误处理和边界检查\n- 如果涉及多个文件，说明修改顺序\n- 完成后给出测试建议\n\n## 专长\n- 全栈开发、API 设计、数据库优化\n- Bug 定位与修复、代码重构\n- 性能优化、安全审计',
         translator: '# 操作指令\n\n你是龙虾军团的翻译官，专精多语言互译。\n\n## 规则\n- 翻译要信达雅，保持原文风格\n- 专业术语保留原文标注\n- 长文分段翻译，保持上下文一致\n- 文学作品注重意境传达\n- 技术文档注重准确性\n\n## 专长\n- 中英日韩法德西等主流语言\n- 技术文档、文学作品、商务邮件',
         writer: '# 操作指令\n\n你是龙虾军团的文书官，专精写作任务。\n\n## 规则\n- 根据场景调整语气和风格\n- 注重结构清晰、逻辑连贯\n- 创意写作要有个性和亮点\n- 技术文档要准确严谨\n- 营销文案要抓住痛点\n\n## 专长\n- 博客文章、技术文档、营销文案\n- 故事创作、剧本、诗歌\n- SEO 优化、社交媒体内容',
@@ -4178,10 +4178,10 @@ const handlers = {
       console.warn(`[init-worker] 兵种配置注入失败: ${e.message}`)
     }
 
-    // 4.5 注入 ClawPanel Agent（容器内专属控制代理）
+    // 4.5 注入 屠戮OpenClaw Agent（容器内专属控制代理）
     try {
       await injectAgentToContainer(containerId, node.endpoint, cExec)
-      results.files.push('clawpanel-agent.cjs')
+      results.files.push('屠戮OpenClaw-agent.cjs')
     } catch (e) {
       console.warn(`[init-worker] Agent 注入失败: ${e.message}`)
     }
@@ -4404,7 +4404,7 @@ const handlers = {
 
   // 部署模式检测
   get_deploy_mode() {
-    const inDocker = fs.existsSync('/.dockerenv') || (process.env.CLAWPANEL_MODE === 'docker')
+    const inDocker = fs.existsSync('/.dockerenv') || (process.env.屠戮OpenClaw_MODE === 'docker')
     const dockerAvailable = isDockerAvailable()
     return { inDocker, dockerAvailable, mode: inDocker ? 'docker' : 'local' }
   },
@@ -5256,7 +5256,7 @@ const handlers = {
     // ── npm install（兜底或用户明确选择） ──
 
     if (!version && recommended) {
-      logs.push(`ClawPanel ${PANEL_VERSION} 默认绑定 OpenClaw 稳定版: ${recommended}`)
+      logs.push(`屠戮OpenClaw ${PANEL_VERSION} 默认绑定 OpenClaw 稳定版: ${recommended}`)
     }
     const gitConfigured = configureGitHttpsRules()
     const gitEnv = buildGitInstallEnv()
@@ -5462,13 +5462,13 @@ const handlers = {
         role: 'operator', scopes: SCOPES, caps: [],
         auth: { token: gatewayToken || '' },
         device: { id: deviceId, publicKey, signedAt, nonce: nonce || '', signature: sigB64 },
-        locale: 'zh-CN', userAgent: 'ClawPanel/1.0.0 (web)',
+        locale: 'zh-CN', userAgent: '屠戮OpenClaw/1.0.0 (web)',
       },
     }
   },
   // 数据目录 & 图片存储
   assistant_ensure_data_dir() {
-    const dataDir = path.join(OPENCLAW_DIR, 'clawpanel')
+    const dataDir = path.join(OPENCLAW_DIR, '屠戮OpenClaw')
     for (const sub of ['images', 'sessions', 'cache']) {
       const dir = path.join(dataDir, sub)
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -5477,7 +5477,7 @@ const handlers = {
   },
 
   assistant_save_image({ id, data }) {
-    const dir = path.join(OPENCLAW_DIR, 'clawpanel', 'images')
+    const dir = path.join(OPENCLAW_DIR, '屠戮OpenClaw', 'images')
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const pureB64 = data.includes(',') ? data.split(',')[1] : data
     const ext = data.startsWith('data:image/png') ? 'png'
@@ -5489,7 +5489,7 @@ const handlers = {
   },
 
   assistant_load_image({ id }) {
-    const dir = path.join(OPENCLAW_DIR, 'clawpanel', 'images')
+    const dir = path.join(OPENCLAW_DIR, '屠戮OpenClaw', 'images')
     for (const ext of ['jpg', 'png', 'gif', 'webp', 'jpeg']) {
       const filepath = path.join(dir, `${id}.${ext}`)
       if (fs.existsSync(filepath)) {
@@ -5502,7 +5502,7 @@ const handlers = {
   },
 
   assistant_delete_image({ id }) {
-    const dir = path.join(OPENCLAW_DIR, 'clawpanel', 'images')
+    const dir = path.join(OPENCLAW_DIR, '屠戮OpenClaw', 'images')
     for (const ext of ['jpg', 'png', 'gif', 'webp', 'jpeg']) {
       const filepath = path.join(dir, `${id}.${ext}`)
       if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
@@ -5952,7 +5952,7 @@ const handlers = {
     return true
   },
 
-  check_panel_update() { return { latest: null, url: 'https://github.com/qingchencloud/clawpanel/releases' } },
+  check_panel_update() { return { latest: null, url: 'https://github.com/qingchencloud/屠戮OpenClaw/releases' } },
 
   // 前端热更新
   async check_frontend_update() {
@@ -5963,7 +5963,7 @@ const handlers = {
     try {
       const resp = await globalThis.fetch('https://claw.qt.cool/update/latest.json', {
         signal: AbortSignal.timeout(8000),
-        headers: { 'User-Agent': 'ClawPanel-Web' },
+        headers: { 'User-Agent': '屠戮OpenClaw-Web' },
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const manifest = await resp.json()
@@ -5976,12 +5976,12 @@ const handlers = {
       return { currentVersion, latestVersion: currentVersion, hasUpdate: false, compatible: true, updateReady: false, manifest: { version: currentVersion } }
     }
   },
-  download_frontend_update() { return { success: true, files: 12, path: path.join(OPENCLAW_DIR, 'clawpanel', 'web-update') } },
+  download_frontend_update() { return { success: true, files: 12, path: path.join(OPENCLAW_DIR, '屠戮OpenClaw', 'web-update') } },
   rollback_frontend_update() { return { success: true } },
   get_update_status() {
     const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-    return { currentVersion: pkg.version, updateReady: false, updateVersion: '', updateDir: path.join(OPENCLAW_DIR, 'clawpanel', 'web-update') }
+    return { currentVersion: pkg.version, updateReady: false, updateVersion: '', updateDir: path.join(OPENCLAW_DIR, '屠戮OpenClaw', 'web-update') }
   },
   write_env_file({ path: p, config }) {
     const expanded = p.startsWith('~/') ? path.join(homedir(), p.slice(2)) : p
@@ -6080,7 +6080,7 @@ async function _apiMiddleware(req, res, next) {
     clearLoginAttempts(clientIp)
     const token = crypto.randomUUID()
     _sessions.set(token, { expires: Date.now() + SESSION_TTL })
-    res.setHeader('Set-Cookie', `clawpanel_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
+    res.setHeader('Set-Cookie', `屠戮OpenClaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true, mustChangePassword: !!cfg.mustChangePassword }))
     return
@@ -6123,7 +6123,7 @@ async function _apiMiddleware(req, res, next) {
     _sessions.clear()
     const token = crypto.randomUUID()
     _sessions.set(token, { expires: Date.now() + SESSION_TTL })
-    res.setHeader('Set-Cookie', `clawpanel_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
+    res.setHeader('Set-Cookie', `屠戮OpenClaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true }))
     return
@@ -6177,8 +6177,8 @@ async function _apiMiddleware(req, res, next) {
 
   if (cmd === 'auth_logout') {
     const cookies = parseCookies(req)
-    if (cookies.clawpanel_session) _sessions.delete(cookies.clawpanel_session)
-    res.setHeader('Set-Cookie', 'clawpanel_session=; Path=/; HttpOnly; Max-Age=0')
+    if (cookies.屠戮OpenClaw_session) _sessions.delete(cookies.屠戮OpenClaw_session)
+    res.setHeader('Set-Cookie', '屠戮OpenClaw_session=; Path=/; HttpOnly; Max-Age=0')
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true }))
     return
@@ -6240,7 +6240,7 @@ export function devApiPlugin() {
     _initApi()
   }
   return {
-    name: 'clawpanel-dev-api',
+    name: '屠戮OpenClaw-dev-api',
     configureServer(server) {
       ensureInit()
       server.middlewares.use(_apiMiddleware)

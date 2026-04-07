@@ -13,11 +13,11 @@ import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 const RENDER_THROTTLE = 30
-const STORAGE_SESSION_KEY = 'clawpanel-last-session'
-const STORAGE_MODEL_KEY = 'clawpanel-chat-selected-model'
-const STORAGE_SIDEBAR_KEY = 'clawpanel-chat-sidebar-open'
-const STORAGE_SESSION_NAMES_KEY = 'clawpanel-chat-session-names'
-const STORAGE_WORKSPACE_PANEL_KEY = 'clawpanel-chat-workspace-open'
+const STORAGE_SESSION_KEY = '屠戮OpenClaw-last-session'
+const STORAGE_MODEL_KEY = '屠戮OpenClaw-chat-selected-model'
+const STORAGE_SIDEBAR_KEY = '屠戮OpenClaw-chat-sidebar-open'
+const STORAGE_SESSION_NAMES_KEY = '屠戮OpenClaw-chat-session-names'
+const STORAGE_WORKSPACE_PANEL_KEY = '屠戮OpenClaw-chat-workspace-open'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -54,6 +54,7 @@ const COMMANDS = [
     { cmd: '/help', desc: 'chat.cmdHelp', action: 'exec' },
     { cmd: '/status', desc: 'chat.cmdStatus', action: 'exec' },
     { cmd: '/context', desc: 'chat.cmdContext', action: 'exec' },
+    { cmd: '/喵咕验证', desc: '快速访问喵咕验证卡密系统', action: 'navigate' },
   ]},
 ]
 
@@ -84,7 +85,7 @@ let _isApplyingModel = false
 
 // ── 托管 Agent ──
 const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
-const HOSTED_SESSIONS_KEY = 'clawpanel-hosted-agent-sessions'
+const HOSTED_SESSIONS_KEY = '屠戮OpenClaw-hosted-agent-sessions'
 const HOSTED_SYSTEM_PROMPT = `你是一个托管调度 Agent。你的职责是：根据用户设定的目标，持续引导 OpenClaw AI Agent 完成任务。
 规则：
 1. 你每一轮只输出一条简洁的指令（1-3 句话），发给 OpenClaw 执行
@@ -345,7 +346,7 @@ export async function render() {
   return page
 }
 
-const GUIDE_KEY = 'clawpanel-guide-chat-dismissed'
+const GUIDE_KEY = '屠戮OpenClaw-guide-chat-dismissed'
 
 function showPageGuide(container) {
   if (localStorage.getItem(GUIDE_KEY)) return
@@ -2981,7 +2982,7 @@ async function runHostedAgentStep() {
 async function callHostedAI(messages, onChunk) {
   let config
   try {
-    const raw = localStorage.getItem('clawpanel-assistant')
+    const raw = localStorage.getItem('屠戮OpenClaw-assistant')
     const stored = raw ? JSON.parse(raw) : {}
     config = { baseUrl: stored.baseUrl || '', apiKey: stored.apiKey || '', model: stored.model || '', temperature: stored.temperature || 0.7, apiType: stored.apiType || 'openai-completions' }
   } catch { config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, apiType: 'openai-completions' } }

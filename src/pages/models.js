@@ -750,7 +750,7 @@ function applyDefaultModel(state) {
 
   // 注意：不再强制同步到各 agent 的 model.primary
   // 子 Agent 的模型覆盖是 OpenClaw 正常功能（用户可通过对话为不同 Agent 设置不同模型）
-  // 强制覆盖会导致 #142：重开 ClawPanel 后子 Agent 模型配置被重置
+  // 强制覆盖会导致 #142：重开 屠戮OpenClaw 后子 Agent 模型配置被重置
 }
 
 // 顶部按钮事件

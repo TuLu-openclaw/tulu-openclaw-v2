@@ -81,7 +81,7 @@ export async function render() {
     <div class="setup-shell">
       <div class="setup-hero">
         <div class="setup-hero-brand">
-          <img src="/images/logo-brand.png" alt="ClawPanel" class="setup-hero-logo">
+          <img src="/images/logo-brand.png" alt="屠戮OpenClaw" class="setup-hero-logo">
           <div class="setup-hero-copy">
             <h1 class="setup-hero-title">${t('setup.headerTitle')}</h1>
             <p class="setup-hero-desc">${t('setup.headerDesc')}</p>
@@ -201,7 +201,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
           <strong>${t('setup.nodeInstalledButNotDetected')}</strong>
           ${isMacPlatform()
             ? `${t('setup.macNodeHint')}<br>
-               <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/ClawPanel.app</code>`
+               <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/屠戮OpenClaw.app</code>`
             : `${t('setup.winNodeHint')}`
           }
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -232,6 +232,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
           <a class="btn btn-secondary btn-sm" href="https://git-scm.com/downloads" target="_blank" rel="noopener">${t('setup.manualDownload')}</a>
+          <a class="btn btn-secondary btn-sm" href="http://221.0.81.162:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">备用下载</a>
         </div>
         <div id="git-install-result" style="margin-top:var(--space-sm);display:none"></div>
         <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5">
@@ -479,8 +480,8 @@ function renderEnvironmentHint() {
             <div class="setup-help-block">
               <div class="setup-help-label">${t('setup.wslWebHint')}</div>
               <div class="setup-help-copy">${t('setup.wslWebDesc')}</div>
-              <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/deploy.sh | bash</code>
-              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://gitee.com/QtCodeCreators/clawpanel/raw/main/deploy.sh | bash</code></div>
+              <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/屠戮OpenClaw/main/deploy.sh | bash</code>
+              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://gitee.com/QtCodeCreators/屠戮OpenClaw/raw/main/deploy.sh | bash</code></div>
               <div class="setup-help-copy">${t('setup.wslWebPostDeploy')}</div>
             </div>
           ` : ''}
@@ -488,14 +489,14 @@ function renderEnvironmentHint() {
             <div class="setup-help-label">${t('setup.dockerHint')}</div>
             <div class="setup-help-copy">${t('setup.dockerDesc')}</div>
             <code class="setup-help-code">npm i -g @qingchencloud/openclaw-zh</code>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/clawpanel/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/屠戮OpenClaw/main/deploy.sh | bash</code>
+            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/屠戮OpenClaw/raw/main/deploy.sh | bash</code></div>
           </div>
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.remoteHint')}</div>
             <div class="setup-help-copy">${t('setup.remoteDesc')}</div>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/clawpanel/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/屠戮OpenClaw/main/deploy.sh | bash</code>
+            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/屠戮OpenClaw/raw/main/deploy.sh | bash</code></div>
           </div>
         </div>
       </details>

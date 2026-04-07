@@ -1,5 +1,5 @@
 # =============================================================================
-# ClawPanel Docker Compose 配置
+# 屠戮OpenClaw Docker Compose 配置
 # =============================================================================
 # 使用方法:
 #   1. 快速启动: docker compose up -d
@@ -10,19 +10,19 @@
 
 services:
   # ---------------------------------------------------------------------------
-  # ClawPanel Web 服务
+  # 屠戮OpenClaw Web 服务
   # ---------------------------------------------------------------------------
-  clawpanel:
+  屠戮OpenClaw:
     build:
       context: .
       dockerfile: Dockerfile
       # 使用 BuildKit 构建缓存
       cache_from:
-        - clawpanel:build-cache
+        - 屠戮OpenClaw:build-cache
       args:
         - NPM_REGISTRY=https://registry.npmmirror.com
-    container_name: clawpanel
-    hostname: clawpanel
+    container_name: 屠戮OpenClaw
+    hostname: 屠戮OpenClaw
 
     # -------------------------------------------------------------------------
     # 网络配置 - 关键：使用 host 网络模式解决容器内外互通问题
@@ -41,7 +41,7 @@ services:
     # 如果你想用 bridge 模式而不是 host 模式，注释上面一行，取消下面注释
     # -------------------------------------------------------------------------
     # ports:
-    #   - "1420:1420"      # ClawPanel Web 界面
+    #   - "1420:1420"      # 屠戮OpenClaw Web 界面
 
     # -------------------------------------------------------------------------
     # 卷挂载 - 数据持久化
@@ -50,7 +50,7 @@ services:
       # OpenClaw 配置目录 - 关键！
       # 包含 openclaw.json, mcp.json, agents/, devices/ 等
       - ~/.openclaw:/root/.openclaw
-      # ClawPanel 数据目录（可选，用于存储临时文件）
+      # 屠戮OpenClaw 数据目录（可选，用于存储临时文件）
       - ./data:/app/data
 
     # -------------------------------------------------------------------------
@@ -154,7 +154,7 @@ services:
 # =============================================================================
 # networks:
 #   default:
-#     name: clawpanel-network
+#     name: 屠戮OpenClaw-network
 #     driver: bridge
 
 # =============================================================================
@@ -162,4 +162,4 @@ services:
 # =============================================================================
 # volumes:
 #   openclaw-config:
-#     name: clawpanel-openclaw-config
+#     name: 屠戮OpenClaw-openclaw-config

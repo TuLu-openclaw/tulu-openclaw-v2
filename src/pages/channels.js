@@ -233,7 +233,7 @@ const PLATFORM_REGISTRY = {
       { key: 'accessToken', label: 'Access Token', placeholder: 'syt_xxxxx', secret: true, required: false, hint: t('channels.matrixAccessTokenHint') },
       { key: 'userId', label: 'User ID', placeholder: '@bot:matrix.org', required: false },
       { key: 'password', label: 'Password', placeholder: t('channels.matrixPasswordPh'), secret: true, required: false },
-      { key: 'deviceId', label: 'Device ID', placeholder: t('channels.optionalEg', { example: 'CLAWPANEL' }), required: false },
+      { key: 'deviceId', label: 'Device ID', placeholder: t('channels.optionalEg', { example: '屠戮OpenClaw' }), required: false },
       { key: 'e2ee', label: 'E2EE', type: 'select', options: [{ value: '', label: t('channels.policyDefault') }, { value: 'true', label: t('channels.enable') }, { value: 'false', label: t('channels.disable') }], required: false },
       { key: 'dmPolicy', label: t('channels.dmPolicy'), type: 'select', options: [{ value: '', label: t('channels.policyDefault') }, { value: 'allow', label: t('channels.dmAllow') }, { value: 'deny', label: t('channels.dmDeny') }], required: false },
       { key: 'groupPolicy', label: t('channels.groupPolicy'), type: 'select', options: [{ value: '', label: t('channels.policyDefault') }, { value: 'all', label: t('channels.groupAllRooms') }, { value: 'mentioned', label: t('channels.groupMentionBot') }, { value: 'allowlist', label: t('channels.groupAllowlist') }], required: false },

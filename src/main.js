@@ -1,5 +1,5 @@
 /**
- * ClawPanel 入口
+ * 屠戮OpenClaw 入口
  */
 
 // 模块已加载，取消 splash 超时回退（防止假阳性的 "页面加载失败" 提示）
@@ -14,7 +14,7 @@ import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStat
 import { version as APP_VERSION } from '../package.json'
 import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
-import { tryShowEngagement } from './components/engagement.js'
+// import { tryShowEngagement } from './components/engagement.js'
 import { initI18n, t } from './lib/i18n.js'
 
 // 样式
@@ -49,12 +49,12 @@ const isTauri = isTauriRuntime()
 
 async function checkAuth() {
   if (isTauri) {
-    // 桌面端：读 clawpanel.json，检查密码配置
+    // 桌面端：读 屠戮OpenClaw.json，检查密码配置
     try {
       const { api } = await import('./lib/tauri-api.js')
       const cfg = await api.readPanelConfig()
       if (!cfg.accessPassword) return { ok: true }
-      if (sessionStorage.getItem('clawpanel_authed') === '1') return { ok: true }
+      if (sessionStorage.getItem('屠戮OpenClaw_authed') === '1') return { ok: true }
       // 默认密码：直接传给登录页，避免二次读取
       const defaultPw = (cfg.mustChangePassword && cfg.accessPassword) ? cfg.accessPassword : null
       return { ok: false, defaultPw }
@@ -106,7 +106,7 @@ function showBackendDownOverlay() {
       </button>
       <div id="backend-retry-status" style="font-size:12px;color:var(--text-tertiary);margin-top:12px"></div>
       <div style="margin-top:16px;font-size:11px;color:#aaa">
-        <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">claw.qt.cool</a>
+        <a href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
         <span style="margin:0 6px">&middot;</span>v${APP_VERSION}
       </div>
     </div>
@@ -171,11 +171,11 @@ function showLoginOverlay(defaultPw) {
   let _captcha = _loginFailCount >= CAPTCHA_THRESHOLD ? _genCaptcha() : null
   const securityLabel = t('sidebar.security')
   const accessPasswordField = '<code style="background:rgba(99,102,241,.1);padding:1px 5px;border-radius:3px;font-size:10px">accessPassword</code>'
-  const resetPath = '<code style="background:rgba(99,102,241,.1);padding:2px 6px;border-radius:3px;font-size:10px;word-break:break-all">~/.openclaw/clawpanel.json</code>'
+  const resetPath = '<code style="background:rgba(99,102,241,.1);padding:2px 6px;border-radius:3px;font-size:10px;word-break:break-all">~/.openclaw/屠戮OpenClaw.json</code>'
   overlay.innerHTML = `
     <div class="login-card">
       ${_logoSvg}
-      <div class="login-title">ClawPanel</div>
+      <div class="login-title">屠戮 OpenClaw</div>
       <div class="login-desc">${hasDefault
         ? `${t('security.firstLoginHint')}<br><span style="font-size:12px;color:#6366f1;font-weight:600">${t('security.firstLoginChangeHint', { security: securityLabel })}</span>`
         : (isTauri ? t('security.appLocked') : t('security.loginPrompt'))}</div>
@@ -198,7 +198,7 @@ function showLoginOverlay(defaultPw) {
         </div>
       </details>` : ''}
       <div style="margin-top:${hasDefault ? '20' : '12'}px;font-size:11px;color:#aaa;text-align:center">
-        <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">claw.qt.cool</a>
+        <a href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
         <span style="margin:0 6px">·</span>v${APP_VERSION}
       </div>
     </div>
@@ -246,7 +246,7 @@ function showLoginOverlay(defaultPw) {
             btn.textContent = t('security.loginAction')
             return
           }
-          sessionStorage.setItem('clawpanel_authed', '1')
+          sessionStorage.setItem('屠戮OpenClaw_authed', '1')
           // 同步建立 web session（WEB_ONLY_CMDS 需要 cookie 认证）
           try {
             await fetch('/__api/auth_login', {
@@ -258,7 +258,7 @@ function showLoginOverlay(defaultPw) {
           overlay.classList.add('hide')
           setTimeout(() => overlay.remove(), 400)
           if (cfg.accessPassword === '123456') {
-            sessionStorage.setItem('clawpanel_must_change_pw', '1')
+            sessionStorage.setItem('屠戮OpenClaw_must_change_pw', '1')
           }
           resolve()
         } else {
@@ -284,7 +284,7 @@ function showLoginOverlay(defaultPw) {
           overlay.classList.add('hide')
           setTimeout(() => overlay.remove(), 400)
           if (data.mustChangePassword || data.defaultPassword === '123456') {
-            sessionStorage.setItem('clawpanel_must_change_pw', '1')
+            sessionStorage.setItem('屠戮OpenClaw_must_change_pw', '1')
           }
           resolve()
         }
@@ -298,7 +298,7 @@ function showLoginOverlay(defaultPw) {
 }
 
 // 全局 401 拦截：API 返回 401 时弹出登录
-window.__clawpanel_show_login = async function() {
+window.__屠戮OpenClaw_show_login = async function() {
   if (document.getElementById('login-overlay')) return
   await showLoginOverlay()
   location.reload()
@@ -320,6 +320,9 @@ async function boot() {
   registerRoute('/gateway', () => import('./pages/gateway.js'))
   registerRoute('/memory', () => import('./pages/memory.js'))
   registerRoute('/skills', () => import('./pages/skills.js'))
+  registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
+  registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
+  registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
   registerRoute('/security', () => import('./pages/security.js'))
   registerRoute('/about', () => import('./pages/about.js'))
   registerRoute('/assistant', () => import('./pages/assistant.js'))
@@ -342,7 +345,7 @@ async function boot() {
     <button class="mobile-hamburger" id="btn-mobile-menu">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
-    <span class="mobile-topbar-title">ClawPanel</span>
+    <span class="mobile-topbar-title">屠戮 OpenClaw</span>
   `
   topbar.querySelector('.mobile-hamburger').addEventListener('click', openMobileSidebar)
   mainCol.prepend(topbar)
@@ -355,13 +358,13 @@ async function boot() {
   }
 
   // 默认密码提醒横幅
-  if (sessionStorage.getItem('clawpanel_must_change_pw') === '1') {
+  if (sessionStorage.getItem('屠戮OpenClaw_must_change_pw') === '1') {
     const banner = document.createElement('div')
     banner.id = 'pw-change-banner'
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:13px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,0.15)'
     banner.innerHTML = `
       <span>${statusIcon('warn', 14)} ${t('common.defaultPasswordBanner')}</span>
-      <a href="#/security" style="color:#fff;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600" onclick="document.getElementById('pw-change-banner').remove();sessionStorage.removeItem('clawpanel_must_change_pw')">${t('common.goSecurity')}</a>
+      <a href="#/security" style="color:#fff;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600" onclick="document.getElementById('pw-change-banner').remove();sessionStorage.removeItem('屠戮OpenClaw_must_change_pw')">${t('common.goSecurity')}</a>
       <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px">✕</button>
     `
     document.body.prepend(banner)
@@ -400,8 +403,8 @@ async function boot() {
       onGatewayChange((running) => {
         if (running) {
           autoConnectWebSocket()
-          // 正向时机：Gateway 启动成功，延迟弹社区引导
-          setTimeout(tryShowEngagement, 5000)
+          // 正向时机：社区引导已禁用
+          // setTimeout(tryShowEngagement, 5000)
         } else {
           wsClient.disconnect()
         }
@@ -738,11 +741,11 @@ async function checkGlobalUpdate() {
     if (!ver) return
 
     // 用户已忽略过该版本，不再打扰
-    const dismissed = localStorage.getItem('clawpanel_update_dismissed')
+    const dismissed = localStorage.getItem('屠戮OpenClaw_update_dismissed')
     if (dismissed === ver) return
 
     // 热更新已下载并重载过，不再重复提示同一版本
-    const hotApplied = localStorage.getItem('clawpanel_hot_update_applied')
+    const hotApplied = localStorage.getItem('屠戮OpenClaw_hot_update_applied')
     if (hotApplied === ver) return
 
     const changelog = info.manifest?.changelog || ''
@@ -758,9 +761,9 @@ async function checkGlobalUpdate() {
         </div>
         ${isWeb
           ? `<button class="btn btn-sm" id="btn-update-show-cmd">${t('about.updateMethod')}</button>
-             <a class="btn btn-sm" href="https://github.com/qingchencloud/clawpanel/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
+             <a class="btn btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
           : `<button class="btn btn-sm" id="btn-update-hot">${t('about.hotUpdate')}</button>
-             <a class="btn btn-sm" href="https://github.com/qingchencloud/clawpanel/releases" target="_blank" rel="noopener">${t('about.fullInstaller')}</a>`
+             <a class="btn btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener">${t('about.fullInstaller')}</a>`
         }
         <button class="update-banner-close" id="btn-update-dismiss" title="${t('about.dismissVersion')}">✕</button>
       </div>
@@ -768,7 +771,7 @@ async function checkGlobalUpdate() {
 
     // 关闭按钮：记住忽略的版本
     banner.querySelector('#btn-update-dismiss')?.addEventListener('click', () => {
-      localStorage.setItem('clawpanel_update_dismissed', ver)
+      localStorage.setItem('屠戮OpenClaw_update_dismissed', ver)
       banner.classList.add('update-banner-hidden')
     })
 
@@ -781,11 +784,11 @@ async function checkGlobalUpdate() {
           <div class="modal-title">${t('about.updateToVersion', { version: ver })}</div>
           <div style="font-size:var(--font-size-sm);line-height:1.8">
             <p style="margin-bottom:12px">${t('about.runOnServer')}</p>
-            <pre style="background:var(--bg-tertiary);padding:12px 16px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;user-select:all">cd /opt/clawpanel
+            <pre style="background:var(--bg-tertiary);padding:12px 16px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;user-select:all">cd /opt/屠戮OpenClaw
 git pull origin main
 npm install
 npm run build
-sudo systemctl restart clawpanel</pre>
+sudo systemctl restart 屠戮OpenClaw</pre>
             <p style="margin-top:12px;color:var(--text-tertiary);font-size:var(--font-size-xs)">
               ${t('about.updateCommandHint')}
             </p>
@@ -809,7 +812,7 @@ sudo systemctl restart clawpanel</pre>
       btn.textContent = t('about.downloading')
       try {
         await api.downloadFrontendUpdate(info.manifest?.url || '', info.manifest?.hash || '')
-        localStorage.setItem('clawpanel_hot_update_applied', ver)
+        localStorage.setItem('屠戮OpenClaw_hot_update_applied', ver)
         btn.textContent = t('about.reloadApp')
         btn.disabled = false
         btn.onclick = () => window.location.reload()
@@ -857,7 +860,7 @@ function startUpdateChecker() {
         <div style="font-size:18px;font-weight:600;margin-bottom:8px;color:#18181b">${t('common.pageLoadFailed')}</div>
         <div style="font-size:13px;color:#71717a;max-width:400px;line-height:1.6;margin-bottom:16px">${String(bootErr?.message || bootErr).replace(/</g,'&lt;')}</div>
         <button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-size:13px;cursor:pointer">${t('common.reloadRetry')}</button>
-        <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}<br><a href="https://github.com/qingchencloud/clawpanel/issues" target="_blank" style="color:#6366f1">GitHub Issues</a></div>
+        <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}<br><a href="https://github.com/qingchencloud/屠戮OpenClaw/issues" target="_blank" style="color:#6366f1">GitHub Issues</a></div>
       </div>`
   }
   startUpdateChecker()

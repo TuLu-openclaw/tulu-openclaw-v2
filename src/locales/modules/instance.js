@@ -17,6 +17,6 @@ export default {
   adding: _('添加中...', 'Adding...', '新增中...', '追加中...', '추가 중...', 'Đang thêm...', 'Agregando...', 'Adicionando...', 'Добавление...', 'Ajout...', 'Wird hinzugefügt...'),
   switchedTo: _('已切换到 {name} — 模型配置、Agent 等将管理该实例', 'Switched to {name} — Models, Agents, etc. will manage this instance', '已切換到 {name} — 模型設定、Agent 等將管理該執行個體', '{name} に切り替えました', '{name}(으)로 전환됨'),
   current: _('当前', 'Active', '目前', '現在', '현재', 'Hiện tại', 'Actual', 'Atual', 'Текущий', 'Actuel', 'Aktuell'),
-  remoteHint: _('远程服务器需要运行 ClawPanel (serve.js)。', 'The remote server must be running ClawPanel (serve.js).', '遠程伺服器需要執行 ClawPanel (serve.js)。', 'リモートサーバーで ClawPanel (serve.js) が実行されている必要があります。', '원격 서버에서 ClawPanel (serve.js)이 실행 중이어야 합니다.'),
+  remoteHint: _('远程服务器需要运行 屠戮OpenClaw (serve.js)。', 'The remote server must be running 屠戮OpenClaw (serve.js).', '遠程伺服器需要執行 屠戮OpenClaw (serve.js)。', 'リモートサーバーで 屠戮OpenClaw (serve.js) が実行されている必要があります。', '원격 서버에서 屠戮OpenClaw (serve.js)이 실행 중이어야 합니다.'),
   example: _('示例', 'Example', '', '例', '예시'),
 }

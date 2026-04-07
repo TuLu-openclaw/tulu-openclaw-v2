@@ -92,7 +92,7 @@ fn current_gateway_owner_signature() -> (u16, String, Option<String>) {
 }
 
 fn matches_current_gateway_owner_signature(owner: &GatewayOwnerRecord) -> bool {
-    if owner.started_by != "clawpanel" {
+    if owner.started_by != "屠戮OpenClaw" {
         return false;
     }
     let (port, openclaw_dir, cli_path) = current_gateway_owner_signature();
@@ -132,7 +132,7 @@ fn write_gateway_owner(pid: Option<u32>) -> Result<(), String> {
         cli_path,
         openclaw_dir,
         started_at: chrono::Local::now().to_rfc3339(),
-        started_by: "clawpanel".into(),
+        started_by: "屠戮OpenClaw".into(),
     };
     let content = serde_json::to_string_pretty(&record)
         .map_err(|e| format!("序列化 Gateway owner 失败: {e}"))?;
@@ -623,7 +623,7 @@ mod platform {
             .stderr(stderr_log);
         cmd.spawn().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "OpenClaw CLI 未找到，请确认已安装并重启 ClawPanel。".to_string()
+                "OpenClaw CLI 未找到，请确认已安装并重启 屠戮OpenClaw。".to_string()
             } else {
                 format!("启动 Gateway 失败: {e}")
             }
@@ -1168,7 +1168,7 @@ mod platform {
 
         let _ = writeln!(
             stdout_log,
-            "\n[{}] [ClawPanel] Hidden-start Gateway on Windows",
+            "\n[{}] [屠戮OpenClaw] Hidden-start Gateway on Windows",
             chrono::Local::now().to_rfc3339()
         );
 

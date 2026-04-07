@@ -14,6 +14,6 @@
   "adding": "추가 중...",
   "switchedTo": "{name}(으)로 전환됨",
   "current": "현재",
-  "remoteHint": "원격 서버에서 ClawPanel (serve.js)이 실행 중이어야 합니다.",
+  "remoteHint": "원격 서버에서 屠戮OpenClaw (serve.js)이 실행 중이어야 합니다.",
   "example": "예시"
 }

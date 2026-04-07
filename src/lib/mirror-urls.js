@@ -10,7 +10,7 @@ const GITEE_RAW = 'https://gitee.com/QtCodeCreators'
 
 // 仓库名映射（GitHub → Gitee，名称不同时需映射）
 const REPO_MAP = {
-  clawpanel: 'clawpanel',
+  屠戮OpenClaw: '屠戮OpenClaw',
   clawapp: 'clawapp',
   cftunnel: 'cftunnel',
   'openclaw-zh': 'openclaw-zh',
@@ -42,7 +42,7 @@ async function isGithubReachable() {
 
 /**
  * 获取仓库 URL（优先 GitHub，不可达时用 Gitee）
- * @param {string} repo - 仓库名，如 'clawpanel'
+ * @param {string} repo - 仓库名，如 '屠戮OpenClaw'
  * @param {string} [path] - 可选路径，如 '/releases'、'/issues/new'
  */
 export async function repoUrl(repo, path = '') {
@@ -87,8 +87,8 @@ export async function rawFileUrl(repo, branch, filePath) {
  */
 export function deployCommand() {
   return {
-    github: `curl -fsSL ${GITHUB_RAW}/clawpanel/main/deploy.sh | bash`,
-    gitee: `curl -fsSL ${GITEE_RAW}/clawpanel/raw/main/deploy.sh | bash`,
+    github: `curl -fsSL ${GITHUB_RAW}/屠戮OpenClaw/main/deploy.sh | bash`,
+    gitee: `curl -fsSL ${GITEE_RAW}/屠戮OpenClaw/raw/main/deploy.sh | bash`,
   }
 }
 

@@ -1,9 +1,9 @@
 /**
  * 本地消息存储 - IndexedDB
- * 从 clawapp 移植，适配 ClawPanel
+ * 从 clawapp 移植，适配 屠戮OpenClaw
  */
 
-const DB_NAME = 'clawpanel-messages'
+const DB_NAME = '屠戮OpenClaw-messages'
 const DB_VERSION = 1
 const STORE_NAME = 'messages'
 const STORE_SESSIONS = 'sessions'

@@ -1,15 +1,15 @@
 [package]
-name = "clawpanel"
+name = "屠戮OpenClaw"
 version = "0.11.5"
 edition = "2021"
-description = "ClawPanel - OpenClaw 可视化管理面板"
+description = "屠戮OpenClaw - OpenClaw 可视化管理面板"
 authors = ["qingchencloud"]
-repository = "https://github.com/qingchencloud/clawpanel"
-homepage = "https://github.com/qingchencloud/clawpanel"
+repository = "https://github.com/qingchencloud/屠戮OpenClaw"
+homepage = "https://github.com/qingchencloud/屠戮OpenClaw"
 license = "AGPL-3.0"
 
 [lib]
-name = "clawpanel_lib"
+name = "屠戮OpenClaw_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

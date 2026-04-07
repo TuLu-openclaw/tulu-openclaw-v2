@@ -58,7 +58,7 @@ static INDEX_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(Non
 // ── HTTP 客户端 ──────────────────────────────────────────
 
 fn client() -> Result<reqwest::Client, String> {
-    super::build_http_client(Duration::from_secs(30), Some("ClawPanel-SkillHub/1.0"))
+    super::build_http_client(Duration::from_secs(30), Some("屠戮OpenClaw-SkillHub/1.0"))
 }
 
 // ── 公开接口 ──────────────────────────────────────────────

@@ -1,4 +1,4 @@
-# ClawPanel 发布构建工作流
+# 屠戮OpenClaw 发布构建工作流
 # 推送 v* 标签时自动构建跨平台产物并创建 GitHub Release
 name: Release
 
@@ -111,7 +111,7 @@ jobs:
           # TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ env.TAG_NAME }}
-          releaseName: "ClawPanel ${{ env.TAG_NAME }}"
+          releaseName: "屠戮OpenClaw ${{ env.TAG_NAME }}"
           releaseBody: "正在构建所有平台安装包，请稍候..."
           releaseDraft: false
           prerelease: false
@@ -145,20 +145,20 @@ jobs:
           BUNDLE_DIR="src-tauri/target/release/bundle"
 
           # 确保 Release 已存在（可能被其他 matrix job 的 tauri-action 创建）
-          gh release create "$TAG_NAME" --title "ClawPanel $TAG_NAME" \
+          gh release create "$TAG_NAME" --title "屠戮OpenClaw $TAG_NAME" \
             --notes "正在构建所有平台安装包，请稍候..." 2>/dev/null || true
 
           # 重命名 NSIS exe 并上传
-          mv "${BUNDLE_DIR}/nsis/ClawPanel_${VERSION}_x64-setup.exe" \
-             "${BUNDLE_DIR}/nsis/ClawPanel_${VERSION}_x64-setup-full.exe"
+          mv "${BUNDLE_DIR}/nsis/屠戮OpenClaw_${VERSION}_x64-setup.exe" \
+             "${BUNDLE_DIR}/nsis/屠戮OpenClaw_${VERSION}_x64-setup-full.exe"
           gh release upload "$TAG_NAME" \
-             "${BUNDLE_DIR}/nsis/ClawPanel_${VERSION}_x64-setup-full.exe" --clobber
+             "${BUNDLE_DIR}/nsis/屠戮OpenClaw_${VERSION}_x64-setup-full.exe" --clobber
 
           # 重命名 MSI 并上传
-          mv "${BUNDLE_DIR}/msi/ClawPanel_${VERSION}_x64_en-US.msi" \
-             "${BUNDLE_DIR}/msi/ClawPanel_${VERSION}_x64-full_en-US.msi"
+          mv "${BUNDLE_DIR}/msi/屠戮OpenClaw_${VERSION}_x64_en-US.msi" \
+             "${BUNDLE_DIR}/msi/屠戮OpenClaw_${VERSION}_x64-full_en-US.msi"
           gh release upload "$TAG_NAME" \
-             "${BUNDLE_DIR}/msi/ClawPanel_${VERSION}_x64-full_en-US.msi" --clobber
+             "${BUNDLE_DIR}/msi/屠戮OpenClaw_${VERSION}_x64-full_en-US.msi" --clobber
 
   # ── 所有平台构建完成后，统一更新 Release Notes ─────────────────────────────
   # 独立 job 确保只执行一次，彻底避免多个 matrix job 的竞争条件
@@ -312,33 +312,33 @@ jobs:
             echo "### macOS"
             echo "| 芯片 | 安装包 |"
             echo "|------|--------|"
-            echo "| Apple Silicon (M1/M2/M3/M4) | [ClawPanel_${VERSION}_aarch64.dmg](${DL}/ClawPanel_${VERSION}_aarch64.dmg) |"
-            echo "| Intel | [ClawPanel_${VERSION}_x64.dmg](${DL}/ClawPanel_${VERSION}_x64.dmg) |"
+            echo "| Apple Silicon (M1/M2/M3/M4) | [屠戮OpenClaw_${VERSION}_aarch64.dmg](${DL}/屠戮OpenClaw_${VERSION}_aarch64.dmg) |"
+            echo "| Intel | [屠戮OpenClaw_${VERSION}_x64.dmg](${DL}/屠戮OpenClaw_${VERSION}_x64.dmg) |"
             echo ""
-            echo '> **⚠️ 首次打开提示"无法验证开发者"？** 在终端执行：`sudo xattr -rd com.apple.quarantine /Applications/ClawPanel.app`，或前往 **系统设置 → 隐私与安全性** 点击「仍要打开」。'
+            echo '> **⚠️ 首次打开提示"无法验证开发者"？** 在终端执行：`sudo xattr -rd com.apple.quarantine /Applications/屠戮OpenClaw.app`，或前往 **系统设置 → 隐私与安全性** 点击「仍要打开」。'
             echo ""
             echo "### Windows"
             echo "| 格式 | 安装包 | 说明 |"
             echo "|------|--------|------|"
-            echo "| EXE 安装器（推荐） | [ClawPanel_${VERSION}_x64-setup.exe](${DL}/ClawPanel_${VERSION}_x64-setup.exe) | 轻量版 ~10 MB |"
-            echo "| EXE 完整包 | [ClawPanel_${VERSION}_x64-setup-full.exe](${DL}/ClawPanel_${VERSION}_x64-setup-full.exe) | 含 WebView2 ~200 MB |"
-            echo "| MSI 安装器 | [ClawPanel_${VERSION}_x64_en-US.msi](${DL}/ClawPanel_${VERSION}_x64_en-US.msi) | 轻量版 ~10 MB |"
-            echo "| MSI 完整包 | [ClawPanel_${VERSION}_x64-full_en-US.msi](${DL}/ClawPanel_${VERSION}_x64-full_en-US.msi) | 含 WebView2 ~200 MB |"
+            echo "| EXE 安装器（推荐） | [屠戮OpenClaw_${VERSION}_x64-setup.exe](${DL}/屠戮OpenClaw_${VERSION}_x64-setup.exe) | 轻量版 ~10 MB |"
+            echo "| EXE 完整包 | [屠戮OpenClaw_${VERSION}_x64-setup-full.exe](${DL}/屠戮OpenClaw_${VERSION}_x64-setup-full.exe) | 含 WebView2 ~200 MB |"
+            echo "| MSI 安装器 | [屠戮OpenClaw_${VERSION}_x64_en-US.msi](${DL}/屠戮OpenClaw_${VERSION}_x64_en-US.msi) | 轻量版 ~10 MB |"
+            echo "| MSI 完整包 | [屠戮OpenClaw_${VERSION}_x64-full_en-US.msi](${DL}/屠戮OpenClaw_${VERSION}_x64-full_en-US.msi) | 含 WebView2 ~200 MB |"
             echo ""
             echo "> **💡 轻量版 vs 完整包**：Win10 1803+ 和 Win11 已预装 WebView2，推荐下载轻量版。如果是内网/断网环境，选择完整包。"
             echo ""
             echo "### Linux"
             echo "| 格式 | 安装包 |"
             echo "|------|--------|"
-            echo "| AppImage（免安装） | [ClawPanel_${VERSION}_amd64.AppImage](${DL}/ClawPanel_${VERSION}_amd64.AppImage) |"
-            echo "| DEB（Debian/Ubuntu） | [ClawPanel_${VERSION}_amd64.deb](${DL}/ClawPanel_${VERSION}_amd64.deb) |"
-            echo "| RPM（Fedora/RHEL） | [ClawPanel-${VERSION}-1.x86_64.rpm](${DL}/ClawPanel-${VERSION}-1.x86_64.rpm) |"
+            echo "| AppImage（免安装） | [屠戮OpenClaw_${VERSION}_amd64.AppImage](${DL}/屠戮OpenClaw_${VERSION}_amd64.AppImage) |"
+            echo "| DEB（Debian/Ubuntu） | [屠戮OpenClaw_${VERSION}_amd64.deb](${DL}/屠戮OpenClaw_${VERSION}_amd64.deb) |"
+            echo "| RPM（Fedora/RHEL） | [屠戮OpenClaw-${VERSION}-1.x86_64.rpm](${DL}/屠戮OpenClaw-${VERSION}-1.x86_64.rpm) |"
             echo ""
             echo "---"
             echo ""
             echo "## 🚀 首次使用"
             echo ""
-            echo "1. 安装并打开 ClawPanel"
+            echo "1. 安装并打开 屠戮OpenClaw"
             echo "2. 首次运行会自动检测 Node.js 环境和 OpenClaw CLI"
             echo "3. 如未安装 OpenClaw，按提示一键安装即可"
             echo "4. 安装完成后自动跳转仪表盘，开始使用"

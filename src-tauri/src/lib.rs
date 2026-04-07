@@ -10,7 +10,7 @@ use commands::{
 
 pub fn run() {
     let hot_update_dir = commands::openclaw_dir()
-        .join("clawpanel")
+        .join("屠戮OpenClaw")
         .join("web-update");
 
     tauri::Builder::default()
@@ -218,7 +218,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("启动 ClawPanel 失败")
+        .expect("启动 屠戮OpenClaw 失败")
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
                 #[cfg(target_os = "windows")]

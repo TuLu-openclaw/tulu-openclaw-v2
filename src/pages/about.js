@@ -15,9 +15,9 @@ export async function render() {
 
   page.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;gap:16px">
-      <img src="/images/logo-brand.png" alt="ClawPanel" style="height:48px;width:auto">
+      <img src="/images/logo-brand.png" alt="屠戮OpenClaw" style="height:48px;width:auto">
       <div>
-        <h1 class="page-title" style="margin:0">ClawPanel</h1>
+        <h1 class="page-title" style="margin:0">屠戮OpenClaw</h1>
         <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:var(--primary)">claw.qt.cool</a></p>
       </div>
     </div>
@@ -69,7 +69,7 @@ async function loadData(page) {
       api.checkInstallation(),
     ])
 
-    // 尝试从 Tauri API 获取 ClawPanel 自身版本号，失败则 fallback
+    // 尝试从 Tauri API 获取 屠戮OpenClaw 自身版本号，失败则 fallback
     let panelVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'
     try {
       const { getVersion } = await import('@tauri-apps/api/app')
@@ -94,7 +94,7 @@ async function loadData(page) {
 
     cards.innerHTML = `
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">ClawPanel</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">屠戮OpenClaw</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
       </div>
@@ -450,7 +450,7 @@ async function checkHotUpdate(cards, panelVersion) {
         <span style="color:var(--accent)">${t('about.newVersion')}: v${ver}</span>
         ${changelog ? `<span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${changelog}</span>` : ''}
         <button class="btn btn-primary btn-sm" id="btn-hot-download" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.hotUpdate')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.fullInstaller')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.fullInstaller')}</a>
       `
       meta.querySelector('#btn-hot-download')?.addEventListener('click', async () => {
         const btn = meta.querySelector('#btn-hot-download')
@@ -465,7 +465,7 @@ async function checkHotUpdate(cards, panelVersion) {
         }
       })
     } else if (!info.compatible) {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-primary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.goToWebsite')}</a> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-primary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.goToWebsite')}</a> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a>`
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
     }
@@ -493,35 +493,14 @@ function renderCommunity(page) {
   el.innerHTML = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
       <div style="text-align:center">
-        <img src="/images/OpenClaw-QQ.png" alt="${t('about.qqGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.qqGroup')}</div>
-      </div>
-      <div style="text-align:center">
-        <img src="/images/OpenClawWx.png" alt="${t('about.wechatGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.wechatGroup')}</div>
-      </div>
-      <div style="text-align:center">
-        <img src="https://qt.cool/c/OpenClawDY/qr.png" alt="${t('about.douyinGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.douyinGroup')}</div>
-      </div>
-      <div style="text-align:center">
-        <img src="https://qt.cool/c/feishu/qr.png" alt="${t('about.feishuGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary);object-fit:contain;background:#fff">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.feishuGroup')}</div>
+        <img src="https://qr.qq.com/a/feed/916149901" alt="反馈交流群" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
+        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">反馈交流群</div>
       </div>
       <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;padding-top:4px">
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">${t('about.communityWelcome')}</div>
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);font-style:italic">${t('about.communityWelcomeIntl')}</div>
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-top:4px">${t('about.communityDesc')}</div>
+        <div style="font-size:var(--font-size-md);color:var(--text-primary);font-weight:600">交流反馈请联系QQ群</div>
+        <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">遇到问题或有建议，欢迎加群交流</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          <a class="btn btn-sm" href="https://discord.gg/U9AttmsNHh" target="_blank" rel="noopener" style="background:#5865F2;color:#fff;display:inline-flex;align-items:center;gap:4px;border:none">${icon('message-circle', 14)} ${t('about.joinDiscord')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/OpenClaw" target="_blank" rel="noopener">${t('about.joinQQ')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/OpenClawWx" target="_blank" rel="noopener">${t('about.joinWechat')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/OpenClawDY" target="_blank" rel="noopener">${t('about.joinDouyin')}</a>
-          <a class="btn btn-primary btn-sm" href="https://qt.cool/c/feishu" target="_blank" rel="noopener">${t('about.joinFeishu')}</a>
-          <a class="btn btn-secondary btn-sm" href="https://yb.tencent.com/gp/i/IIGXzcMcdh84" target="_blank" rel="noopener">${t('about.joinYuanbao')}</a>
-        </div>
-        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px">
-          ${t('about.communityNote')}
+          <a class="btn btn-primary btn-sm" href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener">加群交流</a>
         </div>
       </div>
     </div>
@@ -540,10 +519,10 @@ const PROJECTS = [
     url: 'https://github.com/1186258278/OpenClawChineseTranslation',
   },
   {
-    name: 'ClawPanel',
-    desc: t('about.projectClawPanel'),
-    url: 'https://github.com/qingchencloud/clawpanel',
-    gitee: 'https://gitee.com/QtCodeCreators/clawpanel',
+    name: '屠戮OpenClaw',
+    desc: t('about.project屠戮OpenClaw'),
+    url: 'https://github.com/qingchencloud/屠戮OpenClaw',
+    gitee: 'https://gitee.com/QtCodeCreators/屠戮OpenClaw',
   },
   {
     name: 'ClawApp',
@@ -559,20 +538,43 @@ const PROJECTS = [
 
 function renderProjects(page) {
   const el = page.querySelector('#projects-list')
-  el.innerHTML = PROJECTS.map(p => `
-    <div class="service-card">
-      <div class="service-info">
-        <div>
-          <div class="service-name">${p.name}</div>
-          <div class="service-desc">${p.desc}</div>
-        </div>
-      </div>
-      <div class="service-actions">
-        <a class="btn btn-secondary btn-sm" href="${p.url}" target="_blank" rel="noopener">GitHub</a>
-        ${p.gitee ? `<a class="btn btn-secondary btn-sm" href="${p.gitee}" target="_blank" rel="noopener">${t('about.domesticMirror')}</a>` : ''}
-      </div>
+  el.innerHTML = `
+    <div class="locked-section" id="projects-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
+      <div style="font-size:32px;margin-bottom:8px">🔒</div>
+      <div style="font-size:var(--font-size-sm);margin-bottom:12px">相关内容已上锁</div>
+      <input type="password" id="projects-pwd" placeholder="请输入解锁密码" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
+      <button onclick="unlockProjects()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">解锁</button>
+      <div id="projects-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">密码错误</div>
     </div>
-  `).join('')
+    <div id="projects-content" style="display:none"></div>
+  `
+
+  window.unlockProjects = function() {
+    const pwd = el.querySelector('#projects-pwd').value
+    if (pwd === '2552667173') {
+      el.querySelector('#projects-locked').style.display = 'none'
+      const content = el.querySelector('#projects-content')
+      content.style.display = ''
+      content.innerHTML = PROJECTS.map(p => `
+        <div class="service-card">
+          <div class="service-info">
+            <div>
+              <div class="service-name">${p.name}</div>
+              <div class="service-desc">${p.desc}</div>
+            </div>
+          </div>
+          <div class="service-actions">
+            <a class="btn btn-secondary btn-sm" href="${p.url}" target="_blank" rel="noopener">GitHub</a>
+            ${p.gitee ? `<a class="btn btn-secondary btn-sm" href="${p.gitee}" target="_blank" rel="noopener">${t('about.domesticMirror')}</a>` : ''}
+          </div>
+        </div>
+      `).join('')
+    } else {
+      const err = el.querySelector('#projects-error')
+      err.style.display = ''
+      setTimeout(() => { err.style.display = 'none' }, 2000)
+    }
+  }
 }
 
 const LINKS = [
@@ -585,26 +587,66 @@ const LINKS = [
 function renderContribute(page) {
   const el = page.querySelector('#contribute-section')
   el.innerHTML = `
-    <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:12px">
-      ${t('about.contributeDesc')}
+    <div class="locked-section" id="contribute-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
+      <div style="font-size:32px;margin-bottom:8px">🔒</div>
+      <div style="font-size:var(--font-size-sm);margin-bottom:12px">相关内容已上锁</div>
+      <input type="password" id="contribute-pwd" placeholder="请输入解锁密码" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
+      <button onclick="unlockContribute()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">解锁</button>
+      <div id="contribute-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">密码错误</div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px">
-      <a class="btn btn-primary btn-sm" href="https://github.com/qingchencloud/clawpanel/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
-      <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
-      <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
-      <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawpanel/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
-    </div>
-    <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary)">
-      ${t('about.domesticMirrorHint')}
+    <div id="contribute-content" style="display:none">
+      <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:12px">${t('about.contributeDesc')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <a class="btn btn-primary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
+      </div>
+      <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('about.domesticMirrorHint')}</div>
     </div>
   `
+
+  window.unlockContribute = function() {
+    const pwd = el.querySelector('#contribute-pwd').value
+    if (pwd === '2552667173') {
+      el.querySelector('#contribute-locked').style.display = 'none'
+      el.querySelector('#contribute-content').style.display = ''
+    } else {
+      const err = el.querySelector('#contribute-error')
+      err.style.display = ''
+      setTimeout(() => { err.style.display = 'none' }, 2000)
+    }
+  }
 }
 
 function renderLinks(page) {
   const el = page.querySelector('#links-list')
-  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:var(--space-sm)">
-    ${LINKS.map(l => `<a class="btn ${l.primary ? 'btn-primary' : 'btn-secondary'} btn-sm" href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`).join('')}
-  </div>`
+  el.innerHTML = `
+    <div class="locked-section" id="links-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
+      <div style="font-size:32px;margin-bottom:8px">🔒</div>
+      <div style="font-size:var(--font-size-sm);margin-bottom:12px">相关内容已上锁</div>
+      <input type="password" id="links-pwd" placeholder="请输入解锁密码" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
+      <button onclick="unlockLinks()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">解锁</button>
+      <div id="links-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">密码错误</div>
+    </div>
+    <div id="links-content" style="display:none">
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-sm)">
+        ${LINKS.map(l => `<a class="btn ${l.primary ? 'btn-primary' : 'btn-secondary'} btn-sm" href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`).join('')}
+      </div>
+    </div>
+  `
+
+  window.unlockLinks = function() {
+    const pwd = el.querySelector('#links-pwd').value
+    if (pwd === '2552667173') {
+      el.querySelector('#links-locked').style.display = 'none'
+      el.querySelector('#links-content').style.display = ''
+    } else {
+      const err = el.querySelector('#links-error')
+      err.style.display = ''
+      setTimeout(() => { err.style.display = 'none' }, 2000)
+    }
+  }
 }
 
 function renderCompany(page) {
@@ -612,63 +654,42 @@ function renderCompany(page) {
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
       <div style="display:flex;align-items:center;gap:12px">
-        <img src="/images/logo-brand.png" alt="QingchenCloud" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
+        <img src="/images/logo-brand.png" alt="屠戮网络科技" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
         <div>
-          <div style="font-weight:700;font-size:var(--font-size-md)">${t('about.companyName')}</div>
-          <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">QingchenCloud</div>
+          <div style="font-weight:700;font-size:var(--font-size-md)">屠戮网络科技有限公司</div>
+          <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">屠戮 OpenClaw</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:var(--font-size-sm)">
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.officialWebsite')}</div>
-          <a href="https://qingchencloud.com" target="_blank" rel="noopener" style="color:var(--accent)">qingchencloud.com</a>
+          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">联系作者</div>
+          <a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener" style="color:var(--accent)">QQ：2552667173</a>
         </div>
-        <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.productWebsite')}</div>
-          <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:var(--accent)">claw.qt.cool</a>
-        </div>
-        <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.openSourceRepo')}</div>
-          <a href="https://github.com/qingchencloud" target="_blank" rel="noopener" style="color:var(--accent)">github.com/qingchencloud</a>
-        </div>
-        <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.businessCoop')}</div>
-          <a href="mailto:support@qctx.net" style="color:var(--accent)">support@qctx.net</a>
+        <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary);text-align:center">
+          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">扫码添加作者</div>
+          <img src="https://qr.qq.com/a/feed/2552667173" alt="QQ二维码" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, 'QQ: 2552667173')">
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">
-        ${t('about.companyDesc')}
+        屠戮 OpenClaw · 正版授权 · 2.0.0
       </div>
-      ${!getLang().startsWith('zh') ? `<div style="margin-top:12px;padding:12px 14px;border-radius:var(--radius-md);border:1px dashed var(--border-primary);background:var(--bg-secondary);font-size:var(--font-size-xs);color:var(--text-tertiary)">
-        <div style="display:flex;align-items:center;gap:12px">
-          <img src="/images/bnbqr.jpg" alt="Sponsor QR" width="64" height="64" style="border-radius:6px;flex-shrink:0;background:#fff;padding:2px;cursor:pointer" loading="lazy" id="sponsor-qr-thumb" title="Click to enlarge">
-          <div style="min-width:0">
-            <div style="font-weight:600;color:var(--text-secondary);margin-bottom:4px">${t('about.sponsorProject') || 'Sponsor This Project'} <span style="opacity:0.5">· USDT (BNB Smart Chain)</span></div>
-            <code style="font-size:10px;background:var(--bg-tertiary);padding:2px 6px;border-radius:4px;user-select:all;word-break:break-all;display:block;line-height:1.6">0xbdd7ebdf2b30d873e556799711021c6671ffe88f</code>
-            <div style="margin-top:4px;opacity:0.6">${t('about.sponsorDesc') || 'Your support helps us maintain and improve this open-source project.'}</div>
-          </div>
-        </div>
-      </div>` : ''}
     </div>
   `
-  // QR 点击预览大图
-  el.querySelector('#sponsor-qr-thumb')?.addEventListener('click', () => {
+
+  window.showQRPreview = function(src, label) {
     const overlay = document.createElement('div')
     overlay.className = 'modal-overlay'
     overlay.innerHTML = `
       <div class="modal" style="max-width:360px;text-align:center">
-        <div class="modal-title">${t('about.sponsorProject') || 'Sponsor This Project'}</div>
-        <img src="/images/bnbqr.jpg" alt="Sponsor QR" style="width:240px;height:240px;border-radius:8px;margin:12px auto;display:block">
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin:8px 0">USDT · BNB Smart Chain</div>
-        <code style="font-size:11px;background:var(--bg-tertiary);padding:4px 8px;border-radius:4px;user-select:all;word-break:break-all;display:block;line-height:1.6">0xbdd7ebdf2b30d873e556799711021c6671ffe88f</code>
-        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px">${t('about.sponsorDesc') || 'Your support helps us maintain and improve this open-source project.'}</div>
+        <div class="modal-title">${label || '二维码'}</div>
+        <img src="${src}" alt="二维码" style="width:240px;height:240px;border-radius:8px;margin:12px auto;display:block">
         <div class="modal-actions" style="margin-top:16px">
-          <button class="btn btn-secondary btn-sm" data-action="close">${t('common.close')}</button>
+          <button class="btn btn-secondary btn-sm" data-action="close">关闭</button>
         </div>
       </div>
     `
     document.body.appendChild(overlay)
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
     overlay.querySelector('[data-action="close"]').onclick = () => overlay.remove()
-  })
+  }
 }
