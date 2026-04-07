@@ -100,7 +100,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install mingw -y --no-progress --ignore-checksums
-          $env:PATH = "C:\ProgramData\mingw64\mingw64\bin;$env:PATH"
+          $env:PATH = "C:\hostedtoolcache\Node\22\x64;C:\ProgramData\mingw64\mingw64\bin;$env:PATH"
           npm run tauri build
         shell: powershell
 
