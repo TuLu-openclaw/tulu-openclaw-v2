@@ -41,10 +41,12 @@ jobs:
             os: windows-latest
             args: ""
             rust_target: ""
+            bundle_mode: ""
           - name: Windows (x64) 完整包
             os: windows-latest
             args: ""
             rust_target: ""
+            bundle_mode: full
 
     steps:
       - name: 签出代码
@@ -94,8 +96,12 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
+      - name: 安装 MinGW (dlltool)
+        if: runner.os == 'Windows'
+        run: choco install mingw -y
+
       - name: 构建 Tauri 应用
-        if: matrix.platform.name != 'Windows (x64) 完整包'
+        if: matrix.platform.bundle_mode != 'full'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
