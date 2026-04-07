@@ -2,12 +2,11 @@
  * 喵咕验证页面
  * 访问 https://yz.blyfw.cn/ 自动查找文档，为用户指定的应用或源码加入最适合的网络卡密验证
  */
-import { t } from '../lib/i18n.js'
 
-export function renderMiaoguVerify(el) {
+export default function render(el) {
   el.innerHTML = `
     <div class="page-header">
-      <div class="page-title">${icon('verify', 20)} 喵咕验证</div>
+      <div class="page-title">喵咕验证</div>
       <div class="page-desc">网络卡密验证系统 · 自动查找文档快速接入</div>
     </div>
     <div class="verify-container">
@@ -22,7 +21,15 @@ export function renderMiaoguVerify(el) {
           </p>
           <div class="verify-actions">
             <a class="btn btn-primary btn-lg" href="https://yz.blyfw.cn/" target="_blank" rel="noopener">
-              ${icon('external-link', 16)} 打开喵咕验证
+              打开喵咕验证
+            </a>
+          </div>
+          <div class="verify-actions">
+            <a class="btn btn-secondary btn-lg" href="https://yz.blyfw.cn/login?type=dev" target="_blank" rel="noopener">
+              👨‍💻 开发者登录
+            </a>
+            <a class="btn btn-secondary btn-lg" href="https://yz.blyfw.cn/login?type=agent" target="_blank" rel="noopener">
+              🤝 代理登录
             </a>
           </div>
           <div class="verify-info">
@@ -40,10 +47,9 @@ export function renderMiaoguVerify(el) {
     </div>
   `
 
-  // 页面样式
-  if (!document.getElementById('verify-page-style')) {
+  if (!document.getElementById('miaogu-verify-style')) {
     const style = document.createElement('style')
-    style.id = 'verify-page-style'
+    style.id = 'miaogu-verify-style'
     style.textContent = `
       .verify-container { padding: 24px; max-width: 640px; margin: 0 auto; }
       .verify-card { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); overflow: hidden; }
@@ -53,10 +59,12 @@ export function renderMiaoguVerify(el) {
       .verify-status.online { background: rgba(34,197,94,.15); color: #22c55e; }
       .verify-status.offline { background: rgba(239,68,68,.15); color: #ef4444; }
       .verify-card-body { padding: 24px 20px; }
-      .verify-actions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+      .verify-actions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
       .btn-lg { padding: 10px 24px; font-size: var(--font-size-md); font-weight: 600; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; cursor: pointer; border: none; transition: all .2s; }
       .btn-primary { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; }
       .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+      .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }
+      .btn-secondary:hover { background: var(--bg-secondary); }
       .verify-info { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--border); }
       .verify-info-item { display: flex; gap: 12px; font-size: var(--font-size-sm); }
       .verify-info-label { color: var(--text-tertiary); min-width: 80px; }
@@ -65,12 +73,4 @@ export function renderMiaoguVerify(el) {
     `
     document.head.appendChild(style)
   }
-}
-
-function icon(name, size = 16) {
-  const icons = {
-    'verify': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="${size}" height="${size}"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>`,
-    'external-link': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="${size}" height="${size}"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
-  }
-  return icons[name] || ''
 }

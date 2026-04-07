@@ -10,7 +10,7 @@ pub fn update_dir() -> PathBuf {
 }
 
 /// 更新清单 URL（自建远控更新服务器）
-const LATEST_JSON_URL: &str = "http://221.0.81.162:9002/1772156650257000000// 屠戮龙虾更新.txt";
+const LATEST_JSON_URL: &str = "http://221.0.81.162:9002/1772156650257000000/屠戮龙虾更新.txt";
 
 /// 检查前端是否有新版本可用
 #[tauri::command]

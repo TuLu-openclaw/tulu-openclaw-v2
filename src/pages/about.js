@@ -18,7 +18,7 @@ export async function render() {
       <img src="/images/logo-brand.png" alt="屠戮OpenClaw" style="height:48px;width:auto">
       <div>
         <h1 class="page-title" style="margin:0">屠戮OpenClaw</h1>
-        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a href="https://claw.qt.cool" target="_blank" rel="noopener" style="color:var(--primary)">claw.qt.cool</a></p>
+        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">联系QQ：2552667173</a></p>
       </div>
     </div>
     <div class="stat-cards" id="version-cards">
@@ -465,14 +465,14 @@ async function checkHotUpdate(cards, panelVersion) {
         }
       })
     } else if (!info.compatible) {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-primary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.goToWebsite')}</a> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系QQ：2552667173</span>`
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
     }
   } catch (err) {
     const meta = el()
     if (!meta) return
-    meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <a class="btn btn-secondary btn-sm" href="https://claw.qt.cool" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.goToWebsite')}</a>`
+    meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <span style="color:var(--text-secondary);font-size:var(--font-size-xs)">联系QQ：2552667173</span>`
   }
 }
 
@@ -493,7 +493,7 @@ function renderCommunity(page) {
   el.innerHTML = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
       <div style="text-align:center">
-        <img src="https://qr.qq.com/a/feed/916149901" alt="反馈交流群" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" alt="反馈交流群" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
         <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">反馈交流群</div>
       </div>
       <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;padding-top:4px">
@@ -578,10 +578,8 @@ function renderProjects(page) {
 }
 
 const LINKS = [
-  { label: t('about.linkWebsite'), url: 'https://claw.qt.cool', primary: true },
+  { label: '联系作者', url: 'http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes' },
   { label: t('about.linkOpenClawZh'), url: 'https://github.com/1186258278/OpenClawChineseTranslation' },
-  { label: t('about.linkClawApp'), url: 'https://clawapp.qt.cool' },
-  { label: t('about.linkCftunnel'), url: 'https://cftunnel.qt.cool' },
 ]
 
 function renderContribute(page) {
@@ -667,7 +665,7 @@ function renderCompany(page) {
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary);text-align:center">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">扫码添加作者</div>
-          <img src="https://qr.qq.com/a/feed/2552667173" alt="QQ二维码" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, 'QQ: 2552667173')">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" alt="QQ二维码" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, 'QQ: 2552667173')">
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">

@@ -54,7 +54,8 @@ const COMMANDS = [
     { cmd: '/help', desc: 'chat.cmdHelp', action: 'exec' },
     { cmd: '/status', desc: 'chat.cmdStatus', action: 'exec' },
     { cmd: '/context', desc: 'chat.cmdContext', action: 'exec' },
-    { cmd: '/喵咕验证', desc: '快速访问喵咕验证卡密系统', action: 'navigate' },
+    { cmd: '/miaogu', desc: '喵咚验证 - 快速访问喵咚验证', action: 'navigate' },
+    { cmd: '/weiyan', desc: '微验验证 - 快速访问微验验证', action: 'navigate' },
   ]},
 ]
 
@@ -1513,6 +1514,15 @@ function showCmdPanel() {
       _textarea.value = item.dataset.cmd
       _textarea.focus()
       updateSendState()
+    } else if (item.dataset.action === 'navigate') {
+      // 快捷指令：跳转到对应页面
+      const cmd = item.dataset.cmd
+      if (cmd === '/miaogu') navigate('/miaogu-verify')
+      else if (cmd === '/weiyan') navigate('/weiyan-verify')
+      else {
+        _textarea.value = cmd
+        sendMessage()
+      }
     } else {
       _textarea.value = item.dataset.cmd
       sendMessage()
