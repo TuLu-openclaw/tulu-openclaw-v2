@@ -14,6 +14,9 @@ on:
         type: string
         default: "v1.0.0"
 
+env:
+  TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
+
 jobs:
   build:
     name: Build (${{ matrix.platform.name }})
@@ -26,19 +29,15 @@ jobs:
         platform:
           - name: macOS (ARM64)
             os: macos-latest
-            args: --target aarch64-apple-darwin
             rust_target: aarch64-apple-darwin
           - name: macOS (Intel)
             os: macos-latest
-            args: --target x86_64-apple-darwin
             rust_target: x86_64-apple-darwin
           - name: Linux (x64)
             os: ubuntu-latest
-            args: ""
             rust_target: ""
           - name: Windows (x64)
             os: windows-latest
-            args: ""
             rust_target: ""
 
     steps:
@@ -46,16 +45,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set release tag
-        id: vars
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> "$GITHUB_ENV"
-          else
-            echo "TAG_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
-          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -89,18 +78,56 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: Install MinGW (dlltool for windows-sys)
+      - name: Install MinGW
         if: runner.os == 'Windows'
         run: choco install mingw -y
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            npm run tauri build
+          else
+            npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          fi
+
+      - name: Upload MSI installer (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ env.TAG_NAME }}
-          releaseName: "TuLuOpenClaw ${{ env.TAG_NAME }}"
-          releaseBody: "Build in progress..."
-          releaseDraft: false
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-x64-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+
+      - name: Upload DMG installer (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.name }}-dmg
+          path: src-tauri/target/${{ matrix.platform.rust_target }}/release/bundle/dmg/*.dmg
+
+      - name: Upload DEB/APPIMAGE (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Linux-x64-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: TuLuOpenClaw ${{ env.TAG_NAME }}
+          draft: false
           prerelease: false
-          args: ${{ matrix.platform.args }}
+          files: artifacts/**/*.msi artifacts/**/*.dmg artifacts/**/*.deb
