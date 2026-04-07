@@ -68,12 +68,18 @@ jobs:
           workspaces: src-tauri -> target
           key: ${{ matrix.platform.name }}
 
+      # macOS code signing disabled for CI
+      - name: Disable code signing (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "CODE_SIGN_IDENTITY=-" >> $GITHUB_ENV
+
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
+            libwebkit2gtk-4.0-dev \
             librsvg2-dev \
             patchelf \
             libssl-dev \
@@ -83,21 +89,17 @@ jobs:
             clang
 
       # windows-sys crate (pulled in by tauri core) needs dlltool on Windows MSVC
-      # Install MinGW solely to provide dlltool.exe - does NOT change PATH or conflict with MSVC
+      # Install MinGW to provide dlltool.exe; add to PATH for this step
       - name: Install MinGW dlltool (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install mingw --version 13.2.0 -y --no-progress
-          # Find dlltool.exe and add its bin dir to PATH for this step only
-          DLLTOOL_PATH=$(find "C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin" -name "dlltool.exe" 2>$null | Select-Object -First 1)
-          echo "Found dlltool at: $DLLTOOL_PATH"
-          echo "DLLTOOL_PATH=$DLLTOOL_PATH" >> $env:GITHUB_ENV
+          choco install mingw -y --no-progress --ignore-checksums
+          Write-Host "MinGW installed"
+        shell: powershell
       - name: Build Tauri app
-        shell: bash
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            # Add MinGW bin (dlltool) to PATH - does not conflict with MSVC cl.exe
-            export PATH="/c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH"
+            export PATH="C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH"
             npm run tauri build
           elif [ -n "${{ matrix.platform.rust_target }}" ]; then
             npm run tauri build -- --target ${{ matrix.platform.rust_target }}
