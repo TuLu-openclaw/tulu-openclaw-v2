@@ -79,16 +79,36 @@ async function httpPost(host, path, body) {
     formData.append(k, v)
   }
 
-  const resp = await fetch(`https://${host}/${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'Mozilla/4.0 (compatible; WeiyanVerify/1.0)',
-    },
-    body: formData.toString(),
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10000)
 
-  return resp.text()
+  try {
+    const resp = await fetch(`https://${host}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/4.0 (compatible; WeiyanVerify/1.0)',
+      },
+      body: formData.toString(),
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+
+    // resp.text() 也要限制，防止慢响应卡死
+    const textPromise = resp.text()
+    const timeout2 = setTimeout(() => controller.abort(), 10000)
+    try {
+      const text = await textPromise
+      clearTimeout(timeout2)
+      return text
+    } catch {
+      clearTimeout(timeout2)
+      throw new Error('响应读取超时')
+    }
+  } catch (err) {
+    clearTimeout(timeout)
+    throw err
+  }
 }
 
 /**
