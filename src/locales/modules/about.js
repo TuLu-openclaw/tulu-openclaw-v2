@@ -10,7 +10,7 @@ export default {
   sectionLinks: _('快捷链接', 'Quick Links', '快捷連結', 'リンク', '링크', 'Liên kết', 'Enlaces', 'Links', 'Ссылки', 'Liens', 'Links'),
   sectionAboutUs: _('关于我们', 'About Us', '關於我們', '私たちについて', '소개'),
   techStack: _('屠戮OpenClaw 基于 Tauri v2 构建，前端 Vanilla JS + Vite，后端 Rust。', '屠戮OpenClaw is built with Tauri v2, Vanilla JS + Vite frontend, Rust backend.', '屠戮OpenClaw 基於 Tauri v2 構建，前端 Vanilla JS + Vite，後端 Rust。', '屠戮OpenClaw は Tauri v2 で構築、フロントエンド Vanilla JS + Vite、バックエンド Rust。'),
-  copyright: _('MIT License © 2026 武汉屠戮天下网络科技有限公司', 'MIT License © 2026 Wuhan Qingchen Tianxia Network Technology Co., Ltd.', 'MIT License © 2026 武漢屠戮天下網路科技有限公司'),
+  copyright: _('MIT License © 2026 屠戮网络科技有限公司 2026 Wuhan Qingchen Tianxia Network Technology Co., Ltd.', 'MIT License © 2026 武漢屠戮天下網路科技有限公司'),
   checkingUpdate: _('检查更新中...', 'Checking for updates...', '檢查更新中...', '更新を確認中...', '업데이트 확인 중...', 'Đang kiểm tra cập nhật...', 'Verificando actualizaciones...', 'Verificando atualizações...', 'Проверка обновлений...', 'Vérification des mises à jour...', 'Suche nach Updates...'),
   official: _('原版', 'Official', '', '公式', '공식', 'Chính thức', 'Oficial', 'Oficial', 'Официальный', 'Officiel', 'Offiziell'),
   chinese: _('汉化版', 'Chinese', '漢化版', '中国語版', '중국어판'),

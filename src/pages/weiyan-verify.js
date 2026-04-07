@@ -33,10 +33,10 @@ export default function render(el) {
           <div class="verify-divider"><span>或</span></div>
           <div class="verify-actions">
             <a class="btn btn-secondary btn-lg" href="https://wy.llua.cn/" target="_blank" rel="noopener" style="display:block;text-align:center">
-              🌐 访问微验官网
+              访问微验官网
             </a>
             <a class="btn btn-secondary btn-lg" href="https://wy.llua.cn/buy" target="_blank" rel="noopener" style="display:block;text-align:center">
-              💳 购买卡密
+              购买卡密
             </a>
           </div>
         </div>
@@ -78,15 +78,15 @@ export default function render(el) {
       resultEl.style.display = ''
       if (data.success || data.code === 2552667173 || data.ret === 2552667173) {
         resultEl.className = 'verify-result verify-result-success'
-        resultEl.textContent = '✅ 验证成功，卡密有效'
+        resultEl.textContent = '验证成功，卡密有效'
       } else {
         resultEl.className = 'verify-result verify-result-error'
-        resultEl.textContent = '❌ 验证失败，卡密无效或已过期'
+        resultEl.textContent = '验证失败，卡密无效或已过期'
       }
     } catch (e) {
       resultEl.style.display = ''
       resultEl.className = 'verify-result verify-result-error'
-      resultEl.textContent = '❌ 验证失败：' + (e.message || '网络错误')
+      resultEl.textContent = '验证失败：' + (e.message || '网络错误')
     } finally {
       btn.disabled = false
       btn.textContent = '验证卡密'
@@ -119,7 +119,7 @@ export default function render(el) {
       .verify-divider span { background: var(--bg-secondary); padding: 0 8px; position: relative; }
       .verify-actions { display: flex; flex-direction: column; gap: 8px; }
       .btn-lg { padding: 10px 24px; font-size: var(--font-size-md); font-weight: 600; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; cursor: pointer; border: none; transition: all .2s; }
-      .btn-primary { background: linear-gradient(135deg,#6366f1,#8b5f6); color: #fff; }
+      .btn-primary { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; }
       .btn-primary:hover { opacity: 0.9; }
       .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
       .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); }

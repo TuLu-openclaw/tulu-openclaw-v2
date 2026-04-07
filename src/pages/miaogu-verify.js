@@ -26,10 +26,10 @@ export default function render(el) {
           </div>
           <div class="verify-actions">
             <a class="btn btn-secondary btn-lg" href="https://yz.blyfw.cn/login?type=dev" target="_blank" rel="noopener">
-              👨‍💻 开发者登录
+              开发者登录
             </a>
             <a class="btn btn-secondary btn-lg" href="https://yz.blyfw.cn/login?type=agent" target="_blank" rel="noopener">
-              🤝 代理登录
+              代理登录
             </a>
           </div>
           <div class="verify-info">
@@ -57,7 +57,6 @@ export default function render(el) {
       .verify-badge { font-weight: 700; font-size: var(--font-size-md); color: var(--text-primary); }
       .verify-status { font-size: var(--font-size-xs); padding: 2px 8px; border-radius: 12px; }
       .verify-status.online { background: rgba(34,197,94,.15); color: #22c55e; }
-      .verify-status.offline { background: rgba(239,68,68,.15); color: #ef4444; }
       .verify-card-body { padding: 24px 20px; }
       .verify-actions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
       .btn-lg { padding: 10px 24px; font-size: var(--font-size-md); font-weight: 600; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; cursor: pointer; border: none; transition: all .2s; }
@@ -69,7 +68,6 @@ export default function render(el) {
       .verify-info-item { display: flex; gap: 12px; font-size: var(--font-size-sm); }
       .verify-info-label { color: var(--text-tertiary); min-width: 80px; }
       .verify-info-value { color: var(--text-secondary); }
-      .page-desc { color: var(--text-secondary); font-size: var(--font-size-sm); margin-top: 4px; }
     `
     document.head.appendChild(style)
   }

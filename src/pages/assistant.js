@@ -11,6 +11,7 @@ import { OPENCLAW_KB } from '../lib/openclaw-kb.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { QTCOOL, PROVIDER_PRESETS, API_TYPES as SHARED_API_TYPES, fetchQtcoolModels } from '../lib/model-presets.js'
 import { t } from '../lib/i18n.js'
+import { navigate } from '../router.js'
 
 // ── 常量 ──
 const STORAGE_KEY = '屠戮OpenClaw-assistant'
@@ -712,6 +713,23 @@ const BUILTIN_SKILLS = [
 - 先调用 get_system_info 判断操作系统，过滤出适合当前平台的安装选项
 - 如果用户想从 SkillHub 搜索安装新 Skill，使用 skillhub_search 和 skillhub_install`,
   },
+,
+  {
+    id: 'goto-miaogu',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    name: '喵咕验证',
+    desc: '打开喵咕卡密验证系统',
+    tools: [],
+    prompt: '/miaogu-verify',
+  },
+  {
+    id: 'goto-weiyan',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    name: '微验验证',
+    desc: '打开微验卡密验证系统',
+    tools: [],
+    prompt: '/weiyan-verify',
+  }
 ]
 
 function currentMode() {
@@ -4277,6 +4295,12 @@ export async function render() {
     if (skillCard) {
       const skill = BUILTIN_SKILLS.find(s => s.id === skillCard.dataset.skill)
       if (!skill) return
+
+      // Navigate if prompt is a route command
+      if (skill.prompt && skill.prompt.startsWith('/')) {
+        navigate(skill.prompt.slice(1))
+        return
+      }
 
       // 技能需要工具 → 自动切换到执行模式（如果当前是聊天模式）
       if (skill.tools.length > 0 && currentMode() === 'chat') {

@@ -80,7 +80,7 @@ async function loadRoute() {
   let page
   try {
     const renderFn = mod.render || mod.default
-    page = renderFn ? await withTimeout(renderFn(), 15000, '页面渲染超时') : mod
+    page = renderFn ? await withTimeout(renderFn(_contentEl), 15000, '页面渲染超时') : mod
   } catch (e) {
     console.error('[router] 页面渲染失败:', routePath, e)
     // 渲染失败时清除缓存，下次重试时重新加载模块
