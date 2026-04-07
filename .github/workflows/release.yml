@@ -1,4 +1,5 @@
-﻿# 灞犳埉OpenClaw 鍙戝竷鏋勫缓宸ヤ綔娴?# 鎺ㄩ€?v* 鏍囩鏃惰嚜鍔ㄦ瀯寤鸿法骞冲彴浜х墿骞跺垱寤?GitHub Release
+# 屠戮OpenClaw 发布构建工作流
+# 推送 v* 标签时自动构建跨平台产物并创建 GitHub Release
 name: Release
 
 on:
@@ -8,15 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '鍙戝竷鐗堟湰鍙?(渚嬪: v1.0.0)'
+        description: "发布版本号 (例如: v1.0.0)"
         required: true
         type: string
-        default: 'v1.0.0'
+        default: "v1.0.0"
 
 jobs:
-  # 鈹€鈹€ 璺ㄥ钩鍙版瀯寤?job 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   build:
-    name: 鏋勫缓 (${{ matrix.platform.name }})
+    name: Build (${{ matrix.platform.name }})
     runs-on: ${{ matrix.platform.os }}
     permissions:
       contents: write
@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - name: macOS (Apple Silicon)
+          - name: macOS (ARM64)
             os: macos-latest
             args: --target aarch64-apple-darwin
             rust_target: aarch64-apple-darwin
@@ -40,19 +40,14 @@ jobs:
             os: windows-latest
             args: ""
             rust_target: ""
-            bundle_mode: ""
-          - name: Windows (x64) 瀹屾暣鍖?            os: windows-latest
-            args: ""
-            rust_target: ""
-            bundle_mode: full
 
     steps:
-      - name: 绛惧嚭浠ｇ爜
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 璁剧疆鐗堟湰鏍囩
+      - name: Set release tag
         id: vars
         shell: bash
         run: |
@@ -62,26 +57,27 @@ jobs:
             echo "TAG_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
           fi
 
-      - name: 瀹夎 Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: 瀹夎鍓嶇渚濊禆
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: 瀹夎 Rust 宸ュ叿閾?        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.rust_target }}
 
-      - name: Rust 缂栬瘧缂撳瓨
+      - name: Rust compile cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
           key: ${{ matrix.platform.name }}
 
-      - name: 瀹夎 Linux 绯荤粺渚濊禆
+      - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -93,261 +89,18 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: 瀹夎 MinGW (dlltool)
+      - name: Install MinGW (dlltool for windows-sys)
         if: runner.os == 'Windows'
         run: choco install mingw -y
 
-      - name: 鏋勫缓 Tauri 搴旂敤
-        if: matrix.platform.bundle_mode != 'full'
+      - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS 浠ｇ爜绛惧悕锛堝彲閫夛級
-          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows 浠ｇ爜绛惧悕锛堝彲閫夛級
-          # TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          # TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ env.TAG_NAME }}
-          releaseName: "灞犳埉OpenClaw ${{ env.TAG_NAME }}"
-          releaseBody: "姝ｅ湪鏋勫缓鎵€鏈夊钩鍙板畨瑁呭寘锛岃绋嶅€?.."
+          releaseName: "TuLuOpenClaw ${{ env.TAG_NAME }}"
+          releaseBody: "Build in progress..."
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.platform.args }}
-
-      # 鈹€鈹€ Windows 瀹屾暣鍖咃紙鍐呭祵 WebView2 绂荤嚎瀹夎鍣級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-      - name: 閰嶇疆 WebView2 瀹屾暣鍖呮ā寮?        if: matrix.platform.name == 'Windows (x64) 瀹屾暣鍖?
-        shell: bash
-        run: |
-          node -e "
-            const fs = require('fs');
-            const f = 'src-tauri/tauri.conf.json';
-            const c = JSON.parse(fs.readFileSync(f, 'utf8'));
-            c.bundle.windows.webviewInstallMode = { type: 'offlineInstaller', silent: true };
-            fs.writeFileSync(f, JSON.stringify(c, null, 2));
-          "
-
-      - name: 鏋勫缓 Windows 瀹屾暣鍖?        if: matrix.platform.name == 'Windows (x64) 瀹屾暣鍖?
-        shell: bash
-        run: npx tauri build
-
-      - name: 閲嶅懡鍚嶅苟涓婁紶瀹屾暣鍖?        if: matrix.platform.name == 'Windows (x64) 瀹屾暣鍖?
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${TAG_NAME#v}"
-          BUNDLE_DIR="src-tauri/target/release/bundle"
-
-          # 纭繚 Release 宸插瓨鍦紙鍙兘琚叾浠?matrix job 鐨?tauri-action 鍒涘缓锛?          gh release create "$TAG_NAME" --title "灞犳埉OpenClaw $TAG_NAME" \
-            --notes "姝ｅ湪鏋勫缓鎵€鏈夊钩鍙板畨瑁呭寘锛岃绋嶅€?.." 2>/dev/null || true
-
-          # 閲嶅懡鍚?NSIS exe 骞朵笂浼?          mv "${BUNDLE_DIR}/nsis/灞犳埉OpenClaw_${VERSION}_x64-setup.exe" \
-             "${BUNDLE_DIR}/nsis/灞犳埉OpenClaw_${VERSION}_x64-setup-full.exe"
-          gh release upload "$TAG_NAME" \
-             "${BUNDLE_DIR}/nsis/灞犳埉OpenClaw_${VERSION}_x64-setup-full.exe" --clobber
-
-          # 閲嶅懡鍚?MSI 骞朵笂浼?          mv "${BUNDLE_DIR}/msi/灞犳埉OpenClaw_${VERSION}_x64_en-US.msi" \
-             "${BUNDLE_DIR}/msi/灞犳埉OpenClaw_${VERSION}_x64-full_en-US.msi"
-          gh release upload "$TAG_NAME" \
-             "${BUNDLE_DIR}/msi/灞犳埉OpenClaw_${VERSION}_x64-full_en-US.msi" --clobber
-
-  # 鈹€鈹€ 鎵€鏈夊钩鍙版瀯寤哄畬鎴愬悗锛岀粺涓€鏇存柊 Release Notes 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-  # 鐙珛 job 纭繚鍙墽琛屼竴娆★紝褰诲簳閬垮厤澶氫釜 matrix job 鐨勭珵浜夋潯浠?  update-release-notes:
-    name: 鏇存柊 Release Notes
-    needs: build
-    runs-on: ubuntu-latest
-    if: always() && needs.build.result != 'cancelled'
-    permissions:
-      contents: write
-
-    steps:
-      - name: 绛惧嚭浠ｇ爜
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 璁剧疆鐗堟湰鏍囩
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> "$GITHUB_ENV"
-          else
-            echo "TAG_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
-          fi
-
-      - name: 瀹夎 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: 鏋勫缓鍓嶇骞朵笂浼犵儹鏇存柊鍖?        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${TAG_NAME#v}"
-
-          # 鏋勫缓鍓嶇
-          npm ci
-          npm run build
-
-          # 鎵撳寘 dist 鐩綍涓?zip
-          cd dist
-          zip -r "../web-${VERSION}.zip" .
-          cd ..
-
-          # 璁＄畻 SHA-256
-          HASH=$(sha256sum "web-${VERSION}.zip" | cut -d' ' -f1)
-          SIZE=$(stat -c%s "web-${VERSION}.zip" 2>/dev/null || stat -f%z "web-${VERSION}.zip")
-
-          # 涓婁紶涓?Release Asset
-          gh release upload "$TAG_NAME" "web-${VERSION}.zip" --clobber
-
-          # 璇诲彇鐜版湁 minAppVersion锛堝墠绔儹鏇存柊閫氬父涓嶉渶瑕佹洿鏂?Rust 鍚庣锛屼繚鐣欐棫鍊硷級
-          MIN_APP_VER=$(cat docs/update/latest.json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('minAppVersion','0.9.0'))" 2>/dev/null || echo "0.9.0")
-
-          # 鏇存柊 docs/update/latest.json
-          DL_URL="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/web-${VERSION}.zip"
-          cat > docs/update/latest.json << EOF
-          {
-            "version": "${VERSION}",
-            "minAppVersion": "${MIN_APP_VER}",
-            "hash": "sha256:${HASH}",
-            "url": "${DL_URL}",
-            "size": ${SIZE},
-            "changelog": "",
-            "releasedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          EOF
-          # 鍘绘帀 heredoc 缂╄繘
-          sed -i 's/^          //' docs/update/latest.json
-
-          # 鎻愪氦 latest.json 鍒?main 鍒嗘敮
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/update/latest.json
-          git commit -m "ci: update latest.json for ${TAG_NAME}" || true
-          git push origin HEAD:main || true
-
-      - name: 鐢熸垚骞舵洿鏂?Release Notes
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_RESULT: ${{ needs.build.result }}
-          REPO: ${{ github.repository }}
-        run: |
-          VERSION="${TAG_NAME#v}"
-          DL="https://github.com/${REPO}/releases/download/${TAG_NAME}"
-
-          # 鈹€鈹€ 鐢熸垚鍒嗙被 Changelog 鈹€鈹€
-          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p' || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            RANGE="${PREV_TAG}..HEAD"
-            CHANGELOG_HEADER="鑷?${PREV_TAG} 浠ユ潵鐨勫彉鏇?
-          else
-            RANGE=""
-            CHANGELOG_HEADER="涓昏鍙樻洿"
-          fi
-
-          # 鎸?conventional commit 鍓嶇紑鍒嗙被
-          get_logs() {
-            local prefix="$1"
-            if [ -n "$RANGE" ]; then
-              git log "$RANGE" --pretty=format:"%s" --no-merges | { grep -iE "^${prefix}" || true; } | sed "s/^${prefix}[:(] */- /" | head -20
-            else
-              git log --pretty=format:"%s" --no-merges -30 | { grep -iE "^${prefix}" || true; } | sed "s/^${prefix}[:(] */- /" | head -20
-            fi
-          }
-
-          FEATS=$(get_logs "feat")
-          FIXES=$(get_logs "fix")
-          OTHERS=$(
-            if [ -n "$RANGE" ]; then
-              git log "$RANGE" --pretty=format:"%s" --no-merges | { grep -ivE "^(feat|fix|style|chore|ci|docs|test|build)" || true; } | sed 's/^/- /' | head -10
-            else
-              git log --pretty=format:"%s" --no-merges -30 | { grep -ivE "^(feat|fix|style|chore|ci|docs|test|build)" || true; } | sed 's/^/- /' | head -10
-            fi
-          )
-
-          CHANGELOG_BODY=""
-          if [ -n "$FEATS" ]; then
-            CHANGELOG_BODY="${CHANGELOG_BODY}"$'\n### 鉁?鏂板姛鑳絓n'"${FEATS}"$'\n'
-          fi
-          if [ -n "$FIXES" ]; then
-            CHANGELOG_BODY="${CHANGELOG_BODY}"$'\n### 馃悰 淇\n'"${FIXES}"$'\n'
-          fi
-          if [ -n "$OTHERS" ]; then
-            CHANGELOG_BODY="${CHANGELOG_BODY}"$'\n### 馃摝 鍏朵粬\n'"${OTHERS}"$'\n'
-          fi
-          if [ -z "$CHANGELOG_BODY" ]; then
-            CHANGELOG_BODY=$'\n- 甯歌鏇存柊涓庝紭鍖朶n'
-          fi
-
-          # 鈹€鈹€ 鏋勫缓鐘舵€?鈹€鈹€
-          if [ "$BUILD_RESULT" = "success" ]; then
-            STATUS_BADGE="鉁?鍏ㄩ儴骞冲彴鏋勫缓鎴愬姛"
-          else
-            STATUS_BADGE="鈿狅笍 閮ㄥ垎骞冲彴鏋勫缓澶辫触锛岃鏌ョ湅 [Actions 鏃ュ織](https://github.com/${REPO}/actions)"
-          fi
-
-          # 鈹€鈹€ 鍐欏叆 Release Notes 鈹€鈹€
-          {
-            echo "${STATUS_BADGE}"
-            echo ""
-            echo "## 馃摜 涓嬭浇瀹夎"
-            echo ""
-            echo "鏍规嵁浣犵殑鎿嶄綔绯荤粺閫夋嫨瀵瑰簲瀹夎鍖咃紝鐐瑰嚮鏂囦欢鍚嶅嵆鍙笅杞斤細"
-            echo ""
-            echo "### macOS"
-            echo "| 鑺墖 | 瀹夎鍖?|"
-            echo "|------|--------|"
-            echo "| Apple Silicon (M1/M2/M3/M4) | [灞犳埉OpenClaw_${VERSION}_aarch64.dmg](${DL}/灞犳埉OpenClaw_${VERSION}_aarch64.dmg) |"
-            echo "| Intel | [灞犳埉OpenClaw_${VERSION}_x64.dmg](${DL}/灞犳埉OpenClaw_${VERSION}_x64.dmg) |"
-            echo ""
-            echo '> **鈿狅笍 棣栨鎵撳紑鎻愮ず"鏃犳硶楠岃瘉寮€鍙戣€?锛?* 鍦ㄧ粓绔墽琛岋細`sudo xattr -rd com.apple.quarantine /Applications/灞犳埉OpenClaw.app`锛屾垨鍓嶅線 **绯荤粺璁剧疆 鈫?闅愮涓庡畨鍏ㄦ€?* 鐐瑰嚮銆屼粛瑕佹墦寮€銆嶃€?
-            echo ""
-            echo "### Windows"
-            echo "| 鏍煎紡 | 瀹夎鍖?| 璇存槑 |"
-            echo "|------|--------|------|"
-            echo "| EXE 瀹夎鍣紙鎺ㄨ崘锛?| [灞犳埉OpenClaw_${VERSION}_x64-setup.exe](${DL}/灞犳埉OpenClaw_${VERSION}_x64-setup.exe) | 杞婚噺鐗?~10 MB |"
-            echo "| EXE 瀹屾暣鍖?| [灞犳埉OpenClaw_${VERSION}_x64-setup-full.exe](${DL}/灞犳埉OpenClaw_${VERSION}_x64-setup-full.exe) | 鍚?WebView2 ~200 MB |"
-            echo "| MSI 瀹夎鍣?| [灞犳埉OpenClaw_${VERSION}_x64_en-US.msi](${DL}/灞犳埉OpenClaw_${VERSION}_x64_en-US.msi) | 杞婚噺鐗?~10 MB |"
-            echo "| MSI 瀹屾暣鍖?| [灞犳埉OpenClaw_${VERSION}_x64-full_en-US.msi](${DL}/灞犳埉OpenClaw_${VERSION}_x64-full_en-US.msi) | 鍚?WebView2 ~200 MB |"
-            echo ""
-            echo "> **馃挕 杞婚噺鐗?vs 瀹屾暣鍖?*锛歐in10 1803+ 鍜?Win11 宸查瑁?WebView2锛屾帹鑽愪笅杞借交閲忕増銆傚鏋滄槸鍐呯綉/鏂綉鐜锛岄€夋嫨瀹屾暣鍖呫€?
-            echo ""
-            echo "### Linux"
-            echo "| 鏍煎紡 | 瀹夎鍖?|"
-            echo "|------|--------|"
-            echo "| AppImage锛堝厤瀹夎锛?| [灞犳埉OpenClaw_${VERSION}_amd64.AppImage](${DL}/灞犳埉OpenClaw_${VERSION}_amd64.AppImage) |"
-            echo "| DEB锛圖ebian/Ubuntu锛?| [灞犳埉OpenClaw_${VERSION}_amd64.deb](${DL}/灞犳埉OpenClaw_${VERSION}_amd64.deb) |"
-            echo "| RPM锛團edora/RHEL锛?| [灞犳埉OpenClaw-${VERSION}-1.x86_64.rpm](${DL}/灞犳埉OpenClaw-${VERSION}-1.x86_64.rpm) |"
-            echo ""
-            echo "---"
-            echo ""
-            echo "## 馃殌 棣栨浣跨敤"
-            echo ""
-            echo "1. 瀹夎骞舵墦寮€ 灞犳埉OpenClaw"
-            echo "2. 棣栨杩愯浼氳嚜鍔ㄦ娴?Node.js 鐜鍜?OpenClaw CLI"
-            echo "3. 濡傛湭瀹夎 OpenClaw锛屾寜鎻愮ず涓€閿畨瑁呭嵆鍙?
-            echo "4. 瀹夎瀹屾垚鍚庤嚜鍔ㄨ烦杞华琛ㄧ洏锛屽紑濮嬩娇鐢?
-            echo ""
-            echo '> **绯荤粺瑕佹眰**锛歂ode.js 18+锛堟帹鑽?22 LTS锛?
-            echo ""
-            echo "---"
-            echo ""
-            echo "## ${CHANGELOG_HEADER}"
-            echo "${CHANGELOG_BODY}"
-            echo "---"
-            echo ""
-            echo "馃摉 [椤圭洰涓婚〉](https://github.com/${REPO}) 路 馃挰 [鍙嶉闂](https://github.com/${REPO}/issues) 路 馃摚 [QQ 缇(https://qt.cool/c/OpenClaw)"
-          } > release_body.md
-
-          gh release edit "$TAG_NAME" --notes-file release_body.md
-
