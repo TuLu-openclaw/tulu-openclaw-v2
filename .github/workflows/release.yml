@@ -89,8 +89,10 @@ jobs:
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
             npm run tauri build
-          else
+          elif [ -n "${{ matrix.platform.rust_target }}" ]; then
             npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          else
+            npm run tauri build
           fi
 
       - name: Upload MSI installer (Windows)
