@@ -1,15 +1,15 @@
 [package]
-name = "屠戮OpenClaw"
+name = "TuLuOpenClaw"
 version = "0.11.5"
 edition = "2021"
 description = "屠戮OpenClaw - OpenClaw 可视化管理面板"
 authors = ["qingchencloud"]
-repository = "https://github.com/qingchencloud/屠戮OpenClaw"
-homepage = "https://github.com/qingchencloud/屠戮OpenClaw"
+repository = "https://github.com/qingchencloud/TuLuOpenClaw"
+homepage = "https://github.com/qingchencloud/TuLuOpenClaw"
 license = "AGPL-3.0"
 
 [lib]
-name = "屠戮OpenClaw_lib"
+name = "TuLuOpenClaw_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
