@@ -85,6 +85,7 @@ jobs:
         run: choco install mingw -y
 
       - name: Build Tauri app
+        shell: bash
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
             npm run tauri build
