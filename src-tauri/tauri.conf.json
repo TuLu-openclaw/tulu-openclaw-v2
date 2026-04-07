@@ -40,11 +40,6 @@
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
-      },
-      "nsis": {
-        "languages": ["SimpChinese"],
-        "defaultLang": "SimpChinese",
-        "displayLanguageSelector": false
       }
     }
   }
