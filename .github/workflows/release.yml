@@ -78,12 +78,12 @@ jobs:
             patchelf \
             libssl-dev \
             libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            cmake \
+            clang
 
-      - name: Install MinGW
-        if: runner.os == 'Windows'
-        run: choco install mingw -y
-
+      # Windows (x64) uses MSVC toolchain pre-installed on windows-latest
+      # MinGW removed - was causing dlltool.exe conflicts with windows-sys crate
       - name: Build Tauri app
         shell: bash
         run: |
