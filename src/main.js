@@ -848,6 +848,15 @@ function startUpdateChecker() {
 
   const auth = await checkAuth()
   if (!auth.ok) await showLoginOverlay(auth.defaultPw)
+
+  // === 微验卡密验证（启动时必须通过）===
+  try {
+    const { showKamiVerifyModal } = await import('./components/kami-modal.js')
+    await showKamiVerifyModal()
+  } catch (e) {
+    console.warn('[kami] 卡密验证模块加载异常（非致命）:', e)
+  }
+
   try {
     await boot()
   } catch (bootErr) {
