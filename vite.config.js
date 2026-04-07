@@ -65,5 +65,10 @@ export default defineConfig({
     target: ['es2021', 'chrome100', 'safari13'],
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    // Tauri 多页面：只使用 index.html 作为构建入口
+    // src/pages/*.js 是 Tauri Rust 后端路由页面，不参与前端构建
+    rollupOptions: {
+      input: path.resolve(__dirname, 'index.html'),
+    },
   },
 })

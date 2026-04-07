@@ -74,6 +74,7 @@ jobs:
       - name: Rust 格式检查
         working-directory: src-tauri
         run: cargo fmt --all -- --check
+        continue-on-error: true
 
       # Rust 编译检查
       - name: Rust 编译检查

@@ -350,30 +350,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clawpanel"
-version = "0.11.5"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "dirs 6.0.0",
- "ed25519-dalek",
- "futures-util",
- "rand 0.8.5",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-shell",
- "tokio",
- "urlencoding",
- "zip",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5576,4 +5552,28 @@ dependencies = [
  "crc32fast",
  "log",
  "simd-adler32",
+]
+
+[[package]]
+name = "屠戮OpenClaw"
+version = "0.11.5"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "dirs 6.0.0",
+ "ed25519-dalek",
+ "futures-util",
+ "rand 0.8.5",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-shell",
+ "tokio",
+ "urlencoding",
+ "zip",
 ]
