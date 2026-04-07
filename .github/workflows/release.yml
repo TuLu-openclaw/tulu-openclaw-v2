@@ -96,16 +96,23 @@ jobs:
           choco install mingw -y --no-progress --ignore-checksums
           Write-Host "MinGW installed"
         shell: powershell
-      - name: Build Tauri app
+      - name: Build Tauri app (Windows)
+        if: runner.os == 'Windows'
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            export PATH="C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH"
-            npm run tauri build
-          elif [ -n "${{ matrix.platform.rust_target }}" ]; then
+          choco install mingw -y --no-progress --ignore-checksums
+          $env:PATH = "C:\ProgramData\mingw64\mingw64\bin;$env:PATH"
+          npm run tauri build
+        shell: powershell
+
+      - name: Build Tauri app (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          if [ -n "${{ matrix.platform.rust_target }}" ]; then
             npm run tauri build -- --target ${{ matrix.platform.rust_target }}
           else
             npm run tauri build
           fi
+        shell: bash
 
       - name: Upload MSI installer (Windows)
         if: runner.os == 'Windows'
