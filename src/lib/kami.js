@@ -128,8 +128,13 @@ function extractBody(httpResponse) {
 
 /**
  * 执行卡密登录
+ * 精确匹配 C++ Weiyan::Login 逻辑：
+ * 1. sign = MD5("kami={kami}&markcode={imei}&t={timestamp}&{appkey}")
+ * 2. data = binToHex(RC4("kami={kami}&markcode={imei}&t={timestamp}&sign={sign}&value={randomValue}"))
+ * 3. POST -> RC4(hexToBin(body)) -> JSON
+ * 4. 校验 code + 时间戳 ±30s + check 校验
  * @param {string} kami - 卡密
- * @returns {Promise<object|null>} 成功返回用户信息对象，失败返回null
+ * @returns {Promise<object>} 验证结果
  */
 export async function login(kami) {
   try {
@@ -137,56 +142,71 @@ export async function login(kami) {
     const timestamp = getUnixTimestamp()
     const randomValue = generateRandomValue()
 
+    // 保存 randValue，用于后续 check 校验
+    _lastRandValue = randomValue
+
     // 计算签名: MD5("kami={卡密}&markcode={设备码}&t={时间戳}&{appkey}")
     const signStr = `kami=${kami}&markcode=${imei}&t=${timestamp}&${APPKEY}`
     const sign = md5(signStr)
 
-    // 构造请求数据
-    const reqData = `kami=${kami}&markcode=${imei}&t=${timestamp}&sign=${sign}&value=${randomValue}`
+    // 构造请求原文
+    const reqPlain = `kami=${kami}&markcode=${imei}&t=${timestamp}&sign=${sign}&value=${randomValue}`
 
-    // RC4加密并转hex
-    const encrypted = binToHex(rc4(reqData, RC4KEY))
+    // RC4 加密并转 hex
+    const encrypted = binToHex(rc4(reqPlain, RC4KEY))
 
-    // 发送请求
+    // 发送 HTTP 请求
     const raw = await httpPost(WY_HOST, `api/?id=kmlogon`, `app=${APPID}&data=${encrypted}`)
-    const json = extractBody(raw)
 
-    if (!json) {
-      console.warn('[kami] 无效响应')
-      return { error: '网络错误，请检查网络连接', code: -1 }
-    }
-
-    // RC4解密响应
+    // C++ 逻辑：从 HTTP body（纯 hex 字符串）取 hexToBin -> RC4 -> JSON
+    const bodyHex = raw.trim()
+    const decrypted = rc4(hexToBin(bodyHex), RC4KEY)
     let response
     try {
-      const decrypted = rc4(hexToBin(raw), RC4KEY)
       response = JSON.parse(decrypted)
     } catch {
-      response = json
+      return { success: false, error: '响应解密失败，数据格式错误', code: -1 }
     }
 
     // 检查返回码
-    if (response.code === SUCCESS_CODE) {
-      return {
-        success: true,
-        time: response.time,
-        msg: response.msg,
+    if (response.code !== SUCCESS_CODE) {
+      return { success: false, code: response.code, error: response.msg || '卡密验证失败' }
+    }
+
+    // === 安全校验（必须与 C++ 完全一致）===
+
+    // 1. 时间戳校验：服务器时间与本地时间误差必须在 ±30 秒内
+    const serverTime = response.time
+    const timeDiff = Math.abs(serverTime - timestamp)
+    if (timeDiff > 30) {
+      return { success: false, error: '设备时间不准，请校准系统时间后重试', code: -2 }
+    }
+
+    // 2. check 校验: check = MD5(time + appkey + randValue)
+    if (response.check) {
+      const checkStr = `${serverTime}${APPKEY}${randomValue}`
+      const expectedCheck = md5(checkStr)
+      if (response.check !== expectedCheck) {
+        return { success: false, error: '校验失败，数据被篡改', code: -3 }
       }
-    } else {
-      return {
-        success: false,
-        code: response.code,
-        error: response.msg || '卡密验证失败',
-      }
+    }
+
+    // 验证通过
+    return {
+      success: true,
+      time: serverTime,
+      msg: response.msg,
+      // 额外信息（到期时间或剩余次数）
+      vip: response.msg?.ktype === 'code' ? response.msg.vip : null,
+      num: response.msg?.ktype === 'num' ? response.msg.num : null,
     }
   } catch (err) {
-    return {
-      success: false,
-      error: `网络请求失败: ${err.message}`,
-      code: -1,
-    }
+    return { success: false, error: `网络请求失败: ${err.message}`, code: -1 }
   }
 }
+
+// 内部：上次验证的 randValue（用于 check 校验）
+let _lastRandValue = ''
 
 /**
  * 验证已存储的卡密（用于5分钟自动重验）
