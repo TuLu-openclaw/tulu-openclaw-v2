@@ -74,7 +74,7 @@ const _logoSvg = `<svg class="login-logo" viewBox="0 0 24 24" fill="none" stroke
   <path d="M18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>
 </svg>`
 
-function _hideSplash() {
+export function _hideSplash() {
   const splash = document.getElementById('splash')
   if (splash) { splash.classList.add('hide'); setTimeout(() => splash.remove(), 500) }
 }
@@ -162,7 +162,7 @@ function showBackendDownOverlay() {
 function showKamiFallbackModal() {
   _hideSplash()
   const overlay = document.createElement('div')
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif'
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif'
   overlay.innerHTML = `
     <div style="background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)">
       <div style="text-align:center;margin-bottom:28px">

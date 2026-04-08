@@ -4,6 +4,7 @@
  */
 
 import { login, revalidate, getStoredKami, saveKami, clearStoredKami, markVerified, getLastVerifiedTime, KAMI_CONFIG } from '../lib/kami.js'
+import { _hideSplash } from '../main.js'
 
 const STORAGE_REMEMBER = 'tulu_kami_remember'
 
@@ -82,6 +83,7 @@ function showBlockOverlay() {
  * @param {boolean} isRetry - 是否为重试模式（清空输入框）
  */
 function showKamiModal(isRetry = false) {
+  _hideSplash()  // 立即隐藏启动遮罩，确保弹窗可见
   if (_modalEl) _modalEl.remove()
 
   const storedKami = getStoredKami()
@@ -91,8 +93,9 @@ function showKamiModal(isRetry = false) {
 
   _modalEl = document.createElement('div')
   _modalEl.id = 'kami-verify-overlay'
+  _modalEl.style.cssText += ';z-index:100000'
   _modalEl.style.cssText = `
-    position:fixed;top:0;left:0;right:0;bottom:0;z-index:99998;
+    position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;
     background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
     backdrop-filter:blur(8px)
