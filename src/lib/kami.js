@@ -160,12 +160,21 @@ export async function login(kami) {
 
     // C++ 逻辑：从 HTTP body（纯 hex 字符串）取 hexToBin -> RC4 -> JSON
     const bodyHex = raw.trim()
+    console.log('[Kami Debug] httpPost raw response length:', bodyHex.length, 'first64:', bodyHex.slice(0, 64))
+
+    // 预检：如果包含非 hex 字符（说明服务器返回了明文错误而非加密响应），直接报告
+    if (!/^[0-9a-fA-F]*$/.test(bodyHex)) {
+      console.error('[Kami] 服务器返回非 hex 响应（可能是错误页面）：', bodyHex.slice(0, 200))
+      return { success: false, error: '服务器响应格式异常（非加密数据），请检查网络或联系作者', code: -10, debug: { raw: bodyHex.slice(0, 200) } }
+    }
+
     const decrypted = rc4(hexToBin(bodyHex), RC4KEY)
+    console.log('[Kami Debug] decrypted (hex→string):', decrypted.slice(0, 200))
     let response
     try {
       response = JSON.parse(decrypted)
     } catch {
-      return { success: false, error: '响应解密失败，数据格式错误', code: -1 }
+      return { success: false, error: '响应解密失败（RC4/密钥可能不匹配）', code: -1, debug: { raw: bodyHex.slice(0, 200), decrypted: decrypted.slice(0, 200) } }
     }
 
     // 检查返回码

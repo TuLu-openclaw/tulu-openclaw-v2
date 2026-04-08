@@ -137,9 +137,15 @@ export function rc4(data, key) {
  * 十六进制字符串转二进制字符串
  */
 export function hexToBin(hex) {
+  // 过滤非 hex 字符，只保留合法字符
+  const clean = hex.replace(/[^0-9a-fA-F]/g, '')
   let bin = ''
-  for (let i = 0; i < hex.length; i += 2) {
-    bin += String.fromCharCode(parseInt(hex.substr(i, 2), 16))
+  // 强制按偶数长度处理（奇数则丢弃最后一位）
+  const len = clean.length - (clean.length % 2)
+  for (let i = 0; i < len; i += 2) {
+    const byte = parseInt(clean.substr(i, 2), 16)
+    if (isNaN(byte)) return '' // 非正常情况直接返回空
+    bin += String.fromCharCode(byte)
   }
   return bin
 }
