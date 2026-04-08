@@ -155,6 +155,76 @@ function showBackendDownOverlay() {
   }, 5000)
 }
 
+/**
+ * Kami 验证内置模块3次加载失败时的 Fallback 弹窗
+ * 确保用户至少能看到一个可操作的界面
+ */
+function showKamiFallbackModal() {
+  _hideSplash()
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif'
+  overlay.innerHTML = `
+    <div style="background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="font-size:48px;margin-bottom:12px">🔐</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">屠戮授权验证</div>
+        <div style="font-size:12px;color:#666">请输入卡密以继续使用</div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="color:#888;font-size:12px;margin-bottom:8px">卡密</div>
+        <input id="kami-fb-input" type="password" placeholder="请输入卡密" autocomplete="off" autofocus
+          style="width:100%;padding:12px 14px;box-sizing:border-box;background:#16213e;border:1px solid rgba(99,102,241,0.3);border-radius:10px;color:#fff;font-size:14px;outline:none"
+        />
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <label style="display:flex;align-items:center;cursor:pointer;user-select:none">
+          <input id="kami-fb-remember" type="checkbox" style="width:15px;height:15px;margin-right:8px;accent-color:#6366f1;cursor:pointer" />
+          <span style="font-size:12px;color:#888">记住卡密</span>
+        </label>
+        <a href="https://wy.llua.cn/buy" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 →</a>
+      </div>
+      <button id="kami-fb-btn" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,0.35)">验证卡密</button>
+      <div id="kami-fb-error" style="margin-top:12px;text-align:center;font-size:12px;color:#ef4444;min-height:16px"></div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  // 动态 import kami.js（独立于模块加载失败的环境）
+  import('./lib/kami.js').then(async ({ login, saveKami, markVerified }) => {
+    const inputEl = document.getElementById('kami-fb-input')
+    const rememberEl = document.getElementById('kami-fb-remember')
+    const btnEl = document.getElementById('kami-fb-btn')
+    const errorEl = document.getElementById('kami-fb-error')
+
+    async function doVerify() {
+      const kami = inputEl.value.trim()
+      if (!kami) { errorEl.textContent = '请输入卡密'; return }
+      btnEl.disabled = true
+      btnEl.textContent = '验证中...'
+      errorEl.textContent = ''
+
+      const result = await login(kami)
+      if (result.success) {
+        if (rememberEl.checked) saveKami(kami)
+        markVerified(kami, result.time)
+        overlay.innerHTML = `<div style="text-align:center;padding:40px;color:#22c55e;font-size:18px;font-weight:700">✅ 验证成功，正在进入应用...</div>`
+        setTimeout(() => overlay.remove(), 800)
+        setTimeout(() => location.reload(), 1000)
+      } else {
+        errorEl.textContent = result.error || '验证失败'
+        btnEl.disabled = false
+        btnEl.textContent = '验证卡密'
+      }
+    }
+
+    btnEl.addEventListener('click', doVerify)
+    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doVerify() })
+  }).catch(err => {
+    errorEl.textContent = '验证模块加载失败，请重启应用'
+    console.error('[kami-fallback] kami.js 加载失败:', err)
+  })
+}
+
 let _loginFailCount = 0
 const CAPTCHA_THRESHOLD = 3
 
@@ -846,16 +916,24 @@ function startUpdateChecker() {
     }
   }
 
-  // === 微验卡密验证（启动时必须通过，失败时循环重试）===
+  // === 微验卡密验证（启动时必须通过，失败时循环重试，最多3次内置模块，之后显示 fallback）===
   let kamiVerified = false
+  let kamiFailCount = 0
   while (!kamiVerified) {
     try {
       const { showKamiVerifyModal } = await import('./components/kami-modal.js')
       await showKamiVerifyModal()
       kamiVerified = true
     } catch (err) {
-      console.error('[kami] 验证模块加载失败，将重试:', err)
-      await new Promise(r => setTimeout(r, 1000))
+      kamiFailCount++
+      console.error(`[kami] 验证模块加载失败 (${kamiFailCount}/3):`, err)
+      if (kamiFailCount >= 3) {
+        // 3次失败后显示 fallback，确保用户至少能看到一个可操作的界面
+        showKamiFallbackModal()
+        kamiVerified = true
+      } else {
+        await new Promise(r => setTimeout(r, 1000))
+      }
     }
   }
 

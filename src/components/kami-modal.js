@@ -99,6 +99,7 @@ function showKamiModal(isRetry = false) {
   `
 
   _modalEl.innerHTML = `
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
     <div style="
       background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;
       box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)
@@ -208,8 +209,8 @@ function showKamiModal(isRetry = false) {
     }
 
     verifyBtn.disabled = true
-    verifyBtn.textContent = '验证中...'
-    verifyBtn.style.opacity = '0.7'
+    verifyBtn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:8px"></span>验证中...'
+    verifyBtn.style.cssText += ';opacity:0.7;cursor:not-allowed'
     errorEl.textContent = ''
 
     const result = await login(kami)
@@ -236,8 +237,8 @@ function showKamiModal(isRetry = false) {
     } else {
       errorEl.textContent = result.error || '验证失败，卡密无效或已过期'
       verifyBtn.disabled = false
-      verifyBtn.textContent = '验证卡密'
-      verifyBtn.style.opacity = '1'
+      verifyBtn.innerHTML = '验证卡密'
+      verifyBtn.style.cssText = 'width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;cursor:pointer;transition:opacity 0.2s;box-shadow:0 4px 14px rgba(99,102,241,0.35)'
     }
   }
 
