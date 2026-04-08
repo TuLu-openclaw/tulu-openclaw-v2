@@ -181,7 +181,7 @@ function showKamiFallbackModal() {
           <input id="kami-fb-remember" type="checkbox" style="width:15px;height:15px;margin-right:8px;accent-color:#6366f1;cursor:pointer" />
           <span style="font-size:12px;color:#888">记住卡密</span>
         </label>
-        <a href="https://wy.llua.cn/buy" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 →</a>
+        <a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 →</a>
       </div>
       <button id="kami-fb-btn" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,0.35)">验证卡密</button>
       <div id="kami-fb-error" style="margin-top:12px;text-align:center;font-size:12px;color:#ef4444;min-height:16px"></div>

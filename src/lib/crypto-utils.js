@@ -124,7 +124,7 @@ export function rc4(data, key) {
   for (let idx = 0; idx < data.length; idx++) {
     i = (i + 1) % 256
     k = (k + s[i]) % 256
-    const tmp = s[i]; s[i] = s[j]; s[j] = tmp
+    const tmp = s[i]; s[i] = s[k]; s[k] = tmp
     const t = (s[i] + s[k]) % 256
     out[idx] = data.charCodeAt(idx) ^ s[t]
   }

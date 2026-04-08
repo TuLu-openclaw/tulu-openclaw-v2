@@ -139,7 +139,7 @@ function showKamiModal(isRetry = false) {
           />
           <span style="font-size:12px;color:#888">记住卡密</span>
         </label>
-        <a href="https://wy.llua.cn/buy" target="_blank" rel="noopener"
+        <a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener"
           style="font-size:11px;color:#6366f1;text-decoration:none"
         >购买卡密 →</a>
       </div>
@@ -156,9 +156,9 @@ function showKamiModal(isRetry = false) {
       "></div>
 
       <div style="margin-top:20px;text-align:center">
-        <a href="https://wy.llua.cn/" target="_blank" rel="noopener"
+        <a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener"
           style="font-size:11px;color:#555;text-decoration:none"
-        >微验官方 · 卡密系统</a>
+        >屠戮官方 · 卡密系统</a>
       </div>
     </div>
   `
