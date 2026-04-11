@@ -5,6 +5,9 @@
 
 const VOD_API = 'https://api.mmkkapi.com/api.php/provide/vod'
 
+// 引入 hls.js（m3u8 流媒体播放）
+const HLS_JS = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js'
+
 // 点播数据源（备用）
 const VOD_SOURCES = [
   { name: '🥬影视仓库', api: 'https://api.mmkkapi.com/api.php/provide/vod', icon: '🎬' },
@@ -355,16 +358,86 @@ export default function render(el) {
     const header = el.querySelector('#vm-player-title')
     const urlBar = el.querySelector('#vm-player-url-bar')
     header.textContent = name
+    body.innerHTML = '<div class="vm-player-loading">正在加载播放器...</div>'
     urlBar.innerHTML = `<a href="${url}" target="_blank" class="vm-open-external">↗ 外部打开</a>`
 
-    // 尝试内嵌 iframe
-    body.innerHTML = `<div class="vm-iframe-wrap"><iframe id="vm-iframe" src="${url}" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>`
+    // 动态加载 hls.js
+    function ensureHls() {
+      return new Promise((resolve) => {
+        if (window.Hls) { resolve(); return }
+        const sc = document.createElement('script')
+        sc.src = HLS_JS
+        sc.onload = () => resolve()
+        sc.onerror = () => resolve() // 加载失败也继续
+        document.head.appendChild(sc)
+      })
+    }
 
-    // 备用：直接打开
-    body.innerHTML += `<div style="text-align:center;padding:12px">
-      <button class="vm-btn vm-btn-primary" onclick="window.open('${url}','_blank')">↗ 在浏览器中打开</button>
-    </div>`
+    async function initPlayer() {
+      await ensureHls()
+      const isM3u8 = url.includes('.m3u8')
 
+      if (isM3u8 && window.Hls && window.Hls.isSupported()) {
+        // hls.js 播放 m3u8
+        const video = document.createElement('video')
+        video.id = 'vm-video'
+        video.controls = true
+        video.style = 'width:100%;height:100%;background:#000;border-radius:8px'
+        video.setAttribute('allowfullscreen', true)
+        body.innerHTML = ''
+        body.appendChild(video)
+        const hls = new window.Hls({ autoStartLoad: true })
+        hls.loadSource(url)
+        hls.attachMedia(video)
+        hls.on(window.Hls.Events.ERROR, (evt, data) => {
+          if (data.fatal) {
+            // 致命错误，尝试外部播放
+            body.innerHTML = `<div style="text-align:center;padding:40px">
+              <p style="color:#8b8b9e;margin-bottom:16px">m3u8 流媒体播放失败，自动跳转外部播放...</p>
+              <button class="vm-btn vm-btn-primary" onclick="window.open('${url}','_blank')">↗ 在浏览器中打开</button>
+            </div>`
+          }
+        })
+        video.play().catch(() => {})
+      } else if (isM3u8 && video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari 原生支持 m3u8
+        const video = document.createElement('video')
+        video.id = 'vm-video'
+        video.controls = true
+        video.style = 'width:100%;height:100%;background:#000;border-radius:8px'
+        video.setAttribute('allowfullscreen', true)
+        body.innerHTML = ''
+        body.appendChild(video)
+        video.src = url
+        video.play().catch(() => {})
+      } else {
+        // MP4/M3U 直链 → iframe 或 video 标签
+        const isMp4 = url.includes('.mp4')
+        if (isMp4) {
+          const video = document.createElement('video')
+          video.id = 'vm-video'
+          video.controls = true
+          video.style = 'width:100%;height:100%;background:#000;border-radius:8px'
+          video.setAttribute('allowfullscreen', true)
+          video.src = url
+          body.innerHTML = ''
+          body.appendChild(video)
+          video.play().catch(() => {})
+        } else {
+          // 其他类型用 iframe + 外部备用
+          body.innerHTML = `
+            <div class="vm-iframe-wrap">
+              <iframe id="vm-iframe" src="${url}" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe>
+            </div>
+            <div style="text-align:center;padding:12px">
+              <button class="vm-btn vm-btn-primary" onclick="window.open('${url}','_blank')">↗ 在浏览器中打开（推荐）</button>
+            </div>
+          `
+        }
+      }
+    }
+
+    initPlayer()
     overlay.style.display = 'flex'
   }
 
