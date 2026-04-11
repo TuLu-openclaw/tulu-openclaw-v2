@@ -5,7 +5,7 @@ mod utils;
 
 use commands::{
     agent, assistant, config, device, extensions, logs, memory, messaging, pairing, service,
-    skills, update,
+    skillhub, skills, tvbox, update,
 };
 
 pub fn run() {
@@ -209,6 +209,16 @@ pub fn run() {
             update::download_frontend_update,
             update::rollback_frontend_update,
             update::get_update_status,
+            // TVBox 框架接口
+            tvbox::tvbox_req,
+            tvbox::tvbox_md5,
+            tvbox::tvbox_base64_encode,
+            tvbox::tvbox_base64_decode,
+            tvbox::tvbox_store_set,
+            tvbox::tvbox_store_get,
+            tvbox::tvbox_store_keys,
+            tvbox::tvbox_store_del,
+            tvbox::tvbox_cookie_get,
         ])
         .on_window_event(|window, event| {
             // 关闭窗口时最小化到托盘，不退出应用

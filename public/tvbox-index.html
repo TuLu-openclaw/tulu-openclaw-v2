@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>屠戮影视仓</title>
+  <script src="./hls.min.js"></script>
+  <script src="./tvbox-framework.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+    #tvbox-app { min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* 导航栏 */
+    .tvbox-nav { display: flex; background: #16213e; padding: 8px; gap: 4px; position: sticky; top: 0; z-index: 10; }
+    .tvbox-nav button { flex: 1; padding: 8px 0; border: none; background: transparent; color: #888; font-size: 14px; border-radius: 6px; cursor: pointer; transition: all .2s; }
+    .tvbox-nav button.active { background: #e94560; color: #fff; font-weight: bold; }
+
+    /* 源选择 */
+    .tvbox-sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; background: #16213e; border-bottom: 1px solid #2a2a4a; }
+    .tvbox-sources button { padding: 5px 12px; border: 1px solid #333; background: #1a1a2e; color: #aaa; border-radius: 16px; font-size: 12px; cursor: pointer; transition: all .2s; }
+    .tvbox-sources button.active { background: #e94560; color: #fff; border-color: #e94560; }
+
+    /* 内容区 */
+    .tvbox-content { flex: 1; overflow-y: auto; padding: 12px; }
+
+    /* 区块标题 */
+    .tvbox-section { margin-bottom: 20px; }
+    .tvbox-section-title { font-size: 15px; font-weight: bold; color: #e94560; margin-bottom: 10px; padding-left: 4px; border-left: 3px solid #e94560; }
+
+    /* 网格 */
+    .tvbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+
+    /* 卡片 */
+    .tvbox-card { cursor: pointer; transition: transform .2s; }
+    .tvbox-card:hover { transform: translateY(-2px); }
+    .tvbox-cover { position: relative; background: #2a2a4a; border-radius: 6px; overflow: hidden; aspect-ratio: 2/3; }
+    .tvbox-cover img { width: 100%; height: 100%; object-fit: cover; }
+    .tvbox-tag { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 10px; padding: 2px 5px; border-radius: 3px; }
+    .tvbox-src-tag { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(233,69,96,.85); color: #fff; font-size: 10px; text-align: center; padding: 2px; }
+    .tvbox-name { font-size: 12px; margin-top: 6px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+
+    /* 分类标签 */
+    .tvbox-cat-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .tvbox-cat-tabs button { padding: 6px 14px; border: 1px solid #333; background: #1a1a2e; color: #aaa; border-radius: 16px; font-size: 13px; cursor: pointer; }
+    .tvbox-cat-tabs button.active { background: #e94560; color: #fff; border-color: #e94560; }
+
+    /* 搜索栏 */
+    .tvbox-search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tvbox-search-bar input { flex: 1; padding: 10px 14px; background: #2a2a4a; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+    .tvbox-search-bar input:focus { border-color: #e94560; }
+    .tvbox-search-bar button { padding: 10px 20px; background: #e94560; border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; }
+
+    /* 分页 */
+    .tvbox-page { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 16px; padding: 10px; }
+    .tvbox-page button { padding: 7px 16px; background: #2a2a4a; border: 1px solid #333; color: #aaa; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .tvbox-page button:disabled { opacity: .4; cursor: not-allowed; }
+    .tvbox-page span { color: #888; font-size: 13px; }
+
+    /* 状态 */
+    .tvbox-loading, .tvbox-empty, .tvbox-error { text-align: center; padding: 40px 0; color: #888; font-size: 14px; }
+    .tvbox-error { color: #e94560; }
+
+    /* 详情弹窗 */
+    .tvbox-modal { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .tvbox-detail { background: #1a1a2e; border-radius: 12px; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; padding: 20px; position: relative; }
+    .tvbox-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; background: #2a2a4a; border: none; color: #888; font-size: 16px; cursor: pointer; line-height: 1; }
+    .tvbox-detail-header { display: flex; gap: 14px; margin-bottom: 14px; }
+    .tvbox-detail-pic { width: 100px; height: 140px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #2a2a4a; }
+    .tvbox-detail-info { flex: 1; min-width: 0; }
+    .tvbox-detail-info h3 { font-size: 15px; color: #fff; margin-bottom: 6px; line-height: 1.4; }
+    .tvbox-detail-info p { font-size: 12px; color: #888; margin-bottom: 4px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tvbox-score { color: #e94560 !important; font-weight: bold; }
+    .tvbox-detail-desc { font-size: 13px; color: #aaa; line-height: 1.6; margin-bottom: 14px; max-height: 100px; overflow-y: auto; }
+
+    /* 播放源 */
+    .tvbox-play-sources { }
+    .tvbox-play-source { margin-bottom: 14px; }
+    .tvbox-source-name { font-size: 13px; color: #e94560; margin-bottom: 8px; font-weight: bold; }
+    .tvbox-episodes { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tvbox-ep-btn { padding: 5px 10px; background: #2a2a4a; border: 1px solid #333; color: #ccc; border-radius: 5px; font-size: 12px; cursor: pointer; transition: all .2s; }
+    .tvbox-ep-btn:hover { background: #e94560; color: #fff; border-color: #e94560; }
+    .tvbox-no-play { text-align: center; color: #666; padding: 20px; font-size: 13px; }
+
+    /* 播放器 */
+    .tvbox-player-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .tvbox-player-box { background: #000; border-radius: 10px; width: 100%; max-width: 900px; position: relative; }
+    .tvbox-close-player { position: absolute; top: -36px; right: 0; background: #333; border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 16px; z-index: 1; }
+    .tvbox-player-title { padding: 10px 14px; color: #fff; font-size: 14px; background: #1a1a2e; border-radius: 10px 10px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tvbox-player-error { padding: 30px; text-align: center; color: #888; }
+    .tvbox-player-error p { margin-bottom: 10px; font-size: 13px; }
+    .tvbox-player-error button { padding: 8px 20px; background: #e94560; border: none; border-radius: 6px; color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="tvbox-app"></div>
+  <script type="module" src="./tvbox-app.js"></script>
+</body>
+</html>

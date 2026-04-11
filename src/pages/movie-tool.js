@@ -7,11 +7,12 @@ import '../style/movie-tool.css'
 
 const API_BASE = 'https://api.mmkkapi.com/api.php/provide/vod'
 
-const HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js'
+const HLS_CDN = './hls.min.js'
 
 const VOD_SOURCES = [
-  { name: '🥬影视仓库', api: 'https://api.mmkkapi.com/api.php/provide/vod' },
-  { name: '🥒备用线路', api: 'https://w接口1.com/api.php/provide/vod' },
+  { name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod' },
+  { name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod' },
+  { name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod' },
 ]
 
 const TV_SOURCES = [
@@ -34,12 +35,15 @@ const CATEGORIES = [
   { id: 'live',    name: '电视直播', typeId: '' },
 ]
 
-export default function render(el) {
+export default function render() {
   let cat = 'movie'
   let src = 0
   let page = 1
   let query = ''
   let tvCache = {}
+
+  const el = document.createElement('div')
+  el.className = 'tvbox-page-root'
 
   el.innerHTML = `
     <div class="tvbox-page">
