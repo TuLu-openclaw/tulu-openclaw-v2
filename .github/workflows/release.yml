@@ -104,7 +104,12 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install mingw -y --no-progress --ignore-checksums
-          npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          $target = "${{ matrix.platform.rust_target }}"
+          if ($target -ne "") {
+            npm run tauri build -- --target $target
+          } else {
+            npm run tauri build
+          }
         shell: powershell
 
       - name: Build Tauri app (macOS/Linux)
