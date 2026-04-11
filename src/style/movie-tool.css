@@ -1,0 +1,66 @@
+﻿const CSS = `
+  .tvbox-page { display:flex; height:100%; background:#0f0f1a; color:#e2e2f0; font-family:system-ui,-apple-system,sans-serif; overflow:hidden; }
+  .tvbox-sidebar { width:155px; min-width:155px; background:#0b0b16; border-right:1px solid rgba(255,255,255,.07); display:flex; flex-direction:column; }
+  .tvbox-logo { padding:18px 14px 12px; font-size:14px; font-weight:700; color:#a78bfa; border-bottom:1px solid rgba(255,255,255,.06); letter-spacing:.5px; }
+  .tvbox-cats { flex:1; padding:6px 0; overflow-y:auto; }
+  .tvbox-cat { display:flex; align-items:center; gap:8px; padding:9px 14px; cursor:pointer; font-size:13px; color:#8b8b9e; border-left:3px solid transparent; transition:all .15s; user-select:none; }
+  .tvbox-cat:hover { background:rgba(167,139,250,.08); color:#c4b5fd; }
+  .tvbox-cat.active { background:rgba(167,139,250,.13); color:#a78bfa; border-left-color:#a78bfa; }
+  .tvbox-sources { padding:8px 10px; border-top:1px solid rgba(255,255,255,.06); }
+  .tvbox-src-btn { display:block; width:100%; padding:5px 8px; margin-bottom:4px; border-radius:6px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#8b8b9e; font-size:11px; cursor:pointer; text-align:left; transition:all .12s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tvbox-src-btn:hover { border-color:#a78bfa; color:#a78bfa; }
+  .tvbox-src-btn.active { background:#7c3aed; color:#fff; border-color:#7c3aed; }
+  .tvbox-main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .tvbox-toolbar { padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.06); display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:rgba(15,15,26,.4); }
+  .tvbox-search { display:flex; gap:6px; flex:1; min-width:180px; }
+  .tvbox-search input { flex:1; padding:7px 11px; border-radius:7px; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.05); color:#e2e2f0; font-size:13px; }
+  .tvbox-search input:focus { outline:none; border-color:#7c3aed; }
+  .tvbox-search input::placeholder { color:#555; }
+  .tvbox-src-tabs { display:flex; flex-wrap:wrap; gap:5px; }
+  .tvbox-src-tab { padding:4px 11px; border-radius:14px; border:1px solid rgba(255,255,255,.1); background:transparent; color:#8b8b9e; font-size:12px; cursor:pointer; transition:all .12s; }
+  .tvbox-src-tab:hover { border-color:#a78bfa; color:#a78bfa; }
+  .tvbox-src-tab.active { background:#7c3aed; color:#fff; border-color:#7c3aed; }
+  .tvbox-content { flex:1; overflow-y:auto; padding:14px; }
+  .tvbox-loading { text-align:center; padding:60px; color:#6b6b80; font-size:14px; }
+  .tvbox-empty { text-align:center; padding:80px 20px; color:#6b6b80; font-size:14px; }
+  .tvbox-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:12px; }
+  .tvbox-card { border-radius:9px; overflow:hidden; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.07); cursor:pointer; transition:all .2s; }
+  .tvbox-card:hover { transform:translateY(-3px); border-color:rgba(167,139,250,.4); box-shadow:0 8px 24px rgba(0,0,0,.45); }
+  .tvbox-pic { position:relative; aspect-ratio:2/3; background:#14142a; display:flex; align-items:center; justify-content:center; }
+  .tvbox-pic img { width:100%; height:100%; object-fit:cover; }
+  .tvbox-pic .tvbox-placeholder { font-size:2.2rem; }
+  .tvbox-tag { position:absolute; top:5px; left:5px; background:rgba(0,0,0,.72); color:#fff; font-size:10px; padding:2px 5px; border-radius:3px; }
+  .tvbox-score { position:absolute; bottom:5px; right:5px; background:rgba(234,179,8,.88); color:#fff; font-size:10px; padding:2px 5px; border-radius:3px; font-weight:600; }
+  .tvbox-info { padding:7px 9px; }
+  .tvbox-title { font-size:12px; font-weight:600; color:#ddd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:3px; }
+  .tvbox-sub { font-size:10px; color:#555; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tvbox-pagination { display:flex; align-items:center; justify-content:center; gap:12px; padding:14px; }
+  .tvbox-page-btn { padding:6px 15px; border-radius:7px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); color:#a78bfa; font-size:12px; cursor:pointer; }
+  .tvbox-page-btn:hover { background:rgba(124,58,237,.2); }
+  .tvbox-page-info { font-size:12px; color:#555; }
+  .tvbox-player-overlay { position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:9999; display:flex; align-items:center; justify-content:center; }
+  .tvbox-player-box { background:#13131f; border-radius:13px; width:93vw; max-width:860px; max-height:88vh; display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
+  .tvbox-player-header { display:flex; justify-content:space-between; align-items:center; padding:13px 17px; background:#0f0f1a; border-bottom:1px solid rgba(255,255,255,.06); font-size:13px; color:#e2e2f0; font-weight:600; }
+  .tvbox-player-close { background:none; border:none; color:#6b6b80; font-size:15px; cursor:pointer; padding:4px 8px; border-radius:4px; }
+  .tvbox-player-close:hover { background:rgba(255,255,255,.08); color:#e2e2f0; }
+  .tvbox-player-body { flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column; }
+  .tvbox-player-url-bar { padding:9px 15px; background:#0f0f1a; border-top:1px solid rgba(255,255,255,.06); text-align:center; }
+  .tvbox-open-ext { color:#a78bfa; font-size:12px; text-decoration:none; }
+  .tvbox-open-ext:hover { text-decoration:underline; }
+  .tvbox-ep-info { display:flex; gap:13px; margin-bottom:14px; }
+  .tvbox-ep-pic { width:72px; border-radius:7px; object-fit:cover; flex-shrink:0; }
+  .tvbox-ep-desc { font-size:12px; color:#6b6b80; line-height:1.6; max-height:72px; overflow:hidden; }
+  .tvbox-ep-list-title { font-size:12px; color:#a78bfa; margin-bottom:9px; font-weight:600; }
+  .tvbox-ep-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(60px,1fr)); gap:5px; }
+  .tvbox-ep-btn { padding:5px 3px; border-radius:5px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.04); color:#8b8b9e; font-size:11px; cursor:pointer; text-align:center; transition:all .12s; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tvbox-ep-btn:hover { background:rgba(124,58,237,.2); border-color:rgba(124,58,237,.5); color:#c4b5fd; }
+  .tvbox-cat-block { margin-bottom:15px; }
+  .tvbox-cat-title { font-size:13px; font-weight:600; color:#a78bfa; margin-bottom:9px; padding-bottom:5px; border-bottom:1px solid rgba(167,139,250,.2); }
+  .tvbox-ch-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(105px,1fr)); gap:7px; }
+  .tvbox-ch-item { display:flex; align-items:center; gap:5px; padding:6px 9px; border-radius:7px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.06); cursor:pointer; font-size:12px; color:#8b8b9e; transition:all .12s; overflow:hidden; }
+  .tvbox-ch-item:hover { background:rgba(124,58,237,.2); border-color:rgba(124,58,237,.4); color:#c4b5fd; }
+  .tvbox-ch-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tvbox-player-loading { text-align:center; padding:50px; color:#6b6b80; }
+  .tvbox-iframe-wrap { width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; flex:1; }
+  .tvbox-video-wrap { width:100%; flex:1; background:#000; display:flex; align-items:center; justify-content:center; }
+  .tvbox-video-wrap video { width:100%; height:100%; }
