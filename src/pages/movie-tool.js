@@ -501,7 +501,7 @@ export default function render(el) {
 }
 
 function injectStyles() {
-  if (document.getElementById('vm-styles')) return
+  if (el.querySelector('#vm-styles')) return
   const s = document.createElement('style')
   s.id = 'vm-styles'
   s.textContent = `
@@ -568,5 +568,5 @@ function injectStyles() {
     .vm-ep-btn { padding: 6px 4px; border-radius: 6px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #8b8b9e; font-size: 11px; cursor: pointer; transition: all .15s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .vm-ep-btn:hover { background: rgba(124,58,237,.2); border-color: rgba(124,58,237,.5); color: #c4b5fd; }
   `
-  document.head.appendChild(s)
+  el.appendChild(s)
 }
