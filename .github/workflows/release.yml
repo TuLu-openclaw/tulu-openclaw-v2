@@ -47,6 +47,11 @@ jobs:
             rust_target: ""
             artifact_suffix: "Windows-x64"
             bundle_path: "src-tauri/target/release/bundle"
+          - name: Windows (ARM64)
+            os: windows-latest
+            rust_target: aarch64-pc-windows-msvc
+            artifact_suffix: "Windows-ARM64"
+            bundle_path: "src-tauri/target/aarch64-pc-windows-msvc/release/bundle"
 
     steps:
       - name: Checkout code
@@ -99,7 +104,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install mingw -y --no-progress --ignore-checksums
-          npm run tauri build
+          npm run tauri build -- --target ${{ matrix.platform.rust_target }}
         shell: powershell
 
       - name: Build Tauri app (macOS/Linux)
@@ -128,7 +133,7 @@ jobs:
           name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.artifact_suffix }}-msi
           path: ${{ matrix.platform.bundle_path }}/msi/*.msi
 
-      # ── NSIS .exe (Windows) ───────────────────────────────
+      # ── NSIS .exe (Windows) ────────────────────────────────
       - name: Upload NSIS installer (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
