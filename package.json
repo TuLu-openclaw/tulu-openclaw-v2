@@ -1,6 +1,6 @@
 {
   "name": "屠戮OpenClaw",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "description": "屠戮OpenClaw - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
   "type": "module",
