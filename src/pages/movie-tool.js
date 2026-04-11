@@ -39,6 +39,8 @@ const CLASSES = [
 ]
 
 export default function render(el) {
+  injectStyles()
+
   el.innerHTML = `
     <div class="vm-page">
       <div class="vm-sidebar">
@@ -503,7 +505,7 @@ function injectStyles() {
   const s = document.createElement('style')
   s.id = 'vm-styles'
   s.textContent = `
-    .vm-page { display: flex; height: 100%; background: var(--bg-primary); color: var(--text-primary); overflow: hidden; }
+    .vm-page { display: flex; height: 100%; background: var(--bg-primary, #0f0f1a); color: var(--text-primary, #e2e2f0); overflow: hidden; }
     .vm-sidebar { width: 160px; min-width: 160px; background: #0f0f1a; border-right: 1px solid rgba(255,255,255,.06); display: flex; flex-direction: column; overflow-y: auto; }
     .vm-logo { padding: 18px 16px 12px; font-size: 15px; font-weight: 700; color: #a78bfa; border-bottom: 1px solid rgba(255,255,255,.06); letter-spacing: 1px; }
     .vm-classes { padding: 8px 0; flex: 1; }
@@ -515,7 +517,7 @@ function injectStyles() {
     .vm-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .vm-toolbar { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: rgba(15,15,26,.5); }
     .vm-search-box { display: flex; gap: 6px; flex: 1; min-width: 200px; }
-    .vm-search-input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: var(--text-primary); font-size: 13px; }
+    .vm-search-input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: var(--text-primary, #e2e2f0); font-size: 13px; }
     .vm-search-input:focus { outline: none; border-color: #a78bfa; }
     .vm-btn { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; transition: all .15s; }
     .vm-btn-primary { background: #7c3aed; color: #fff; }
