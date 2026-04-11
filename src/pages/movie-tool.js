@@ -496,9 +496,6 @@ export default function render(el) {
   renderClasses()
   renderSourceTabs()
   loadContent()
-
-  // 内部引用
-  this._renderSourceTabs = renderSourceTabs
 }
 
 function injectStyles() {
