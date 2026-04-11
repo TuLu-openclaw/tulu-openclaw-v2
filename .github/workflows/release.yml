@@ -1,4 +1,4 @@
-# 屠戮OpenClaw 全平台发布构建
+# 屠戮OpenClaw 发布构建工作流
 # 推送 v* 标签时自动构建跨平台产物并创建 GitHub Release
 name: Release
 
@@ -18,11 +18,36 @@ env:
   TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
 
 jobs:
-  build-windows-x64:
-    name: Build (Windows x64)
-    runs-on: windows-latest
+  build:
+    name: Build (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.os }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: macOS (ARM64)
+            os: macos-latest
+            rust_target: aarch64-apple-darwin
+            artifact_suffix: "macOS-ARM64"
+            bundle_path: "src-tauri/target/aarch64-apple-darwin/release/bundle/dmg"
+          - name: macOS (Intel)
+            os: macos-latest
+            rust_target: x86_64-apple-darwin
+            artifact_suffix: "macOS-Intel"
+            bundle_path: "src-tauri/target/x86_64-apple-darwin/release/bundle/dmg"
+          - name: Linux (x64)
+            os: ubuntu-latest
+            rust_target: ""
+            artifact_suffix: "Linux-x64"
+            bundle_path: "src-tauri/target/release/bundle"
+          - name: Windows (x64)
+            os: windows-latest
+            rust_target: ""
+            artifact_suffix: "Windows-x64"
+            bundle_path: "src-tauri/target/release/bundle"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,187 +60,29 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        run: |
+          npm cache clean --force
+          npm ci --prefer-offline
 
-      - name: Rust cache
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.rust_target }}
+
+      - name: Rust compile cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          key: ${{ matrix.platform.name }}
 
-      - name: Build Tauri
-        run: npm run tauri build
+      - name: Disable code signing (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "CODE_SIGN_IDENTITY=-" >> $GITHUB_ENV
 
-      - name: Upload MSI
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-x64-msi
-          path: src-tauri/target/release/bundle/msi/*.msi
-
-      - name: Upload NSIS .exe
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-x64-setup
-          path: src-tauri/target/release/bundle/nsis/*.exe
-
-  build-windows-arm64:
-    name: Build (Windows ARM64)
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-pc-windows-msvc
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Build Tauri (ARM64)
-        run: npm run tauri build --target aarch64-pc-windows-msvc
-
-      - name: Upload MSI (ARM64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-ARM64-msi
-          path: src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi/*.msi
-
-      - name: Upload NSIS .exe (ARM64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-ARM64-setup
-          path: src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
-
-  build-macos-arm64:
-    name: Build (macOS ARM64)
-    runs-on: macos-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Disable code signing
-        run: echo "CODE_SIGN_IDENTITY=-" >> $GITHUB_ENV
-
-      - name: Build Tauri
-        run: npm run tauri build --target aarch64-apple-darwin
-
-      - name: Upload .app
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-macOS-ARM64-app
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.app
-
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-macOS-ARM64-dmg
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-
-  build-macos-x64:
-    name: Build (macOS x64)
-    runs-on: macos-13
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Disable code signing
-        run: echo "CODE_SIGN_IDENTITY=-" >> $GITHUB_ENV
-
-      - name: Build Tauri
-        run: npm run tauri build --target x86_64-apple-darwin
-
-      - name: Upload .app
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-macOS-x64-app
-          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.app
-
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-macOS-x64-dmg
-          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
-
-  build-linux:
-    name: Build (Linux x64)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install Linux dependencies
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -228,24 +95,66 @@ jobs:
             cmake \
             clang
 
-      - name: Build Tauri
-        run: npm run tauri build
+      - name: Build Tauri app (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install mingw -y --no-progress --ignore-checksums
+          npm run tauri build
+        shell: powershell
 
-      - name: Upload DEB
+      - name: Build Tauri app (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          if [ -n "${{ matrix.platform.rust_target }}" ]; then
+            npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          else
+            npm run tauri build
+          fi
+        shell: bash
+
+      # ── DMG (macOS) ─────────────────────────────────────
+      - name: Upload DMG (macOS)
+        if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Linux-x64-deb
-          path: src-tauri/target/release/bundle/deb/*.deb
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.artifact_suffix }}-dmg
+          path: ${{ matrix.platform.bundle_path }}/*.dmg
 
-      - name: Upload AppImage
+      # ── MSI (Windows / macOS) ────────────────────────────
+      - name: Upload MSI (Windows)
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Linux-x64-appimage
-          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.artifact_suffix }}-msi
+          path: ${{ matrix.platform.bundle_path }}/msi/*.msi
+
+      # ── NSIS .exe (Windows) ───────────────────────────────
+      - name: Upload NSIS installer (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.artifact_suffix }}-setup
+          path: ${{ matrix.platform.bundle_path }}/nsis/*.exe
+
+      # ── DEB (Linux) ──────────────────────────────────────
+      - name: Upload DEB (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.artifact_suffix }}-deb
+          path: ${{ matrix.platform.bundle_path }}/deb/*.deb
+
+      # ── AppImage (Linux) ─────────────────────────────────
+      - name: Upload AppImage (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuLuOpenClaw-${{ env.TAG_NAME }}-${{ matrix.platform.artifact_suffix }}-appimage
+          path: ${{ matrix.platform.bundle_path }}/appimage/*.AppImage
 
   release:
     name: Create Release
-    needs: [build-windows-x64, build-windows-arm64, build-macos-arm64, build-macos-x64, build-linux]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
