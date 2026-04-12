@@ -1,3 +1,5 @@
+const KAMI_ANNOUNCEMENT = '屠戮影视 v3.3.4 更新公告：修复已知问题，优化播放体验。卡密问题联系 QQ：2552667173'
+
 /**
  * 微验卡密验证弹框组件
  * 功能：卡密输入 + 记住卡密 + 显示/隐藏密码 + 验证状态
@@ -107,6 +109,10 @@ function showKamiModal(isRetry = false) {
       background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;
       box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)
     ">
+      ${KAMI_ANNOUNCEMENT ? `
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 12px;margin-bottom:20px;font-size:12px;color:#a5b4fc;line-height:1.6">
+        📢 ${KAMI_ANNOUNCEMENT}
+      </div>` : ''}
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
         <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">屠戮授权验证</div>
