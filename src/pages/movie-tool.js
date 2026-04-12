@@ -1,35 +1,44 @@
 /**
  * 屠戮影视 - 影视点播 + 电视直播
- * VOD: 量子资源 (cj.lziapi.com)
- * TV: rihou.cc:555 (gggg.nzk)
- * 2026-04-12 v7
+ * VOD: 多源聚合（暴风/量子/天涯/星之尘/1080）
+ * TV: 多源直播（zdir/聚看/小聚合等M3U源）
+ * 基于 TVAPP (youhunwl/TVAPP) 影视仓框架分析
+ * 2026-04-13 v8
  */
 
 import '../style/movie-tool.css'
 
 const VOD_SOURCES = [
-  { name: '量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod' },
+  { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
+  { key: 'lziapi', name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',    type: 'tvbox' },
+  { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
+  { key: 'zyku',   name: '🌺1080资源', api: 'https://api.1080zyku.com/inc/api_mac10.php',   type: '1080' },
+  { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
 ]
 
 const TV_SOURCES = [
-  { name: 'rihou 国内海外', api: 'http://rihou.cc:555/gggg.nzk' },
+  { key: 'zdir',  name: '📺zdir聚合',  api: 'http://zdir.kebedd69.repl.co/public/live.txt' },
+  { key: 'jukan', name: '📺聚看影视',   api: 'http://home.jundie.top:81/Cat/tv/live.txt' },
+  { key: 'xh',    name: '📺小聚合',     api: 'http://jiexi.bulisite.top/m3u.php' },
+  { key: 'ftyy',  name: '📺Ftyyy',     api: 'http://ftyyy.tk/live.txt' },
+  { key: 'rihou', name: '📺rihou',     api: 'http://rihou.cc:555/gggg.nzk' },
 ]
 
-const CATEGORIES = [
+const VOD_CATEGORIES = [
   { id: 'movie',   name: '电影',   typeId: '1' },
   { id: 'tv',      name: '电视剧', typeId: '2' },
   { id: 'variety', name: '综艺',   typeId: '3' },
   { id: 'anime',   name: '动漫',   typeId: '4' },
   { id: 'short',   name: '短剧',   typeId: '5' },
-  { id: 'live',    name: '电视直播', typeId: '' },
 ]
 
 const HLS_CDN = './hls.min.js'
 const KEY_SEARCH = 'tulu_vod_search'
 const KEY_PLAY   = 'tulu_vod_play'
 
-let cat = ''
+let cat = 'movie'
 let src = 0
+let tvSrc = 0
 let page = 1
 let query = ''
 let tvCache = {}
@@ -95,6 +104,35 @@ function parseNzk(raw) {
   return categories
 }
 
+// ── M3U 转 NZK（TVAPP convertM3uToNormal 算法）──────────────────────────────
+function convertM3uToNormal(m3u) {
+  try {
+    const lines = m3u.split('\n'), parts = []
+    let currentGroup = '', TV = ''
+    for (const line of lines) {
+      if (line.startsWith('#EXTINF:')) {
+        const g = line.split('"')[1]?.trim() || '未分类'
+        TV = line.split('"')[2]?.substring(1) || ''
+        if (currentGroup !== g) { currentGroup = g; parts.push('\n' + currentGroup + ',#genre#\n') }
+      } else if (line.startsWith('http')) {
+        parts.push(TV + '\,' + line.split(',')[0] + '\n')
+      }
+    }
+    return parts.join('').trim()
+  } catch (e) { return m3u }
+}
+
+// ── 自动检测格式加载 TV 源 ──────────────────────────────────────────────────
+async function loadTvSource(idx) {
+  if (tvCache[idx]) return tvCache[idx]
+  try {
+    const text = await fetch(TV_SOURCES[idx].api, { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.text())
+    const isM3u = text.includes('#EXTM3U') || text.includes('group-title')
+    tvCache[idx] = isM3u ? parseNzk(convertM3uToNormal(text)) : parseNzk(text)
+  } catch (e) { tvCache[idx] = [] }
+  return tvCache[idx]
+}
+
 export default function render() {
   const el = document.createElement('div')
   el.className = 'tvbox-page-root'
@@ -109,7 +147,11 @@ function initApp(el) {
   el.innerHTML = `
     <div class="tvbox-toolbar">
       <div class="tvbox-toolbar-top">
-        <div class="tvbox-logo">🎬 屠戮影视</div>
+        <div class="tvbox-logo">🎬 屠戮影视 <span style="font-size:11px;color:#888;font-weight:normal">v8</span></div>
+        <div class="tvbox-src-switch" id="t-mode-switch">
+          <button class="tvbox-mode-btn active" data-mode="vod">📺 影视点播</button>
+          <button class="tvbox-mode-btn" data-mode="live">📡 电视直播</button>
+        </div>
       </div>
       <div class="tvbox-search">
         <input type="text" id="t-search" placeholder="搜索电影、剧集、综艺、动漫..." />
@@ -151,6 +193,20 @@ function initApp(el) {
   el.querySelector('#t-clear-history').addEventListener('click', e => { e.stopPropagation(); clearSearchHistory(); renderSearchHistory() })
   el.querySelector('#t-player-close').addEventListener('click', closePlayer)
   el.querySelector('#t-player-overlay').addEventListener('click', e => { if (e.target === el.querySelector('#t-player-overlay')) closePlayer() })
+
+  // 影视/直播模式切换
+  el.querySelectorAll('.tvbox-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode
+      el.querySelectorAll('.tvbox-mode-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      page = 1; query = ''; searchInput.value = ''; hideHistory(); _viewStack = []
+      renderCatTabs(); renderSrcTabs()
+      if (mode === 'live') loadData()
+      else if (getPlayHistory().length > 0) showPlayHistory()
+      else loadData()
+    })
+  })
 
   renderCatTabs()
   renderSrcTabs()
@@ -241,7 +297,7 @@ function initApp(el) {
 
   function renderCatTabs() {
     const container = el.querySelector('#t-cat-tabs')
-    container.innerHTML = CATEGORIES.map(c =>
+    container.innerHTML = VOD_CATEGORIES.map(c =>
       '<button class="tvbox-tab ' + (c.id === cat ? 'active' : '') + '" data-id="' + c.id + '">' + c.name + '</button>'
     ).join('')
     container.querySelectorAll('.tvbox-tab').forEach(btn => {
@@ -292,40 +348,46 @@ function initApp(el) {
     }
   }
 
-    async function loadList() {
+  async function loadList() {
     const source = VOD_SOURCES[src]
     const catObj = CATEGORIES.find(c => c.id === cat)
     let json = { list: [], total: 0 }
-    // cat is empty = show all content using ac=detail (no type filter)
-    if (!cat || cat === 'live') {
-      // Show all VOD content without type filter
-      try { json = await fetchJSON(source.api + '?ac=detail&pg=' + page) } catch {}
-      if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=detail&pg=' + page) } catch {} }
-    } else {
-      // Filter by specific category type
-      try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
-      if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {} }
+    try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
+    if (!json.list) {
+      try { json = await fetchJsonp(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
     }
     renderVodGrid(json.list || [], json.total || 0)
   }
-
 
   async function loadSearch() {
     const source = VOD_SOURCES[src]
+    const q = encodeURIComponent(query)
     let json = { list: [], total: 0 }
-    // Search using zm parameter (lziapi)
-    try { json = await fetchJSON(source.api + '?ac=detail&zm=' + encodeURIComponent(query) + '&pg=' + page) } catch {}
-    if (!json.list || !json.list.length) {
-      try { json = await fetchJsonp(source.api + '?ac=detail&zm=' + encodeURIComponent(query) + '&pg=' + page) } catch {}
-    }
-    // Fallback: try wd parameter
-    if (!json.list || !json.list.length) {
-      try { json = await fetchJSON(source.api + '?ac=detail&wd=' + encodeURIComponent(query) + '&pg=' + page) } catch {}
-    }
+    try {
+      try { json = await fetchJSON(source.api + '?ac=detail&zm=' + q + '&pg=' + page) } catch {}
+      if (!json.list?.length) { try { json = await fetchJSON(source.api + '?ac=detail&wd=' + q + '&pg=' + page) } catch {} }
+      if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=detail&zm=' + q) } catch {} }
+    } catch {}
     renderVodGrid(json.list || [], json.total || 0)
   }
 
-    function renderVodGrid(list, total) {
+  function fetchJsonp(url) {
+    return new Promise((resolve, reject) => {
+      const cbName = '__jsonp_cb_' + Date.now()
+      const script = document.createElement('script')
+      script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName
+      script.onerror = () => { cleanup(); reject(new Error('JSONP 请求失败')) }
+      window[cbName] = (data) => { cleanup(); resolve(data) }
+      document.head.appendChild(script)
+      setTimeout(() => { cleanup(); reject(new Error('JSONP 超时')) }, 20000)
+      function cleanup() {
+        delete window[cbName]
+        if (script.parentNode) script.parentNode.removeChild(script)
+      }
+    })
+  }
+
+  function renderVodGrid(list, total) {
     const content = el.querySelector('#t-content')
     if (!list || !list.length) {
       content.innerHTML = '<div class="tvbox-empty">暂无数据，请尝试其他分类或关键词搜索</div>'
