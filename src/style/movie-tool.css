@@ -2,6 +2,88 @@
    屠戮影视 - 统一 TVBox 样式（黑底版）
    ============================================ */
 
+/* --- 密码锁屏 --- */
+.tvbox-lock-screen {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.tvbox-lock-box {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 40px 36px;
+  text-align: center;
+  max-width: 320px;
+  width: 90%;
+}
+
+.tvbox-lock-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.tvbox-lock-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #e2e2e2;
+  margin-bottom: 8px;
+}
+
+.tvbox-lock-sub {
+  font-size: 13px;
+  color: #6b6b8a;
+  margin-bottom: 24px;
+}
+
+.tvbox-lock-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e2e2e2;
+  font-size: 15px;
+  outline: none;
+  text-align: center;
+  margin-bottom: 12px;
+  transition: border-color 0.2s;
+}
+
+.tvbox-lock-input:focus {
+  border-color: #a78bfa;
+}
+
+.tvbox-lock-error {
+  color: #f87171;
+  font-size: 12px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.tvbox-lock-btn {
+  width: 100%;
+  padding: 12px;
+  background: #a78bfa;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tvbox-lock-btn:hover {
+  background: #8b5cf6;
+}
+
 /* --- 页面框架 --- */
 .tvbox-page-root { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #000000; color: #e2e2f0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
 
