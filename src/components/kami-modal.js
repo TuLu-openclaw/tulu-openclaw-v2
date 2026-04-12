@@ -1,4 +1,4 @@
-const KAMI_ANNOUNCEMENT = 'v3.3.4 更新公告：修复已知问题，优化播放体验。卡密问题联系 QQ：2552667173'
+const KAMI_ANNOUNCEMENT = ''
 
 /**
  * 微验卡密验证弹框组件
