@@ -1,3 +1,5 @@
+import '../style/movie-tool.css';
+
 /**
  * 微验验证页面
  * 网络卡密验证系统 · 基于微验API
