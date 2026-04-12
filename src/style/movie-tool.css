@@ -201,3 +201,8 @@
 .coming-soon-url a:hover { text-decoration: underline; }
 .coming-soon-badge { background: rgba(167,139,250,.15); border: 1px solid rgba(167,139,250,.25); color: #a78bfa; font-size: 11px; padding: 4px 10px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
 .coming-soon-hint { font-size: 11px; color: #444; text-align: center; margin-top: 10px; }
+
+/* --- 返回按钮 --- */
+.tvbox-back-btn { background: rgba(167,139,250,.15); border: 1px solid rgba(167,139,250,.3); color: #a78bfa; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: all .2s; }
+.tvbox-back-btn:hover { background: rgba(167,139,250,.25); }
+.tvbox-clear-play-btn { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.25); color: #f87171; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; }
