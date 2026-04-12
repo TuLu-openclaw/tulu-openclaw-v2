@@ -1,156 +1,82 @@
 /**
- * 屠戮影视 - 重写版 v6
- * VOD 点播（电影/剧集/综艺/动漫/短剧）+ TV 直播
- * TV 直播源: rihou.cc 555端口（86分类，数百频道）
- * VOD 源: 量子资源（唯一可用）
- * 2026-04-12
+ * TVBox Style - Black Theme
+ * 统一黑底影视样式
  */
 
 import '../style/movie-tool.css'
 
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
 const VOD_SOURCES = [
-  { name: '量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod' },
+  { name: 'lizi', api: 'https://cj.lziapi.com/api.php/provide/vod' },
 ]
 
 const TV_SOURCES = [
-  { name: 'rihou 国内海外', api: 'http://rihou.cc:555/gggg.nzk' },
+  { name: 'rihou', api: 'http://rihou.cc:555/gggg.nzk' },
 ]
 
 const CATEGORIES = [
-  { id: 'movie',   name: '电影',   typeId: '1' },
-  { id: 'tv',      name: '电视剧', typeId: '2' },
-  { id: 'variety', name: '综艺',   typeId: '3' },
-  { id: 'anime',   name: '动漫',   typeId: '4' },
-  { id: 'short',   name: '短剧',   typeId: '5' },
-  { id: 'live',    name: '电视直播', typeId: '' },
+  { id: 'movie',   name: 'movie',   typeId: '1' },
+  { id: 'tv',      name: 'tv',     typeId: '2' },
+  { id: 'variety', name: 'variety', typeId: '3' },
+  { id: 'anime',   name: 'anime',  typeId: '4' },
+  { id: 'short',   name: 'short',  typeId: '5' },
+  { id: 'live',    name: 'live',   typeId: '' },
 ]
 
-const HLS_CDN = './hls.min.js'
-const MAX_SEARCH_HISTORY = 20
-const MAX_PLAY_HISTORY = 30
 const KEY_SEARCH = 'tulu_vod_search'
 const KEY_PLAY   = 'tulu_vod_play'
+const HLS_CDN = './hls.min.js'
 
-// 全局状态
 let cat = 'movie'
 let src = 0
 let page = 1
 let query = ''
 let tvCache = {}
-let tvParseCache = {}
 let playingEp = null
 let _el = null
-
-// ── 历史记录 ──
-function getSearchHistory() {
-  try { return JSON.parse(localStorage.getItem(KEY_SEARCH) || '[]') } catch { return [] }
-}
-function saveSearchHistory(list) { localStorage.setItem(KEY_SEARCH, JSON.stringify(list)) }
-function addSearchHistory(q) {
-  if (!q) return
-  let h = getSearchHistory().filter(s => s !== q)
-  h.unshift(q)
-  saveSearchHistory(h.slice(0, MAX_SEARCH_HISTORY))
-}
-function clearSearchHistory() { saveSearchHistory([]) }
-
-function getPlayHistory() {
-  try { return JSON.parse(localStorage.getItem(KEY_PLAY) || '[]') } catch { return [] }
-}
-function savePlayHistory(list) { localStorage.setItem(KEY_PLAY, JSON.stringify(list)) }
-function upsertPlayHistory(item) {
-  let h = getPlayHistory().filter(s => !(s.id === item.id && s.source === item.source))
-  h.unshift({ ...item, updatedAt: Date.now() })
-  savePlayHistory(h.slice(0, MAX_PLAY_HISTORY))
-}
-function updatePlayProgress(id, source, progress) {
-  let h = getPlayHistory()
-  let idx = h.findIndex(s => s.id === id && s.source === source)
-  if (idx >= 0) { h[idx].progress = progress; h[idx].updatedAt = Date.now() }
-  savePlayHistory(h)
-}
-function clearPlayHistory() { savePlayHistory([]) }
-
-// ── 网络请求 ──
-async function fetchJSON(url) {
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15000) })
-  if (!resp.ok) throw new Error('HTTP ' + resp.status)
-  return resp.json()
-}
-
-// ── NZK 解析 ──
-function parseNzk(raw) {
-  if (tvParseCache[raw]) return tvParseCache[raw]
-  const lines = raw.split('\n').map(l => l.replace(/\r$/, '').trim()).filter(l => l)
-  const categories = []
-  let currentCat = null
-  for (const line of lines) {
-    if (line.includes('#genre#')) {
-      currentCat = { name: line.replace('#genre#', '').trim(), channels: [] }
-      categories.push(currentCat)
-    } else if (line.includes(',') && currentCat) {
-      const commaIdx = line.indexOf(',')
-      const chName = line.slice(0, commaIdx).trim()
-      const chUrl = line.slice(commaIdx + 1).trim()
-      if (chName && chUrl && (chUrl.startsWith('http') || chUrl.startsWith('//'))) {
-        currentCat.channels.push({ name: chName, url: chUrl.startsWith('//') ? 'https:' + chUrl : chUrl })
-      }
-    }
-  }
-  tvParseCache[raw] = categories
-  return categories
-}
-
-// ── 路由栈（用于返回）──
 let _viewStack = []
 
-// ──────────────────────────────────────────────
-// 主渲染入口
-// ──────────────────────────────────────────────
 export default function render() {
   const el = document.createElement('div')
   el.className = 'tvbox-page-root'
   _el = el
-  _viewStack = []
   document.body.appendChild(el)
   initApp(el)
   return el
 }
 
-// ──────────────────────────────────────────────
-// 主应用初始化
-// ──────────────────────────────────────────────
 function initApp(el) {
   el.innerHTML = `
-    <div class="tvbox-toolbar">
-      <div class="tvbox-toolbar-top">
-        <div class="tvbox-logo">🎬 屠戮影视</div>
+    <div class=tvbox-toolbar>
+      <div class=tvbox-toolbar-top>
+        <div class=tvbox-logo>movie</div>
       </div>
-      <div class="tvbox-search">
-        <input type="text" id="t-search" placeholder="搜索电影、剧集、综艺、动漫..." />
-        <button class="tvbox-search-btn" id="t-search-btn">🔍</button>
+      <div class=tvbox-search>
+        <input type=text id=t-search placeholder=search... />
+        <button class=tvbox-search-btn id=t-search-btn>search</button>
       </div>
-      <div class="tvbox-tabs-wrap" id="t-cat-tabs"></div>
-      <div id="t-src-tabs-wrap"><div class="tvbox-tabs-wrap" id="t-src-tabs"></div></div>
-      <div class="tvbox-history" id="t-history" style="display:none">
-        <div class="tvbox-history-label">
-          搜索历史
-          <button class="tvbox-history-clear" id="t-clear-history">清除</button>
+      <div class=tvbox-tabs-wrap id=t-cat-tabs></div>
+      <div id=t-src-tabs-wrap><div class=tvbox-tabs-wrap id=t-src-tabs></div></div>
+      <div class=tvbox-history id=t-history style=display:none>
+        <div class=tvbox-history-label>
+          search history
+          <button class=tvbox-history-clear id=t-clear-history>clear</button>
         </div>
-        <div class="tvbox-history-tags" id="t-history-tags"></div>
+        <div class=tvbox-history-tags id=t-history-tags></div>
       </div>
     </div>
-    <div class="tvbox-content" id="t-content"><div class="tvbox-loading">加载中...</div></div>
+    <div class=tvbox-content id=t-content><div class=tvbox-loading>loading...</div></div>
 
-    <div class="tvbox-player-overlay" id="t-player-overlay" style="display:none">
-      <div class="tvbox-player-box">
-        <div class="tvbox-player-header">
-          <span class="tvbox-player-title" id="t-player-title">播放中</span>
-          <button class="tvbox-player-close" id="t-player-close">✕</button>
+    <div class=tvbox-player-overlay id=t-player-overlay style=display:none>
+      <div class=tvbox-player-box>
+        <div class=tvbox-player-header>
+          <span class=tvbox-player-title id=t-player-title>playing</span>
+          <button class=tvbox-player-close id=t-player-close>close</button>
         </div>
-        <div class="tvbox-player-body" id="t-player-body"><div class="tvbox-player-loading">正在加载播放器...</div></div>
-        <div class="tvbox-player-url-bar">
-          <a href="#" class="tvbox-open-ext" id="t-ext-link" target="_blank" rel="noopener">↗ 外部打开</a>
+        <div class=tvbox-player-body id=t-player-body><div class=tvbox-player-loading>loading player...</div></div>
+        <div class=tvbox-player-url-bar>
+          <a href=# class=tvbox-open-ext id=t-ext-link target=_blank rel=noopener>open external</a>
         </div>
       </div>
     </div>
@@ -172,7 +98,6 @@ function initApp(el) {
   if (getPlayHistory().length > 0 && cat !== 'live') showPlayHistory()
   else loadData()
 
-  // ── 搜索 ──
   function doSearch(q) {
     query = q.trim()
     if (!query) return
@@ -194,7 +119,7 @@ function initApp(el) {
   function renderSearchHistory() {
     const tags = el.querySelector('#t-history-tags')
     tags.innerHTML = getSearchHistory().map(s =>
-      '<span class="tvbox-history-tag" data-q="' + s + '">' + s + '</span>'
+      '<span class=tvbox-history-tag data-q="' + s + '">' + s + '</span>'
     ).join('')
     tags.querySelectorAll('.tvbox-history-tag').forEach(tag => {
       tag.addEventListener('click', () => {
@@ -206,27 +131,26 @@ function initApp(el) {
 
   function hideHistory() { el.querySelector('#t-history').style.display = 'none' }
 
-  // ── 播放历史 ──
   function showPlayHistory() {
     const h = getPlayHistory().slice(0, 12)
     const content = el.querySelector('#t-content')
     if (!h.length) { loadData(); return }
 
-    let html = '<div class="tvbox-section-title">📜 最近播放 <button class="tvbox-history-clear" id="t-clear-play" style="float:right;font-size:11px">清除全部</button></div>'
-    html += '<div class="tvbox-grid">'
+    let html = '<div class=tvbox-section-title>recent playback <button class=tvbox-history-clear id=t-clear-play style=float:right;font-size:11px>clear all</button></div>'
+    html += '<div class=tvbox-grid>'
     h.forEach(item => {
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
-      const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续▶ ' + pct + '%' : ''
-      html += '<div class="tvbox-card' + (resumeLabel ? ' has-resume' : '') + '" data-id="' + item.id + '" data-source="' + item.source + '" data-name="' + item.name + '" data-pic="' + item.pic + '" data-epname="' + (item.epName || '') + '" data-epurl="' + (item.epUrl || '') + '" data-progress="' + item.progress + '" data-duration="' + (item.duration || 0) + '">' +
-        '<div class="tvbox-pic">' +
-          '<img src="' + item.pic + '" alt="' + item.name + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-placeholder>🎬</span>\'" />' +
-          (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
+      const resumeLabel = pct > 95 ? 'done' : pct > 2 ? 'resume ' + pct + '%' : ''
+      html += '<div class=tvbox-card' + (resumeLabel ? ' has-resume' : '') + ' data-id=' + item.id + ' data-source=' + item.source + ' data-name=' + item.name + ' data-pic=' + item.pic + ' data-epname=' + (item.epName || '') + ' data-epurl=' + (item.epUrl || '') + ' data-progress=' + item.progress + ' data-duration=' + (item.duration || 0) + '>' +
+        '<div class=tvbox-pic>' +
+          '<img src=' + item.pic + ' alt=' + item.name + ' onerror="this.style.display=none;this.parentElement.innerHTML=span class=tvbox-placeholder+movie+/span" />' +
+          (resumeLabel ? '<span class=tvbox-resume-badge>' + resumeLabel + '</span>' : '') +
         '</div>' +
-        '<div class="tvbox-info"><div class="tvbox-title">' + item.name + '</div><div class="tvbox-sub">' + (item.epName || '') + '</div></div>' +
+        '<div class=tvbox-info><div class=tvbox-title>' + item.name + '</div><div class=tvbox-sub>' + (item.epName || '') + '</div></div>' +
       '</div>'
     })
     html += '</div>'
-    html += '<div class="tvbox-section-title" style="margin-top:20px">📺 影视列表</div>'
+    html += '<div class=tvbox-section-title style=margin-top:20px>category list</div>'
     content.innerHTML = html
 
     content.querySelector('#t-clear-play')?.addEventListener('click', e => {
@@ -248,23 +172,22 @@ function initApp(el) {
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = name + (epName ? ' ' + epName : '')
     el.querySelector('#t-ext-link').href = epUrl || '#'
-    body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b6b8a">正在加载...</div>'
+    body.innerHTML = '<div style=text-align:center;padding:40px;color:#6b6b8a>loading...</div>'
     overlay.style.display = 'flex'
     if (!epUrl || epUrl === '#' || epUrl === 'undefined') {
-      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'
+      body.innerHTML = '<div style=text-align:center;padding:40px><p style=color:#6b6b8a>no playback URL</p></div>'
       return
     }
     const isM3u8 = epUrl.includes('.m3u8')
     const isMp4  = epUrl.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(epUrl, isM3u8, progress)
-    else body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + epUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else body.innerHTML = '<div class=tvbox-iframe-wrap><iframe src=' + epUrl + ' allowfullscreen allow="autoplay; fullscreen" style=width:100%;height:100%;border:none></iframe></div>'
   }
 
-  // ── 分类 Tab ──
   function renderCatTabs() {
     const container = el.querySelector('#t-cat-tabs')
     container.innerHTML = CATEGORIES.map(c =>
-      '<button class="tvbox-tab ' + (c.id === cat ? 'active' : '') + '" data-id="' + c.id + '">' + c.name + '</button>'
+      '<button class=tvbox-tab' + (c.id === cat ? ' active' : '') + ' data-id=' + c.id + '>' + c.name + '</button>'
     ).join('')
     container.querySelectorAll('.tvbox-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -283,14 +206,13 @@ function initApp(el) {
     })
   }
 
-  // ── 源 Tab ──
   function renderSrcTabs() {
     const wrap = el.querySelector('#t-src-tabs-wrap')
     const container = el.querySelector('#t-src-tabs')
     const list = cat === 'live' ? TV_SOURCES : VOD_SOURCES
     wrap.style.display = 'block'
     container.innerHTML = list.map((s, i) =>
-      '<button class="tvbox-tab ' + (i === src ? 'active' : '') + '" data-idx="' + i + '">' + s.name + '</button>'
+      '<button class=tvbox-tab' + (i === src ? ' active' : '') + ' data-idx=' + i + '>' + s.name + '</button>'
     ).join('')
     container.querySelectorAll('.tvbox-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -303,33 +225,29 @@ function initApp(el) {
     })
   }
 
-  // ── 主加载 ──
   function loadData() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">加载中...</div>'
+    content.innerHTML = '<div class=tvbox-loading>loading...</div>'
     try {
       if (cat === 'live') loadLive()
       else if (query) loadSearch()
       else loadList()
     } catch (e) {
-      content.innerHTML = '<div class="tvbox-empty">加载失败: ' + e.message + '</div>'
+      content.innerHTML = '<div class=tvbox-empty>load failed: ' + e.message + '</div>'
     }
   }
 
-  // ── VOD 列表 ──
   async function loadList() {
     const source = VOD_SOURCES[src]
     const catObj = CATEGORIES.find(c => c.id === cat)
     let json = { list: [], total: 0 }
     try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
-    // 如果失败，尝试 JSONP
     if (!json.list) {
       try { json = await fetchJsonp(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
     }
     renderVodGrid(json.list || [], json.total || 0)
   }
 
-  // ── VOD 搜索 ──
   async function loadSearch() {
     const source = VOD_SOURCES[src]
     const q = encodeURIComponent(query)
@@ -346,16 +264,15 @@ function initApp(el) {
     renderVodGrid(json.list || [], json.total || 0)
   }
 
-  // ── JSONP 跨域 ──
   function fetchJsonp(url) {
     return new Promise((resolve, reject) => {
       const cbName = '__jsonp_cb_' + Date.now()
       const script = document.createElement('script')
       script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName
-      script.onerror = () => { cleanup(); reject(new Error('JSONP 请求失败')) }
+      script.onerror = () => { cleanup(); reject(new Error('JSONP failed')) }
       window[cbName] = (data) => { cleanup(); resolve(data) }
       document.head.appendChild(script)
-      setTimeout(() => { cleanup(); reject(new Error('JSONP 超时')) }, 20000)
+      setTimeout(() => { cleanup(); reject(new Error('JSONP timeout')) }, 20000)
       function cleanup() {
         delete window[cbName]
         if (script.parentNode) script.parentNode.removeChild(script)
@@ -363,30 +280,29 @@ function initApp(el) {
     })
   }
 
-  // ── VOD 网格 ──
   function renderVodGrid(list, total) {
     const content = el.querySelector('#t-content')
     if (!list || !list.length) {
-      content.innerHTML = '<div class="tvbox-empty">暂无数据，请尝试其他分类或关键词搜索</div>'
+      content.innerHTML = '<div class=tvbox-empty>no data</div>'
       return
     }
     const history = getPlayHistory()
     const sourceName = VOD_SOURCES[src].name
     const totalPages = Math.max(1, Math.ceil(total / 20))
 
-    let html = '<div class="tvbox-grid">'
+    let html = '<div class=tvbox-grid>'
     html += list.map(item => {
       const histItem = history.find(h => h.id == item.vod_id && h.source === sourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
-      const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续▶ ' + pct + '%' : ''
-      return '<div class="tvbox-card' + (resumeLabel ? ' has-resume' : '') + '" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
-        '<div class="tvbox-pic">' +
-          '<img src="' + item.vod_pic + '" alt="' + item.vod_name + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-placeholder>🎬</span>\'" />' +
-          '<span class="tvbox-tag">' + (item.type_name || '影视') + '</span>' +
-          (item.vod_score ? '<span class="tvbox-score">' + item.vod_score + '</span>' : '') +
-          (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
+      const resumeLabel = pct > 95 ? 'done' : pct > 2 ? 'resume ' + pct + '%' : ''
+      return '<div class=tvbox-card' + (resumeLabel ? ' has-resume' : '') + ' data-id=' + item.vod_id + ' data-source=' + sourceName + ' data-name=' + item.vod_name + ' data-pic=' + item.vod_pic + '>' +
+        '<div class=tvbox-pic>' +
+          '<img src=' + item.vod_pic + ' alt=' + item.vod_name + ' onerror="this.style.display=none;this.parentElement.innerHTML=span class=tvbox-placeholder+movie+/span" />' +
+          '<span class=tvbox-tag>' + (item.type_name || 'video') + '</span>' +
+          (item.vod_score ? '<span class=tvbox-score>' + item.vod_score + '</span>' : '') +
+          (resumeLabel ? '<span class=tvbox-resume-badge>' + resumeLabel + '</span>' : '') +
         '</div>' +
-        '<div class="tvbox-info"><div class="tvbox-title">' + item.vod_name + '</div><div class="tvbox-sub">' + (item.vod_actor || '未知主演') + '</div></div>' +
+        '<div class=tvbox-info><div class=tvbox-title>' + item.vod_name + '</div><div class=tvbox-sub>' + (item.vod_actor || 'unknown') + '</div></div>' +
       '</div>'
     }).join('')
     html += '</div>'
@@ -409,18 +325,17 @@ function initApp(el) {
     })
   }
 
-  // ── TV 直播加载 ──
   async function loadLive() {
     const source = TV_SOURCES[src]
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">正在加载直播频道...</div>'
+    content.innerHTML = '<div class=tvbox-loading>loading channels...</div>'
     let raw = tvCache[src]
     if (!raw) {
       try {
         raw = await fetch(source.api, { signal: AbortSignal.timeout(20000) }).then(r => r.text())
         tvCache[src] = raw
       } catch (e) {
-        content.innerHTML = '<div class="tvbox-empty">加载失败: ' + e.message + '</div>'
+        content.innerHTML = '<div class=tvbox-empty>load failed: ' + e.message + '</div>'
         return
       }
     }
@@ -428,20 +343,39 @@ function initApp(el) {
     renderTvGrid(categories)
   }
 
-  // ── TV 网格渲染 ──
+  function parseNzk(raw) {
+    const lines = raw.split('\n').map(l => l.replace(/\r$/, '').trim()).filter(l => l)
+    const categories = []
+    let currentCat = null
+    for (const line of lines) {
+      if (line.includes('#genre#')) {
+        currentCat = { name: line.replace('#genre#', '').trim(), channels: [] }
+        categories.push(currentCat)
+      } else if (line.includes(',') && currentCat) {
+        const idx = line.indexOf(',')
+        const chName = line.slice(0, idx).trim()
+        const chUrl = line.slice(idx + 1).trim()
+        if (chName && chUrl && (chUrl.startsWith('http') || chUrl.startsWith('//'))) {
+          currentCat.channels.push({ name: chName, url: chUrl.startsWith('//') ? 'https:' + chUrl : chUrl })
+        }
+      }
+    }
+    return categories
+  }
+
   function renderTvGrid(categories) {
     const content = el.querySelector('#t-content')
-    if (!categories || categories.length === 0) { content.innerHTML = '<div class="tvbox-empty">暂无频道数据</div>'; return }
+    if (!categories || categories.length === 0) { content.innerHTML = '<div class=tvbox-empty>no channels</div>'; return }
     content.innerHTML = categories.slice(0, 30).map(cat => {
       if (!cat.channels || cat.channels.length === 0) return ''
       const chHtml = cat.channels.slice(0, 60).map(ch =>
-        '<div class="tvbox-ch-item" data-url="' + ch.url + '" data-name="' + ch.name + '">' +
-          '<span>📺</span><span class="tvbox-ch-name">' + ch.name + '</span>' +
+        '<div class=tvbox-ch-item data-url=' + ch.url + ' data-name=' + ch.name + '>' +
+          '<span>ch</span><span class=tvbox-ch-name>' + ch.name + '</span>' +
         '</div>'
       ).join('')
-      return '<div class="tvbox-cat-block">' +
-        '<div class="tvbox-cat-title">' + cat.name + ' (' + cat.channels.length + ')</div>' +
-        '<div class="tvbox-ch-grid">' + chHtml + '</div>' +
+      return '<div class=tvbox-cat-block>' +
+        '<div class=tvbox-cat-title>' + cat.name + ' (' + cat.channels.length + ')</div>' +
+        '<div class=tvbox-ch-grid>' + chHtml + '</div>' +
       '</div>'
     }).join('')
     bindTvItems()
@@ -454,41 +388,37 @@ function initApp(el) {
         const url = node.dataset.url
         const name = node.dataset.name
         if (url && url !== '#') openPlayerTv(name, url)
-        else alert('该频道暂无播放地址')
       })
     })
   }
 
-  // ── TV 播放器 ──
   function openPlayerTv(name, url) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
-    el.querySelector('#t-player-title').textContent = '📺 ' + name
+    el.querySelector('#t-player-title').textContent = name
     el.querySelector('#t-ext-link').href = url
-    body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
+    body.innerHTML = '<div class=tvbox-player-loading>loading...</div>'
     overlay.style.display = 'flex'
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
-    else body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + url + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else body.innerHTML = '<div class=tvbox-iframe-wrap><iframe src=' + url + ' allowfullscreen allow="autoplay; fullscreen" style=width:100%;height:100%;border:none></iframe></div>'
   }
 
-  // ── 影片详情 ──
   async function openDetail(id, name, sourceName, pic) {
     const source = VOD_SOURCES[src]
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">加载中...</div>'
+    content.innerHTML = '<div class=tvbox-loading>loading...</div>'
     let json = { list: null }
     try { json = await fetchJSON(source.api + '?ac=detail&ids=' + id) } catch {}
     if (!json.list) {
       try { json = await fetchJsonp(source.api + '?ac=detail&ids=' + id) } catch {}
     }
     const item = json.list && json.list[0]
-    if (!item) { content.innerHTML = '<div class="tvbox-empty">未找到该影片</div>'; return }
+    if (!item) { content.innerHTML = '<div class=tvbox-empty>not found</div>'; return }
     showEpisodePicker(item, source.name)
   }
 
-  // ── 选集 ──
   function showEpisodePicker(item, sourceName) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
@@ -498,43 +428,38 @@ function initApp(el) {
     const hist = getPlayHistory().find(h => h.id == item.vod_id && h.source === sourceName)
     playingEp = null
 
-    // 返回按钮 + 影片信息
-    const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">← 返回列表</button></div>'
-
+    const backBtn = '<div style=margin-bottom:12px><button class=tvbox-back-btn id=t-detail-back> back to list</button></div>'
     const firstUrls = episodes[0]?.urls || []
     const siHtml = episodes.length > 1
-      ? '<div style="margin-bottom:10px"><span class="tvbox-ep-list-title">选择源：</span>' +
-          episodes.map((e, i) => '<button class="tvbox-tab ' + (i===0?'active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + '</button>').join('') +
+      ? '<div style=margin-bottom:10px><span class=tvbox-ep-list-title>source: </span>' +
+          episodes.map((e, i) => '<button class=tvbox-tab' + (i===0?' active':'') + ' style=margin-right:6px;margin-bottom:6px data-si=' + i + '>' + e.name + '</button>').join('') +
         '</div>'
       : ''
 
     body.innerHTML =
       backBtn +
-      '<div class="tvbox-ep-info">' +
-        '<img src="' + item.vod_pic + '" class="tvbox-ep-pic" onerror="this.style.display=\'none\'" />' +
-        '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
+      '<div class=tvbox-ep-info>' +
+        '<img src=' + item.vod_pic + ' class=tvbox-ep-pic onerror="this.style.display=none" />' +
+        '<div class=tvbox-ep-desc>' + (item.vod_content || 'no description') + '</div>' +
       '</div>' +
       siHtml +
-      '<div class="tvbox-ep-list-title">播放列表 ' + firstUrls.length + ' 集</div>' +
-      '<div class="tvbox-ep-grid" id="t-ep-grid">' +
+      '<div class=tvbox-ep-list-title>playlist ' + firstUrls.length + '</div>' +
+      '<div class=tvbox-ep-grid id=t-ep-grid>' +
         firstUrls.map((ep, i) => {
           const isResume = hist && hist.epName === ep.name
-          return '<button class="tvbox-ep-btn' + (isResume?' playing':'') + '" ' +
-            'data-url="' + ep.url + '" data-name="' + item.vod_name + ' ' + ep.name + '" ' +
-            'data-epname="' + ep.name + '" data-pic="' + item.vod_pic + '" ' +
-            'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' +
-            (isResume?'▶ ':'') + ep.name + '</button>'
+          return '<button class=tvbox-ep-btn' + (isResume?' playing':'') + ' ' +
+            'data-url=' + ep.url + ' data-name=' + item.vod_name + ' ' + ep.name + ' ' +
+            'data-epname=' + ep.name + ' data-pic=' + item.vod_pic + ' ' +
+            'data-id=' + item.vod_id + ' data-source=' + sourceName + '>' +
+            (isResume?' ':'') + ep.name + '</button>'
         }).join('') +
       '</div>'
 
     body.querySelector('#t-detail-back')?.addEventListener('click', () => {
       closePlayer()
       _viewStack.pop()
-      const prev = _viewStack[_viewStack.length - 1]
-      if (prev === 'list' || _viewStack.length === 0) {
-        if (query) loadSearch()
-        else loadList()
-      }
+      if (query) loadSearch()
+      else loadList()
     })
 
     body.querySelectorAll('[data-si]').forEach(btn => {
@@ -543,9 +468,9 @@ function initApp(el) {
         const eps = episodes[si]?.urls || []
         const grid = body.querySelector('#t-ep-grid')
         grid.innerHTML = eps.map((ep, i) =>
-          '<button class="tvbox-ep-btn" data-url="' + ep.url + '" data-name="' + item.vod_name + ' ' + ep.name + '" ' +
-            'data-epname="' + ep.name + '" data-pic="' + item.vod_pic + '" ' +
-            'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' + ep.name + '</button>'
+          '<button class=tvbox-ep-btn data-url=' + ep.url + ' data-name=' + item.vod_name + ' ' + ep.name + ' ' +
+            'data-epname=' + ep.name + ' data-pic=' + item.vod_pic + ' ' +
+            'data-id=' + item.vod_id + ' data-source=' + sourceName + '>' + ep.name + '</button>'
         ).join('')
         bindEpBtns()
         body.querySelectorAll('[data-si]').forEach(b => b.classList.remove('active'))
@@ -570,23 +495,21 @@ function initApp(el) {
     }
   }
 
-  // ── VOD 播放器 ──
   function openPlayerVod(name, url, id, source, epName, pic) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = name
     el.querySelector('#t-ext-link').href = url
     playingEp = { id, source, epName, pic }
-    body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
+    body.innerHTML = '<div class=tvbox-player-loading>loading...</div>'
     overlay.style.display = 'flex'
-    if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
+    if (!url || url === '#') { body.innerHTML = '<div style=text-align:center;padding:40px><p style=color:#6b6b8a>no URL</p></div>'; return }
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
-    else body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + url + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else body.innerHTML = '<div class=tvbox-iframe-wrap><iframe src=' + url + ' allowfullscreen allow="autoplay; fullscreen" style=width:100%;height:100%;border:none></iframe></div>'
   }
 
-  // ── 视频播放器（HLS/mp4）─
   async function loadVideoPlayer(videoUrl, isM3u8, startProgress) {
     const body = el.querySelector('#t-player-body')
     if (isM3u8) {
@@ -600,14 +523,14 @@ function initApp(el) {
         hls.loadSource(videoUrl)
         hls.attachMedia(video)
         hls.on(window.Hls.Events.ERROR, () => {
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+          body.innerHTML = '<div style=text-align:center;padding:40px><p style=color:#6b6b8a;margin-bottom:14px>m3u8 failed</p><a href=' + videoUrl + ' target=_blank class=tvbox-open-ext>open in browser</a></div>'
         })
         video.addEventListener('timeupdate', () => trackProgress(video))
         video.addEventListener('ended', () => markFinished())
         if (startProgress > 0) video.currentTime = startProgress
         video.play().catch(() => {})
       } else {
-        body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">正在尝试播放...</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+        body.innerHTML = '<div style=text-align:center;padding:40px><p style=color:#6b6b8a;margin-bottom:14px>trying to play...</p><a href=' + videoUrl + ' target=_blank class=tvbox-open-ext>open in browser</a></div>'
       }
     } else {
       const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'
@@ -654,10 +577,10 @@ function initApp(el) {
     if (total <= 1) return ''
     const prev = page > 1 ? page - 1 : 1
     const next = page < total ? page + 1 : total
-    return '<div class="tvbox-pagination">' +
-      '<button class="tvbox-page-btn" data-page="' + prev + '">◀ 上一页</button>' +
-      '<span class="tvbox-page-info">第 ' + page + ' / ' + total + ' 页</span>' +
-      '<button class="tvbox-page-btn" data-page="' + next + '">下一页 ▶</button>' +
+    return '<div class=tvbox-pagination>' +
+      '<button class=tvbox-page-btn data-page=' + prev + '>prev</button>' +
+      '<span class=tvbox-page-info>page ' + page + ' / ' + total + '</span>' +
+      '<button class=tvbox-page-btn data-page=' + next + '>next</button>' +
     '</div>'
   }
 
@@ -665,17 +588,52 @@ function initApp(el) {
     if (!url) return []
     const sources = []
     url.split('$$$').forEach((part, i) => {
-      const name = (from || '').split('$$$')[i] || ('源' + (i + 1))
+      const name = (from || '').split('$$$')[i] || ('source' + (i + 1))
       sources.push({
         name,
         urls: part.split('#').map(p => {
           const idx = p.indexOf('$')
           return idx >= 0
-            ? { name: p.slice(0, idx) || '未知', url: p.slice(idx + 1) }
-            : { name: '未知', url: p }
+            ? { name: p.slice(0, idx) || 'unknown', url: p.slice(idx + 1) }
+            : { name: 'unknown', url: p }
         }).filter(ep => ep.url)
       })
     })
     return sources
   }
+
+  async function fetchJSON(url) {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    return resp.json()
+  }
+
+  function getSearchHistory() {
+    try { return JSON.parse(localStorage.getItem(KEY_SEARCH) || '[]') } catch { return [] }
+  }
+  function saveSearchHistory(list) { localStorage.setItem(KEY_SEARCH, JSON.stringify(list)) }
+  function addSearchHistory(q) {
+    if (!q) return
+    let h = getSearchHistory().filter(s => s !== q)
+    h.unshift(q)
+    saveSearchHistory(h.slice(0, 20))
+  }
+  function clearSearchHistory() { saveSearchHistory([]) }
+
+  function getPlayHistory() {
+    try { return JSON.parse(localStorage.getItem(KEY_PLAY) || '[]') } catch { return [] }
+  }
+  function savePlayHistory(list) { localStorage.setItem(KEY_PLAY, JSON.stringify(list)) }
+  function upsertPlayHistory(item) {
+    let h = getPlayHistory().filter(s => !(s.id === item.id && s.source === item.source))
+    h.unshift({ ...item, updatedAt: Date.now() })
+    savePlayHistory(h.slice(0, 30))
+  }
+  function updatePlayProgress(id, source, progress) {
+    let h = getPlayHistory()
+    let idx = h.findIndex(s => s.id === id && s.source === source)
+    if (idx >= 0) { h[idx].progress = progress; h[idx].updatedAt = Date.now() }
+    savePlayHistory(h)
+  }
+  function clearPlayHistory() { savePlayHistory([]) }
 }
