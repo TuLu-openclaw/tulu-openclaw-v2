@@ -133,12 +133,18 @@ async function loadTvSource(idx) {
   return tvCache[idx]
 }
 
-export default function render() {
+/**
+ * 渲染入口 — 接收路由容器，将自身挂载到容器内
+ * 不再直接 appendChild(document.body)，避免被路由的 innerHTML='' 清除
+ */
+export default function render(container) {
+  // 如果传入了容器（路由环境），渲染到容器内；否则降级到 body
+  const root = container || document.body
   const el = document.createElement('div')
   el.className = 'tvbox-page-root'
   _el = el
   _viewStack = []
-  document.body.appendChild(el)
+  root.appendChild(el)
   initApp(el)
   return el
 }
@@ -599,9 +605,11 @@ function initApp(el) {
         wrap.appendChild(video)
         body.innerHTML = ''; body.appendChild(wrap)
         const hls = new window.Hls()
+        window._movieHls = hls
         hls.loadSource(videoUrl)
         hls.attachMedia(video)
         hls.on(window.Hls.Events.ERROR, () => {
+          window._movieHls = null
           body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
         })
         video.addEventListener('timeupdate', () => trackProgress(video))
@@ -650,6 +658,11 @@ function initApp(el) {
     playingEp = null
     el.querySelector('#t-player-overlay').style.display = 'none'
     el.querySelector('#t-player-body').innerHTML = ''
+    // 清理 HLS 实例，防止视频后台继续播放
+    if (window._movieHls) {
+      window._movieHls.destroy()
+      window._movieHls = null
+    }
   }
 
   function renderPagination(page, total) {
