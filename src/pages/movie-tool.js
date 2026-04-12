@@ -309,7 +309,23 @@ function initApp(el) {
     renderVodGrid(json.list || [], json.total || 0)
   }
 
-  function renderVodGrid(list, total) {
+
+  async function loadSearch() {
+    const source = VOD_SOURCES[src]
+    let json = { list: [], total: 0 }
+    // Search using zm parameter (lziapi)
+    try { json = await fetchJSON(source.api + '?ac=detail&zm=' + encodeURIComponent(query) + '&pg=' + page) } catch {}
+    if (!json.list || !json.list.length) {
+      try { json = await fetchJsonp(source.api + '?ac=detail&zm=' + encodeURIComponent(query) + '&pg=' + page) } catch {}
+    }
+    // Fallback: try wd parameter
+    if (!json.list || !json.list.length) {
+      try { json = await fetchJSON(source.api + '?ac=detail&wd=' + encodeURIComponent(query) + '&pg=' + page) } catch {}
+    }
+    renderVodGrid(json.list || [], json.total || 0)
+  }
+
+    function renderVodGrid(list, total) {
     const content = el.querySelector('#t-content')
     if (!list || !list.length) {
       content.innerHTML = '<div class="tvbox-empty">暂无数据，请尝试其他分类或关键词搜索</div>'
