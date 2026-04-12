@@ -4,6 +4,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -16,6 +18,7 @@ on:
 
 env:
   TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref_name, 'refs/') || startsWith(github.ref_name, 'v') }}
 
 jobs:
   build:
@@ -165,6 +168,7 @@ jobs:
   release:
     name: Create Release
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.tag_name != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
