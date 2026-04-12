@@ -45,9 +45,9 @@ function NAV_ITEMS_FULL() { return [
       { route: '/skills', label: t('sidebar.skills'), icon: 'skills' },
       { route: '/miaogu-verify', label: '喵咕验证', icon: 'verify' },
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
-      { route: '/movie-tool', label: '影视大全', icon: 'movie' },
+      { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
       { route: '/tvbox', label: '影视仓', icon: 'movie' },
-      { route: '/coming-soon', label: '待开放使用', icon: 'lock' },
+      { route: '/coming-soon', label: '待开放功能', icon: 'lock' },
     ]
   },
   {

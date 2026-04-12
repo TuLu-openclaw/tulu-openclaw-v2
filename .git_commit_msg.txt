@@ -1,0 +1,12 @@
+fix: movie-tool v2 - CSS repair, rename, UI polish, search/play history, resume playback
+
+- src/style/movie-tool.css: convert from broken JS template literal to proper CSS (was const CSS = `...` syntax, now clean CSS)
+- src/pages/movie-tool.js: complete rewrite with:
+  * Unified TV/VOD interface (all 19 live sources + 3 VOD sources)
+  * Search history (localStorage, max 20 entries)
+  * Play history (localStorage, max 30 entries, stores progress/duration)
+  * Resume playback (shows progress badge on cards, resumes from last position)
+  * Modern grid UI with purple theme, hover effects, pagination
+  * Auto-save playback progress every update tick
+- src/pages/coming-soon.js: clean render with proper URL link, pointer-events:all
+- src/components/sidebar.js: rename 影视大全->屠戮影视, rename 待开放使用->待开放功能
