@@ -1,4 +1,6 @@
 import './tvbox.css';
+import '../style/movie-tool.css';
+
 
 const TVBOX_SOURCES = [
   { key: 'lziapi', name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod', type: 'tvbox' },
