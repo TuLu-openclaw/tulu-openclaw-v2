@@ -1,4 +1,4 @@
-import '../style/movie-tool.css';
+import '../style/pages.css';
 
 const URL = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific';
 const LOCK_KEY = 'tulu_comingsoon_locked'
