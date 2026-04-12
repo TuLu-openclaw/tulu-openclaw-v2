@@ -28,7 +28,7 @@ const HLS_CDN = './hls.min.js'
 const KEY_SEARCH = 'tulu_vod_search'
 const KEY_PLAY   = 'tulu_vod_play'
 
-let cat = 'movie'
+let cat = ''
 let src = 0
 let page = 1
 let query = ''
@@ -292,43 +292,21 @@ function initApp(el) {
     }
   }
 
-  async function loadList() {
+    async function loadList() {
     const source = VOD_SOURCES[src]
     const catObj = CATEGORIES.find(c => c.id === cat)
     let json = { list: [], total: 0 }
-    try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
-    if (!json.list) {
-      try { json = await fetchJsonp(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
+    // cat is empty = show all content using ac=detail (no type filter)
+    if (!cat || cat === 'live') {
+      // Show all VOD content without type filter
+      try { json = await fetchJSON(source.api + '?ac=detail&pg=' + page) } catch {}
+      if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=detail&pg=' + page) } catch {} }
+    } else {
+      // Filter by specific category type
+      try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
+      if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {} }
     }
     renderVodGrid(json.list || [], json.total || 0)
-  }
-
-  async function loadSearch() {
-    const source = VOD_SOURCES[src]
-    const q = encodeURIComponent(query)
-    let json = { list: [], total: 0 }
-    try {
-      try { json = await fetchJSON(source.api + '?ac=detail&zm=' + q + '&pg=' + page) } catch {}
-      if (!json.list?.length) { try { json = await fetchJSON(source.api + '?ac=detail&wd=' + q + '&pg=' + page) } catch {} }
-      if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=detail&zm=' + q) } catch {} }
-    } catch {}
-    renderVodGrid(json.list || [], json.total || 0)
-  }
-
-  function fetchJsonp(url) {
-    return new Promise((resolve, reject) => {
-      const cbName = '__jsonp_cb_' + Date.now()
-      const script = document.createElement('script')
-      script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName
-      script.onerror = () => { cleanup(); reject(new Error('JSONP 请求失败')) }
-      window[cbName] = (data) => { cleanup(); resolve(data) }
-      document.head.appendChild(script)
-      setTimeout(() => { cleanup(); reject(new Error('JSONP 超时')) }, 20000)
-      function cleanup() {
-        delete window[cbName]
-        if (script.parentNode) script.parentNode.removeChild(script)
-      }
-    })
   }
 
   function renderVodGrid(list, total) {
