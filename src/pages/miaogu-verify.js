@@ -1,4 +1,4 @@
-import '../style/pages.css';
+import '../style/movie-tool.css';
 
 /**
  * 喵咕验证页面
