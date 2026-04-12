@@ -1,4 +1,4 @@
-import '../style/movie-tool.css';
+import '../style/pages.css';
 
 /**
  * 微验验证页面
