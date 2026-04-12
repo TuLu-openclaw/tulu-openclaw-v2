@@ -350,7 +350,7 @@ function initApp(el) {
 
   async function loadList() {
     const source = VOD_SOURCES[src]
-    const catObj = CATEGORIES.find(c => c.id === cat)
+    const catObj = VOD_CATEGORIES.find(c => c.id === cat)
     let json = { list: [], total: 0 }
     try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
     if (!json.list) {
