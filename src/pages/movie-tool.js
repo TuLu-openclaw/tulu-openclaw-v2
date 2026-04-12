@@ -1,7 +1,9 @@
 /**
- * 屠戮影视 - 重写版
+ * 屠戮影视 - 重写版 v4
  * VOD 点播（电影/剧集/综艺/动漫/短剧）+ TV 直播
- * 2026-04-12 重写，测试后可用接口
+ * TV 直播源: rihou.cc 555端口（86分类，数百频道）
+ * VOD 源: 量子资源（唯一可用）
+ * 2026-04-12
  */
 
 import '../style/movie-tool.css'
@@ -17,23 +19,13 @@ const VOD_SOURCES = [
 ]
 
 // ──────────────────────────────────────────────
-// TV 直播接口 — 测试后可用
+// TV 直播接口 — rihou.cc 555端口
 // ──────────────────────────────────────────────
 const TV_SOURCES = [
-  { name: '南风',    url: 'http://120.46.39.251/tvbox/tvboxqq/南风/api.json' },
-  { name: '欧歌',    url: 'http://120.46.39.251/tvbox/tvboxqq/欧歌/api.json' },
-  { name: '天微',    url: 'http://120.46.39.251/tvbox/tvboxqq/天微/api.json' },
-  { name: '戏曲音乐',  url: 'http://120.46.39.251/tvbox/tvboxqq/戏曲音乐/api.json' },
-  { name: '少儿频道',  url: 'http://120.46.39.251/tvbox/tvboxqq/少儿频道/api.json' },
-  { name: '小米',    url: 'http://120.46.39.251/tvbox/tvboxqq/小米/api.json' },
-  { name: '王二小',  url: 'http://120.46.39.251/tvbox/tvboxqq/王二小/api.json' },
-  { name: '小虎斑',  url: 'http://120.46.39.251/tvbox/tvboxqq/小虎斑/api.json' },
-  { name: '饭太硬',  url: 'http://120.46.39.251/tvbox/tvboxqq/饭太硬/api.json' },
-  { name: '肥猫',    url: 'http://120.46.39.251/tvbox/tvboxqq/肥猫/api.json' },
-  { name: '潇洒',    url: 'http://120.46.39.251/tvbox/tvboxqq/潇洒/api.json' },
-  { name: '摸鱼儿',  url: 'http://120.46.39.251/tvbox/tvboxqq/摸鱼儿/api.json' },
-  { name: '香雅情',  url: 'http://120.46.39.251/tvbox/tvboxqq/香雅情/api.json' },
-  { name: 'OK直播', url: 'http://ok321.top/tv' },
+  {
+    name: 'rihou 国内海外',
+    api: 'http://rihou.cc:555/gggg.nzk',
+  },
 ]
 
 // ──────────────────────────────────────────────
@@ -62,6 +54,7 @@ let src = 0
 let page = 1
 let query = ''
 let tvCache = {}
+let tvParseCache = {}
 let playingEp = null
 let _el = null
 
@@ -105,6 +98,31 @@ async function fetchJSON(url) {
   const resp = await fetch(url, { signal: AbortSignal.timeout(15000) })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
   return resp.json()
+}
+
+// 解析 rihou.cc 的 nzk 格式
+// 分类行:  名称,#genre#
+// 频道行:  名称,URL
+function parseNzk(raw) {
+  if (tvParseCache[raw]) return tvParseCache[raw]
+  const lines = raw.split('\n').map(l => l.replace(/\r$/, '').trim()).filter(l => l)
+  const categories = []
+  let currentCat = null
+  for (const line of lines) {
+    if (line.includes('#genre#')) {
+      currentCat = { name: line.replace('#genre#', '').trim(), channels: [] }
+      categories.push(currentCat)
+    } else if (line.includes(',') && currentCat) {
+      const commaIdx = line.indexOf(',')
+      const chName = line.slice(0, commaIdx).trim()
+      const chUrl = line.slice(commaIdx + 1).trim()
+      if (chName && chUrl && (chUrl.startsWith('http') || chUrl.startsWith('//'))) {
+        currentCat.channels.push({ name: chName, url: chUrl.startsWith('//') ? 'https:' + chUrl : chUrl })
+      }
+    }
+  }
+  tvParseCache[raw] = categories
+  return categories
 }
 
 // ──────────────────────────────────────────────
@@ -335,7 +353,7 @@ export default function render() {
   // ── VOD 网格 ──
   function renderVodGrid(list, total) {
     const content = el.querySelector('#t-content')
-    if (!list.length) { content.innerHTML = '<div class="tvbox-empty">暂无数据，请尝试其他分类</div>'; return }
+    if (!list.length) { content.innerHTML = '<div class="tvbox-empty">暂无数据，请尝试其他分类或关键词搜索</div>'; return }
     const history = getPlayHistory()
     const sourceName = VOD_SOURCES[src].name
     const totalPages = Math.max(1, Math.ceil(total / 20))
@@ -371,77 +389,45 @@ export default function render() {
   async function loadLive() {
     const source = TV_SOURCES[src]
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">正在加载 ' + source.name + '...</div>'
-    let data = tvCache[src]
-    if (!data) {
+    content.innerHTML = '<div class="tvbox-loading">正在加载直播频道...</div>'
+
+    let raw = tvCache[src]
+    if (!raw) {
       try {
-        data = await fetchJSON(source.url)
-        tvCache[src] = data
+        raw = await fetch(source.api, { signal: AbortSignal.timeout(20000) }).then(r => r.text())
+        tvCache[src] = raw
       } catch (e) {
-        content.innerHTML = '<div class="tvbox-empty">加载失败: ' + e.message + '<br><br>接口: ' + source.url + '</div>'
+        content.innerHTML = '<div class="tvbox-empty">加载失败: ' + e.message + '<br><br>接口: ' + source.api + '</div>'
         return
       }
     }
-    renderTvGrid(data)
+
+    const categories = parseNzk(raw)
+    renderTvGrid(categories)
   }
 
-  // ── TV 网格渲染 — 支持多种 JSON 格式 ──
-  function renderTvGrid(data) {
+  // ── TV 网格渲染 ──
+  function renderTvGrid(categories) {
     const content = el.querySelector('#t-content')
-    if (!data || (Array.isArray(data) && data.length === 0)) {
-      content.innerHTML = '<div class="tvbox-empty">该接口暂无数据</div>'
+    if (!categories || categories.length === 0) {
+      content.innerHTML = '<div class="tvbox-empty">暂无频道数据</div>'
       return
     }
 
-    // 格式A: 分类格式 [{name:"央视频道",channels:[{name:"CCTV1",url:"..."}]}]
-    if (Array.isArray(data) && data[0] && data[0].channels) {
-      content.innerHTML = data.filter(cat => cat.name && cat.channels && cat.channels.length).slice(0, 20).map(cat => {
-        let chHtml = cat.channels.slice(0, 48).map(ch =>
-          '<div class="tvbox-ch-item" data-url="' + (ch.url || ch.play_url || '#') + '" data-name="' + (ch.name || ch.title || '未知') + '">' +
-            '<span>📺</span><span class="tvbox-ch-name">' + (ch.name || ch.title || '未知') + '</span>' +
-          '</div>'
-        ).join('')
-        return '<div class="tvbox-cat-block">' +
-          '<div class="tvbox-cat-title">' + cat.name + '</div>' +
-          '<div class="tvbox-ch-grid">' + chHtml + '</div>' +
+    content.innerHTML = categories.slice(0, 30).map(cat => {
+      if (!cat.channels || cat.channels.length === 0) return ''
+      const chHtml = cat.channels.slice(0, 60).map(ch =>
+        '<div class="tvbox-ch-item" data-url="' + ch.url + '" data-name="' + ch.name + '">' +
+          '<span>📺</span><span class="tvbox-ch-name">' + ch.name + '</span>' +
         '</div>'
-      }).join('')
-      bindTvItems()
-      return
-    }
+      ).join('')
+      return '<div class="tvbox-cat-block">' +
+        '<div class="tvbox-cat-title">' + cat.name + ' (' + cat.channels.length + ')</div>' +
+        '<div class="tvbox-ch-grid">' + chHtml + '</div>' +
+      '</div>'
+    }).join('')
 
-    // 格式B: 扁平数组 [{name:"CCTV1",url:"..."}]
-    if (Array.isArray(data) && data[0] && data[0].name && (data[0].url || data[0].play_url)) {
-      const grouped = {}
-      data.forEach(ch => {
-        const u = ch.url || ch.play_url
-        if (!u) return
-        const group = (ch.name || '未知').slice(0, 2)
-        if (!grouped[group]) grouped[group] = []
-        grouped[group].push(ch)
-      })
-      content.innerHTML = Object.entries(grouped).slice(0, 20).map(([gname, channels]) => {
-        let chHtml = channels.slice(0, 48).map(ch =>
-          '<div class="tvbox-ch-item" data-url="' + (ch.url || ch.play_url) + '" data-name="' + (ch.name || '未知') + '">' +
-            '<span>📺</span><span class="tvbox-ch-name">' + (ch.name || '未知') + '</span>' +
-          '</div>'
-        ).join('')
-        return '<div class="tvbox-cat-block">' +
-          '<div class="tvbox-cat-title">' + gname + '</div>' +
-          '<div class="tvbox-ch-grid">' + chHtml + '</div>' +
-        '</div>'
-      }).join('')
-      bindTvItems()
-      return
-    }
-
-    // 格式C: {urls:[...]} 包裹格式
-    if (data.urls && Array.isArray(data.urls)) {
-      renderTvGrid(data.urls)
-      return
-    }
-
-    content.innerHTML = '<div class="tvbox-empty">数据格式不支持，尝试其他接口</div>'
+    bindTvItems()
   }
 
   function bindTvItems() {
@@ -449,7 +435,8 @@ export default function render() {
     content.querySelectorAll('.tvbox-ch-item').forEach(node => {
       node.addEventListener('click', () => {
         const url = node.dataset.url
-        if (url && url !== '#') openPlayerTv(node.dataset.name, url)
+        const name = node.dataset.name
+        if (url && url !== '#') openPlayerTv(name, url)
         else alert('该频道暂无播放地址')
       })
     })
