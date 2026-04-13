@@ -17,7 +17,8 @@ const LOAD_TIMEOUT = 8000
 //  锁屏视图
 // ─────────────────────────────────────────────
 function renderLockView(container, onUnlock) {
-  container.innerHTML = ''
+  try {
+    container.innerHTML = ''
 
   const style = document.createElement('style')
   style.textContent = `
@@ -127,13 +128,17 @@ function renderLockView(container, onUnlock) {
   })
 
   setTimeout(() => input.focus(), 120)
+  } catch (e) {
+    console.error('[global] renderLockView error:', e)
+  }
 }
 
 // ─────────────────────────────────────────────
 //  内置浏览器视图（iframe）
 // ─────────────────────────────────────────────
 function renderBrowserView(container) {
-  container.innerHTML = ''
+  try {
+    container.innerHTML = ''
 
   const style = document.createElement('style')
   style.textContent = `
@@ -297,21 +302,33 @@ function renderBrowserView(container) {
 
   startLoad()
   iframe.src = TARGET_URL
+  } catch (e) {
+    console.error('[global] renderBrowserView error:', e)
+  }
 }
 
 // ─────────────────────────────────────────────
 //  主入口
 // ─────────────────────────────────────────────
 export default function render(container) {
+  console.log('[global] render called, container:', !!container)
   const root = container || document.body
   root.innerHTML = ''
 
   function unlock() {
+    console.log('[global] unlock called')
     renderBrowserView(root)
   }
 
   let unlocked = false
-  try { unlocked = sessionStorage.getItem(LOCK_KEY) === '1' } catch (_) {}
+  try {
+    const v = sessionStorage.getItem(LOCK_KEY)
+    console.log('[global] sessionStorage value:', v)
+    unlocked = v === '1'
+  } catch (e) {
+    console.error('[global] sessionStorage error:', e)
+  }
+  console.log('[global] unlocked:', unlocked)
   if (unlocked) {
     renderBrowserView(root)
   } else {
