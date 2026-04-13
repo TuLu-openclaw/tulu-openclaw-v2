@@ -1,26 +1,9 @@
-// 捕获所有未处理错误，防止白屏
-window.addEventListener('error', function(e) {
-  const doc = document
-  if (doc && doc.body) {
-    doc.body.innerHTML = '<div style="position:absolute;top:0;left:0;right:0;padding:20px;background:#111;color:#f55;font-family:monospace;font-size:14px;z-index:999999;white-space:pre-wrap">ERROR: ' + (e.message || String(e)) + '\n' + (e.filename || '').split('/').pop() + ':' + (e.lineno || 0) + '</div>'
-  }
-})
-
-window.addEventListener('unhandledrejection', function(e) {
-  const doc = document
-  if (doc && doc.body) {
-    doc.body.innerHTML = '<div style="position:absolute;top:0;left:0;right:0;padding:20px;background:#311;font-color:#f88;font-family:monospace;font-size:14px;z-index:999999;white-space:pre-wrap">UNHANDLED: ' + String(e.reason) + '</div>'
-  }
-})
-
 /**
- * 全球内置 - 密码锁 + 内置浏览器页面
+ * 全球内置 - Modal 弹窗锁 + 内置浏览器
  *
- * 功能：
- * 1. 首次访问显示密码锁（sessionStorage 持久化本次会话的解锁状态）
- * 2. 密码正确（2552667173）→ 加载 iframe 全屏显示目标 URL
- * 3. 密码错误 → 输入框抖动 + 错误提示
- * 4. 刷新页面不重新锁屏（sessionStorage）
+ * UX：点击侧边栏"全球内置"→ 弹出密码验证 Modal
+ *    → 密码正确（2552667173）→ Modal 消失，显示内置浏览器
+ *    → 刷新不重新锁（sessionStorage）
  */
 
 const TARGET_URL = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific'
@@ -28,91 +11,167 @@ const LOCK_KEY = 'tulu_global_unlocked'
 const CORRECT_PWD = '2552667173'
 const LOAD_TIMEOUT = 8000
 
-// ─────────────────────────────────────────────
-//  锁屏视图
-// ─────────────────────────────────────────────
-function renderLockView(container, onUnlock) {
-  try {
-    container.innerHTML = ''
+let _unlocked = false
 
+// ─────────────────────────────────────────────
+//  Modal 样式（注入一次）
+// ─────────────────────────────────────────────
+function _injectStyles() {
+  if (document.getElementById('t-gb-styles')) return
   const style = document.createElement('style')
+  style.id = 't-gb-styles'
   style.textContent = `
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes fadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
-    @keyframes shake {
+    @keyframes tGbSpin { to { transform: rotate(360deg); } }
+    @keyframes tGbFadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+    @keyframes tGbShake {
       0%,100% { transform: translateX(0); }
-      15%,45%,75% { transform: translateX(-8px); }
-      30%,60%,90% { transform: translateX(8px); }
+      15%,45%,75% { transform: translateX(-7px); }
+      30%,60%,90% { transform: translateX(7px); }
     }
-    @keyframes lockBounce {
-      0%,100% { transform: scale(1); }
-      40% { transform: scale(1.12); }
-      70% { transform: scale(0.95); }
+    @keyframes tGbPulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+      50% { box-shadow: 0 0 0 12px rgba(99,102,241,0); }
     }
-    .gb-lock { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
+    .t-gb-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9000;
+      background: rgba(6,6,18,0.82); backdrop-filter: blur(6px);
       display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #0a0a1a 0%, #111128 50%, #0a0a1a 100%);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      animation: fadeIn 0.35s ease;
+      animation: tGbFadeIn 0.25s ease;
     }
-    .gb-lock-card {
-      text-align: center; padding: 48px 40px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 20px; backdrop-filter: blur(24px);
-      box-shadow: 0 32px 80px rgba(0,0,0,0.55);
-      width: 340px; max-width: 92vw;
-      animation: fadeIn 0.4s ease;
+    .t-gb-modal {
+      background: #0f0f24; border: 1px solid rgba(99,102,241,0.22);
+      border-radius: 20px; padding: 44px 40px 36px;
+      width: 360px; max-width: 92vw;
+      box-shadow: 0 40px 90px rgba(0,0,0,0.7), 0 0 60px rgba(99,102,241,0.08);
+      text-align: center; animation: tGbFadeIn 0.3s ease;
     }
-    .gb-lock-icon { font-size: 68px; display: inline-block; animation: lockBounce 2s ease infinite; margin-bottom: 20px; }
-    .gb-lock-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-    .gb-lock-sub { font-size: 13px; color: #5a5a7a; margin-bottom: 32px; line-height: 1.6; }
-    .gb-lock-input-wrap { position: relative; margin-bottom: 16px; }
-    .gb-lock-input {
-      width: 100%; box-sizing: border-box;
-      padding: 15px 16px;
-      background: rgba(255,255,255,0.05);
-      border: 1.5px solid rgba(255,255,255,0.1);
-      border-radius: 12px; color: #fff; font-size: 15px;
-      outline: none; text-align: center;
-      letter-spacing: 4px; transition: border-color 0.2s;
+    .t-gb-icon { font-size: 64px; margin-bottom: 18px; display: inline-block;
+      animation: tGbPulse 2.4s ease infinite; }
+    .t-gb-title { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .t-gb-sub { font-size: 13px; color: #4a4a70; margin-bottom: 30px; line-height: 1.7; }
+    .t-gb-input {
+      width: 100%; box-sizing: border-box; padding: 14px 16px;
+      background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.1);
+      border-radius: 12px; color: #fff; font-size: 16px;
+      outline: none; text-align: center; letter-spacing: 5px;
+      transition: border-color 0.2s;
     }
-    .gb-lock-input:focus { border-color: rgba(99,102,241,0.65); }
-    .gb-lock-input.error { border-color: rgba(239,68,68,0.7); }
-    .gb-lock-err { font-size: 12px; color: #ef4444; min-height: 18px; margin-bottom: 10px; }
-    .gb-lock-btn {
+    .t-gb-input:focus { border-color: rgba(99,102,241,0.6); }
+    .t-gb-input.err { border-color: rgba(239,68,68,0.65); animation: tGbShake 0.45s ease; }
+    .t-gb-err { font-size: 12px; color: #ef4444; min-height: 18px; margin: 8px 0 14px; }
+    .t-gb-btn {
       width: 100%; padding: 14px; border: none; border-radius: 12px;
       background: linear-gradient(135deg, #6366f1, #8b5cf6);
       color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
       transition: opacity 0.2s, transform 0.1s;
-      box-shadow: 0 4px 16px rgba(99,102,241,0.38);
+      box-shadow: 0 4px 18px rgba(99,102,241,0.4);
     }
-    .gb-lock-btn:hover { opacity: 0.9; }
-    .gb-lock-btn:active { transform: scale(0.98); }
-    .gb-lock-footer { margin-top: 22px; font-size: 11px; color: #333348; }
+    .t-gb-btn:hover { opacity: 0.88; }
+    .t-gb-btn:active { transform: scale(0.98); }
+    .t-gb-footer { margin-top: 20px; font-size: 11px; color: #2e2e50; }
+
+    /* 浏览器视图 */
+    .t-gb-br {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9000;
+      display: flex; flex-direction: column;
+      background: #0b0b14;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .t-gb-bar {
+      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px;
+      background: rgba(14,14,24,0.96);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .t-gb-bar-l { display: flex; align-items: center; gap: 10px; }
+    .t-gb-bar-r { display: flex; align-items: center; gap: 8px; }
+    .t-gb-title2 { font-size: 14px; font-weight: 700; color: #fff; }
+    .t-gb-badge { font-size: 10px; background: rgba(34,197,94,0.14);
+      color: #22c55e; padding: 2px 8px; border-radius: 10px;
+      border: 1px solid rgba(34,197,94,0.28); }
+    .t-gb-status { font-size: 11px; color: #555; transition: color 0.3s; }
+    .t-gb-status.ok { color: #22c55e; }
+    .t-gb-status.fail { color: #ef4444; }
+    .t-gb-status.loading { color: #f59e0b; }
+    .t-gb-btn2 {
+      cursor: pointer; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1); color: #888;
+      font-size: 11px; padding: 4px 10px; border-radius: 6px;
+      transition: background 0.2s;
+    }
+    .t-gb-btn2:hover { background: rgba(255,255,255,0.1); }
+    .t-gb-btn2.ext { background: rgba(99,102,241,0.14);
+      border-color: rgba(99,102,241,0.28); color: #8b8cf5; }
+    .t-gb-btn2.ext:hover { background: rgba(99,102,241,0.24); }
+    .t-gb-btn2.lock { background: rgba(239,68,68,0.12);
+      border-color: rgba(239,68,68,0.25); color: #ef4444; }
+    .t-gb-body { flex: 1; position: relative; overflow: hidden; }
+    .t-gb-iframe { width: 100%; height: 100%; border: none; display: block; }
+    .t-gb-load {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; background: #0b0b14;
+      gap: 14px; transition: opacity 0.4s;
+    }
+    .t-gb-load.hidden { opacity: 0; pointer-events: none; }
+    .t-gb-spin {
+      width: 34px; height: 34px; border: 3px solid rgba(99,102,241,0.18);
+      border-top-color: #6366f1; border-radius: 50%;
+      animation: tGbSpin 0.8s linear infinite;
+    }
+    .t-gb-load-txt { font-size: 12px; color: #555; }
+    .t-gb-load-url { font-size: 11px; color: #3a3a55; max-width: 80%;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .t-gb-blocked {
+      position: absolute; inset: 0; display: none; flex-direction: column;
+      align-items: center; justify-content: center; background: #0f0f1a;
+      padding: 40px 20px; text-align: center; gap: 12px;
+      animation: tGbFadeIn 0.3s ease;
+    }
+    .t-gb-blocked.show { display: flex; }
+    .t-gb-blocked-icon { font-size: 42px; }
+    .t-gb-blocked-title { font-size: 15px; font-weight: 700; color: #ef4444; }
+    .t-gb-blocked-desc { font-size: 12px; color: #4a4a65; max-width: 340px; line-height: 1.8; }
+    .t-gb-open-btn {
+      display: inline-block; padding: 9px 24px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff; border-radius: 9px; font-size: 13px; font-weight: 700;
+      text-decoration: none; cursor: pointer; border: none;
+      box-shadow: 0 4px 14px rgba(99,102,241,0.33); transition: opacity 0.2s;
+    }
+    .t-gb-open-btn:hover { opacity: 0.9; }
   `
   document.head.appendChild(style)
+}
 
-  const wrap = document.createElement('div')
-  wrap.className = 'gb-lock'
-  wrap.innerHTML =
-    '<div class="gb-lock-card">' +
-      '<div class="gb-lock-icon">&#x1F512;</div>' +
-      '<div class="gb-lock-title">&#x5F85;&#x5F00;&#x653E;&#x529F;&#x80FD;</div>' +
-      '<div class="gb-lock-sub">&#x8BF7;&#x8F93;&#x5165;&#x8BBF;&#x95EE;&#x5BC6;&#x7801;&#x5B8C;&#x6210;&#x9A8C;&#x8BC1;</div>' +
-      '<div class="gb-lock-input-wrap">' +
-        '<input type="password" id="t-gl-pwd" class="gb-lock-input" placeholder="&#x5BC6;&#x7801;" maxlength="20" autocomplete="off" spellcheck="false" />' +
-      '</div>' +
-      '<div class="gb-lock-err" id="t-gl-err"></div>' +
-      '<button class="gb-lock-btn" id="t-gl-btn">&#x89E3;&#x9501;&#x8FDB;&#x5165;</button>' +
-      '<div class="gb-lock-footer">&#x5C0F;&#x63D0;&#x793A;&#xFF1A;&#x5BC6;&#x7801;&#x4E3A;&#x6388;&#x6743;&#x7801;&#xFF0C;&#x8BF7;&#x8054;&#x7CFB; QQ&#xFF1A;2552667173</div>' +
+// ─────────────────────────────────────────────
+//  密码验证 Modal
+// ─────────────────────────────────────────────
+function _showLockModal(onUnlock) {
+  _injectStyles()
+
+  const overlay = document.createElement('div')
+  overlay.className = 't-gb-overlay'
+  overlay.innerHTML =
+    '<div class="t-gb-modal">' +
+      '<div class="t-gb-icon">&#x1F512;</div>' +
+      '<div class="t-gb-title">全球内置</div>' +
+      '<div class="t-gb-sub">请输入访问密码完成验证</div>' +
+      '<input type="password" class="t-gb-input" id="t-gb-pwd" ' +
+        'placeholder="&#x5BC6;&#x7801;" maxlength="20" ' +
+        'autocomplete="off" spellcheck="false" />' +
+      '<div class="t-gb-err" id="t-gb-err"></div>' +
+      '<button class="t-gb-btn" id="t-gb-btn">&#x89E3;&#x9501;&#x8FDB;&#x5165;</button>' +
+      '<div class="t-gb-footer">&#x5C0F;&#x63D0;&#x793A;&#xFF1A;&#x6388;&#x6743;&#x7801;&#xFF1A;2552667173</div>' +
     '</div>'
 
-  container.appendChild(wrap)
+  document.body.appendChild(overlay)
 
-  const input = wrap.querySelector('#t-gl-pwd')
-  const btn = wrap.querySelector('#t-gl-btn')
-  const errEl = wrap.querySelector('#t-gl-err')
+  const input = overlay.querySelector('#t-gb-pwd')
+  const btn = overlay.querySelector('#t-gb-btn')
+  const errEl = overlay.querySelector('#t-gb-err')
+
+  function cleanup() { overlay.remove() }
 
   function tryUnlock() {
     const val = input.value
@@ -121,17 +180,17 @@ function renderLockView(container, onUnlock) {
       return
     }
     if (val === CORRECT_PWD) {
-      sessionStorage.setItem(LOCK_KEY, '1')
+      try { sessionStorage.setItem(LOCK_KEY, '1') } catch (_) {}
+      _unlocked = true
+      cleanup()
       onUnlock()
     } else {
       errEl.textContent = '密码错误，请重试'
-      input.classList.add('error')
-      input.style.animation = 'none'
+      input.classList.remove('err')
       void input.offsetWidth
-      input.style.animation = 'shake 0.5s ease'
+      input.classList.add('err')
       input.value = ''
       input.focus()
-      setTimeout(() => input.classList.remove('error'), 600)
     }
   }
 
@@ -139,136 +198,69 @@ function renderLockView(container, onUnlock) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock() })
   input.addEventListener('input', () => {
     errEl.textContent = ''
-    input.classList.remove('error')
+    input.classList.remove('err')
   })
 
-  setTimeout(() => input.focus(), 120)
-  } catch (e) {
-    console.error('[global] renderLockView error:', e)
-    container.innerHTML = '<div style="padding:20px;color:#f55;font-family:monospace">renderLockView Error: ' + String(e) + '</div>'
-  }
+  setTimeout(() => input.focus(), 100)
 }
 
 // ─────────────────────────────────────────────
-//  内置浏览器视图（iframe）
+//  内置浏览器视图
 // ─────────────────────────────────────────────
-function renderBrowserView(container) {
-  try {
-    container.innerHTML = ''
-
-  const style = document.createElement('style')
-  style.textContent = `
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    .gb-br { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 500;
-      display: flex; flex-direction: column;
-      background: #0b0b14;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    .gb-br-bar { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-      padding: 9px 16px; background: rgba(14,14,24,0.97);
-      border-bottom: 1px solid rgba(255,255,255,0.07); }
-    .gb-br-left { display: flex; align-items: center; gap: 10px; }
-    .gb-br-icon { font-size: 18px; }
-    .gb-br-title { font-size: 14px; font-weight: 600; color: #fff; }
-    .gb-br-badge { font-size: 10px; background: rgba(34,197,94,0.14); color: #22c55e;
-      padding: 2px 7px; border-radius: 10px; border: 1px solid rgba(34,197,94,0.28); }
-    .gb-br-right { display: flex; align-items: center; gap: 8px; }
-    .gb-br-status { font-size: 11px; color: #555; transition: color 0.3s; }
-    .gb-br-status.ok { color: #22c55e; }
-    .gb-br-status.fail { color: #ef4444; }
-    .gb-br-status.loading { color: #f59e0b; }
-    .gb-br-btn { cursor: pointer; background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1); color: #888;
-      font-size: 11px; padding: 4px 10px; border-radius: 6px;
-      transition: background 0.2s; }
-    .gb-br-btn:hover { background: rgba(255,255,255,0.1); }
-    .gb-br-btn.ext { background: rgba(99,102,241,0.14);
-      border-color: rgba(99,102,241,0.28); color: #8b8cf5; }
-    .gb-br-btn.ext:hover { background: rgba(99,102,241,0.24); }
-    .gb-br-btn.lock { background: rgba(239,68,68,0.12);
-      border-color: rgba(239,68,68,0.25); color: #ef4444; }
-    .gb-br-body { flex: 1; position: relative; overflow: hidden; }
-    .gb-br-iframe { width: 100%; height: 100%; border: none; display: block; }
-    .gb-br-load { position: absolute; inset: 0; display: flex;
-      flex-direction: column; align-items: center; justify-content: center;
-      background: #0b0b14; gap: 14px; pointer-events: none;
-      transition: opacity 0.4s; }
-    .gb-br-load.hidden { opacity: 0; pointer-events: none; }
-    .gb-br-spin { width: 34px; height: 34px; border: 3px solid rgba(99,102,241,0.18);
-      border-top-color: #6366f1; border-radius: 50%;
-      animation: spin 0.8s linear infinite; }
-    .gb-br-load-txt { font-size: 12px; color: #555; }
-    .gb-br-load-url { font-size: 11px; color: #3a3a55; max-width: 80%;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .gb-br-blocked { position: absolute; inset: 0; display: none;
-      flex-direction: column; align-items: center; justify-content: center;
-      background: #0f0f1a; padding: 40px 20px; text-align: center;
-      gap: 12px; animation: fadeIn 0.3s ease; }
-    .gb-br-blocked.show { display: flex; }
-    .gb-br-blocked-icon { font-size: 42px; }
-    .gb-br-blocked-title { font-size: 15px; font-weight: 700; color: #ef4444; }
-    .gb-br-blocked-desc { font-size: 12px; color: #4a4a65; max-width: 340px; line-height: 1.8; }
-    .gb-br-open-btn { display: inline-block; padding: 9px 24px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      color: #fff; border-radius: 9px; font-size: 13px; font-weight: 700;
-      text-decoration: none; cursor: pointer; border: none;
-      box-shadow: 0 4px 14px rgba(99,102,241,0.33); transition: opacity 0.2s; }
-    .gb-br-open-btn:hover { opacity: 0.9; }
-  `
-  document.head.appendChild(style)
+function _showBrowserView() {
+  _injectStyles()
 
   const wrap = document.createElement('div')
-  wrap.className = 'gb-br'
+  wrap.className = 't-gb-br'
   wrap.innerHTML =
-    '<div class="gb-br-bar">' +
-      '<div class="gb-br-left">' +
-        '<span class="gb-br-icon">&#x1F310;</span>' +
-        '<span class="gb-br-title">全球内置</span>' +
-        '<span class="gb-br-badge">已解锁</span>' +
+    '<div class="t-gb-bar">' +
+      '<div class="t-gb-bar-l">' +
+        '<span style="font-size:18px">&#x1F310;</span>' +
+        '<span class="t-gb-title2">全球内置</span>' +
+        '<span class="t-gb-badge">已解锁</span>' +
       '</div>' +
-      '<div class="gb-br-right">' +
-        '<span class="gb-br-status" id="t-br-status">&#x1F504; 等待加载</span>' +
-        '<button class="gb-br-btn" id="t-br-refresh">&#x21BB; 刷新</button>' +
-        '<button class="gb-br-btn lock" id="t-br-lock">&#x1F512; 锁定</button>' +
-        '<a class="gb-br-btn ext" href="' + TARGET_URL + '" target="_blank" rel="noopener">&#x1F517; 外部</a>' +
+      '<div class="t-gb-bar-r">' +
+        '<span class="t-gb-status" id="t-gb-status">&#x1F504; 等待加载</span>' +
+        '<button class="t-gb-btn2" id="t-gb-refresh">&#x21BB; 刷新</button>' +
+        '<button class="t-gb-btn2 lock" id="t-gb-lock">&#x1F512; 锁定</button>' +
+        '<a class="t-gb-btn2 ext" href="' + TARGET_URL + '" target="_blank" rel="noopener">&#x1F517; 外部</a>' +
       '</div>' +
     '</div>' +
-    '<div class="gb-br-body" id="t-br-body">' +
-      '<div class="gb-br-load" id="t-br-load">' +
-        '<div class="gb-br-spin"></div>' +
-        '<div class="gb-br-load-txt">正在连接全球服务器...</div>' +
-        '<div class="gb-br-load-url">' + TARGET_URL + '</div>' +
+    '<div class="t-gb-body" id="t-gb-body">' +
+      '<div class="t-gb-load" id="t-gb-load">' +
+        '<div class="t-gb-spin"></div>' +
+        '<div class="t-gb-load-txt">正在连接全球服务器...</div>' +
+        '<div class="t-gb-load-url">' + TARGET_URL + '</div>' +
       '</div>' +
-      '<div class="gb-br-blocked" id="t-br-blocked">' +
-        '<div class="gb-br-blocked-icon">&#x26A0;&#xFE0F;</div>' +
-        '<div class="gb-br-blocked-title">页面无法在应用内加载</div>' +
-        '<div class="gb-br-blocked-desc">目标网站设置了安全策略（X-Frame-Options 或 CSP），<br>不允许在 iframe 中嵌入。可在浏览器中打开。</div>' +
-        '<a class="gb-br-open-btn" href="' + TARGET_URL + '" target="_blank" rel="noopener">&#x1F517; 在浏览器中打开</a>' +
+      '<div class="t-gb-blocked" id="t-gb-blocked">' +
+        '<div class="t-gb-blocked-icon">&#x26A0;&#xFE0F;</div>' +
+        '<div class="t-gb-blocked-title">页面无法在应用内加载</div>' +
+        '<div class="t-gb-blocked-desc">目标网站设置了安全策略，不允许在 iframe 中嵌入。<br>可在浏览器中打开。</div>' +
+        '<a class="t-gb-open-btn" href="' + TARGET_URL + '" target="_blank" rel="noopener">&#x1F517; 在浏览器中打开</a>' +
       '</div>' +
-      '<iframe id="t-br-iframe" class="gb-br-iframe" allow="fullscreen"></iframe>' +
+      '<iframe id="t-gb-iframe" class="t-gb-iframe" allow="fullscreen"></iframe>' +
     '</div>'
 
-  container.appendChild(wrap)
+  document.body.appendChild(wrap)
 
-  const iframe = wrap.querySelector('#t-br-iframe')
-  const statusEl = wrap.querySelector('#t-br-status')
-  const loadingEl = wrap.querySelector('#t-br-load')
-  const blockedEl = wrap.querySelector('#t-br-blocked')
+  const iframe = wrap.querySelector('#t-gb-iframe')
+  const statusEl = wrap.querySelector('#t-gb-status')
+  const loadingEl = wrap.querySelector('#t-gb-load')
+  const blockedEl = wrap.querySelector('#t-gb-blocked')
 
   let loadTimer = null
   let loadFired = false
 
   function setStatus(text, cls) {
     statusEl.textContent = text
-    statusEl.className = 'gb-br-status ' + (cls || '')
+    statusEl.className = 't-gb-status ' + (cls || '')
   }
 
   function showBlocked() {
     loadingEl.classList.add('hidden')
     iframe.style.display = 'none'
     blockedEl.classList.add('show')
-    setStatus('&#x26D4; 加载被拦截', 'fail')
+    setStatus('\u26D4 加载被拦截', 'fail')
   }
 
   function startLoad() {
@@ -276,81 +268,68 @@ function renderBrowserView(container) {
     loadingEl.classList.remove('hidden')
     iframe.style.display = 'block'
     blockedEl.classList.remove('show')
-    setStatus('&#x1F504; 加载中...', 'loading')
+    setStatus('\u1F504 加载中...', 'loading')
     clearTimeout(loadTimer)
-    loadTimer = setTimeout(function() {
-      if (!loadFired) showBlocked()
-    }, LOAD_TIMEOUT)
+    loadTimer = setTimeout(() => { if (!loadFired) showBlocked() }, LOAD_TIMEOUT)
   }
 
-  iframe.addEventListener('load', function() {
+  iframe.addEventListener('load', () => {
     loadFired = true
     clearTimeout(loadTimer)
     try {
       const doc = iframe.contentDocument
       if (doc && doc.body && doc.body.innerHTML.length > 100) {
         loadingEl.classList.add('hidden')
-        setStatus('&#x2705; 已加载', 'ok')
+        setStatus('\u2705 已加载', 'ok')
       } else {
         showBlocked()
       }
-    } catch(e) {
+    } catch (_) {
       loadingEl.classList.add('hidden')
-      setStatus('&#x2705; 已加载', 'ok')
+      setStatus('\u2705 已加载', 'ok')
     }
   })
 
-  iframe.addEventListener('error', function() {
+  iframe.addEventListener('error', () => {
     loadFired = true
     clearTimeout(loadTimer)
     showBlocked()
   })
 
-  wrap.querySelector('#t-br-refresh').addEventListener('click', function() {
+  wrap.querySelector('#t-gb-refresh').addEventListener('click', () => {
     startLoad()
     iframe.src = TARGET_URL + '?r=' + Date.now()
   })
 
-  wrap.querySelector('#t-br-lock').addEventListener('click', function() {
+  wrap.querySelector('#t-gb-lock').addEventListener('click', () => {
+    _unlocked = false
     try { sessionStorage.removeItem(LOCK_KEY) } catch (_) {}
-    renderLockView(container, unlock)
+    wrap.remove()
+    _showLockModal(_showBrowserView)
   })
 
   startLoad()
   iframe.src = TARGET_URL
-  } catch (e) {
-    console.error('[global] renderBrowserView error:', e)
-    container.innerHTML = '<div style="padding:20px;color:#f55;font-family:monospace">renderBrowserView Error: ' + String(e) + '</div>'
-  }
 }
 
 // ─────────────────────────────────────────────
 //  主入口
 // ─────────────────────────────────────────────
 export default function render(container) {
-  console.log('[global] render called, container:', !!container)
+  // 不往 container 写内容，所有内容都 render 到 document.body
+  // 这样无论当前在哪个页面，点击侧边栏按钮都能弹出
   const root = container || document.body
   root.innerHTML = ''
 
-  function unlock() {
-    console.log('[global] unlock called')
-    renderBrowserView(root)
-  }
-
+  // 检查 sessionStorage 是否已解锁
   let unlocked = false
-  try {
-    const v = sessionStorage.getItem(LOCK_KEY)
-    console.log('[global] sessionStorage value:', v)
-    unlocked = v === '1'
-  } catch (e) {
-    console.error('[global] sessionStorage error:', e)
-    root.innerHTML = '<div style="padding:20px;color:#f55;font-family:monospace">sessionStorage Error: ' + String(e) + '</div>'
-  }
-  console.log('[global] unlocked:', unlocked)
+  try { unlocked = sessionStorage.getItem(LOCK_KEY) === '1' } catch (_) {}
+
   if (unlocked) {
-    renderBrowserView(root)
+    _unlocked = true
+    _showBrowserView()
   } else {
-    renderLockView(root, unlock)
+    _showLockModal(_showBrowserView)
   }
 
   return root
