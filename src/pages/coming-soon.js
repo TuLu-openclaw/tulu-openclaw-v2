@@ -291,7 +291,7 @@ function renderBrowserView(container) {
   })
 
   wrap.querySelector('#t-br-lock').addEventListener('click', function() {
-    sessionStorage.removeItem(LOCK_KEY)
+    try { sessionStorage.removeItem(LOCK_KEY) } catch (_) {}
     renderLockView(container, unlock)
   })
 
@@ -310,7 +310,9 @@ export default function render(container) {
     renderBrowserView(root)
   }
 
-  if (sessionStorage.getItem(LOCK_KEY) === '1') {
+  let unlocked = false
+  try { unlocked = sessionStorage.getItem(LOCK_KEY) === '1' } catch (_) {}
+  if (unlocked) {
     renderBrowserView(root)
   } else {
     renderLockView(root, unlock)
