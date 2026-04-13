@@ -102,7 +102,7 @@ function invalidate(...cmds) {
 // 导出 invalidate 供外部使用
 export { invalidate }
 
-async function invoke(cmd, args = {}) {
+export async function invoke(cmd, args = {}) {
   const start = Date.now()
   const tauriInvoke = WEB_ONLY_CMDS.has(cmd) ? null : await getTauriInvoke()
   if (tauriInvoke) {
