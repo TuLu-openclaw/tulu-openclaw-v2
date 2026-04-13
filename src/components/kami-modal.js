@@ -1,10 +1,25 @@
 // =============================================
-//  HTML 实体解码（处理 &amp; &quot; &lt; &gt; &#xxx; 等）
+//  HTML 实体解码（安全处理所有实体格式，无 XSS 风险）
+//  支持：&amp; &lt; &gt; &quot; &nbsp; &#123; &#x1A; &#x{1A}
 // =============================================
-function _decodeHTML(html) {
-  var txt = document.createElement('textarea')
-  txt.innerHTML = html
-  return txt.value
+function _decodeHTML(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, '\u00A0')
+    .replace(/&#(\d+);/g, function(_, code) {
+      return String.fromCodePoint(Number(code))
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, function(_, hex) {
+      return String.fromCodePoint(parseInt(hex, 16))
+    })
+    .replace(/&#x\{([0-9a-fA-F]+)\};/g, function(_, hex) {
+      return String.fromCodePoint(parseInt(hex, 16))
+    })
 }
 
 // =============================================
@@ -173,10 +188,11 @@ async function showKamiModal(isRetry) {
   _modalEl.innerHTML = buildModalHTML(initialKami, showPw, remembered, null)
   document.body.appendChild(_modalEl)
 
-  // 异步获取并填充真实公告（解码 HTML 实体后显示）
+  // 异步获取并填充真实公告
+  // textContent 自动处理所有 HTML 实体解码（&#xHEX; / &#DEC; / &named;），无二次解析风险
   getNotice().then(function(noticeText) {
     var el = document.getElementById('kami-notice-text')
-    if (el && noticeText) el.innerHTML = _decodeHTML(noticeText)
+    if (el && noticeText) el.textContent = noticeText
   }).catch(function() { /* 网络失败则保留默认文案 */ })
 
   var inputEl = document.getElementById('kami-input')

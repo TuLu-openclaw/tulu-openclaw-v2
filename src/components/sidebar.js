@@ -47,7 +47,7 @@ function NAV_ITEMS_FULL() { return [
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
       { route: '/tvbox', label: '影视仓', icon: 'tv' },
-      { route: '/coming-soon', label: '待开放功能', icon: 'lock' },
+      { route: '/coming-soon', label: '全球内置', icon: 'lock' },
     ]
   },
   {
