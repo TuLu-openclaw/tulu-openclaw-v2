@@ -22,6 +22,7 @@ const SUCCESS_CODE = 2552667173
 const KAMI_STORED_KEY = 'tulu_kami'
 const KAMI_VERIFIED_KEY = 'tulu_kami_verified'
 const KAMI_TIME_KEY = 'tulu_kami_time'
+const KAMI_NOTICE_KEY = 'tulu_kami_notice'
 
 /**
  * 获取设备标识码
@@ -94,17 +95,9 @@ async function httpPost(host, path, body) {
     })
     clearTimeout(timeout)
 
-    // resp.text() 也要限制，防止慢响应卡死
-    const textPromise = resp.text()
-    const timeout2 = setTimeout(() => controller.abort(), 10000)
-    try {
-      const text = await textPromise
-      clearTimeout(timeout2)
-      return text
-    } catch {
-      clearTimeout(timeout2)
-      throw new Error('响应读取超时')
-    }
+    // 读取响应文本（限制大小防止崩溃）
+    const text = await resp.text()
+    return text
   } catch (err) {
     clearTimeout(timeout)
     throw err
@@ -112,18 +105,12 @@ async function httpPost(host, path, body) {
 }
 
 /**
- * 解析HTTP响应体，提取JSON（处理chunked编码）
+ * 从 HTTP 响应中提取 body（兼容完整响应和纯 hex）
+ * HTTP 响应可能包含 chunked 传输编码的 body，直接返回原始文本
+ * 由调用方负责 RC4 解密
  */
 function extractBody(httpResponse) {
-  // 去掉HTTP头，找到第一个{的位置
-  const bodyStart = httpResponse.indexOf('{')
-  if (bodyStart === -1) return null
-  const body = httpResponse.slice(bodyStart)
-  try {
-    return JSON.parse(body)
-  } catch {
-    return null
-  }
+  return httpResponse.trim()
 }
 
 /**
@@ -158,23 +145,45 @@ export async function login(kami) {
     // 发送 HTTP 请求
     const raw = await httpPost(WY_HOST, `api/?id=kmlogon`, `app=${APPID}&data=${encrypted}`)
 
-    // C++ 逻辑：从 HTTP body（纯 hex 字符串）取 hexToBin -> RC4 -> JSON
-    const bodyHex = raw.trim()
-    console.log('[Kami Debug] httpPost raw response length:', bodyHex.length, 'first64:', bodyHex.slice(0, 64))
-
-    // 预检：如果包含非 hex 字符（说明服务器返回了明文错误而非加密响应），直接报告
-    if (!/^[0-9a-fA-F]*$/.test(bodyHex)) {
-      console.error('[Kami] 服务器返回非 hex 响应（可能是错误页面）：', bodyHex.slice(0, 200))
-      return { success: false, error: '服务器响应格式异常（非加密数据），请检查网络或联系作者', code: -10, debug: { raw: bodyHex.slice(0, 200) } }
+    // 预检：如果响应包含 HTTP 头部（非纯 hex），尝试提取 body 部分
+    let bodyHex = raw
+    if (raw.indexOf('\r\n\r\n') !== -1 || raw.indexOf('{') !== -1) {
+      // 去掉 HTTP 头，找到第一个 { 或纯 hex 起始位置
+      const bodyStart = raw.indexOf('{')
+      const hexStart = raw.search(/[0-9a-fA-F]{8,}/)
+      const firstUseful = bodyStart !== -1 && (hexStart === -1 || bodyStart < hexStart) ? bodyStart : hexStart
+      if (firstUseful !== -1) {
+        bodyHex = raw.slice(firstUseful).replace(/[^0-9a-fA-F]/g, '')
+      }
+    } else {
+      // 纯 hex 响应，清洗非 hex 字符
+      bodyHex = raw.replace(/[^0-9a-fA-F]/g, '')
     }
 
-    const decrypted = rc4(hexToBin(bodyHex), RC4KEY)
-    console.log('[Kami Debug] decrypted (hex→string):', decrypted.slice(0, 200))
+    console.log('[Kami Debug] bodyHex length:', bodyHex.length, 'sample:', bodyHex.slice(0, 64))
+
+    // 异常检测：hex 长度异常（太短或奇数位）
+    if (bodyHex.length < 8 || bodyHex.length % 2 !== 0) {
+      console.error('[Kami] hex 数据异常:', bodyHex.slice(0, 200))
+      return { success: false, error: '服务器响应格式异常', code: -10, debug: { raw: raw.slice(0, 200) } }
+    }
+
+    // RC4 解密
+    let decrypted
+    try {
+      decrypted = rc4(hexToBin(bodyHex), RC4KEY)
+    } catch (e) {
+      return { success: false, error: '解密失败：' + e.message, code: -1, debug: { raw: raw.slice(0, 200) } }
+    }
+
+    console.log('[Kami Debug] decrypted:', decrypted.slice(0, 200))
+
+    // JSON 解析
     let response
     try {
       response = JSON.parse(decrypted)
     } catch {
-      return { success: false, error: '响应解密失败（RC4/密钥可能不匹配）', code: -1, debug: { raw: bodyHex.slice(0, 200), decrypted: decrypted.slice(0, 200) } }
+      return { success: false, error: '响应解密失败，请检查卡密和网络', code: -1, debug: { raw: raw.slice(0, 200), decrypted: decrypted.slice(0, 200) } }
     }
 
     // 检查返回码
@@ -268,6 +277,63 @@ export function markVerified(kami, serverTime) {
   localStorage.setItem(KAMI_STORED_KEY, kami)
   localStorage.setItem(KAMI_VERIFIED_KEY, '1')
   localStorage.setItem(KAMI_TIME_KEY, String(serverTime || getUnixTimestamp()))
+}
+
+/**
+ * 获取真实公告（对接微验公告 API）
+ * 优先返回本地缓存（1小时内有效），失败时返回空字符串
+ * @returns {Promise<string>} 公告内容（HTML 可用）
+ */
+export async function getNotice() {
+  try {
+    const cached = localStorage.getItem(KAMI_NOTICE_KEY)
+    if (cached) {
+      const { text, ts } = JSON.parse(cached)
+      // 1 小时内用缓存
+      if (Date.now() - ts < 60 * 60 * 1000) return text
+    }
+
+    const formData = new URLSearchParams()
+    formData.append('app', APPID)
+    const resp = await fetch(`https://${WY_HOST}/api/?id=notice`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/4.0 (compatible; WeiyanVerify/1.0)',
+      },
+      body: formData.toString(),
+    })
+    const raw = await resp.text()
+
+    // 提取 hex body
+    let bodyHex = raw.trim()
+    if (raw.indexOf('\r\n\r\n') !== -1 || raw.indexOf('{') !== -1) {
+      const bodyStart = raw.indexOf('{')
+      const hexStart = raw.search(/[0-9a-fA-F]{8,}/)
+      const firstUseful = bodyStart !== -1 && (hexStart === -1 || bodyStart < hexStart) ? bodyStart : hexStart
+      if (firstUseful !== -1) bodyHex = raw.slice(firstUseful).replace(/[^0-9a-fA-F]/g, '')
+    } else {
+      bodyHex = raw.replace(/[^0-9a-fA-F]/g, '')
+    }
+
+    if (bodyHex.length < 8 || bodyHex.length % 2 !== 0) return ''
+
+    const decrypted = rc4(hexToBin(bodyHex), RC4KEY)
+    let json
+    try {
+      json = JSON.parse(decrypted)
+    } catch {
+      return ''
+    }
+
+    if (json.code !== 200 || !json.msg?.app_gg) return ''
+    const text = json.msg.app_gg
+
+    localStorage.setItem(KAMI_NOTICE_KEY, JSON.stringify({ text, ts: Date.now() }))
+    return text
+  } catch {
+    return ''
+  }
 }
 
 // 导出配置常量供外部使用

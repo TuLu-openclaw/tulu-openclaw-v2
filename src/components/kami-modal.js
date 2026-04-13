@@ -1,20 +1,16 @@
 // =============================================
 //  公告内容（显示在卡密弹框顶部）
+//  静态默认公告（网络获取失败时显示）
 // =============================================
-const KAMI_ANNOUNCEMENT = '验证通过后即可使用全部功能，卡密问题请联系 QQ：2552667173'
-
-/**
- * 状态栏配置（新增：卡密验证界面顶部状态栏）
- * 设为空字符串 '' 可隐藏状态栏
- */
-const KAMI_STATUS_BAR = '🚀 系统运行正常 · 已连接服务器'
+const KAMI_ANNOUNCEMENT_FALLBACK = '验证通过后即可使用全部功能，卡密问题请联系 QQ：2552667173'
+const KAMI_STATUS_BAR_HIDE = ''  // 设为空字符串隐藏状态栏
 
 /**
  * 微验卡密验证弹框组件
  * 功能：卡密输入 + 记住卡密 + 显示/隐藏密码 + 验证状态
  */
 
-import { login, revalidate, getStoredKami, saveKami, clearStoredKami, markVerified, getLastVerifiedTime, KAMI_CONFIG } from '../lib/kami.js'
+import { login, revalidate, getStoredKami, saveKami, clearStoredKami, markVerified, getLastVerifiedTime, getNotice, KAMI_CONFIG } from '../lib/kami.js'
 import { _hideSplash } from '../main.js'
 
 const STORAGE_REMEMBER = 'tulu_kami_remember'
@@ -93,9 +89,12 @@ function showBlockOverlay() {
  * 显示卡密输入弹框
  * @param {boolean} isRetry - 是否为重试模式（清空输入框）
  */
-function showKamiModal(isRetry = false) {
+async function showKamiModal(isRetry = false) {
   _hideSplash()  // 立即隐藏启动遮罩，确保弹窗可见
   if (_modalEl) _modalEl.remove()
+
+  // 并行获取真实公告
+  const noticePromise = getNotice().catch(() => '')
 
   const storedKami = getStoredKami()
   const remembered = localStorage.getItem(STORAGE_REMEMBER) === 'true'
@@ -118,13 +117,12 @@ function showKamiModal(isRetry = false) {
       background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;
       box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)
     ">
-      ${KAMI_STATUS_BAR ? `
+      ${KAMI_STATUS_BAR_HIDE ? `
       <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:8px 12px;margin-bottom:16px;font-size:11px;color:#86efac;line-height:1.5">
-        ${KAMI_STATUS_BAR}
+        ${KAMI_STATUS_BAR_HIDE}
       </div>` : ''}
-      ${KAMI_ANNOUNCEMENT ? `
-      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:#a5b4fc;line-height:1.6">
-        📢 ${KAMI_ANNOUNCEMENT}
+      <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:#a5b4fc;line-height:1.6" id="kami-announcement">
+        📢 ${KAMI_ANNOUNCEMENT_FALLBACK}
       </div>` : ''}
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
@@ -183,6 +181,14 @@ function showKamiModal(isRetry = false) {
   `
 
   document.body.appendChild(_modalEl)
+
+  // 异步填充真实公告（不阻塞弹框显示）
+  noticePromise.then((noticeText) => {
+    const el = document.getElementById('kami-announcement')
+    if (el && noticeText) {
+      el.innerHTML = '📢 ' + noticeText
+    }
+  })
 
   const inputEl = _modalEl.querySelector('#kami-input')
   const toggleBtn = _modalEl.querySelector('#kami-toggle-vis')
