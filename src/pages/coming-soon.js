@@ -1,3 +1,18 @@
+// 捕获所有未处理错误，防止白屏
+window.addEventListener('error', function(e) {
+  const doc = document
+  if (doc && doc.body) {
+    doc.body.innerHTML = '<div style="position:absolute;top:0;left:0;right:0;padding:20px;background:#111;color:#f55;font-family:monospace;font-size:14px;z-index:999999;white-space:pre-wrap">ERROR: ' + (e.message || String(e)) + '\n' + (e.filename || '').split('/').pop() + ':' + (e.lineno || 0) + '</div>'
+  }
+})
+
+window.addEventListener('unhandledrejection', function(e) {
+  const doc = document
+  if (doc && doc.body) {
+    doc.body.innerHTML = '<div style="position:absolute;top:0;left:0;right:0;padding:20px;background:#311;font-color:#f88;font-family:monospace;font-size:14px;z-index:999999;white-space:pre-wrap">UNHANDLED: ' + String(e.reason) + '</div>'
+  }
+})
+
 /**
  * 全球内置 - 密码锁 + 内置浏览器页面
  *
@@ -130,6 +145,7 @@ function renderLockView(container, onUnlock) {
   setTimeout(() => input.focus(), 120)
   } catch (e) {
     console.error('[global] renderLockView error:', e)
+    container.innerHTML = '<div style="padding:20px;color:#f55;font-family:monospace">renderLockView Error: ' + String(e) + '</div>'
   }
 }
 
@@ -304,6 +320,7 @@ function renderBrowserView(container) {
   iframe.src = TARGET_URL
   } catch (e) {
     console.error('[global] renderBrowserView error:', e)
+    container.innerHTML = '<div style="padding:20px;color:#f55;font-family:monospace">renderBrowserView Error: ' + String(e) + '</div>'
   }
 }
 
@@ -327,6 +344,7 @@ export default function render(container) {
     unlocked = v === '1'
   } catch (e) {
     console.error('[global] sessionStorage error:', e)
+    root.innerHTML = '<div style="padding:20px;color:#f55;font-family:monospace">sessionStorage Error: ' + String(e) + '</div>'
   }
   console.log('[global] unlocked:', unlocked)
   if (unlocked) {
