@@ -21,6 +21,8 @@ function _injectStyles() {
   const style = document.createElement('style')
   style.id = 't-gb-styles'
   style.textContent = `
+    /* 让 #content 成为 browser view 的定位参照 */
+    #content { position: relative !important; }
     @keyframes tGbSpin { to { transform: rotate(360deg); } }
     @keyframes tGbFadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
     @keyframes tGbShake {
@@ -71,9 +73,9 @@ function _injectStyles() {
     .t-gb-btn:active { transform: scale(0.98); }
     .t-gb-footer { margin-top: 20px; font-size: 11px; color: #2e2e50; }
 
-    /* 浏览器视图 */
+    /* 浏览器视图：相对于 #content 绝对定位，不覆盖侧边栏 */
     .t-gb-br {
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9000;
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 10;
       display: flex; flex-direction: column;
       background: #0b0b14;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -162,7 +164,7 @@ function _showLockModal(onUnlock) {
         'autocomplete="off" spellcheck="false" />' +
       '<div class="t-gb-err" id="t-gb-err"></div>' +
       '<button class="t-gb-btn" id="t-gb-btn">&#x89E3;&#x9501;&#x8FDB;&#x5165;</button>' +
-      '<div class="t-gb-footer">&#x5C0F;&#x63D0;&#x793A;&#xFF1A;&#x6388;&#x6743;&#x7801;&#xFF1A;2552667173</div>' +
+      '<div class="t-gb-footer">&#x5BC6;&#x7801;&#x9A8C;&#x8BC1;&#x540E;&#x5373;&#x53EF;&#x8FDB;&#x5165;</div>' +
     '</div>'
 
   document.body.appendChild(overlay)
@@ -207,7 +209,7 @@ function _showLockModal(onUnlock) {
 // ─────────────────────────────────────────────
 //  内置浏览器视图
 // ─────────────────────────────────────────────
-function _showBrowserView() {
+function _showBrowserView(container) {
   _injectStyles()
 
   const wrap = document.createElement('div')
@@ -222,6 +224,7 @@ function _showBrowserView() {
       '<div class="t-gb-bar-r">' +
         '<span class="t-gb-status" id="t-gb-status">&#x1F504; 等待加载</span>' +
         '<button class="t-gb-btn2" id="t-gb-refresh">&#x21BB; 刷新</button>' +
+        '<button class="t-gb-btn2" id="t-gb-close">&#x2716; 关闭</button>' +
         '<button class="t-gb-btn2 lock" id="t-gb-lock">&#x1F512; 锁定</button>' +
         '<a class="t-gb-btn2 ext" href="' + TARGET_URL + '" target="_blank" rel="noopener">&#x1F517; 外部</a>' +
       '</div>' +
@@ -241,7 +244,8 @@ function _showBrowserView() {
       '<iframe id="t-gb-iframe" class="t-gb-iframe" allow="fullscreen"></iframe>' +
     '</div>'
 
-  document.body.appendChild(wrap)
+  // 渲染到 #content 容器内（position: absolute 填满该区域）
+  container.appendChild(wrap)
 
   const iframe = wrap.querySelector('#t-gb-iframe')
   const statusEl = wrap.querySelector('#t-gb-status')
@@ -301,11 +305,18 @@ function _showBrowserView() {
     iframe.src = TARGET_URL + '?r=' + Date.now()
   })
 
+  // 关闭：返回仪表盘，移除 browser view
+  wrap.querySelector('#t-gb-close').addEventListener('click', () => {
+    wrap.remove()
+    // navigate to dashboard
+    window.location.hash = '#/dashboard'
+  })
+
   wrap.querySelector('#t-gb-lock').addEventListener('click', () => {
     _unlocked = false
     try { sessionStorage.removeItem(LOCK_KEY) } catch (_) {}
     wrap.remove()
-    _showLockModal(_showBrowserView)
+    _showLockModal(() => _showBrowserView(container))
   })
 
   startLoad()
@@ -316,8 +327,6 @@ function _showBrowserView() {
 //  主入口
 // ─────────────────────────────────────────────
 export default function render(container) {
-  // 不往 container 写内容，所有内容都 render 到 document.body
-  // 这样无论当前在哪个页面，点击侧边栏按钮都能弹出
   const root = container || document.body
   root.innerHTML = ''
 
@@ -327,9 +336,9 @@ export default function render(container) {
 
   if (unlocked) {
     _unlocked = true
-    _showBrowserView()
+    _showBrowserView(root)
   } else {
-    _showLockModal(_showBrowserView)
+    _showLockModal(() => _showBrowserView(root))
   }
 
   return root
