@@ -4,8 +4,8 @@ mod tray;
 mod utils;
 
 use commands::{
-    agent, assistant, config, device, extensions, logs, memory, messaging, pairing, service,
-    skillhub, skills, tvbox, update,
+    agent, assistant, config, device, extensions, logs, memory, messaging, pairing, proxy,
+    service, skillhub, skills, tvbox, update,
 };
 
 pub fn run() {
@@ -219,6 +219,8 @@ pub fn run() {
             tvbox::tvbox_store_keys,
             tvbox::tvbox_store_del,
             tvbox::tvbox_cookie_get,
+            // 全球内置代理
+            proxy::proxy_url,
         ])
         .on_window_event(|window, event| {
             // 关闭窗口时最小化到托盘，不退出应用

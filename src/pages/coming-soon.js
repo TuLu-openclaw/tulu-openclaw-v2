@@ -4,12 +4,15 @@
  * UX：点击侧边栏"全球内置"→ 弹出密码验证 Modal
  *    → 密码正确（2552667173）→ Modal 消失，显示内置浏览器
  *    → 刷新不重新锁（sessionStorage）
+ *    → 内置浏览器通过 Tauri 后端代理加载，绕过 X-Frame-Options 限制
  */
+
+import { invoke } from '../lib/tauri-api.js'
 
 const TARGET_URL = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific'
 const LOCK_KEY = 'tulu_global_unlocked'
 const CORRECT_PWD = '2552667173'
-const LOAD_TIMEOUT = 8000
+const LOAD_TIMEOUT = 15000
 
 let _unlocked = false
 
@@ -260,14 +263,16 @@ function _showBrowserView(container) {
     statusEl.className = 't-gb-status ' + (cls || '')
   }
 
-  function showBlocked() {
+  function showBlocked(msg) {
     loadingEl.classList.add('hidden')
     iframe.style.display = 'none'
     blockedEl.classList.add('show')
-    setStatus('\u26D4 加载被拦截', 'fail')
+    const descEl = blockedEl.querySelector('.t-gb-blocked-desc')
+    if (descEl && msg) descEl.innerHTML = msg
+    setStatus('\u26D4 加载失败', 'fail')
   }
 
-  function startLoad() {
+  async function startLoad() {
     loadFired = false
     loadingEl.classList.remove('hidden')
     iframe.style.display = 'block'
@@ -275,23 +280,36 @@ function _showBrowserView(container) {
     setStatus('\u1F504 加载中...', 'loading')
     clearTimeout(loadTimer)
     loadTimer = setTimeout(() => { if (!loadFired) showBlocked() }, LOAD_TIMEOUT)
+
+    try {
+      const res = await invoke('proxy_url', { url: TARGET_URL })
+      loadFired = true
+      clearTimeout(loadTimer)
+
+      if (res.ok && res.html) {
+        iframe.srcdoc = res.html
+        loadingEl.classList.add('hidden')
+        setStatus('\u2705 已加载', 'ok')
+
+        iframe.addEventListener('load', () => {
+          // srcdoc load 完成，不做额外检查
+        }, { once: true })
+      } else {
+        showBlocked('代理请求失败：' + (res.error || '未知错误'))
+      }
+    } catch (err) {
+      loadFired = true
+      clearTimeout(loadTimer)
+      showBlocked('代理请求异常：' + String(err))
+    }
   }
 
   iframe.addEventListener('load', () => {
+    // srcdoc 模式下 load 事件表示页面加载完成
     loadFired = true
     clearTimeout(loadTimer)
-    try {
-      const doc = iframe.contentDocument
-      if (doc && doc.body && doc.body.innerHTML.length > 100) {
-        loadingEl.classList.add('hidden')
-        setStatus('\u2705 已加载', 'ok')
-      } else {
-        showBlocked()
-      }
-    } catch (_) {
-      loadingEl.classList.add('hidden')
-      setStatus('\u2705 已加载', 'ok')
-    }
+    loadingEl.classList.add('hidden')
+    setStatus('\u2705 已加载', 'ok')
   })
 
   iframe.addEventListener('error', () => {
@@ -300,15 +318,11 @@ function _showBrowserView(container) {
     showBlocked()
   })
 
-  wrap.querySelector('#t-gb-refresh').addEventListener('click', () => {
-    startLoad()
-    iframe.src = TARGET_URL + '?r=' + Date.now()
-  })
+  wrap.querySelector('#t-gb-refresh').addEventListener('click', startLoad)
 
   // 关闭：返回仪表盘，移除 browser view
   wrap.querySelector('#t-gb-close').addEventListener('click', () => {
     wrap.remove()
-    // navigate to dashboard
     window.location.hash = '#/dashboard'
   })
 
@@ -320,7 +334,6 @@ function _showBrowserView(container) {
   })
 
   startLoad()
-  iframe.src = TARGET_URL
 }
 
 // ─────────────────────────────────────────────
