@@ -1,4 +1,13 @@
 // =============================================
+//  HTML 实体解码（处理 &amp; &quot; &lt; &gt; &#xxx; 等）
+// =============================================
+function _decodeHTML(html) {
+  var txt = document.createElement('textarea')
+  txt.innerHTML = html
+  return txt.value
+}
+
+// =============================================
 //  微验卡密验证弹框组件
 //  功能：卡密输入 + 公告栏 + 记住卡密 + 显隐密码 + 验证状态
 // =============================================
@@ -164,10 +173,10 @@ async function showKamiModal(isRetry) {
   _modalEl.innerHTML = buildModalHTML(initialKami, showPw, remembered, null)
   document.body.appendChild(_modalEl)
 
-  // 异步获取并填充真实公告
+  // 异步获取并填充真实公告（解码 HTML 实体后显示）
   getNotice().then(function(noticeText) {
     var el = document.getElementById('kami-notice-text')
-    if (el && noticeText) el.textContent = noticeText
+    if (el && noticeText) el.innerHTML = _decodeHTML(noticeText)
   }).catch(function() { /* 网络失败则保留默认文案 */ })
 
   var inputEl = document.getElementById('kami-input')
