@@ -318,7 +318,14 @@ export async function getNotice() {
 
     if (bodyHex.length < 8 || bodyHex.length % 2 !== 0) return ''
 
-    const decrypted = rc4(hexToBin(bodyHex), RC4KEY)
+    let decrypted
+    try {
+      decrypted = rc4(hexToBin(bodyHex), RC4KEY)
+    } catch {
+      return ''
+    }
+    if (!decrypted || decrypted.length < 2) return ''
+
     let json
     try {
       json = JSON.parse(decrypted)
