@@ -9,12 +9,22 @@ pub struct ProxyResponse {
     pub error: Option<String>,
 }
 
+/// 从环境变量读取代理地址（支持常见应用层代理工具）
+fn get_proxy_url() -> Option<String> {
+    // 优先使用 HTTPS_PROXY（用于 https:// 请求）
+    std::env::var("HTTPS_PROXY")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("https_proxy").ok().filter(|s| !s.is_empty()))
+        .or_else(|| std::env::var("HTTP_PROXY").ok().filter(|s| !s.is_empty()))
+        .or_else(|| std::env::var("http_proxy").ok().filter(|s| !s.is_empty()))
+}
+
 /// 读取 Windows 系统代理（Internet Options → LAN 设置）
 fn get_windows_system_proxy() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         use std::process::Command;
-        // 检查是否启用代理
         let output = Command::new("reg")
             .args([
                 "query",
@@ -30,7 +40,6 @@ fn get_windows_system_proxy() -> Option<String> {
             return None;
         }
 
-        // 读取代理服务器地址
         let output2 = Command::new("reg")
             .args([
                 "query",
@@ -42,7 +51,6 @@ fn get_windows_system_proxy() -> Option<String> {
             .ok()?;
 
         let stdout2 = String::from_utf8_lossy(&output2.stdout);
-        // 格式: ProxyServer    REG_SZ    127.0.0.1:7890
         for line in stdout2.lines() {
             if let Some(value) = line.split("REG_SZ").nth(1) {
                 let proxy = value.trim();
@@ -76,10 +84,14 @@ async fn proxy_url_impl(url: &str) -> ProxyResponse {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         );
 
-    // 尝试应用 Windows 系统代理（让 Rust 能访问外网）
-    if let Some(proxy_url) = get_windows_system_proxy() {
-        if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-            builder = builder.proxy(proxy);
+    // 优先用环境变量代理（应用层代理：VPN/游戏加速器/Clash 等）
+    // 再试 Windows 系统代理注册表
+    let proxy_to_use = get_proxy_url()
+        .or_else(get_windows_system_proxy);
+
+    if let Some(proxy) = proxy_to_use {
+        if let Ok(p) = reqwest::Proxy::all(&proxy) {
+            builder = builder.proxy(p);
         }
     }
 
