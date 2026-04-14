@@ -2992,7 +2992,7 @@ fn npm_global_modules_dir() -> Option<PathBuf> {
 
 /// npm 全局 bin 目录
 #[allow(dead_code)]
-fn npm_global_bin_dir() -> Option<PathBuf> {
+pub(crate) fn npm_global_bin_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         super::windows_npm_global_prefix()
