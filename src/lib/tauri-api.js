@@ -28,21 +28,35 @@ const NPM_REGISTRIES = {
 
 // 尝试多个 registry，直到成功
 async function fetchWithFallback(path, timeout = 5000) {
-  const userRegistry = await cachedInvoke('get_npm_registry', {}, 30000)
-  const registries = []
+  let userRegistry = null
+  try {
+    userRegistry = await cachedInvoke('get_npm_registry', {}, 30000)
+  } catch {
+    userRegistry = null
+  }
 
+  const registries = []
   if (NPM_REGISTRIES.official) registries.push(NPM_REGISTRIES.official)
-  if (userRegistry) registries.push(userRegistry.replace(/\/$/, ''))
-  // 去重
-  const seen = new Set(); const unique = registries.filter(r => seen.has(r) ? false : seen.add(r))
+  if (userRegistry) registries.push(String(userRegistry).replace(/\/$/, ''))
+
+  const seen = new Set()
+  const unique = registries.filter(r => seen.has(r) ? false : seen.add(r))
 
   for (const base of unique) {
+    let timer = null
     try {
-      const resp = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(timeout) })
-      if (resp.ok) return { ok: true, json: await resp.json() }
-    } catch { /* try next */ }
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+      timer = controller ? setTimeout(() => controller.abort(), timeout) : null
+      const resp = await fetch(`${base}${path}`, controller ? { signal: controller.signal } : undefined)
+      if (timer) clearTimeout(timer)
+      if (resp.ok) return { ok: true, json: await resp.json(), registry: base }
+    } catch {
+      // try next
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
   }
-  return { ok: false, json: null }
+  return { ok: false, json: null, registry: null }
 }
 
 async function fetchNpmLatest(source) {
@@ -58,7 +72,7 @@ async function fetchNpmAllVersions(source) {
   const encoded = pkg.replace('/', '%2F').replace('@', '%40')
   const result = await fetchWithFallback(`/${encoded}`, 10000)
   if (!result.ok) {
-    console.warn('[version] all registries failed for', path)
+    console.warn('[version] all registries failed for', pkg)
     return null
   }
   const obj = (result.json && typeof result.json === 'object' && result.json.versions) ? result.json.versions : {}
@@ -72,15 +86,32 @@ async function fetchNpmAllVersions(source) {
 // 获取版本信息：本地部分走 Rust，远程部分走 JS fetch（解决 Rust 网络限制）
 async function getVersionInfoViaJs() {
   const localInfo = await invoke('get_version_info_local', {}).catch(() => null)
-  const source = localInfo?.source || 'unknown'
-  const current = localInfo?.current || null
+  if (!localInfo) {
+    return {
+      current: null,
+      latest: null,
+      recommended: null,
+      update_available: false,
+      latest_update_available: false,
+      is_recommended: false,
+      ahead_of_recommended: false,
+      panel_version: '0.0.0',
+      source: 'unknown',
+      cli_path: null,
+      cli_source: null,
+      all_installations: [],
+    }
+  }
+
+  const source = localInfo.source || 'unknown'
+  const current = localInfo.current || null
 
   const [latest, recommended] = await Promise.all([
-    source !== 'unknown' ? fetchNpmLatest(source) : Promise.resolve(null),
-    Promise.resolve(localInfo?.recommended || null),
+    source !== 'unknown' ? fetchNpmLatest(source).catch(() => null) : Promise.resolve(null),
+    Promise.resolve(localInfo.recommended || null),
   ])
 
-  const update_available = latest && recommended
+  const update_available = recommended
     ? recommended_is_newer(recommended, current || '0.0.0')
     : false
   const latest_update_available = latest && current
@@ -97,11 +128,11 @@ async function getVersionInfoViaJs() {
     latest_update_available,
     is_recommended,
     ahead_of_recommended,
-    panel_version: localInfo?.panel_version || '0.0.0',
+    panel_version: localInfo.panel_version || '0.0.0',
     source,
-    cli_path: localInfo?.cli_path || null,
-    cli_source: localInfo?.cli_source || null,
-    all_installations: localInfo?.all_installations || [],
+    cli_path: localInfo.cli_path || null,
+    cli_source: localInfo.cli_source || null,
+    all_installations: localInfo.all_installations || [],
   }
 }
 
