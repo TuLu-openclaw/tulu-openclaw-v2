@@ -2006,6 +2006,39 @@ async fn get_local_version() -> Option<String> {
 }
 
 /// 从 npm registry 获取最新版本号，超时 5 秒
+/// 从 Windows 注册表读取系统代理并构建 reqwest Client（纯 Rust，无外部进程）
+#[cfg(target_os = "windows")]
+fn build_registry_proxy_client(timeout_secs: u64) -> Option<reqwest::Client> {
+    use std::time::Duration;
+
+    let proxy_url = crate::windows_proxy::get_windows_proxy()?;
+
+    // 尝试 http 代理
+    if let Ok(proxy) = reqwest::Proxy::http(&proxy_url) {
+        if let Ok(client) = reqwest::Client::builder()
+            .proxy(proxy)
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+        {
+            return Some(client);
+        }
+    }
+
+    // fallback: 尝试 https 代理
+    if let Ok(proxy) = reqwest::Proxy::https(&proxy_url) {
+        if let Ok(client) = reqwest::Client::builder()
+            .proxy(proxy)
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+        {
+            return Some(client);
+        }
+    }
+
+    None
+}
+
+/// 从 npm registry 获取最新版本号，超时 5 秒
 async fn get_latest_version_for(source: &str) -> Option<String> {
     let pkg = npm_package_name(source)
         .replace('/', "%2F")
@@ -2013,24 +2046,50 @@ async fn get_latest_version_for(source: &str) -> Option<String> {
     let registry = get_configured_registry();
     let url = format!("{registry}/{pkg}/latest");
 
-    // 使用 PowerShell Invoke-WebRequest 绕过 Rust 网络限制
-    let ps = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &format!(
-                "try {{ (Invoke-WebRequest -Uri '{}' -TimeoutSec 3 -UseBasicParsing).Content | ConvertFrom-Json | Select-Object -ExpandProperty version }} catch {{ '' }}",
-                url
-            ),
-        ])
-        .output()
-        .ok()?;
-    let output = String::from_utf8_lossy(&ps.stdout).trim().to_string();
-    if output.is_empty() {
-        return None;
+    #[cfg(target_os = "windows")]
+    {
+        // 方案1: 用 Windows 注册表代理的 reqwest（纯 Rust，无外部进程）
+        if let Some(client) = build_registry_proxy_client(5) {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    return json.get("version").and_then(|v| v.as_str()).map(String::from);
+                }
+            }
+        }
     }
-    Some(output)
+
+    // 方案2: 尝试不走代理的 reqwest（可能失败，但作为 fallback）
+    #[cfg(target_os = "windows")]
+    {
+        use std::time::Duration;
+        if let Ok(client) = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+        {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    return json.get("version").and_then(|v| v.as_str()).map(String::from);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::time::Duration;
+        if let Ok(client) = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+        {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    return json.get("version").and_then(|v| v.as_str()).map(String::from);
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// 从 Windows .cmd shim 文件内容判断实际关联的 npm 包来源
@@ -2664,41 +2723,113 @@ pub async fn list_openclaw_versions(source: String) -> Result<Vec<String>, Strin
     let registry = get_configured_registry();
     let url = format!("{registry}/{pkg}");
 
-    // 使用 PowerShell Invoke-WebRequest 绕过 Rust 网络限制
-    let ps_script = format!(
-        "try {{ (Invoke-WebRequest -Uri '{}' -TimeoutSec 10 -UseBasicParsing).Content }} catch {{ '{}' }}",
-        url,
-        r#"{"versions":{}}"#
-    );
-    let ps = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
-        .output()
-        .map_err(|e| format!("PowerShell 执行失败: {}", e))?;
-    let output = String::from_utf8_lossy(&ps.stdout).to_string();
-    let json: Value = serde_json::from_str(&output)
-        .map_err(|e| format!("JSON 解析失败: {} (raw: {})", e, &output[..output.len().min(200)]))?;
-    let mut versions = json
-        .get("versions")
-        .and_then(|v| v.as_object())
-        .map(|obj| {
-            let mut vers: Vec<String> = obj.keys().cloned().collect();
-            vers.sort_by(|a, b| {
-                let pa = parse_version(a);
-                let pb = parse_version(b);
-                pb.cmp(&pa)
-            });
-            vers
-        })
-        .unwrap_or_default();
-    if let Some(recommended) = recommended_version_for(&source) {
-        if let Some(pos) = versions.iter().position(|v| v == &recommended) {
-            let version = versions.remove(pos);
-            versions.insert(0, version);
-        } else {
-            versions.insert(0, recommended);
+    #[cfg(target_os = "windows")]
+    {
+        // 方案1: 用 Windows 注册表代理的 reqwest（纯 Rust，无外部进程）
+        if let Some(client) = build_registry_proxy_client(10) {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<Value>().await {
+                    let mut versions = json
+                        .get("versions")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            let mut vers: Vec<String> = obj.keys().cloned().collect();
+                            vers.sort_by(|a, b| {
+                                let pa = parse_version(a);
+                                let pb = parse_version(b);
+                                pb.cmp(&pa)
+                            });
+                            vers
+                        })
+                        .unwrap_or_default();
+                    if let Some(recommended) = recommended_version_for(&source) {
+                        if let Some(pos) = versions.iter().position(|v| v == &recommended) {
+                            let version = versions.remove(pos);
+                            versions.insert(0, version);
+                        } else {
+                            versions.insert(0, recommended);
+                        }
+                    }
+                    return Ok(versions);
+                }
+            }
         }
     }
-    Ok(versions)
+
+    // 方案2: 尝试不走代理的 reqwest
+    #[cfg(target_os = "windows")]
+    {
+        use std::time::Duration;
+        if let Ok(client) = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+        {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<Value>().await {
+                    let mut versions = json
+                        .get("versions")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            let mut vers: Vec<String> = obj.keys().cloned().collect();
+                            vers.sort_by(|a, b| {
+                                let pa = parse_version(a);
+                                let pb = parse_version(b);
+                                pb.cmp(&pa)
+                            });
+                            vers
+                        })
+                        .unwrap_or_default();
+                    if let Some(recommended) = recommended_version_for(&source) {
+                        if let Some(pos) = versions.iter().position(|v| v == &recommended) {
+                            let version = versions.remove(pos);
+                            versions.insert(0, version);
+                        } else {
+                            versions.insert(0, recommended);
+                        }
+                    }
+                    return Ok(versions);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::time::Duration;
+        if let Ok(client) = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+        {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<Value>().await {
+                    let mut versions = json
+                        .get("versions")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            let mut vers: Vec<String> = obj.keys().cloned().collect();
+                            vers.sort_by(|a, b| {
+                                let pa = parse_version(a);
+                                let pb = parse_version(b);
+                                pb.cmp(&pa)
+                            });
+                            vers
+                        })
+                        .unwrap_or_default();
+                    if let Some(recommended) = recommended_version_for(&source) {
+                        if let Some(pos) = versions.iter().position(|v| v == &recommended) {
+                            let version = versions.remove(pos);
+                            versions.insert(0, version);
+                        } else {
+                            versions.insert(0, recommended);
+                        }
+                    }
+                    return Ok(versions);
+                }
+            }
+        }
+    }
+
+    Err("无法连接 npm registry，请检查网络".to_string())
 }
 
 /// 执行 npm 全局安装/升级/降级 openclaw（后台执行，通过 event 推送进度）
