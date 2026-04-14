@@ -50,7 +50,7 @@ async function fetchNpmLatest(source) {
   const encoded = pkg.replace('/', '%2F').replace('@', '%40')
   const result = await fetchWithFallback(`/${encoded}/latest`, 5000)
   if (!result.ok) return null
-  return result.json.version || null
+  return result.json?.version || null
 }
 
 async function fetchNpmAllVersions(source) {
@@ -58,7 +58,7 @@ async function fetchNpmAllVersions(source) {
   const encoded = pkg.replace('/', '%2F').replace('@', '%40')
   const result = await fetchWithFallback(`/${encoded}`, 10000)
   if (!result.ok) return null
-  const obj = result.json.versions || {}
+  const obj = result.json?.versions || {}
   return Object.keys(obj).sort((a, b) => {
     const pa = parseVersion(a); const pb = parseVersion(b)
     return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
