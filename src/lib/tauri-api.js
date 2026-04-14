@@ -9,6 +9,101 @@ export function isTauriRuntime() {
   return !!window.__TAURI_INTERNALS__ || !!window.__TAURI__ || window.location?.hostname === 'tauri.localhost'
 }
 
+// npm 包名映射
+const NPM_PACKAGES = {
+  official: '@openclaw/openclaw',
+  chinese: '@qingchencloud/openclaw-zh',
+}
+
+// 解析版本号用于排序
+function parseVersion(v) {
+  const parts = v.replace(/^v/, '').split('-')[0].split('.')
+  return parts.map(p => parseInt(p, 10) || 0)
+}
+
+// JS 层直接 fetch npm registry（不走 Rust 网络，受益于 Tauri webview 的完整浏览器网络栈）
+async function fetchNpmLatest(registry, source) {
+  const pkg = NPM_PACKAGES[source] || source
+  const encoded = pkg.replace('/', '%2F').replace('@', '%40')
+  const url = `${registry.replace(/\/$/, '')}/${encoded}/latest`
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) })
+    if (!resp.ok) return null
+    const json = await resp.json()
+    return json.version || null
+  } catch {
+    return null
+  }
+}
+
+async function fetchNpmAllVersions(registry, source) {
+  const pkg = NPM_PACKAGES[source] || source
+  const encoded = pkg.replace('/', '%2F').replace('@', '%40')
+  const url = `${registry.replace(/\/$/, '')}/${encoded}`
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) })
+    if (!resp.ok) return null
+    const json = await resp.json()
+    const obj = json.versions || {}
+    return Object.keys(obj).sort((a, b) => {
+      const pa = parseVersion(a); const pb = parseVersion(b)
+      return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
+    })
+  } catch {
+    return null
+  }
+}
+
+// 获取版本信息：本地部分走 Rust，远程部分走 JS fetch（解决 Rust 网络限制）
+async function getVersionInfoViaJs() {
+  const registry = await cachedInvoke('get_npm_registry', {}, 30000)
+  const localInfo = await invoke('get_version_info_local', {}).catch(() => null)
+  const source = localInfo?.source || 'unknown'
+  const current = localInfo?.current || null
+
+  const [latest, recommended] = await Promise.all([
+    source !== 'unknown' ? fetchNpmLatest(registry, source) : Promise.resolve(null),
+    Promise.resolve(localInfo?.recommended || null),
+  ])
+
+  const update_available = latest && recommended
+    ? recommended_is_newer(recommended, current || '0.0.0')
+    : false
+  const latest_update_available = latest && current
+    ? recommended_is_newer(latest, current)
+    : false
+  const is_recommended = current && recommended ? versions_match(current, recommended) : false
+  const ahead_of_recommended = current && recommended ? recommended_is_newer(current, recommended) : false
+
+  return {
+    current,
+    latest,
+    recommended,
+    update_available,
+    latest_update_available,
+    is_recommended,
+    ahead_of_recommended,
+    panel_version: localInfo?.panel_version || '0.0.0',
+    source,
+    cli_path: localInfo?.cli_path || null,
+    cli_source: localInfo?.cli_source || null,
+    all_installations: localInfo?.all_installations || [],
+  }
+}
+
+function recommended_is_newer(newVer, oldVer) {
+  const np = parseVersion(newVer), op = parseVersion(oldVer)
+  for (let i = 0; i < 3; i++) {
+    if (np[i] > op[i]) return true
+    if (np[i] < op[i]) return false
+  }
+  return false
+}
+
+function versions_match(a, b) {
+  return parseVersion(a)[0] === parseVersion(b)[0]
+}
+
 // 仅在 Node.js 后端实现的命令（Tauri Rust 不处理），强制走 webInvoke
 const WEB_ONLY_CMDS = new Set([
   'instance_list', 'instance_add', 'instance_remove', 'instance_set_active',
@@ -191,8 +286,8 @@ export const api = {
   claimGateway: () => { invalidate('get_services_status'); return invoke('claim_gateway') },
   guardianStatus: () => invoke('guardian_status'),
 
-  // 配置（读缓存，写清缓存）
-  getVersionInfo: () => cachedInvoke('get_version_info', {}, 30000),
+  // 版本信息：本地部分走 Rust，远程（latest）走 JS fetch（绕过 Rust 网络限制）
+  getVersionInfo: () => getVersionInfoViaJs(),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
   calibrateOpenclawConfig: (mode = 'inherit') => { invalidate('read_openclaw_config', 'check_installation', 'list_backups', 'get_services_status', 'get_status_summary'); return invoke('calibrate_openclaw_config', { mode }).then(r => { _debouncedReloadGateway(); return r }) },
@@ -203,7 +298,10 @@ export const api = {
   restartGateway: () => invoke('restart_gateway'),
   doctorCheck: () => invoke('doctor_check'),
   doctorFix: () => invoke('doctor_fix'),
-  listOpenclawVersions: (source = 'chinese') => invoke('list_openclaw_versions', { source }),
+  listOpenclawVersions: async (source = 'chinese') => {
+    const registry = await cachedInvoke('get_npm_registry', {}, 30000)
+    return fetchNpmAllVersions(registry, source)
+  },
   upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => invoke('upgrade_openclaw', { source, version, method }),
   uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
   installGateway: () => invoke('install_gateway'),

@@ -2288,6 +2288,56 @@ pub async fn get_version_info() -> Result<VersionInfo, String> {
     })
 }
 
+/// 仅返回本地信息，不查 npm registry（网络请求由前端 JS fetch 承担）
+#[tauri::command]
+pub async fn get_version_info_local() -> Result<VersionInfo, String> {
+    let current = get_local_version().await;
+    let mut source = detect_installed_source();
+    if let Some(ref ver) = current {
+        if ver.contains("-zh") && source != "chinese" {
+            source = "chinese".to_string();
+        }
+    }
+    let recommended = if source == "unknown" {
+        None
+    } else {
+        recommended_version_for(&source)
+    };
+    let update_available = match (&current, &recommended) {
+        (Some(c), Some(r)) => recommended_is_newer(r, c),
+        (None, Some(_)) => true,
+        _ => false,
+    };
+    let is_recommended = match (&current, &recommended) {
+        (Some(c), Some(r)) => versions_match(c, r),
+        _ => false,
+    };
+    let ahead_of_recommended = match (&current, &recommended) {
+        (Some(c), Some(r)) => recommended_is_newer(c, r),
+        _ => false,
+    };
+    let cli_path = crate::utils::resolve_openclaw_cli_path();
+    let cli_source = cli_path
+        .as_ref()
+        .map(|p| crate::utils::classify_cli_source(p));
+    let all_installations = scan_all_installations(&cli_path);
+
+    Ok(VersionInfo {
+        current,
+        latest: None,
+        recommended,
+        update_available,
+        latest_update_available: false,
+        is_recommended,
+        ahead_of_recommended,
+        panel_version: panel_version().to_string(),
+        source,
+        cli_path,
+        cli_source,
+        all_installations: Some(all_installations),
+    })
+}
+
 fn scan_cli_identity(cli_path: &std::path::Path) -> String {
     #[cfg(target_os = "windows")]
     let identity_path = {
