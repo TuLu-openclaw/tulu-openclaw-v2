@@ -99,6 +99,13 @@ pub fn resolve_openclaw_cli_path() -> Option<String> {
     }
     #[cfg(target_os = "windows")]
     {
+        // 检查 npm 全局目录（npm 全局安装的包目录）
+        if let Some(npm_dir) = crate::commands::npm_global_bin_dir() {
+            let candidate = npm_dir.join("openclaw.cmd");
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
         let path = crate::commands::enhanced_path();
         for dir in path.split(';') {
             let candidate = std::path::Path::new(dir).join("openclaw.cmd");
