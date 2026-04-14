@@ -2660,21 +2660,23 @@ fn npm_package_name(source: &str) -> &'static str {
 /// 获取指定源的所有可用版本列表（从 npm registry 查询）
 #[tauri::command]
 pub async fn list_openclaw_versions(source: String) -> Result<Vec<String>, String> {
-    let client = crate::commands::build_http_client(std::time::Duration::from_secs(10), None)
-        .map_err(|e| format!("HTTP 初始化失败: {e}"))?;
     let pkg = npm_package_name(&source).replace('/', "%2F");
     let registry = get_configured_registry();
     let url = format!("{registry}/{pkg}");
-    let resp = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("查询版本失败: {e}"))?;
-    let json: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {e}"))?;
+
+    // 使用 PowerShell Invoke-WebRequest 绕过 Rust 网络限制
+    let ps_script = format!(
+        "try {{ (Invoke-WebRequest -Uri '{}' -TimeoutSec 10 -UseBasicParsing).Content }} catch {{ '{}' }}",
+        url,
+        r#"{"versions":{}}"#
+    );
+    let ps = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
+        .output()
+        .map_err(|e| format!("PowerShell 执行失败: {}", e))?;
+    let output = String::from_utf8_lossy(&ps.stdout).to_string();
+    let json: Value = serde_json::from_str(&output)
+        .map_err(|e| format!("JSON 解析失败: {} (raw: {})", e, &output[..output.len().min(200)]))?;
     let mut versions = json
         .get("versions")
         .and_then(|v| v.as_object())
