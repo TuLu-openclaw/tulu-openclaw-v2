@@ -2,6 +2,7 @@ mod commands;
 mod models;
 mod tray;
 mod utils;
+#[cfg(target_os = "windows")]
 mod windows_proxy;
 
 use commands::{
