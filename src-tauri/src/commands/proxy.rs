@@ -108,7 +108,29 @@ async fn proxy_url_impl(url: &str) -> ProxyResponse {
         }
     };
 
-    let response = match client.get(url).send().await {
+    let response = match client
+        .get(url)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+        .header("Accept-Encoding", "gzip, deflate, br")
+        .header("Sec-CH-UA", r#""Chromium";v="130", "Google Chrome";v="130", "Not;A=Brand";v="99""#)
+        .header("Sec-CH-UA-Mobile", "?0")
+        .header("Sec-CH-UA-Platform", "\"Windows\"")
+        .header("Sec-CH-UA-Platform-Version", "\"15.0.0\"")
+        .header("Sec-CH-UA-Arch", "\"x86_64\"")
+        .header("Sec-CH-UA-Model", "\"\"")
+        .header("Sec-CH-UA-Bitness", "\"64\"")
+        .header("Sec-CH-UA-Wow64", "?0")
+        .header("Sec-CH-UA-Full-Version", "\"130.0.0.0\"")
+        .header("Sec-CH-UA-Full-Version-List", r#""Chromium";v="130.0.0.0", "Google Chrome";v="130.0.0.0", "Not;A=Brand";v="99.0.0.0""#)
+        .header("Upgrade-Insecure-Requests", "1")
+        .header("Sec-Fetch-Dest", "document")
+        .header("Sec-Fetch-Mode", "navigate")
+        .header("Sec-Fetch-Site", "none")
+        .header("Sec-Fetch-User", "?1")
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             return ProxyResponse {
