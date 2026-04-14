@@ -19,12 +19,15 @@ pub async fn proxy_url(url: String) -> Result<ProxyResponse, String> {
 async fn proxy_url_impl(url: &str) -> ProxyResponse {
     use std::time::Duration;
 
-    let client = match super::build_http_client(
-        Duration::from_secs(20),
-        Some(
+    // 不走用户代理的独立 client，直接连接目标站
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .gzip(true)
+        .user_agent(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        ),
-    ) {
+        )
+        .build()
+    {
         Ok(c) => c,
         Err(e) => {
             return ProxyResponse {
