@@ -2007,18 +2007,30 @@ async fn get_local_version() -> Option<String> {
 
 /// 从 npm registry 获取最新版本号，超时 5 秒
 async fn get_latest_version_for(source: &str) -> Option<String> {
-    let client =
-        crate::commands::build_http_client(std::time::Duration::from_secs(2), None).ok()?;
     let pkg = npm_package_name(source)
         .replace('/', "%2F")
         .replace('@', "%40");
     let registry = get_configured_registry();
     let url = format!("{registry}/{pkg}/latest");
-    let resp = client.get(&url).send().await.ok()?;
-    let json: Value = resp.json().await.ok()?;
-    json.get("version")
-        .and_then(|v| v.as_str())
-        .map(String::from)
+
+    // 使用 PowerShell Invoke-WebRequest 绕过 Rust 网络限制
+    let ps = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "try {{ (Invoke-WebRequest -Uri '{}' -TimeoutSec 3 -UseBasicParsing).Content | ConvertFrom-Json | Select-Object -ExpandProperty version }} catch {{ '' }}",
+                url
+            ),
+        ])
+        .output()
+        .ok()?;
+    let output = String::from_utf8_lossy(&ps.stdout).trim().to_string();
+    if output.is_empty() {
+        return None;
+    }
+    Some(output)
 }
 
 /// 从 Windows .cmd shim 文件内容判断实际关联的 npm 包来源
