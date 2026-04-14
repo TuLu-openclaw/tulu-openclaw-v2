@@ -133,13 +133,22 @@ async fn proxy_url_impl(url: &str) -> ProxyResponse {
     {
         Ok(r) => r,
         Err(e) => {
+            let err_str = e.to_string();
+            // 诊断：判断是 DNS/连接错误还是 TLS 错误
+            let diag = if err_str.contains("dns") || err_str.contains("connection refused") || err_str.contains("connect") {
+                "DIAGNOSTIC: connection-level failure (possible firewall block)"
+            } else if err_str.contains("tls") || err_str.contains("ssl") || err_str.contains("certificate") {
+                "DIAGNOSTIC: TLS-level failure"
+            } else {
+                "DIAGNOSTIC: unknown error"
+            };
             return ProxyResponse {
                 ok: false,
                 status: 0,
                 content_type: None,
                 html: None,
-                error: Some(format!("Request failed: {}", e)),
-            }
+                error: Some(format!("Request failed: {} | {}", e, diag)),
+            };
         }
     };
 
