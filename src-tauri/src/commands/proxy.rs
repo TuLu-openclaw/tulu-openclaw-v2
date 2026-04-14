@@ -9,61 +9,51 @@ pub struct ProxyResponse {
     pub error: Option<String>,
 }
 
-/// 从环境变量读取代理地址（支持常见应用层代理工具）
-fn get_proxy_url() -> Option<String> {
-    // 优先使用 HTTPS_PROXY（用于 https:// 请求）
-    std::env::var("HTTPS_PROXY")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("https_proxy").ok().filter(|s| !s.is_empty()))
-        .or_else(|| std::env::var("HTTP_PROXY").ok().filter(|s| !s.is_empty()))
-        .or_else(|| std::env::var("http_proxy").ok().filter(|s| !s.is_empty()))
-}
+/// 用 PowerShell 的 `iwr` (Invoke-WebRequest) 发请求，继承系统所有网络设置
+fn fetch_with_powershell(url: &str) -> ProxyResponse {
+    use std::process::Command;
 
-/// 读取 Windows 系统代理（Internet Options → LAN 设置）
-fn get_windows_system_proxy() -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::process::Command;
-        let output = Command::new("reg")
-            .args([
-                "query",
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-                "/v",
-                "ProxyEnable",
-            ])
-            .output()
-            .ok()?;
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                r#"$r = iwr '{}' -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' -Headers @{{'Accept'='text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';'Accept-Language'='zh-CN,zh;q=0.9'}} -TimeoutSec 20 -UseBasicParsing -ErrorAction Stop; ConvertTo-Json @{{ok=$true; status=$r.StatusCode; contentType=$r.Headers['Content-Type']; html=$r.Content}} -Compress"#,
+                url
+            ),
+        ])
+        .output();
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if !stdout.contains("0x1") {
-            return None;
-        }
-
-        let output2 = Command::new("reg")
-            .args([
-                "query",
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-                "/v",
-                "ProxyServer",
-            ])
-            .output()
-            .ok()?;
-
-        let stdout2 = String::from_utf8_lossy(&output2.stdout);
-        for line in stdout2.lines() {
-            if let Some(value) = line.split("REG_SZ").nth(1) {
-                let proxy = value.trim();
-                if !proxy.is_empty() {
-                    return Some(format!("http://{}", proxy));
+    match output {
+        Ok(result) => {
+            if result.status.success() {
+                let stdout = String::from_utf8_lossy(&result.stdout);
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                    return ProxyResponse {
+                        ok: parsed.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+                        status: parsed.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
+                        content_type: parsed.get("contentType").and_then(|v| v.as_str()).map(String::from),
+                        html: parsed.get("html").and_then(|v| v.as_str()).map(String::from),
+                        error: None,
+                    };
                 }
             }
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            ProxyResponse {
+                ok: false,
+                status: 0,
+                content_type: None,
+                html: None,
+                error: Some(format!("PowerShell error: {}", stderr)),
+            }
         }
-        None
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        None
+        Err(e) => ProxyResponse {
+            ok: false,
+            status: 0,
+            content_type: None,
+            html: None,
+            error: Some(format!("Failed to run PowerShell: {}", e)),
+        },
     }
 }
 
@@ -71,112 +61,5 @@ fn get_windows_system_proxy() -> Option<String> {
 /// 专用于"全球内置"等必须内嵌第三方页面的场景。
 #[tauri::command]
 pub async fn proxy_url(url: String) -> Result<ProxyResponse, String> {
-    Ok(proxy_url_impl(&url).await)
-}
-
-async fn proxy_url_impl(url: &str) -> ProxyResponse {
-    use std::time::Duration;
-
-    let mut builder = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .gzip(true)
-        .user_agent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        );
-
-    // 优先用环境变量代理（应用层代理：VPN/游戏加速器/Clash 等）
-    // 再试 Windows 系统代理注册表
-    let proxy_to_use = get_proxy_url()
-        .or_else(get_windows_system_proxy);
-
-    if let Some(proxy) = proxy_to_use {
-        if let Ok(p) = reqwest::Proxy::all(&proxy) {
-            builder = builder.proxy(p);
-        }
-    }
-
-    let client = match builder.build() {
-        Ok(c) => c,
-        Err(e) => {
-            return ProxyResponse {
-                ok: false,
-                status: 0,
-                content_type: None,
-                html: None,
-                error: Some(format!("HTTP client error: {}", e)),
-            }
-        }
-    };
-
-    let response = match client
-        .get(url)
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-        .header("Accept-Encoding", "gzip, deflate, br")
-        .header("Sec-CH-UA", r#""Chromium";v="130", "Google Chrome";v="130", "Not;A=Brand";v="99""#)
-        .header("Sec-CH-UA-Mobile", "?0")
-        .header("Sec-CH-UA-Platform", "\"Windows\"")
-        .header("Sec-CH-UA-Platform-Version", "\"15.0.0\"")
-        .header("Sec-CH-UA-Arch", "\"x86_64\"")
-        .header("Sec-CH-UA-Model", "\"\"")
-        .header("Sec-CH-UA-Bitness", "\"64\"")
-        .header("Sec-CH-UA-Wow64", "?0")
-        .header("Sec-CH-UA-Full-Version", "\"130.0.0.0\"")
-        .header("Sec-CH-UA-Full-Version-List", r#""Chromium";v="130.0.0.0", "Google Chrome";v="130.0.0.0", "Not;A=Brand";v="99.0.0.0""#)
-        .header("Upgrade-Insecure-Requests", "1")
-        .header("Sec-Fetch-Dest", "document")
-        .header("Sec-Fetch-Mode", "navigate")
-        .header("Sec-Fetch-Site", "none")
-        .header("Sec-Fetch-User", "?1")
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            let err_str = e.to_string();
-            // 诊断：判断是 DNS/连接错误还是 TLS 错误
-            let diag = if err_str.contains("dns") || err_str.contains("connection refused") || err_str.contains("connect") {
-                "DIAGNOSTIC: connection-level failure (possible firewall block)"
-            } else if err_str.contains("tls") || err_str.contains("ssl") || err_str.contains("certificate") {
-                "DIAGNOSTIC: TLS-level failure"
-            } else {
-                "DIAGNOSTIC: unknown error"
-            };
-            return ProxyResponse {
-                ok: false,
-                status: 0,
-                content_type: None,
-                html: None,
-                error: Some(format!("Request failed: {} | {}", e, diag)),
-            };
-        }
-    };
-
-    let status = response.status().as_u16();
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    let html = match response.text().await {
-        Ok(text) => text,
-        Err(e) => {
-            return ProxyResponse {
-                ok: false,
-                status,
-                content_type,
-                html: None,
-                error: Some(format!("Failed to read response body: {}", e)),
-            }
-        }
-    };
-
-    ProxyResponse {
-        ok: true,
-        status,
-        content_type,
-        html: Some(html),
-        error: None,
-    }
+    Ok(fetch_with_powershell(&url))
 }
