@@ -21,48 +21,58 @@ function parseVersion(v) {
   return parts.map(p => parseInt(p, 10) || 0)
 }
 
-// JS 层直接 fetch npm registry（不走 Rust 网络，受益于 Tauri webview 的完整浏览器网络栈）
-async function fetchNpmLatest(registry, source) {
-  const pkg = NPM_PACKAGES[source] || source
-  const encoded = pkg.replace('/', '%2F').replace('@', '%40')
-  const url = `${registry.replace(/\/$/, '')}/${encoded}/latest`
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    if (!resp.ok) return null
-    const json = await resp.json()
-    return json.version || null
-  } catch {
-    return null
-  }
+const NPM_REGISTRIES = {
+  official: 'https://registry.npmjs.org',
+  chinese: null, // filled from user config at runtime
 }
 
-async function fetchNpmAllVersions(registry, source) {
+// 尝试多个 registry，直到成功
+async function fetchWithFallback(path, timeout = 5000) {
+  const userRegistry = await cachedInvoke('get_npm_registry', {}, 30000)
+  const registries = []
+
+  if (NPM_REGISTRIES.official) registries.push(NPM_REGISTRIES.official)
+  if (userRegistry) registries.push(userRegistry.replace(/\/$/, ''))
+  // 去重
+  const seen = new Set(); const unique = registries.filter(r => seen.has(r) ? false : seen.add(r))
+
+  for (const base of unique) {
+    try {
+      const resp = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(timeout) })
+      if (resp.ok) return { ok: true, json: await resp.json() }
+    } catch { /* try next */ }
+  }
+  return { ok: false, json: null }
+}
+
+async function fetchNpmLatest(source) {
   const pkg = NPM_PACKAGES[source] || source
   const encoded = pkg.replace('/', '%2F').replace('@', '%40')
-  const url = `${registry.replace(/\/$/, '')}/${encoded}`
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!resp.ok) return null
-    const json = await resp.json()
-    const obj = json.versions || {}
-    return Object.keys(obj).sort((a, b) => {
-      const pa = parseVersion(a); const pb = parseVersion(b)
-      return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
-    })
-  } catch {
-    return null
-  }
+  const result = await fetchWithFallback(`/${encoded}/latest`, 5000)
+  if (!result.ok) return null
+  return result.json.version || null
+}
+
+async function fetchNpmAllVersions(source) {
+  const pkg = NPM_PACKAGES[source] || source
+  const encoded = pkg.replace('/', '%2F').replace('@', '%40')
+  const result = await fetchWithFallback(`/${encoded}`, 10000)
+  if (!result.ok) return null
+  const obj = result.json.versions || {}
+  return Object.keys(obj).sort((a, b) => {
+    const pa = parseVersion(a); const pb = parseVersion(b)
+    return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
+  })
 }
 
 // 获取版本信息：本地部分走 Rust，远程部分走 JS fetch（解决 Rust 网络限制）
 async function getVersionInfoViaJs() {
-  const registry = await cachedInvoke('get_npm_registry', {}, 30000)
   const localInfo = await invoke('get_version_info_local', {}).catch(() => null)
   const source = localInfo?.source || 'unknown'
   const current = localInfo?.current || null
 
   const [latest, recommended] = await Promise.all([
-    source !== 'unknown' ? fetchNpmLatest(registry, source) : Promise.resolve(null),
+    source !== 'unknown' ? fetchNpmLatest(source) : Promise.resolve(null),
     Promise.resolve(localInfo?.recommended || null),
   ])
 
@@ -298,10 +308,7 @@ export const api = {
   restartGateway: () => invoke('restart_gateway'),
   doctorCheck: () => invoke('doctor_check'),
   doctorFix: () => invoke('doctor_fix'),
-  listOpenclawVersions: async (source = 'chinese') => {
-    const registry = await cachedInvoke('get_npm_registry', {}, 30000)
-    return fetchNpmAllVersions(registry, source)
-  },
+  listOpenclawVersions: async (source = 'chinese') => fetchNpmAllVersions(source),
   upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => invoke('upgrade_openclaw', { source, version, method }),
   uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
   installGateway: () => invoke('install_gateway'),
