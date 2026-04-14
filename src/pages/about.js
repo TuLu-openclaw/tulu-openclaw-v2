@@ -302,7 +302,7 @@ async function showVersionPicker(page, currentVersion) {
         versionsCache[source] = await api.listOpenclawVersions(source)
       }
       const allVersions = versionsCache[source]
-      if (!allVersions.length) {
+      if (!allVersions || !allVersions.length) {
         select.innerHTML = `<option value="">${t('about.noVersions')}</option>`
         return
       }

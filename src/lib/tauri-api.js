@@ -57,8 +57,12 @@ async function fetchNpmAllVersions(source) {
   const pkg = NPM_PACKAGES[source] || source
   const encoded = pkg.replace('/', '%2F').replace('@', '%40')
   const result = await fetchWithFallback(`/${encoded}`, 10000)
-  if (!result.ok) return null
-  const obj = result.json?.versions || {}
+  if (!result.ok) {
+    console.warn('[version] all registries failed for', path)
+    return null
+  }
+  const obj = (result.json && typeof result.json === 'object' && result.json.versions) ? result.json.versions : {}
+  if (Object.keys(obj).length === 0) return null
   return Object.keys(obj).sort((a, b) => {
     const pa = parseVersion(a); const pb = parseVersion(b)
     return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
