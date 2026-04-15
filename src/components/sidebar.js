@@ -387,8 +387,6 @@ export function renderSidebar(el) {
   }
 }
 
-function _escSidebar(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
-
 // === 移动端侧边栏 ===
 function _closeMobileSidebar() {
   const sidebar = document.getElementById('sidebar')
