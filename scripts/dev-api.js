@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 屠戮OpenClaw 开发模式 API 插件
  * 在 Vite 开发服务器上提供真实 API 端点，替代 mock 数据
  * 使浏览器模式能真正管理 OpenClaw 实例
@@ -1325,7 +1325,7 @@ function isAuthenticated(req) {
   const pw = getAccessPassword()
   if (!pw) return true // 未设密码，放行
   const cookies = parseCookies(req)
-  const token = cookies.屠戮OpenClaw_session
+  const token = cookies.tulu_openclaw_session
   if (!token) return false
   const session = _sessions.get(token)
   if (!session || Date.now() > session.expires) {
@@ -6080,7 +6080,7 @@ async function _apiMiddleware(req, res, next) {
     clearLoginAttempts(clientIp)
     const token = crypto.randomUUID()
     _sessions.set(token, { expires: Date.now() + SESSION_TTL })
-    res.setHeader('Set-Cookie', `屠戮OpenClaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
+    res.setHeader('Set-Cookie', `tulu_openclaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true, mustChangePassword: !!cfg.mustChangePassword }))
     return
@@ -6123,7 +6123,7 @@ async function _apiMiddleware(req, res, next) {
     _sessions.clear()
     const token = crypto.randomUUID()
     _sessions.set(token, { expires: Date.now() + SESSION_TTL })
-    res.setHeader('Set-Cookie', `屠戮OpenClaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
+    res.setHeader('Set-Cookie', `tulu_openclaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true }))
     return
@@ -6177,8 +6177,8 @@ async function _apiMiddleware(req, res, next) {
 
   if (cmd === 'auth_logout') {
     const cookies = parseCookies(req)
-    if (cookies.屠戮OpenClaw_session) _sessions.delete(cookies.屠戮OpenClaw_session)
-    res.setHeader('Set-Cookie', '屠戮OpenClaw_session=; Path=/; HttpOnly; Max-Age=0')
+    if (cookies.tulu_openclaw_session) _sessions.delete(cookies.tulu_openclaw_session)
+    res.setHeader('Set-Cookie', 'tulu_openclaw_session=; Path=/; HttpOnly; Max-Age=0')
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true }))
     return

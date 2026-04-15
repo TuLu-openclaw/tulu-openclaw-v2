@@ -11,7 +11,7 @@ export function isTauriRuntime() {
 
 // npm 包名映射
 const NPM_PACKAGES = {
-  official: '@openclaw/openclaw',
+  official: 'openclaw',
   chinese: '@qingchencloud/openclaw-zh',
 }
 

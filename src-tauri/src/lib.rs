@@ -74,6 +74,7 @@ pub fn run() {
             config::read_mcp_config,
             config::write_mcp_config,
             config::get_version_info,
+            config::get_version_info_local,
             config::check_installation,
             config::init_openclaw_config,
             config::calibrate_openclaw_config,
