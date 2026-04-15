@@ -8,6 +8,43 @@ import { api } from '../lib/tauri-api.js'
 import { toast } from './toast.js'
 import { version as APP_VERSION } from '../../package.json'
 import { t, getLang, setLang, getAvailableLangs } from '../lib/i18n.js'
+import { getActiveEngine, getActiveEngineId, listEngines, switchEngine } from '../lib/engine-manager.js'
+
+function _escSidebar(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+// === 引擎切换器 ===
+function _renderEngineSwitcher() {
+  const engines = listEngines()
+  if (engines.length < 2) return ''
+  const active = getActiveEngine()
+  if (!active) return ''
+  return `<div class="engine-switcher" id="engine-switcher">
+    <button class="engine-current" id="btn-engine-toggle">
+      <span class="engine-icon">${active.icon || ''}</span>
+      <span class="engine-label">${_escSidebar(active.name)}</span>
+      <svg class="engine-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="engine-dropdown" id="engine-dropdown">
+      ${engines.map(e => `<div class="engine-option${e.id === active.id ? ' active' : ''}" data-engine="${e.id}">
+        <span class="engine-opt-icon">${e.icon || ''}</span>
+        <span class="engine-opt-name">${_escSidebar(e.name)}</span>
+        ${e.id === active.id ? '<span class="engine-active-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}
+      </div>`).join('')}
+    </div>
+  </div>`
+}
+
+function _closeEngineDropdown() {
+  const dd = document.getElementById('engine-dropdown')
+  if (dd) dd.classList.remove('open')
+}
+
+function _toggleEngineDropdown() {
+  const dd = document.getElementById('engine-dropdown')
+  if (!dd) return
+  if (dd.classList.contains('open')) { dd.classList.remove('open'); return }
+  dd.classList.add('open')
+}
 
 function NAV_ITEMS_FULL() { return [
   {
@@ -153,6 +190,7 @@ export function renderSidebar(el) {
       <button class="sidebar-collapse-btn" id="btn-sidebar-collapse" title="${t('sidebar.collapse')}">${collapsed ? '»' : '«'}</button>
       <button class="sidebar-close-btn" id="btn-sidebar-close" title="${t('sidebar.closeMenu')}">&times;</button>
     </div>
+    ${_renderEngineSwitcher()}
     ${showSwitcher ? `<div class="instance-switcher" id="instance-switcher">
       <button class="instance-current" id="btn-instance-toggle">
         <span class="instance-dot ${isLocal ? 'local' : 'remote'}"></span>
@@ -317,6 +355,30 @@ export function renderSidebar(el) {
       }
       if (!e.target.closest('.lang-switcher')) {
         _closeLangDropdown()
+      }
+      if (!e.target.closest('.engine-switcher')) {
+        _closeEngineDropdown()
+      }
+      // 引擎切换器：打开/关闭下拉
+      const engineBtn = e.target.closest('#btn-engine-toggle')
+      if (engineBtn) {
+        _toggleEngineDropdown()
+        return
+      }
+      // 引擎选项点击
+      const engineOpt = e.target.closest('.engine-option[data-engine]')
+      if (engineOpt) {
+        const eid = engineOpt.dataset.engine
+        _closeEngineDropdown()
+        if (eid !== getActiveEngineId()) {
+          engineOpt.style.opacity = '0.5'
+          switchEngine(eid).then(() => {
+            toast(t('engine.switchedTo', { name: getActiveEngine()?.name || eid }), 'success')
+            renderSidebar(el)
+            reloadCurrentRoute()
+          })
+        }
+        return
       }
     })
 

@@ -16,6 +16,7 @@ import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
 // import { tryShowEngagement } from './components/engagement.js'
 import { initI18n, t } from './lib/i18n.js'
+import { initEngineManager } from './lib/engine-manager.js'
 
 // 样式
 import './style/variables.css'
@@ -378,6 +379,9 @@ const sidebar = document.getElementById('sidebar')
 const content = document.getElementById('content')
 
 async function boot() {
+  // 初始化引擎管理器（加载上次选中的引擎）
+  try { await initEngineManager() } catch (e) { console.warn('[boot] initEngineManager 失败:', e) }
+
   // 先注册所有路由，立即渲染 UI（不等后端检测）
   registerRoute('/dashboard', () => import('./pages/dashboard.js'))
   registerRoute('/chat', () => import('./pages/chat.js'))
