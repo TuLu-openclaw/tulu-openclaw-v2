@@ -16,7 +16,20 @@ import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
 // import { tryShowEngagement } from './components/engagement.js'
 import { initI18n, t } from './lib/i18n.js'
-import { initEngineManager } from './lib/engine-manager.js'
+import { initEngineManager, registerEngine } from './lib/engine-manager.js'
+import { engineMeta, getRoutes, getDefaultRoute, boot as hermesBoot, cleanup as hermesCleanup } from './engines/hermes/index.js'
+
+// 注册 Hermes 引擎
+registerEngine({
+  id: engineMeta.id,
+  name: engineMeta.name,
+  icon: engineMeta.icon,
+  description: engineMeta.description,
+  getRoutes,
+  getDefaultRoute,
+  boot: hermesBoot,
+  cleanup: hermesCleanup,
+})
 
 // 样式
 import './style/variables.css'

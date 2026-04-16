@@ -18,6 +18,7 @@ pub mod assistant;
 pub mod config;
 pub mod device;
 pub mod extensions;
+pub mod hermes;
 pub mod logs;
 pub mod memory;
 pub mod messaging;

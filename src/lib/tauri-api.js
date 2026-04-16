@@ -508,4 +508,19 @@ export const api = {
   saveImage: (id, data) => invoke('assistant_save_image', { id, data }),
   loadImage: (id) => invoke('assistant_load_image', { id }),
   deleteImage: (id) => invoke('assistant_delete_image', { id }),
+
+  // === Hermes Agent ===
+  checkHermes: () => cachedInvoke('check_hermes', {}, 10000),
+  checkPython: () => cachedInvoke('check_python', {}, 10000),
+  installHermes: (method, extras) => invoke('install_hermes', { method, extras }),
+  hermesGatewayAction: (action) => invoke('hermes_gateway_action', { action }),
+  hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url }),
+  hermesReadConfig: () => cachedInvoke('hermes_read_config', {}, 5000),
+  configureHermes: (provider, apiKey, model, baseUrl) => invoke('configure_hermes', { provider, apiKey, model, baseUrl }),
+  hermesFetchModels: (baseUrl, apiKey, apiType) => invoke('hermes_fetch_models', { baseUrl, apiKey, apiType }),
+  hermesHealthCheck: () => invoke('hermes_health_check'),
+  hermesAgentRun: (prompt, sessionId, history, instructions) => invoke('hermes_agent_run', { prompt, sessionId, history, instructions }),
+  hermesUpdateModel: (model) => invoke('hermes_update_model', { model }),
+  hermesDetectEnvironments: () => invoke('hermes_detect_environments', {}),
+  hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url }),
 }

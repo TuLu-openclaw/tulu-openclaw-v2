@@ -6,7 +6,7 @@ mod utils;
 mod windows_proxy;
 
 use commands::{
-    agent, assistant, config, device, extensions, logs, memory, messaging, pairing, proxy,
+    agent, assistant, config, device, extensions, hermes, logs, memory, messaging, pairing, proxy,
     service, skillhub, skills, tvbox, update,
 };
 
@@ -176,6 +176,19 @@ pub fn run() {
             assistant::assistant_save_image,
             assistant::assistant_load_image,
             assistant::assistant_delete_image,
+            // Hermes Agent
+            hermes::check_hermes,
+            hermes::check_python,
+            hermes::install_hermes,
+            hermes::hermes_gateway_action,
+            hermes::hermes_set_gateway_url,
+            hermes::hermes_read_config,
+            hermes::configure_hermes,
+            hermes::hermes_fetch_models,
+            hermes::hermes_health_check,
+            hermes::hermes_agent_run,
+            hermes::hermes_update_model,
+            hermes::hermes_detect_environments,
             // 消息渠道管理
             messaging::read_platform_config,
             messaging::save_messaging_platform,
