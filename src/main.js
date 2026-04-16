@@ -17,16 +17,29 @@ import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gatewa
 // import { tryShowEngagement } from './components/engagement.js'
 import { initI18n, t } from './lib/i18n.js'
 import { initEngineManager, registerEngine } from './lib/engine-manager.js'
-import { engineMeta, getRoutes, getDefaultRoute, boot as hermesBoot, cleanup as hermesCleanup } from './engines/hermes/index.js'
+import { engineMeta as hermesMeta, getRoutes as getHermesRoutes, getDefaultRoute as getHermesDefaultRoute, boot as hermesBoot, cleanup as hermesCleanup } from './engines/hermes/index.js'
+import { engineMeta as openclawMeta, getRoutes as getOpenclawRoutes, getDefaultRoute as getOpenclawDefaultRoute, boot as openclawBoot, cleanup as openclawCleanup } from './engines/openclaw/index.js'
+
+// 注册 OpenClaw 引擎
+registerEngine({
+  id: openclawMeta.id,
+  name: openclawMeta.name,
+  icon: openclawMeta.icon,
+  description: openclawMeta.description,
+  getRoutes: getOpenclawRoutes,
+  getDefaultRoute: getOpenclawDefaultRoute,
+  boot: openclawBoot,
+  cleanup: openclawCleanup,
+})
 
 // 注册 Hermes 引擎
 registerEngine({
-  id: engineMeta.id,
-  name: engineMeta.name,
-  icon: engineMeta.icon,
-  description: engineMeta.description,
-  getRoutes,
-  getDefaultRoute,
+  id: hermesMeta.id,
+  name: hermesMeta.name,
+  icon: hermesMeta.icon,
+  description: hermesMeta.description,
+  getRoutes: getHermesRoutes,
+  getDefaultRoute: getHermesDefaultRoute,
   boot: hermesBoot,
   cleanup: hermesCleanup,
 })
