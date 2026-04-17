@@ -109,6 +109,5 @@ export async function activateEngine(id, persist = true) {
 export async function switchEngine(id) {
   if (_activeEngine?.id === id) return
   await activateEngine(id, true)
-}
-avigate(_activeEngine.getDefaultRoute())
+  navigate(_activeEngine.getDefaultRoute())
 

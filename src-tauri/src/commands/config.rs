@@ -3235,16 +3235,13 @@ async fn try_standalone_install(
             .any(|p| p.eq_ignore_ascii_case(&install_str))
         {
             // 写入用户 PATH（注册表）
+            // 写入用户 PATH（注册表），使用 PowerShell 变量拼接避免特殊字符问题
+            let ps_install = install_str.replace("'", "''");
+            let ps_cmd = format!(
+                "$p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike '\*{ps_install}\*') {{ [Environment]::SetEnvironmentVariable('Path', $p + ';{ps_install}', 'User') }}",
+            );
             let _ = Command::new("powershell")
-                .args([
-                    "-NoProfile",
-                    "-Command",
-                    &format!(
-                        "$p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike '*{}*') {{ [Environment]::SetEnvironmentVariable('Path', $p + ';{}', 'User') }}",
-                        install_str.replace('\'', "''"),
-                        install_str.replace('\'', "''")
-                    ),
-                ])
+                .args(["-NoProfile", "-Command", &ps_cmd])
                 .creation_flags(0x08000000)
                 .status();
             // 同步更新当前进程的 PATH 环境变量，使后续 resolve_openclaw_cli_path()
