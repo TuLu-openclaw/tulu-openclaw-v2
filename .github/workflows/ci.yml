@@ -1,4 +1,4 @@
-# 屠戮OpenClaw 持续集成工作�?# 在推送到 main 分支或提�?PR �?main 分支时自动运�?# Trigger CI rebuild - updated
+# 屠戮OpenClaw 持续集成工作�?# 在推送到 main 分支或提�?PR �?main 分支时自动运�?# Trigger CI rebuild - updated (rebuild test)
 
 
 on:
