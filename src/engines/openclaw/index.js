@@ -32,7 +32,7 @@ const ROUTES = [
   { path: '/settings', loader: () => import('../../pages/settings.js') },
   { path: '/chat-debug', loader: () => import('../../pages/chat-debug.js') },
   { path: '/about', loader: () => import('../../pages/about.js') },
-  { path: '/setup', loader: () => import('../../pages/setup.js') },
+  { path: '/setup', loader: () => import('./pages/setup.js') },
 ]
 
 /** 返回所有路由 */

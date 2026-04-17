@@ -1,20 +1,18 @@
 /**
- * 引擎管理器
- * 管理多引擎（OpenClaw / Hermes Agent / ...）的注册、切换和状态
- */
+ * 寮曟搸绠＄悊鍣? * 绠＄悊澶氬紩鎿庯紙OpenClaw / Hermes Agent / ...锛夌殑娉ㄥ唽銆佸垏鎹㈠拰鐘舵€? */
 import { api } from './tauri-api.js'
-import { registerRoute, setDefaultRoute } from '../router.js'
+import { registerRoute, setDefaultRoute } from '../router.js', navigate
 
 const _engines = {}
 let _activeEngine = null
 let _listeners = []
 
-/** 注册引擎 */
+/** 娉ㄥ唽寮曟搸 */
 export function registerEngine(engine) {
   _engines[engine.id] = engine
 }
 
-/** 获取所有已注册引擎 */
+/** 鑾峰彇鎵€鏈夊凡娉ㄥ唽寮曟搸 */
 export function listEngines() {
   return Object.values(_engines).map(e => ({
     id: e.id,
@@ -24,31 +22,29 @@ export function listEngines() {
   }))
 }
 
-/** 获取当前激活的引擎 */
+/** 鑾峰彇褰撳墠婵€娲荤殑寮曟搸 */
 export function getActiveEngine() {
   return _activeEngine
 }
 
-/** 获取引擎 ID */
+/** 鑾峰彇寮曟搸 ID */
 export function getActiveEngineId() {
   return _activeEngine?.id || 'openclaw'
 }
 
-/** 按 ID 获取引擎 */
+/** 鎸?ID 鑾峰彇寮曟搸 */
 export function getEngine(id) {
   return _engines[id] || null
 }
 
-/** 监听引擎切换事件 */
+/** 鐩戝惉寮曟搸鍒囨崲浜嬩欢 */
 export function onEngineChange(fn) {
   _listeners.push(fn)
   return () => { _listeners = _listeners.filter(cb => cb !== fn) }
 }
 
 /**
- * 初始化引擎管理器：读取 clawpanel.json 中的 engineMode，激活对应引擎
- * 在 main.js boot() 中调用
- */
+ * 鍒濆鍖栧紩鎿庣鐞嗗櫒锛氳鍙?clawpanel.json 涓殑 engineMode锛屾縺娲诲搴斿紩鎿? * 鍦?main.js boot() 涓皟鐢? */
 export async function initEngineManager() {
   let mode = 'openclaw'
   try {
@@ -61,25 +57,23 @@ export async function initEngineManager() {
 }
 
 /**
- * 激活指定引擎（注册路由 + 启动）
- * @param {string} id 引擎 ID
- * @param {boolean} persist 是否写入 clawpanel.json
+ * 婵€娲绘寚瀹氬紩鎿庯紙娉ㄥ唽璺敱 + 鍚姩锛? * @param {string} id 寮曟搸 ID
+ * @param {boolean} persist 鏄惁鍐欏叆 clawpanel.json
  */
 export async function activateEngine(id, persist = true) {
   const engine = _engines[id]
   if (!engine) {
-    console.error(`[engine-manager] 未知引擎: ${id}`)
+    console.error(`[engine-manager] 鏈煡寮曟搸: ${id}`)
     return
   }
 
-  // 清理旧引擎
-  if (_activeEngine && _activeEngine.id !== id && _activeEngine.cleanup) {
+  // 娓呯悊鏃у紩鎿?  if (_activeEngine && _activeEngine.id !== id && _activeEngine.cleanup) {
     try { _activeEngine.cleanup() } catch {}
   }
 
   _activeEngine = engine
 
-  // 注册引擎路由 + 设置默认路由
+  // 娉ㄥ唽寮曟搸璺敱 + 璁剧疆榛樿璺敱
   const routes = engine.getRoutes()
   for (const r of routes) {
     registerRoute(r.path, r.loader)
@@ -90,11 +84,11 @@ export async function activateEngine(id, persist = true) {
 
   if (persist && engine.boot) {
     try { await engine.boot() } catch (e) {
-      console.warn('[engine-manager] boot 失败:', e)
+      console.warn('[engine-manager] boot 澶辫触:', e)
     }
   }
 
-  // 持久化到 clawpanel.json
+  // 鎸佷箙鍖栧埌 clawpanel.json
   if (persist) {
     try {
       const cfg = await api.readPanelConfig()
@@ -103,18 +97,18 @@ export async function activateEngine(id, persist = true) {
         await api.writePanelConfig(cfg)
       }
     } catch (e) {
-      console.warn('[engine-manager] 保存 engineMode 失败:', e)
+      console.warn('[engine-manager] 淇濆瓨 engineMode 澶辫触:', e)
     }
   }
 
-  // 通知监听者
-  _listeners.forEach(fn => { try { fn(engine) } catch {} })
+  // 閫氱煡鐩戝惉鑰?  _listeners.forEach(fn => { try { fn(engine) } catch {} })
 }
 
 /**
- * 切换引擎（带 UI 跳转）
- */
+ * 鍒囨崲寮曟搸锛堝甫 UI 璺宠浆锛? */
 export async function switchEngine(id) {
   if (_activeEngine?.id === id) return
   await activateEngine(id, true)
 }
+avigate(_activeEngine.getDefaultRoute())
+

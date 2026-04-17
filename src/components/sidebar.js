@@ -313,7 +313,7 @@ export function renderSidebar(el) {
         if (code !== getLang()) {
           setLang(code)
           renderSidebar(el)
-          reloadCurrentRoute()
+          navigate(getActiveEngine().getDefaultRoute())
         } else {
           _closeLangDropdown()
         }
@@ -337,7 +337,7 @@ export function renderSidebar(el) {
             const desc = inst.type === 'local' ? t('instance.local') : inst.name
             toast(t('instance.switchedTo', { name: desc }), 'success')
             renderSidebar(el)
-            reloadCurrentRoute()
+            navigate(getActiveEngine().getDefaultRoute())
           })
         }
         return
@@ -375,7 +375,7 @@ export function renderSidebar(el) {
           switchEngine(eid).then(() => {
             toast(t('engine.switchedTo', { name: getActiveEngine()?.name || eid }), 'success')
             renderSidebar(el)
-            reloadCurrentRoute()
+            navigate(getActiveEngine().getDefaultRoute())
           })
         }
         return
