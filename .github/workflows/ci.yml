@@ -49,8 +49,9 @@ jobs:
       - name: 安装前端依赖
         run: npm ci
 
-      # 安装 Rust 工具�?(stable)
-      - name: 安装 Rust 工具�?        uses: dtolnay/rust-toolchain@stable
+      # 安装 Rust 工具链 (stable)
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
 
       # Rust 编译缓存
       - name: Rust 编译缓存
