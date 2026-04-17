@@ -35,7 +35,23 @@ async function loadRoute() {
   const hash = window.location.hash.slice(1) || _defaultRoute
   const routePath = hash.split('?')[0]
   const loader = routes[routePath]
-  if (!loader || !_contentEl) return
+  // 路由未注册时（引擎刚切换、新路由尚未注册），显示 loading 而不是留空
+  if (!loader) {
+    if (_contentEl) {
+      _contentEl.innerHTML = `
+        <div class="page-loader">
+          <div class="page-loader-spinner"></div>
+          <div class="page-loader-text">加载中...</div>
+        </div>`
+    }
+    // 100ms 后重试（等待引擎路由注册完成）
+    await new Promise(r => setTimeout(r, 100))
+    if (routes[routePath]) {
+      loadRoute()
+    }
+    return
+  }
+  if (!_contentEl) return
 
   // 竞态防护：记录本次加载 ID
   const thisLoad = ++_loadId

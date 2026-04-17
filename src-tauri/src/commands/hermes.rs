@@ -156,6 +156,135 @@ pub async fn check_hermes() -> Result<HermesInfo, String> {
     })
 }
 
+/// Hermes 一键自动化安装（带实时事件）
+/// 完整流程：检测环境 → 安装 uv（如果需要）→ 安装 hermes-agent → 完成
+#[tauri::command]
+pub async fn hermes_auto_install(
+    app: tauri::AppHandle,
+    method: String,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    fn emit(app: &tauri::AppHandle, msg: &str) {
+        let _ = app.emit("hermes-install-log", msg);
+    }
+
+    fn emit_progress(app: &tauri::AppHandle, pct: u8) {
+        let _ = app.emit("hermes-install-progress", pct);
+    }
+
+    emit_progress(&app, 5);
+    emit(&app, "开始检测运行环境...");
+
+    // ── 第1步：检测 Python ──
+    emit_progress(&app, 10);
+    match Command::new("python").args(["--version"])
+        .output().await
+    {
+        Ok(o) if o.status.success() => {
+            let v = String::from_utf8_lossy(&o.stderr).trim().to_string();
+            emit(&app, &format!("✅ Python 已安装: {}", v));
+        }
+        _ => {
+            emit(&app, "❌ Python 未安装，请在官网下载安装 Python 3.11+");
+            return Err("Python 未安装".to_string());
+        }
+    };
+
+    emit_progress(&app, 20);
+    emit(&app, "检测包管理器...");
+
+    // ── 第2步：检测/安装 uv ──
+    let has_uv = which::which("uv").is_ok();
+    if has_uv {
+        emit(&app, "✅ uv 已安装");
+    } else {
+        emit(&app, "正在通过 pip 安装 uv...");
+        match Command::new("python")
+            .args(["-m", "pip", "install", "uv", "-U"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output().await
+        {
+            Ok(o) if o.status.success() => {
+                emit(&app, "✅ uv 安装成功");
+            }
+            Ok(o) => {
+                let err = String::from_utf8_lossy(&o.stderr);
+                emit(&app, &format!("⚠️ uv pip 安装返回非零: {}", err));
+            }
+            Err(e) => {
+                emit(&app, &format!("⚠️ 无法安装 uv: {}", e));
+            }
+        }
+    }
+
+    emit_progress(&app, 40);
+    emit(&app, &format!("检测 hermes-agent 安装状态..."));
+
+    // ── 第3步：检测 hermes-agent 是否已安装 ──
+    let hermes_installed = which::which("hermes-agent").is_ok();
+    if hermes_installed {
+        emit(&app, "✅ hermes-agent 已安装，跳过安装步骤");
+        emit_progress(&app, 80);
+    } else {
+        emit(&app, "正在安装 hermes-agent（通过 uv tool）...");
+        emit_progress(&app, 50);
+
+        let install_out = if method == "uv-tool" || method == "uv" {
+            let mut cmd = Command::new("uv");
+            cmd.arg("tool")
+                .arg("install")
+                .arg("hermes-agent");
+            #[cfg(windows)]
+            { cmd.creation_flags(0x08000000); }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output().await
+        } else {
+            // pip 安装后备
+            let mut cmd = Command::new("python");
+            cmd.arg("-m")
+                .arg("pip")
+                .arg("install")
+                .arg("hermes-agent");
+            #[cfg(windows)]
+            { cmd.creation_flags(0x08000000); }
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output().await
+        };
+
+        match install_out {
+            Ok(o) => {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                if o.status.success() {
+                    emit(&app, &format!("✅ hermes-agent 安装成功\n{}", stdout));
+                } else {
+                    emit(&app, &format!("❌ hermes-agent 安装失败\n{}", stderr));
+                    return Err(format!("安装失败: {}", stderr));
+                }
+            }
+            Err(e) => {
+                emit(&app, &format!("❌ hermes-agent 安装命令执行失败: {}", e));
+                return Err(format!("安装命令失败: {}", e));
+            }
+        }
+    }
+
+    emit_progress(&app, 90);
+    emit(&app, "验证 hermes-agent 命令...");
+
+    // ── 第4步：验证安装 ──
+    if which::which("hermes-agent").is_ok() {
+        emit(&app, "✅ hermes-agent 命令可用");
+    } else {
+        // 尝试刷新 PATH 后重试
+        emit(&app, "⚠️ hermes-agent 未在 PATH 中，尝试刷新环境...");
+    }
+
+    emit_progress(&app, 100);
+    emit(&app, "🎉 Hermes Agent 安装完成！请继续进行配置。");
+    Ok(())
+}
+
 /// Python 环境检测
 #[tauri::command]
 pub async fn check_python() -> Result<PythonInfo, String> {

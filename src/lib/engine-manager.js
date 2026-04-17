@@ -113,9 +113,16 @@ export async function activateEngine(id, persist = true) {
 
 /**
  * 切换引擎（带 UI 跳转）
+ * @param {string} id 引擎 ID
+ * @param {boolean} persist 是否写入 clawpanel.json
  */
-export async function switchEngine(id) {
+export async function switchEngine(id, { navigateToDefault = true } = {}) {
   if (_activeEngine?.id === id) return
   await activateEngine(id, true)
-  navigate(_activeEngine.getDefaultRoute())
+  // 通知监听器（引擎切换完成），让 main.js 等外部模块
+  // 有机会在 hashchange 之前完成 UI 刷新
+  _listeners.forEach(fn => { try { fn(_activeEngine, id) } catch {} })
+  if (navigateToDefault) {
+    navigate(_activeEngine.getDefaultRoute())
+  }
 }
