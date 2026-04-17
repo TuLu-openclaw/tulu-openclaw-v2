@@ -179,20 +179,18 @@ createApp({
       playerError.value = '';
       playingUrl.value = '';
 
-      // 判断是否是直接 m3u8
-      if (rawUrl.includes('.m3u8')) {
-        playingUrl.value = rawUrl;
-        showPlayer.value = true;
-        await nextTick();
-        window.openPlayer(rawUrl);
-        return;
+      // 通过 TVBox 框架解析中间地址
+      if (window.TVBox && typeof window.TVBox.parseUrl === 'function') {
+        try {
+          rawUrl = await window.TVBox.parseUrl(rawUrl);
+        } catch (e) {
+          console.warn('[TVBox] parseUrl failed:', e.message);
+        }
       }
 
-      // 中间地址需要解析
-      showPlayer.value = true;
       playingUrl.value = rawUrl;
+      showPlayer.value = true;
       await nextTick();
-      // 尝试直接播放（部分中间地址可能是直接可用的）
       window.openPlayer(rawUrl);
     }
 

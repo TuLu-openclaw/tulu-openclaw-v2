@@ -29,6 +29,7 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 sha2 = "0.10"
 rand = "0.8"
 base64 = "0.22"
+md5 = "0.8"
 urlencoding = "2"
 regex = "1"
 tokio = { version = "1", features = ["process", "time"] }

@@ -159,18 +159,32 @@ function openDetail(vod) {
   render();
 }
 
-function playEpisode(episode) {
+async function playEpisode(episode) {
   S('playingTitle', episode.name);
   S('playingUrl', (episode.url || '').trim());
   S('playerError', '');
   S('showPlayer', true);
   render();
+
+  // 通过 Tauri 调用 URL 解析链（tvbox-framework.js 注入的 invoke）
+  var rawUrl = S('playingUrl', '');
+  var finalUrl = rawUrl;
+
+  if (window.TVBox && window.TVBox.parseUrl) {
+    try {
+      finalUrl = await window.TVBox.parseUrl(rawUrl);
+    } catch (e) {
+      console.warn('[TVBox] parseUrl failed, using raw URL:', e.message);
+      finalUrl = rawUrl;
+    }
+  }
+
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
       var video = document.getElementById('tvbox-video');
       if (!video) return;
       if (state.hls) { state.hls.destroy(); state.hls = null; }
-      var url = S('playingUrl', '');
+      var url = finalUrl || rawUrl;
       if (url.indexOf('.m3u8') !== -1 && url.indexOf('http') === 0) {
         if (window.Hls && Hls.isSupported()) {
           var hls = new Hls({});

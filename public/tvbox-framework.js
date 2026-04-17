@@ -4,6 +4,13 @@
  * 通过 Tauri Command 与 Rust 后端通信
  */
 
+// ── 解析器链配置（TVBox 标准中间地址解析服务） ──────────────
+const PARSER_URLS = [
+  'https://vip.gaotian.top/api.php?url=$INPUT&type=auto&misc=0',
+  'https://jx.86555.xyz/api.php?url=$INPUT',
+  'https://api.bbbbbb.xyz/api.php?url=$INPUT',
+];
+
 // 等待 Tauri 就绪
 const TAURI = window.__TAURI__;
 let invoke;
@@ -184,32 +191,47 @@ function simpleMD5(str) {
 }
 
 // ── 视频解析 ─────────────────────────────────────────────────
-async function parseUrl(input, chains = []) {
-  // chains: 解析链 [{name, parse_url}, ...]
-  // 这里实现通用解析接口
+// 主解析入口：遍历解析链，返回最终可播放地址
+async function parseUrl(input, chains) {
+  // chains: [{name, parse_url}, ...] 格式
+  // 如果未传 chains，使用内置默认解析器
+  if (!chains || chains.length === 0) {
+    chains = PARSER_URLS.map((url, i) => ({ name: `parser${i}`, parse_url: url }));
+  }
+
   let url = input;
   for (const chain of chains) {
     try {
       const result = await callParse(chain.name, url, chain.parse_url);
-      if (result && result !== url) {
+      if (result && result !== url && result.startsWith('http')) {
         url = result;
       }
     } catch (e) {
-      // ignore
+      // 单个解析器失败，继续下一个
     }
   }
   return url;
 }
 
+// 调用单个解析器（直接请求解析服务，返回解析后的最终地址）
 async function callParse(name, url, parseUrl) {
-  if (!parseUrl) return url;
+  if (!parseUrl || !url) return url;
+
+  // 替换占位符
   const api = parseUrl
-    .replace('$INPUT', encodeURIComponent(url))
-    .replace('$UA', encodeURIComponent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'));
-  
+    .replace(/\$INPUT/gi, encodeURIComponent(url))
+    .replace(/\$UA/gi, encodeURIComponent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'));
+
   const result = await req({ url: api, dataType: 'text', timeout: 15000 });
   if (result.code === 200) {
-    return result.content.trim();
+    const txt = result.content.trim();
+    // 尝试从 JSON 响应中提取 URL
+    try {
+      const json = JSON.parse(txt);
+      return (json.url || json.data || json.result || txt).trim();
+    } catch {
+      return txt;
+    }
   }
   return url;
 }
@@ -225,6 +247,8 @@ window.TVBox = {
   parseUrl,
   callParse,
   isTauri,
+  invoke,
+  PARSER_URLS,
   // 默认请求头
   header: {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',

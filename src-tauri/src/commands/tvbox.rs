@@ -180,17 +180,59 @@ pub fn tvbox_cookie_get(domain: String) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-/// MD5（简化实现，16字节 hex 输出）
+/// MD5（真正的 MD5）
 #[command]
 pub fn tvbox_md5(input: String) -> CryptoResult {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    input.hash(&mut h);
-    let a = h.finish();
-    let mut h2 = DefaultHasher::new();
-    a.hash(&mut h2);
-    let b = h2.finish();
-    let hex = format!("{:016x}{:016x}", a, b);
+    use md5::{Md5, Digest};
+    let mut hasher = Md5::new();
+    Digest::update(&mut hasher, input.as_bytes());
+    let result = hasher.finalize();
+    let hex: String = result.iter().map(|b| format!("{:02x}", b)).collect();
     CryptoResult { code: 0, content: hex }
+}
+
+/// URL 解析（用于解析中间地址为最终播放地址）
+#[command]
+pub async fn tvbox_parse(
+    url: String,
+    api: Option<String>,
+) -> Result<CryptoResult, String> {
+    // 如果没有解析 API，直接返回原地址
+    let api = api.unwrap_or_default();
+    if api.is_empty() {
+        return Ok(CryptoResult { code: 0, content: url });
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let parse_url = api
+        .replace("$INPUT", &url)
+        .replace("$UA", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+    let resp = client
+        .get(&parse_url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header("Referer", format!("{}/", url.split('/').nth(2).unwrap_or("")))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let body = resp.text().await.map_err(|e| e.to_string())?;
+
+    // 解析返回结果：可能是纯文本URL，也可能是JSON {code:1,url:"..."}
+    let final_url = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+        json.get("url")
+            .or_else(|| json.get("data"))
+            .or_else(|| json.get("result"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&body)
+            .to_string()
+    } else {
+        body.trim().to_string()
+    };
+
+    Ok(CryptoResult { code: 0, content: final_url })
 }

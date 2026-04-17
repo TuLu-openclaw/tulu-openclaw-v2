@@ -235,6 +235,7 @@ pub fn run() {
             tvbox::tvbox_store_keys,
             tvbox::tvbox_store_del,
             tvbox::tvbox_cookie_get,
+            tvbox::tvbox_parse,
             // 全球内置代理
             proxy::proxy_url,
         ])
