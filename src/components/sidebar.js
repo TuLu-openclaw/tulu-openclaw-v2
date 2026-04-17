@@ -46,7 +46,7 @@ function _toggleEngineDropdown() {
   dd.classList.add('open')
 }
 
-function NAV_ITEMS_FULL() { return [
+const NAV_ITEMS_OPENCLAW = [
   {
     section: t('sidebar.sectionMonitor'),
     items: [
@@ -84,7 +84,7 @@ function NAV_ITEMS_FULL() { return [
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
       { route: '/tvbox', label: '影视仓', icon: 'tv' },
-      { route: '/coming-soon', label: '全球内置', icon: 'lock' },
+      { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
     ]
   },
   {
@@ -95,7 +95,34 @@ function NAV_ITEMS_FULL() { return [
       { route: '/about', label: t('sidebar.about'), icon: 'about' },
     ]
   }
-] }
+]
+
+const NAV_ITEMS_HERMES = [
+  {
+    section: '',
+    items: [
+      { route: '/hermes/chat', label: 'AI 对话', icon: 'chat' },
+      { route: '/hermes/dashboard', label: '控制台', icon: 'dashboard' },
+      { route: '/hermes/setup', label: '引擎设置', icon: 'setup' },
+      { route: '/hermes/skills', label: '技能中心', icon: 'skills' },
+      { route: '/hermes/channels', label: '对话渠道', icon: 'channels' },
+      { route: '/hermes/logs', label: '运行日志', icon: 'logs' },
+      { route: '/hermes/memory', label: '记忆管理', icon: 'memory' },
+      { route: '/hermes/config', label: '引擎配置', icon: 'settings' },
+    ]
+  },
+]
+
+function NAV_ITEMS_FULL() {
+  if (getActiveEngineId() === 'hermes') return NAV_ITEMS_HERMES
+  return NAV_ITEMS_OPENCLAW
+}
+
+/** 返回引擎对应的侧边栏导航项（供 engine-manager 等外部模块调用） */
+export function getNavItems() {
+  return NAV_ITEMS_FULL()
+}
+
 
 function NAV_ITEMS_SETUP() { return [
   {
@@ -140,6 +167,7 @@ const ICONS = {
   tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>',
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
+  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>',
     movie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
 }
 
@@ -210,7 +238,9 @@ export function renderSidebar(el) {
 
     for (const item of section.items) {
       const active = current === item.route ? ' active' : ''
-      html += `<div class="nav-item${active}" data-route="${item.route}">
+      const itemRoute = item.route || ''
+      const itemDataAction = item.dataAction ? `data-action="${item.dataAction}"` : `data-route="${itemRoute}"`
+      html += `<div class="nav-item${active}" ${itemDataAction}>
         ${ICONS[item.icon] || ''}
         <span>${item.label}</span>
       </div>`
@@ -276,9 +306,20 @@ export function renderSidebar(el) {
     _delegated = true
     el.addEventListener('click', (e) => {
       // 导航点击
-      const navItem = e.target.closest('.nav-item[data-route]')
+      const navItem = e.target.closest('.nav-item[data-route], .nav-item[data-action]')
       if (navItem) {
-        navigate(navItem.dataset.route)
+        const route = navItem.dataset.route
+        const dataAction = navItem.dataset.action
+        // data-action 按钮由专门的处理器处理
+        if (dataAction) return
+        if (route.startsWith('/hermes') && getActiveEngineId() !== 'hermes') {
+          switchEngine('hermes').then(() => {
+            navigate(route)
+            renderSidebar(el)
+          })
+        } else {
+          navigate(route)
+        }
         _closeMobileSidebar()
         return
       }
@@ -365,6 +406,24 @@ export function renderSidebar(el) {
         _toggleEngineDropdown()
         return
       }
+      // data-action 处理（扩展按钮如"部署 Hermes"）
+      const dataAction = e.target.closest('[data-action]')?.dataset?.action
+      if (dataAction === 'deploy-hermes') {
+        _closeEngineDropdown()
+        if (getActiveEngineId() !== 'hermes') {
+          switchEngine('hermes').then(() => {
+            toast('正在切换到 Hermes Engine…', 'info')
+            navigate('/hermes/setup')
+            renderSidebar(el)
+          })
+        } else {
+          navigate('/hermes/setup')
+          renderSidebar(el)
+        }
+        _closeMobileSidebar()
+        return
+      }
+
       // 引擎选项点击
       const engineOpt = e.target.closest('.engine-option[data-engine]')
       if (engineOpt) {
@@ -374,8 +433,8 @@ export function renderSidebar(el) {
           engineOpt.style.opacity = '0.5'
           switchEngine(eid).then(() => {
             toast(t('engine.switchedTo', { name: getActiveEngine()?.name || eid }), 'success')
-            renderSidebar(el)
             navigate(getActiveEngine().getDefaultRoute())
+            renderSidebar(el)
           })
         }
         return
