@@ -1,6 +1,7 @@
 # 屠戮OpenClaw 持续集成工作流
 # 在推送到 main 分支或提交 PR 到 main 分支时自动运行
-name: CI
+# Trigger CI rebuild
+
 
 on:
   push:
