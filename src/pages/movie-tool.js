@@ -8,6 +8,17 @@
 
 import '../style/movie-tool.css'
 
+// ── HTML 转义（防止 XSS）───────────────────────────────
+function escHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const VOD_SOURCES = [
   { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
   { key: 'lziapi', name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',    type: 'tvbox' },
@@ -25,6 +36,18 @@ const TV_SOURCES = [
 ]
 
 // ── TVBox JSON API（通过 cdn.statically.io 代理 GitHub）────────────────────────
+// ── TVBox CDN 多镜像（statically.io 挂了时自动回退）──────────
+function tvboxMirrors(url) {
+  if (!url || !url.includes('cdn.statically.io')) return [url];
+  const parts = url.split('gh/');
+  const path = parts[1] || '';
+  return [
+    url,
+    'https://ghproxy.com/https://raw.githubusercontent.com/' + path,
+    'https://mirror.ghproxy.com/https://raw.githubusercontent.com/' + path,
+  ].filter(Boolean);
+}
+
 const TVBOX_BUILTIN = [
   { key: 'fongmi',    name: '🌺FongMi',    url: 'https://cdn.statically.io/gh/FongMi/CatVodSpider/main/json/b.json',        note: '推荐' },
   { key: 'hjd',       name: '🌺HJD TVBox', url: 'https://cdn.statically.io/gh/hjdhnx/Dr_TVBox/main/json/api.json',          note: '' },
@@ -180,9 +203,13 @@ function clearPlayHistory() { savePlayHistory([]) }
 
 // ── 网络请求 ──
 async function fetchJSON(url) {
-  const resp = await fetch(url, { signal: AbortSignal.timeout(15000) })
+  const resp = await fetch(url, {
+    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
+    headers: { 'Referer': 'https://claw.qt.cool/' }
+  })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
-  return resp.json()
+  const text = await resp.text()
+  try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return {} } }
 }
 
 // ── NZK 解析 ──
@@ -421,7 +448,9 @@ function initApp(el) {
     const isM3u8 = epUrl.includes('.m3u8')
     const isMp4  = epUrl.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(epUrl, isM3u8, progress)
-    else body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + epUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else // URL 格式校验
+        var safeEpUrl = epUrl && /^https?:\/\//i.test(epUrl) ? epUrl : '';
+        body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeEpUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
   }
 
   function renderCatTabs() {
@@ -578,8 +607,8 @@ function initApp(el) {
       '<div style="margin-bottom:16px">' +
         '<div style="font-size:13px;color:#888;margin-bottom:8px">自定义 TVBox 接口 <span style="color:#e50914">(' + custom.length + ')</span></div>' +
         (custom.length ? custom.map(a => '<div style="padding:10px 12px;background:#252540;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
-          '<div style="overflow:hidden"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + a.name + '</div>' +
-          '<div style="font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + a.url + '</div></div>' +
+          '<div style="overflow:hidden"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.name) + '</div>' +
+          '<div style="font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.url) + '</div></div>' +
           '<button class="t-del-api" data-key="' + a.key + '" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">删除</button></div>').join('') : '<div style="color:#555;font-size:13px;text-align:center;padding:12px">暂无自定义接口</div>') +
       '</div>' +
       '<div style="border-top:1px solid #333;padding-top:16px">' +
@@ -629,19 +658,31 @@ function initApp(el) {
   }
 
   function fetchJsonp(url) {
-    return new Promise((resolve, reject) => {
-      const cbName = '__jsonp_cb_' + Date.now()
-      const script = document.createElement('script')
-      script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName
-      script.onerror = () => { cleanup(); reject(new Error('JSONP 请求失败')) }
-      window[cbName] = (data) => { cleanup(); resolve(data) }
-      document.head.appendChild(script)
-      setTimeout(() => { cleanup(); reject(new Error('JSONP 超时')) }, 20000)
-      function cleanup() {
-        delete window[cbName]
-        if (script.parentNode) script.parentNode.removeChild(script)
-      }
-    })
+    // 支持 CDN 镜像回退
+    const mirrors = typeof tvboxMirrors === 'function' ? tvboxMirrors(url) : [url];
+    let mirrorIdx = 0;
+    function tryNext(errMsg) {
+      if (mirrorIdx < mirrors.length) {
+        const mirror = mirrors[mirrorIdx++];
+        return new Promise((resolve, reject) => {
+          const cbName = '__jsonp_cb_' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+          const script = document.createElement('script');
+          script.src = mirror + (mirror.includes('?') ? '&' : '?') + 'callback=' + cbName;
+          let settled = false;
+          function cleanup() {
+            if (settled) return;
+            settled = true;
+            try { delete window[cbName]; } catch(e) {}
+            if (script.parentNode) script.parentNode.removeChild(script);
+          }
+          script.onerror = () => { cleanup(); tryNext('JSONP 请求失败').then(resolve).catch(reject); };
+          window[cbName] = (data) => { cleanup(); resolve(data); };
+          document.head.appendChild(script);
+          setTimeout(() => { cleanup(); if (!settled) tryNext('JSONP 超时').then(resolve).catch(reject); }, 15000);
+        });
+      } else reject(new Error(errMsg || 'JSONP 请求失败'));
+    }
+    return tryNext();
   }
 
   function renderVodGrid(list, total) {
@@ -740,7 +781,9 @@ function initApp(el) {
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
-    else body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + url + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else // URL 格式校验
+        var safeUrl = url && /^https?:\/\//i.test(url) ? url : '';
+        body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
   }
 
   async function openDetail(id, name, sourceName, pic) {

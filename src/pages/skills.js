@@ -263,6 +263,8 @@ async function handleInstallDep(page, btn) {
 // ===== 技能商店（SkillHub SDK）=====
 let _storeIndex = null // 缓存的全量索引
 let _installedNames = new Set() // 已安装的 skill 名称
+let _searchSeq = 0 // 搜索序列号，用于取消旧请求
+let _searchTimer = null // 防抖定时器
 
 async function loadStore(page) {
   const results = page.querySelector('#store-results')
@@ -314,31 +316,48 @@ async function handleStoreSearch(page) {
   const results = page.querySelector('#store-results')
   if (!input || !results) return
   const q = input.value.trim().toLowerCase()
-  if (!q && _storeIndex) {
-    renderStoreItems(results, _storeIndex)
-    return
-  }
-  if (!q) return
-  // 客户端过滤已有索引
-  if (_storeIndex) {
-    const filtered = _storeIndex.filter(item => {
-      const slug = (item.slug || '').toLowerCase()
-      const name = (item.display_name || item.displayName || '').toLowerCase()
-      const desc = (item.summary || item.description || '').toLowerCase()
-      const tags = (item.tags || []).join(' ').toLowerCase()
-      return slug.includes(q) || name.includes(q) || desc.includes(q) || tags.includes(q)
-    })
-    renderStoreItems(results, filtered)
-    return
-  }
-  // 没有索引时走服务端搜索
-  results.innerHTML = `<div class="form-hint" style="padding:var(--space-sm)">${t('skills.searching')}</div>`
-  try {
-    const items = await api.skillhubSearch(input.value.trim())
-    renderStoreItems(results, items)
-  } catch (e) {
-    results.innerHTML = `<div style="color:var(--error);padding:var(--space-sm)">${t('skills.searchFailed')}: ${esc(e?.message || e)}</div>`
-  }
+
+  // 防抖 300ms，清除上一个定时器
+  if (_searchTimer !== null) { clearTimeout(_searchTimer); _searchTimer = null }
+
+  // 递增序列号，用于在请求返回时判断是否已过时
+  const seq = ++_searchSeq
+
+  _searchTimer = setTimeout(async () => {
+    _searchTimer = null
+    if (seq !== _searchSeq) return // 期间有新搜索，取消
+
+    if (!q && _storeIndex) {
+      renderStoreItems(results, _storeIndex)
+      return
+    }
+    if (!q) return
+
+    // 客户端过滤已有索引
+    if (_storeIndex) {
+      const filtered = _storeIndex.filter(item => {
+        const slug = (item.slug || '').toLowerCase()
+        const name = (item.display_name || item.displayName || '').toLowerCase()
+        const desc = (item.summary || item.description || '').toLowerCase()
+        const tags = (item.tags || []).join(' ').toLowerCase()
+        return slug.includes(q) || name.includes(q) || desc.includes(q) || tags.includes(q)
+      })
+      if (seq !== _searchSeq) return
+      renderStoreItems(results, filtered)
+      return
+    }
+
+    // 没有索引时走服务端搜索
+    results.innerHTML = `<div class="form-hint" style="padding:var(--space-sm)">${t('skills.searching')}</div>`
+    try {
+      const items = await api.skillhubSearch(input.value.trim())
+      if (seq !== _searchSeq) return // 期间有新搜索，丢弃结果
+      renderStoreItems(results, items)
+    } catch (e) {
+      if (seq !== _searchSeq) return
+      results.innerHTML = `<div style="color:var(--error);padding:var(--space-sm)">${t('skills.searchFailed')}: ${esc(e?.message || e)}</div>`
+    }
+  }, 300) // 300ms 防抖
 }
 
 async function handleStoreInstall(page, btn) {
