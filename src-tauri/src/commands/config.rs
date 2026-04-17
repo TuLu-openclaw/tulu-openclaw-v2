@@ -3238,7 +3238,7 @@ async fn try_standalone_install(
             // 写入用户 PATH（注册表），使用 PowerShell 变量拼接避免特殊字符问题
             let ps_install = install_str.replace("'", "''");
             let ps_cmd = format!(
-                "$p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike '\*{ps_install}\*') {{ [Environment]::SetEnvironmentVariable('Path', $p + ';{ps_install}', 'User') }}",
+                r#"$p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike '*{ps_install}*') {{ [Environment]::SetEnvironmentVariable('Path', $p + ';{ps_install}', 'User') }}"#
             );
             let _ = Command::new("powershell")
                 .args(["-NoProfile", "-Command", &ps_cmd])

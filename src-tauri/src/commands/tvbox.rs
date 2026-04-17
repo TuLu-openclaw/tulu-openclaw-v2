@@ -183,11 +183,8 @@ pub fn tvbox_cookie_get(domain: String) -> Result<String, String> {
 /// MD5（真正的 MD5）
 #[command]
 pub fn tvbox_md5(input: String) -> CryptoResult {
-    use md5::{Md5, Digest};
-    let mut hasher = Md5::new();
-    Digest::update(&mut hasher, input.as_bytes());
-    let result = hasher.finalize();
-    let hex: String = result.iter().map(|b| format!("{:02x}", b)).collect();
+    let digest = md5::compute(input.as_bytes());
+    let hex: String = format!("{:x}", digest);
     CryptoResult { code: 0, content: hex }
 }
 
