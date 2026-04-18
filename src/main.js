@@ -196,6 +196,7 @@ function showKamiFallbackModal() {
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
         <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">屠戮授权验证</div>
         <div style="font-size:12px;color:#666">请输入卡密以继续使用</div>
+        <div id="kami-fb-notice" style="margin-top:12px;padding:10px 12px;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px;color:#a5b4fc;line-height:1.6;display:none"></div>
       </div>
       <div style="margin-bottom:16px">
         <div style="color:#888;font-size:12px;margin-bottom:8px">卡密</div>
@@ -217,11 +218,20 @@ function showKamiFallbackModal() {
   document.body.appendChild(overlay)
 
   // 动态 import kami.js（独立于模块加载失败的环境）
-  import('./lib/kami.js').then(async ({ login, saveKami, markVerified }) => {
+  import('./lib/kami.js').then(async ({ login, saveKami, markVerified, getNotice }) => {
     const inputEl = document.getElementById('kami-fb-input')
     const rememberEl = document.getElementById('kami-fb-remember')
     const btnEl = document.getElementById('kami-fb-btn')
     const errorEl = document.getElementById('kami-fb-error')
+    const noticeEl = document.getElementById('kami-fb-notice')
+
+    // 异步拉取远程公告
+    getNotice().then(text => {
+      if (text && text.trim()) {
+        noticeEl.textContent = text
+        noticeEl.style.display = 'block'
+      }
+    }).catch(() => {})
 
     async function doVerify() {
       const kami = inputEl.value.trim()
