@@ -171,6 +171,7 @@ pub fn run() {
             assistant::assistant_check_port,
             assistant::assistant_web_search,
             assistant::assistant_fetch_url,
+            assistant::vod_fetch,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,

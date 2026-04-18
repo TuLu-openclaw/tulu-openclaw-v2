@@ -269,14 +269,36 @@ function parseXml(raw) {
   } catch { return { list: [], total: 0 } }
 }
 
-// ── 网络请求 ──
-async function fetchJSON(url) {
+// ── 网络请求（优先 Rust 后端代理，绕过 WebView CORS 限制） ──
+
+// 尝试通过 Tauri Rust 后端请求（vod_fetch 命令）
+async function vodApiFetch(url) {
+  try {
+    const { invoke } = window.__TAURI_INTERNALS__ || window.__TAURI__ || {}
+    if (!invoke) return null
+    const text = await invoke('vod_fetch', { url, timeoutSecs: 12 })
+    if (!text || !text.trim()) return null
+    return JSON.parse(text)
+  } catch { return null }
+}
+
+// 标准 fetch（备用）
+async function webFetch(url) {
   const resp = await fetch(url, {
     signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
     headers: { 'Referer': 'https://claw.qt.cool/' }
   })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
-  const text = await resp.text()
+  return resp.text()
+}
+
+// 通用 JSON 获取（自动降级）
+async function fetchJSON(url) {
+  let json = await vodApiFetch(url)
+  if (json) return json
+  // Rust 后端失败，降级到浏览器 fetch
+  let text
+  try { text = await webFetch(url) } catch { return { list: [], total: 0 } }
   try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return { list: [], total: 0 } } }
 }
 

@@ -446,6 +446,40 @@ pub async fn assistant_web_search(
     Ok(output)
 }
 
+/// 通过 PowerShell iwr 代理 HTTP 请求（绕过 WebView CORS 限制，继承系统网络和代理设置）
+#[tauri::command]
+pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String, String> {
+    use std::process::Command;
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL 必须以 http:// 或 https:// 开头".into());
+    }
+    let escaped = url.replace("'", "''");
+    let ps = format!(
+        r#"try {{
+            $r = Invoke-WebRequest '{}' -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' -Headers @{{'Accept'='application/json, text/plain, */*'; 'Accept-Language'='zh-CN,zh;q=0.9'}} -TimeoutSec 15 -UseBasicParsing -ErrorAction Stop
+            Write-Output $r.Content
+        }} catch {{
+            Write-Output ('VOD_ERROR:' + $_.Exception.Message)
+        }}"#,
+        escaped
+    );
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps])
+        .output()
+        .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() || stdout.contains("VOD_ERROR:") {
+        let msg = if stdout.starts_with("VOD_ERROR:") {
+            stdout.trim_start_matches("VOD_ERROR:").trim()
+        } else {
+            stderr.trim()
+        };
+        return Err(format!("vod_fetch failed: {}", msg));
+    }
+    Ok(stdout.trim().to_string())
+}
+
 /// 抓取 URL 内容（通过 Jina Reader API）
 #[tauri::command]
 pub async fn assistant_fetch_url(url: String) -> Result<String, String> {
