@@ -447,6 +447,7 @@ pub async fn assistant_web_search(
 }
 
 /// 通过 PowerShell iwr 代理 HTTP 请求（绕过 WebView CORS 限制，继承系统网络和代理设置）
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String, String> {
     use std::process::Command;
