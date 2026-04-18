@@ -1,82 +1,153 @@
+/* ===== 屠戮影视 - Modern Dark Theme ===== */
+:root {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #161625;
+  --bg-card: #1e1e30;
+  --bg-card-hover: #252540;
+  --accent: #6c5ce7;
+  --accent-light: #a29bfe;
+  --accent-glow: rgba(108, 92, 231, 0.3);
+  --text-primary: #f0f0f5;
+  --text-secondary: #8888aa;
+  --text-muted: #55556a;
+  --border: #2a2a45;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 8px 32px rgba(108, 92, 231, 0.25);
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
-.tvbox-app { min-height: 100vh; display: flex; flex-direction: column; background: #1a1a2e; color: #eee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 
-/* 导航栏 */
-.tvbox-nav { display: flex; background: #16213e; padding: 8px; gap: 4px; position: sticky; top: 0; z-index: 10; }
-.tvbox-nav button { flex: 1; padding: 8px 0; border: none; background: transparent; color: #888; font-size: 14px; border-radius: 6px; cursor: pointer; transition: all .2s; }
-.tvbox-nav button.active { background: #e94560; color: #fff; font-weight: bold; }
+body { background: var(--bg-primary); }
 
-/* 源选择 */
-.tvbox-sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; background: #16213e; border-bottom: 1px solid #2a2a4a; }
-.tvbox-sources button { padding: 5px 12px; border: 1px solid #333; background: #1a1a2e; color: #aaa; border-radius: 16px; font-size: 12px; cursor: pointer; transition: all .2s; }
-.tvbox-sources button.active { background: #e94560; color: #fff; border-color: #e94560; }
+/* ===== 顶部导航 ===== */
+.tvbox-app { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
 
-/* 内容区 */
-.tvbox-content { flex: 1; overflow-y: auto; padding: 12px; }
+.tvbox-header { background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 0 16px; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); }
+.tvbox-header-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 56px; gap: 16px; }
 
-/* 区块标题 */
-.tvbox-section { margin-bottom: 20px; }
-.tvbox-section-title { font-size: 15px; font-weight: bold; color: #e94560; margin-bottom: 10px; padding-left: 4px; border-left: 3px solid #e94560; }
+.tvbox-logo { font-size: 16px; font-weight: 700; color: var(--accent-light); letter-spacing: 0.5px; flex-shrink: 0; }
 
-/* 网格 */
-.tvbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+.tvbox-nav { display: flex; gap: 4px; }
+.tvbox-nav button { padding: 6px 16px; border: none; background: transparent; color: var(--text-secondary); font-size: 14px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition); font-weight: 500; }
+.tvbox-nav button:hover { color: var(--text-primary); background: var(--bg-card); }
+.tvbox-nav button.active { background: var(--accent); color: #fff; }
 
-/* 卡片 */
-.tvbox-card { cursor: pointer; transition: transform .2s; }
-.tvbox-card:hover { transform: translateY(-2px); }
-.tvbox-cover { position: relative; background: #2a2a4a; border-radius: 6px; overflow: hidden; aspect-ratio: 2/3; }
-.tvbox-cover img { width: 100%; height: 100%; object-fit: cover; }
-.tvbox-tag { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 10px; padding: 2px 5px; border-radius: 3px; }
-.tvbox-src-tag { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(233,69,96,.85); color: #fff; font-size: 10px; text-align: center; padding: 2px; }
-.tvbox-name { font-size: 12px; margin-top: 6px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+/* ===== 源选择器 ===== */
+.tvbox-source-bar { background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+.tvbox-source-inner { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.tvbox-source-inner::-webkit-scrollbar { display: none; }
 
-/* 分类标签 */
-.tvbox-cat-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.tvbox-cat-tabs button { padding: 6px 14px; border: 1px solid #333; background: #1a1a2e; color: #aaa; border-radius: 16px; font-size: 13px; cursor: pointer; }
-.tvbox-cat-tabs button.active { background: #e94560; color: #fff; border-color: #e94560; }
+.tvbox-source-label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; margin-right: 4px; }
+.tvbox-source-btn { padding: 5px 14px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); border-radius: 20px; font-size: 12px; cursor: pointer; transition: var(--transition); white-space: nowrap; }
+.tvbox-source-btn:hover { border-color: var(--accent); color: var(--accent-light); }
+.tvbox-source-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* 搜索栏 */
-.tvbox-search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
-.tvbox-search-bar input { flex: 1; padding: 10px 14px; background: #2a2a4a; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
-.tvbox-search-bar input:focus { border-color: #e94560; }
-.tvbox-search-bar button { padding: 10px 20px; background: #e94560; border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; }
+/* ===== 内容区 ===== */
+.tvbox-content { flex: 1; max-width: 1200px; width: 100%; margin: 0 auto; padding: 20px 16px; }
 
-/* 分页 */
-.tvbox-page { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 16px; padding: 10px; }
-.tvbox-page button { padding: 7px 16px; background: #2a2a4a; border: 1px solid #333; color: #aaa; border-radius: 6px; cursor: pointer; font-size: 13px; }
-.tvbox-page button:disabled { opacity: .4; cursor: not-allowed; }
-.tvbox-page span { color: #888; font-size: 13px; }
+/* ===== 分类/搜索栏 ===== */
+.tvbox-controls { margin-bottom: 20px; }
 
-/* 状态 */
-.tvbox-loading, .tvbox-empty, .tvbox-error { text-align: center; padding: 40px 0; color: #888; font-size: 14px; }
-.tvbox-error { color: #e94560; }
+.tvbox-cat-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tvbox-cat-tabs button { padding: 7px 18px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary); border-radius: 20px; font-size: 13px; cursor: pointer; transition: var(--transition); }
+.tvbox-cat-tabs button:hover { border-color: var(--accent); color: var(--accent-light); }
+.tvbox-cat-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* 详情弹窗 */
-.tvbox-modal { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
-.tvbox-detail { background: #1a1a2e; border-radius: 12px; width: 100%; max-width: 480px; max-height: 85vh; overflow-y: auto; padding: 20px; position: relative; }
-.tvbox-close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; background: #2a2a4a; border: none; color: #888; font-size: 16px; cursor: pointer; line-height: 1; }
-.tvbox-detail-header { display: flex; gap: 14px; margin-bottom: 14px; }
-.tvbox-detail-pic { width: 100px; height: 140px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #2a2a4a; }
-.tvbox-detail-info { flex: 1; min-width: 0; }
-.tvbox-detail-info h3 { font-size: 15px; color: #fff; margin-bottom: 6px; line-height: 1.4; }
-.tvbox-detail-info p { font-size: 12px; color: #888; margin-bottom: 4px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tvbox-score { color: #e94560 !important; font-weight: bold; }
-.tvbox-detail-desc { font-size: 13px; color: #aaa; line-height: 1.6; margin-bottom: 14px; max-height: 100px; overflow-y: auto; }
+.tvbox-search-wrap { display: flex; gap: 8px; }
+.tvbox-search-wrap input { flex: 1; padding: 10px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; outline: none; transition: var(--transition); }
+.tvbox-search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.tvbox-search-wrap input::placeholder { color: var(--text-muted); }
+.tvbox-search-wrap button { padding: 10px 22px; background: var(--accent); border: none; border-radius: var(--radius-md); color: #fff; font-size: 14px; cursor: pointer; transition: var(--transition); font-weight: 600; }
+.tvbox-search-wrap button:hover { background: var(--accent-light); transform: translateY(-1px); }
 
-/* 播放源 */
-.tvbox-play-source { margin-bottom: 14px; }
-.tvbox-source-name { font-size: 13px; color: #e94560; margin-bottom: 8px; font-weight: bold; }
+/* ===== 区块 ===== */
+.tvbox-section { margin-bottom: 32px; }
+.tvbox-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.tvbox-section-title { font-size: 15px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.tvbox-section-title::before { content: ''; display: block; width: 3px; height: 16px; background: var(--accent); border-radius: 2px; }
+.tvbox-section-more { font-size: 12px; color: var(--text-muted); cursor: pointer; transition: var(--transition); }
+.tvbox-section-more:hover { color: var(--accent-light); }
+
+/* ===== 网格 ===== */
+.tvbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 16px; }
+
+/* ===== 卡片 ===== */
+.tvbox-card { cursor: pointer; transition: var(--transition); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-card); }
+.tvbox-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); }
+.tvbox-cover { position: relative; background: var(--bg-secondary); border-radius: var(--radius-md); overflow: hidden; aspect-ratio: 2/3; }
+.tvbox-cover img { width: 100%; height: 100%; object-fit: cover; transition: var(--transition); }
+.tvbox-card:hover .tvbox-cover img { transform: scale(1.05); }
+.tvbox-card-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%); opacity: 0; transition: var(--transition); display: flex; align-items: flex-end; padding: 10px; }
+.tvbox-card:hover .tvbox-card-overlay { opacity: 1; }
+.tvbox-play-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.tvbox-tag { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.7); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; backdrop-filter: blur(4px); }
+.tvbox-tag-src { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(108,92,231,0.9)); color: #fff; font-size: 10px; text-align: center; padding: 4px 6px; }
+.tvbox-name { font-size: 13px; color: var(--text-primary); margin-top: 8px; padding: 0 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+
+/* ===== 状态 ===== */
+.tvbox-loading { text-align: center; padding: 60px 0; color: var(--text-secondary); font-size: 14px; }
+.tvbox-loading::after { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: tvbox-spin 0.8s linear infinite; margin-left: 10px; vertical-align: middle; }
+@keyframes tvbox-spin { to { transform: rotate(360deg); } }
+.tvbox-empty, .tvbox-error { text-align: center; padding: 60px 0; color: var(--text-muted); font-size: 14px; }
+.tvbox-error { color: #e74c3c; }
+
+/* ===== 分页 ===== */
+.tvbox-page { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding: 16px; }
+.tvbox-page button { padding: 8px 20px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; transition: var(--transition); }
+.tvbox-page button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-light); }
+.tvbox-page button:disabled { opacity: 0.35; cursor: not-allowed; }
+.tvbox-page span { color: var(--text-muted); font-size: 13px; }
+
+/* ===== 详情弹窗 ===== */
+.tvbox-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.tvbox-detail { background: var(--bg-secondary); border-radius: var(--radius-lg); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; position: relative; animation: slideUp 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.tvbox-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 50%; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); font-size: 16px; cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; z-index: 1; }
+.tvbox-close:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tvbox-detail-pic { width: 100%; height: 280px; object-fit: cover; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--bg-card); }
+.tvbox-detail-body { padding: 20px; }
+.tvbox-detail-info h3 { font-size: 20px; color: var(--text-primary); margin-bottom: 10px; font-weight: 700; }
+.tvbox-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tvbox-meta-item { font-size: 12px; color: var(--text-secondary); background: var(--bg-card); padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); }
+.tvbox-score { color: #f39c12 !important; font-weight: 700; border-color: rgba(243, 156, 18, 0.3) !important; }
+.tvbox-detail-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 20px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ===== 播放源 ===== */
+.tvbox-play-source { margin-bottom: 16px; }
+.tvbox-source-name { font-size: 13px; color: var(--accent-light); margin-bottom: 10px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.tvbox-source-name::before { content: '▶'; font-size: 10px; }
 .tvbox-episodes { display: flex; flex-wrap: wrap; gap: 6px; }
-.tvbox-ep-btn { padding: 5px 10px; background: #2a2a4a; border: 1px solid #333; color: #ccc; border-radius: 5px; font-size: 12px; cursor: pointer; transition: all .2s; }
-.tvbox-ep-btn:hover { background: #e94560; color: #fff; border-color: #e94560; }
-.tvbox-no-play { text-align: center; color: #666; padding: 20px; font-size: 13px; }
+.tvbox-ep-btn { padding: 6px 12px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; transition: var(--transition); }
+.tvbox-ep-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); transform: translateY(-1px); }
+.tvbox-no-play { text-align: center; color: var(--text-muted); padding: 24px; font-size: 13px; }
 
-/* 播放器 */
-.tvbox-player-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.tvbox-player-box { background: #000; border-radius: 10px; width: 100%; max-width: 900px; position: relative; }
-.tvbox-close-player { position: absolute; top: -36px; right: 0; background: #333; border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 16px; z-index: 1; }
-.tvbox-player-title { padding: 10px 14px; color: #fff; font-size: 14px; background: #1a1a2e; border-radius: 10px 10px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tvbox-player-error { padding: 30px; text-align: center; color: #888; }
-.tvbox-player-error p { margin-bottom: 10px; font-size: 13px; }
-.tvbox-player-error .tvbox-url-hint { word-break: break-all; color: #555; font-size: 11px; }
-.tvbox-player-error button { padding: 8px 20px; background: #e94560; border: none; border-radius: 6px; color: #fff; cursor: pointer; }
+/* ===== 播放器 ===== */
+.tvbox-player-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s ease; }
+.tvbox-player-box { background: #000; border-radius: var(--radius-lg); width: 100%; max-width: 1000px; position: relative; overflow: hidden; }
+.tvbox-player-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--bg-secondary); }
+.tvbox-player-title { font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; padding-right: 12px; }
+.tvbox-close-player { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); font-size: 16px; cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tvbox-close-player:hover { background: #e74c3c; color: #fff; border-color: #e74c3c; }
+.tvbox-player-error { padding: 40px; text-align: center; color: var(--text-secondary); }
+.tvbox-player-error p { margin-bottom: 12px; font-size: 14px; }
+.tvbox-player-error button { padding: 10px 24px; background: var(--accent); border: none; border-radius: var(--radius-sm); color: #fff; font-size: 14px; cursor: pointer; transition: var(--transition); }
+.tvbox-player-error button:hover { background: var(--accent-light); }
+.tvbox-video-wrap { position: relative; background: #000; }
+.tvbox-video-wrap video { width: 100%; max-height: 70vh; display: block; background: #000; }
+
+/* ===== 评分标签 ===== */
+.tvbox-score-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #f39c12; font-weight: 700; }
+.tvbox-score-tag::before { content: '★'; }
+
+/* ===== 响应式 ===== */
+@media (max-width: 640px) {
+  .tvbox-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+  .tvbox-detail-pic { height: 200px; }
+  .tvbox-detail { max-height: 95vh; }
+  .tvbox-source-inner { padding: 10px 12px; }
+}

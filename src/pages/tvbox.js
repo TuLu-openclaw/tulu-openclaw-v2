@@ -1,7 +1,6 @@
 import './tvbox.css';
 import '../style/movie-tool.css';
 
-
 const TVBOX_SOURCES = [
   { key: 'lziapi', name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod', type: 'tvbox' },
   { key: 'bfzyapi', name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod', type: 'tvbox' },
@@ -166,7 +165,6 @@ async function playEpisode(episode) {
   S('showPlayer', true);
   render();
 
-  // 通过 Tauri 调用 URL 解析链（tvbox-framework.js 注入的 invoke）
   var rawUrl = S('playingUrl', '');
   var finalUrl = rawUrl;
 
@@ -247,21 +245,17 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function imgError(el) {
-  el.style.display = 'none';
-}
-
 function renderVodCard(vod) {
   var catTag = vod._cat ? '<span class="tvbox-tag">' + esc(vod._cat) + '</span>' : '';
-  var srcTag = vod._src ? '<span class="tvbox-src-tag">' + esc(vod._src) + '</span>' : '';
+  var srcTag = vod._src ? '<span class="tvbox-tag-src">' + esc(vod._src) + '</span>' : '';
   var tag = catTag || srcTag;
   var name = '<div class="tvbox-name">' + esc(vod.vod_name) + '</div>';
-  var img = '<div class="tvbox-cover"><img src="' + esc(vod.vod_pic) + '" alt="' + esc(vod.vod_name) + '" loading="lazy" onerror="window.__tvbox.imgErr(this)"/>' + tag + '</div>';
+  var img = '<div class="tvbox-cover"><img src="' + esc(vod.vod_pic) + '" alt="' + esc(vod.vod_name) + '" loading="lazy" onerror="window.__tvbox.imgErr(this)"/>' + tag + '<div class="tvbox-card-overlay"><div class="tvbox-play-icon">▶</div></div></div>';
   return '<div class="tvbox-card" onclick="window.__tvbox.detail(\'' + esc(String(vod.vod_id)) + '\')">' + img + name + '</div>';
 }
 
 function renderHome() {
-  if (S('loading', false)) return '<div class="tvbox-loading">加载中...</div>';
+  if (S('loading', false)) return '<div class="tvbox-loading">加载中</div>';
   if (S('errorMsg', '')) return '<div class="tvbox-error">' + esc(S('errorMsg', '')) + '</div>';
   var list = S('homeList', []);
   if (list.length === 0) return '<div class="tvbox-empty">当前源暂无数据，切换其他源试试</div>';
@@ -274,19 +268,17 @@ function renderHome() {
     }
     items = items.slice(0, 6);
     if (!items.length) continue;
-    html += '<div class="tvbox-section"><div class="tvbox-section-title">' + esc(cat.type_name) + '</div><div class="tvbox-grid">';
-    for (var wi = 0; wi < items.length; wi++) html += renderVodCard(items[wi]);
-    html += '</div></div>';
+    html += '<div class="tvbox-section"><div class="tvbox-section-header"><div class="tvbox-section-title">' + esc(cat.type_name) + '</div></div><div class="tvbox-grid">' + items.map(function(v) { return renderVodCard(v); }).join('') + '</div></div>';
   }
   return html;
 }
 
 function renderCategory() {
-  if (S('loading', false)) return '<div class="tvbox-loading">加载中...</div>';
+  if (S('loading', false)) return '<div class="tvbox-loading">加载中</div>';
   if (S('errorMsg', '')) return '<div class="tvbox-error">' + esc(S('errorMsg', '')) + '</div>';
   var list = S('categoryList', []);
-  var html = '';
-  for (var vi = 0; vi < list.length; vi++) html += renderVodCard(list[vi]);
+  if (!list.length) return '<div class="tvbox-empty">暂无内容</div>';
+  var html = '<div class="tvbox-grid">' + list.map(function(v) { return renderVodCard(v); }).join('') + '</div>';
   if (list.length) {
     html += '<div class="tvbox-page"><button' + (S('currentPage', 1) <= 1 ? ' disabled' : '') + ' onclick="window.__tvbox.goPage(' + (S('currentPage', 1) - 1) + ')">上一页</button><span>' + S('currentPage', 1) + ' / ' + S('totalPages', 1) + '</span><button' + (S('currentPage', 1) >= S('totalPages', 1) ? ' disabled' : '') + ' onclick="window.__tvbox.goPage(' + (S('currentPage', 1) + 1) + ')">下一页</button></div>';
   }
@@ -294,13 +286,11 @@ function renderCategory() {
 }
 
 function renderSearch() {
-  if (S('loading', false)) return '<div class="tvbox-loading">搜索中...</div>';
+  if (S('loading', false)) return '<div class="tvbox-loading">搜索中</div>';
   if (S('errorMsg', '')) return '<div class="tvbox-error">' + esc(S('errorMsg', '')) + '</div>';
   var list = S('searchList', []);
-  var html = '';
-  for (var vi = 0; vi < list.length; vi++) html += renderVodCard(list[vi]);
-  if (list.length === 0 && S('searchQuery', '')) html = '<div class="tvbox-empty">未找到相关影片</div>';
-  return html;
+  if (!list.length) return '<div class="tvbox-empty">未找到相关影片</div>';
+  return '<div class="tvbox-grid">' + list.map(function(v) { return renderVodCard(v); }).join('') + '</div>';
 }
 
 function renderEpisodes() {
@@ -324,15 +314,35 @@ function renderEpisodes() {
 function renderDetail() {
   var v = S('detailVod', null);
   if (!v) return '';
-  var score = v.vod_score ? '<p class="tvbox-score">评分: ' + esc(v.vod_score) + '</p>' : '';
-  return '<div class="tvbox-modal" onclick="if(event.target===this)window.__tvbox.closeDetail()"><div class="tvbox-detail"><button class="tvbox-close" onclick="window.__tvbox.closeDetail()">✕</button><div class="tvbox-detail-header"><img class="tvbox-detail-pic" src="' + esc(v.vod_pic) + '" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 80 120%22><rect fill=%22%23333%22 width=%2280%22 height=%22120%22/></svg>\'" /><div class="tvbox-detail-info"><h3>' + esc(v.vod_name) + '</h3><p>' + esc(v.vod_actor || '未知演员') + '</p><p>' + esc(v.vod_director || '未知导演') + '</p><p>' + esc((v.vod_area || '') + ' ' + (v.vod_year || '')) + '</p>' + score + '</div></div><div class="tvbox-detail-desc">' + esc(v.vod_content || '暂无简介') + '</div>' + renderEpisodes() + '</div></div>';
+  var scoreHtml = v.vod_score ? '<span class="tvbox-meta-item tvbox-score">' + esc(v.vod_score) + '</span>' : '';
+  var actorHtml = v.vod_actor && v.vod_actor !== '未知演员' ? '<span class="tvbox-meta-item">主演: ' + esc(v.vod_actor) + '</span>' : '';
+  var directorHtml = v.vod_director && v.vod_director !== '未知导演' ? '<span class="tvbox-meta-item">导演: ' + esc(v.vod_director) + '</span>' : '';
+  var areaHtml = v.vod_area ? '<span class="tvbox-meta-item">' + esc(v.vod_area) + '</span>' : '';
+  var yearHtml = v.vod_year ? '<span class="tvbox-meta-item">' + esc(v.vod_year) + '</span>' : '';
+  return '<div class="tvbox-modal" onclick="if(event.target===this)window.__tvbox.closeDetail()">' +
+    '<div class="tvbox-detail" onclick="event.stopPropagation()">' +
+    '<button class="tvbox-close" onclick="window.__tvbox.closeDetail()">✕</button>' +
+    '<img class="tvbox-detail-pic" src="' + esc(v.vod_pic) + '" onerror="this.src=\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 80 120%22><rect fill=%22%231e1e30%22 width=%2280%22 height=%22120%22/></svg>\'" />' +
+    '<div class="tvbox-detail-body">' +
+    '<div class="tvbox-detail-info"><h3>' + esc(v.vod_name) + '</h3>' +
+    '<div class="tvbox-meta">' + actorHtml + directorHtml + areaHtml + yearHtml + scoreHtml + '</div></div>' +
+    '<div class="tvbox-detail-desc">' + esc(v.vod_content || '暂无简介') + '</div>' +
+    renderEpisodes() + '</div></div></div>';
 }
 
 function renderPlayer() {
   if (!S('showPlayer', false)) return '';
   var err = S('playerError', '');
-  var errHtml = err ? '<div class="tvbox-player-error"><p>' + esc(err) + '</p><p class="tvbox-url-hint">地址: ' + esc(S('playingUrl', '')) + '</p><button onclick="window.__tvbox.openBrowser()">在浏览器打开</button></div>' : '';
-  return '<div class="tvbox-player-overlay"><div class="tvbox-player-box"><button class="tvbox-close-player" onclick="window.__tvbox.closePlayer()">✕</button><div class="tvbox-player-title">' + esc(S('playingTitle', '')) + '</div>' + errHtml + '<video id="tvbox-video" controls autoplay style="width:100%;max-height:70vh;background:#000;display:' + (err ? 'none' : 'block') + '"></video></div></div>';
+  var errHtml = err ? '<div class="tvbox-player-error"><p>' + esc(err) + '</p><button onclick="window.__tvbox.openBrowser()">在浏览器打开</button></div>' : '';
+  return '<div class="tvbox-player-overlay">' +
+    '<div class="tvbox-player-box">' +
+    '<div class="tvbox-player-header">' +
+    '<div class="tvbox-player-title">' + esc(S('playingTitle', '')) + '</div>' +
+    '<button class="tvbox-close-player" onclick="window.__tvbox.closePlayer()">✕</button></div>' +
+    errHtml +
+    '<div class="tvbox-video-wrap" style="display:' + (err ? 'none' : 'block') + '">' +
+    '<video id="tvbox-video" controls autoplay style="width:100%;background:#000;display:block;"></video></div>' +
+    '</div></div>';
 }
 
 function render() {
@@ -347,15 +357,15 @@ function render() {
       var curCat = S('currentCategory', { type_id: '1', type_name: '电影' });
       catHtml += '<button class="' + (cat.type_id === curCat.type_id ? 'active' : '') + '" onclick="window.__tvbox.setCat(\'' + cat.type_id + '\')">' + esc(cat.type_name) + '</button>';
     }
-    catExtra = '<div class="tvbox-cat-tabs">' + catHtml + '</div>';
+    catExtra = '<div class="tvbox-controls"><div class="tvbox-cat-tabs">' + catHtml + '</div></div>';
   } else if (tab === 'search') {
-    catExtra = '<div class="tvbox-search-bar"><input type="text" placeholder="输入影片名称搜索" value="' + esc(S('searchQuery', '')) + '" onkeyup="if(event.key===\'Enter\')window.__tvbox.search()" oninput="window.__tvbox.setQuery(this.value)" /><button onclick="window.__tvbox.search()">搜索</button></div>';
+    catExtra = '<div class="tvbox-controls"><div class="tvbox-search-wrap"><input type="text" placeholder="输入影片名称搜索" value="' + esc(S('searchQuery', '')) + '" onkeyup="if(event.key===\'Enter\')window.__tvbox.search()" oninput="window.__tvbox.setQuery(this.value)" /><button onclick="window.__tvbox.search()">搜索</button></div></div>';
   }
 
   var srcBtns = '';
   for (var si = 0; si < TVBOX_SOURCES.length; si++) {
     var src = TVBOX_SOURCES[si];
-    srcBtns += '<button class="' + (src.key === S('activeSource', 'lziapi') ? 'active' : '') + '" onclick="window.__tvbox.switchSrc(\'' + src.key + '\')">' + src.name + '</button>';
+    srcBtns += '<button class="tvbox-source-btn ' + (src.key === S('activeSource', 'lziapi') ? 'active' : '') + '" onclick="window.__tvbox.switchSrc(\'' + src.key + '\')">' + src.name + '</button>';
   }
 
   var tabContent;
@@ -363,7 +373,19 @@ function render() {
   else if (tab === 'category') tabContent = renderCategory();
   else tabContent = renderSearch();
 
-  el.innerHTML = '<div class="tvbox-nav"><button class="' + (tab === 'home' ? 'active' : '') + '" onclick="window.__tvbox.tab(\'home\')">🏠 首页</button><button class="' + (tab === 'category' ? 'active' : '') + '" onclick="window.__tvbox.tab(\'category\')">📺 分类</button><button class="' + (tab === 'search' ? 'active' : '') + '" onclick="window.__tvbox.tab(\'search\')">🔍 搜索</button></div><div class="tvbox-sources">' + srcBtns + '</div><div class="tvbox-content">' + catExtra + tabContent + '</div>' + renderDetail() + renderPlayer();
+  el.innerHTML =
+    '<div class="tvbox-header"><div class="tvbox-header-inner">' +
+    '<div class="tvbox-logo">🎬 屠戮影视</div>' +
+    '<div class="tvbox-nav">' +
+    '<button class="' + (tab === 'home' ? 'active' : '') + '" onclick="window.__tvbox.tab(\'home\')">首页</button>' +
+    '<button class="' + (tab === 'category' ? 'active' : '') + '" onclick="window.__tvbox.tab(\'category\')">分类</button>' +
+    '<button class="' + (tab === 'search' ? 'active' : '') + '" onclick="window.__tvbox.tab(\'search\')">搜索</button>' +
+    '</div></div></div>' +
+    '<div class="tvbox-source-bar"><div class="tvbox-source-inner">' +
+    '<span class="tvbox-source-label">线路</span>' + srcBtns +
+    '</div></div>' +
+    '<div class="tvbox-content">' + catExtra + tabContent + '</div>' +
+    renderDetail() + renderPlayer();
 }
 
 window.__tvbox = {

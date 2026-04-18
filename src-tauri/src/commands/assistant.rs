@@ -456,8 +456,10 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
     let escaped = url.replace("'", "''");
     let ps = format!(
         r#"try {{
+            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
             $r = Invoke-WebRequest '{}' -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' -Headers @{{'Accept'='application/json, text/plain, */*'; 'Accept-Language'='zh-CN,zh;q=0.9'}} -TimeoutSec 15 -UseBasicParsing -ErrorAction Stop
-            Write-Output $r.Content
+            $bytes = [System.Text.Encoding]::GetEncoding('UTF-8').GetBytes($r.Content)
+            Write-Output ([System.Text.Encoding]::UTF8.GetString($bytes))
         }} catch {{
             Write-Output ('VOD_ERROR:' + $_.Exception.Message)
         }}"#,
@@ -465,6 +467,7 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
     );
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", &ps])
+        .creation_flags(0x08000000)
         .output()
         .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
