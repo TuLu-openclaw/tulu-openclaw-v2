@@ -189,12 +189,22 @@ function getTvboxSourceName(api) {
 // 初始化自定义 TVBox 列表
 _customTvbox = getCustomTvbox()
 
+// 每个 VOD 源的分类映射（CMS type_id 体系各异，必须按源区分）
+// key: source key, value: { movie, tv, variety, anime, short } 对应的 type_id
+const VOD_TYPE_MAP = {
+  bfzy:   { movie: 20, tv: 30, variety: 45, anime: 39, short: 58 },  // 暴风资源
+  lziapi: { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 6  },  // 量子资源
+  xsd:    { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 星之尘
+  zyku:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 1080资源
+  tyys:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 天涯资源
+}
+
 const VOD_CATEGORIES = [
-  { id: 'movie',   name: '电影',   typeId: '1' },
-  { id: 'tv',      name: '电视剧', typeId: '2' },
-  { id: 'variety', name: '综艺',   typeId: '3' },
-  { id: 'anime',   name: '动漫',   typeId: '4' },
-  { id: 'short',   name: '短剧',   typeId: '5' },
+  { id: 'movie',   name: '电影' },
+  { id: 'tv',      name: '电视剧' },
+  { id: 'variety', name: '综艺' },
+  { id: 'anime',   name: '动漫' },
+  { id: 'short',   name: '短剧' },
 ]
 
 const HLS_CDN = './hls.min.js'
@@ -567,11 +577,18 @@ function initApp(el) {
 
   async function loadList() {
     const source = VOD_SOURCES[src]
+    const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
     const catObj = VOD_CATEGORIES.find(c => c.id === cat)
+    const typeId = typeMap[cat] ?? 1
     let json = { list: [], total: 0 }
-    try { json = await fetchJSON(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
-    if (!json.list) {
-      try { json = await fetchJsonp(source.api + '?ac=list&t=' + catObj.typeId + '&pg=' + page) } catch {}
+    try {
+      try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {}
+      if (!json.total) { try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
+      if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
+    } catch {}
+    // 如果列表为空（该 typeId 无数据），尝试全量接口拉取
+    if (!json.list || !json.list.length) {
+      try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {}
     }
     renderVodGrid(json.list || [], json.total || 0)
   }
