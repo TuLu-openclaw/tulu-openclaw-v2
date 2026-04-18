@@ -379,6 +379,7 @@ function initApp(el) {
           <button class="tvbox-mode-btn" data-mode="tvboxjson">🔗 TVBox JSON</button>
         </div>
         <button id="t-api-manage" title="TVBox API 管理" style="background:none;border:none;color:#888;cursor:pointer;font-size:16px;padding:4px 6px;border-radius:6px">⚙️</button>
+        <button id="t-url-input" title="输入链接解析" style="background:none;border:none;color:#a78bfa;cursor:pointer;font-size:15px;padding:4px 6px;border-radius:6px">🔗</button>
       </div>
       <div class="tvbox-search">
         <input type="text" id="t-search" placeholder="搜索电影、剧集、综艺、动漫..." />
@@ -453,6 +454,9 @@ function initApp(el) {
 
   // API 管理按钮
   el.querySelector('#t-api-manage').addEventListener('click', showApiManage)
+
+  // 链接输入按钮
+  el.querySelector('#t-url-input').addEventListener('click', showUrlInput)
 
   renderCatTabs()
   renderSrcTabs()
@@ -913,11 +917,23 @@ function initApp(el) {
     const hist = getPlayHistory().find(h => h.id == item.vod_id && h.source === sourceName)
     playingEp = null
 
+    // 优先选择包含直接 m3u8 的源（lzm3u8 > liangzi 的 share/xxx）
+    let preferredSi = 0
+    if (episodes.length > 1) {
+      const scored = episodes.map((e, i) => {
+        const hasDirectM3u8 = e.urls.some(u => u.url.includes('.m3u8') && !u.url.includes('/share/'))
+        const hasShare = e.urls.some(u => u.url.includes('/share/'))
+        return { i, score: hasDirectM3u8 ? 2 : hasShare ? 1 : 0 }
+      })
+      scored.sort((a, b) => b.score - a.score)
+      preferredSi = scored[0].i
+    }
+
     const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">← 返回列表</button></div>'
-    const firstUrls = episodes[0]?.urls || []
+    const firstUrls = episodes[preferredSi]?.urls || []
     const siHtml = episodes.length > 1
       ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">选择源：</span>' +
-          episodes.map((e, i) => '<button class="tvbox-tab' + (i===0?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + '</button>').join('') +
+          episodes.map((e, i) => '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + (i===preferredSi?' ★':'') + '</button>').join('') +
         '</div>'
       : ''
 
@@ -1087,6 +1103,297 @@ function initApp(el) {
       '<span class="tvbox-page-info">第 ' + page + ' / ' + total + ' 页</span>' +
       '<button class="tvbox-page-btn" data-page="' + next + '">下一页 ▶</button>' +
     '</div>'
+  }
+
+  // ── 悬浮播放器（可拖拽/最小化/置顶）───────────────────────────────────
+  let _floatState = null   // { wrap, title, pinned, minimized, h, w, x, y }
+
+  function openFloatPlayer(name, url, id, source, epName, pic) {
+    closeFloatPlayer()
+
+    // 优先选择直接 m3u8（非 /share/ 的）
+    const useUrl = pickDirectUrl(url)
+
+    const wrap = document.createElement('div')
+    wrap.className = 'tvbox-float-wrap'
+    wrap.style.cssText = 'right:20px;bottom:80px;width:420px;'
+
+    const isM3u8 = useUrl.includes('.m3u8')
+    const isMp4  = useUrl.includes('.mp4')
+    const canEmbed = isM3u8 || isMp4
+
+    wrap.innerHTML = `
+      <div class="tvbox-float-header">
+        <span class="tvbox-float-title">${escHtml(name)}</span>
+        <button class="tvbox-float-ctrl min-btn" id="_fmin" title="最小化">─</button>
+        <button class="tvbox-float-ctrl pin-btn" id="_fpin" title="置顶">📌</button>
+        <button class="tvbox-float-ctrl close" id="_fclose" title="关闭">✕</button>
+      </div>
+      <div class="tvbox-float-body" id="_fbody">
+        ${canEmbed ? `<div class="tvbox-float-video-wrap" id="_fvid"></div>` :
+          `<div style="aspect-ratio:16/9;background:#000;display:flex;align-items:center;justify-content:center;color:#6b6b8a;font-size:13px">
+            <div style="text-align:center">
+              <div style="margin-bottom:8px">⚠️ 非直链，无法直接播放</div>
+              <div style="font-size:11px;color:#555">m3u8/MP4 直链才可播放</div>
+            </div>
+          </div>`}
+      </div>
+      <div class="tvbox-float-url-bar">
+        <a href="${escHtml(useUrl)}" target="_blank" rel="noopener" id="_fext" title="${escHtml(useUrl)}">${escHtml(useUrl)}</a>
+        <button class="tvbox-float-ctrl" id="_fcopy" title="复制链接" style="font-size:10px;width:22px;height:22px">📋</button>
+      </div>`
+
+    document.body.appendChild(wrap)
+    _floatState = {
+      wrap, pinned: false, minimized: false,
+      h: wrap.offsetHeight, w: wrap.offsetWidth,
+      x: window.innerWidth - 420 - 20,
+      y: window.innerHeight - 80 - (canEmbed ? Math.round(420 * 9/16 + 120) : 120)
+    }
+
+    // 拖拽
+    const hdr = wrap.querySelector('.tvbox-float-header')
+    hdr.addEventListener('mousedown', onFloatDragStart)
+    hdr.addEventListener('touchstart', onFloatDragStart, { passive: false })
+
+    // 控制按钮
+    wrap.querySelector('#_fclose').addEventListener('click', closeFloatPlayer)
+    wrap.querySelector('#_fmin').addEventListener('click', () => toggleFloatMin())
+    wrap.querySelector('#_fpin').addEventListener('click', () => toggleFloatPin())
+    wrap.querySelector('#_fcopy')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(useUrl).catch(() => {})
+    })
+
+    // 播放视频
+    if (canEmbed) {
+      if (isM3u8) loadVideoIntoFloat(useUrl)
+      else loadMp4IntoFloat(useUrl)
+    }
+
+    // ESC 关闭
+    document.addEventListener('keydown', onFloatEsc)
+  }
+
+  function pickDirectUrl(url) {
+    // url 可能是 "集名$url#集名$url" 或单个 url
+    if (!url.includes('#') && !url.includes('$$$')) return url
+    // 找第一个非 /share/ 的 m3u8
+    const parts = url.split('#').filter(Boolean)
+    for (const p of parts) {
+      const idx = p.indexOf('$')
+      const u = idx >= 0 ? p.slice(idx + 1) : p
+      if (u.includes('.m3u8') && !u.includes('/share/')) return u
+    }
+    // 其次选第一个 m3u8
+    for (const p of parts) {
+      const idx = p.indexOf('$')
+      const u = idx >= 0 ? p.slice(idx + 1) : p
+      if (u.includes('.m3u8')) return u
+    }
+    // fallback 第一个 url
+    const idx0 = parts[0].indexOf('$')
+    return idx0 >= 0 ? parts[0].slice(idx0 + 1) : parts[0]
+  }
+
+  async function loadVideoIntoFloat(url) {
+    await ensureHls()
+    const vidWrap = document.querySelector('#_fvid')
+    if (!vidWrap) return
+    const video = document.createElement('video')
+    video.controls = true
+    vidWrap.appendChild(video)
+    if (window.Hls && window.Hls.isSupported()) {
+      const hls = new window.Hls()
+      window._floatHls = hls
+      hls.loadSource(url)
+      hls.attachMedia(video)
+      let timedOut = false
+      const timer = setTimeout(() => {
+        if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
+          vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">m3u8 加载超时（15秒）</div>'
+        }
+      }, 15000)
+      hls.on(window.Hls.Events.ERROR, () => { clearTimeout(timer); window._floatHls = null
+        vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">m3u8 播放失败</div>'
+      })
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => clearTimeout(timer))
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url
+    } else {
+      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">浏览器不支持 HLS</div>'
+    }
+    video.play().catch(() => {})
+  }
+
+  function loadMp4IntoFloat(url) {
+    const vidWrap = document.querySelector('#_fvid')
+    if (!vidWrap) return
+    const video = document.createElement('video')
+    video.controls = true
+    video.src = url
+    vidWrap.appendChild(video)
+    video.play().catch(() => {})
+  }
+
+  function toggleFloatMin() {
+    if (!_floatState) return
+    _floatState.minimized = !_floatState.minimized
+    _floatState.wrap.classList.toggle('minimized', _floatState.minimized)
+    _floatState.wrap.querySelector('#_fmin').textContent = _floatState.minimized ? '□' : '─'
+  }
+
+  function toggleFloatPin() {
+    if (!_floatState) return
+    _floatState.pinned = !_floatState.pinned
+    _floatState.wrap.classList.toggle('pinned', _floatState.pinned)
+    _floatState.wrap.style.zIndex = _floatState.pinned ? '9999999' : '99999'
+    _floatState.wrap.querySelector('#_fpin').classList.toggle('pin-on', _floatState.pinned)
+  }
+
+  let _floatDrag = null
+
+  function onFloatDragStart(e) {
+    if (_floatState && _floatState.minimized) return
+    e.preventDefault()
+    const pt = e.touches ? e.touches[0] : e
+    _floatDrag = {
+      ox: pt.clientX, oy: pt.clientY,
+      sx: _floatState ? _floatState.x : 0,
+      sy: _floatState ? _floatState.y : 0
+    }
+    _floatState?.wrap.classList.add('dragging')
+    document.addEventListener('mousemove', onFloatDragMove)
+    document.addEventListener('mouseup', onFloatDragEnd)
+    document.addEventListener('touchmove', onFloatDragMove, { passive: false })
+    document.addEventListener('touchend', onFloatDragEnd)
+  }
+
+  function onFloatDragMove(e) {
+    if (!_floatDrag) return
+    e.preventDefault()
+    const pt = e.touches ? e.touches[0] : e
+    const dx = pt.clientX - _floatDrag.ox
+    const dy = pt.clientY - _floatDrag.oy
+    if (!_floatState) return
+    _floatState.x = Math.max(0, Math.min(window.innerWidth - _floatState.w, _floatState.sx + dx))
+    _floatState.y = Math.max(0, Math.min(window.innerHeight - _floatState.h, _floatState.sy + dy))
+    _floatState.wrap.style.right = 'auto'
+    _floatState.wrap.style.left = _floatState.x + 'px'
+    _floatState.wrap.style.top = _floatState.y + 'px'
+    _floatState.wrap.style.bottom = 'auto'
+  }
+
+  function onFloatDragEnd() {
+    if (_floatState) _floatState.wrap.classList.remove('dragging')
+    _floatDrag = null
+    document.removeEventListener('mousemove', onFloatDragMove)
+    document.removeEventListener('mouseup', onFloatDragEnd)
+    document.removeEventListener('touchmove', onFloatDragMove)
+    document.removeEventListener('touchend', onFloatDragEnd)
+  }
+
+  function onFloatEsc(e) {
+    if (e.key === 'Escape') closeFloatPlayer()
+  }
+
+  function closeFloatPlayer() {
+    if (window._floatHls) { window._floatHls.destroy(); window._floatHls = null }
+    if (_floatState?.wrap) { _floatState.wrap.remove(); _floatState = null }
+    document.removeEventListener('keydown', onFloatEsc)
+    onFloatDragEnd()
+  }
+
+  // ── 链接输入解析器 ────────────────────────────────────────────────
+  function showUrlInput() {
+    const existing = document.querySelector('.tvbox-url-overlay')
+    if (existing) { existing.remove(); return }
+
+    const overlay = document.createElement('div')
+    overlay.className = 'tvbox-url-overlay'
+    overlay.innerHTML = `
+      <div class="tvbox-url-box">
+        <div class="tvbox-url-title">🔗 链接解析播放</div>
+        <div class="tvbox-url-err" id="_urlerr"></div>
+        <div class="tvbox-url-row">
+          <input id="_urlin" type="url" placeholder="粘贴视频页面 URL、m3u8 直链或分享页链接..." autofocus />
+          <button class="tvbox-url-go" id="_urlgo">解析</button>
+        </div>
+        <div class="tvbox-url-hint">
+          支持：<span>m3u8/MP4 直链</span>、<span>量子/暴风分享页</span>、<span>任意视频页 URL</span><br>
+          提示：解析结果会尽可能提取直链 m3u8，无法提取时显示说明
+        </div>
+        <button class="tvbox-url-cancel" id="_urlcancel">取消</button>
+      </div>`
+
+    document.body.appendChild(overlay)
+
+    const err = overlay.querySelector('#_urlerr')
+    const inp = overlay.querySelector('#_urlin')
+
+    function showErr(msg) {
+      err.textContent = msg
+      err.classList.add('show')
+    }
+    function clearErr() { err.classList.remove('show') }
+
+    async function doUrlParse(rawUrl) {
+      rawUrl = rawUrl.trim()
+      if (!rawUrl) { showErr('请输入链接'); return }
+      if (!/^https?:/i.test(rawUrl)) { showErr('仅支持 http/https 链接'); return }
+      clearErr()
+
+      // 直链直接播
+      if (rawUrl.includes('.m3u8') || rawUrl.includes('.mp4')) {
+        overlay.remove()
+        openFloatPlayer('直链播放', rawUrl)
+        return
+      }
+
+      // 量子/暴风分享页 → 尝试 Rust vod_fetch 提取详情
+      const isLzShare = /\/share\//.test(rawUrl) || rawUrl.includes('v.lfthirtytwo.com') || rawUrl.includes('vip.lz-')
+      if (isLzShare) {
+        overlay.remove()
+        openFloatPlayer('解析中', rawUrl)
+        // 先尝试用 vod_fetch 找详情接口
+        await tryExtractFromSharePage(rawUrl)
+        return
+      }
+
+      // 其他页面 → 显示不支持
+      overlay.remove()
+      openFloatPlayer('无法解析', rawUrl)
+    }
+
+    overlay.querySelector('#_urlgo').addEventListener('click', () => doUrlParse(inp.value))
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') doUrlParse(inp.value) })
+    overlay.querySelector('#_urlcancel').addEventListener('click', () => overlay.remove())
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
+    inp.focus()
+  }
+
+  async function tryExtractFromSharePage(shareUrl) {
+    // 从分享页 URL 反向推断 vod_id，调用详情接口
+    // 分享页格式: https://v.lfthirtytwo.com/share/{hash}
+    // 无法直接提取 hash → vod_id 映射，改用 iframe 尝试
+    const vidWrap = document.querySelector('#_fvid')
+    if (vidWrap) {
+      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">⚠️ 分享页需浏览器打开防盗链</div>'
+    }
+    // 更新说明
+    const urlBar = document.querySelector('.tvbox-float-url-bar')
+    if (urlBar) {
+      const a = urlBar.querySelector('a')
+      if (a) a.href = shareUrl
+    }
+    // 尝试 iframe 播放（可能失败）
+    if (vidWrap && !vidWrap.innerHTML.includes('iframe')) {
+      const safeUrl = /^https?:\/[^\/]+/.test(shareUrl) ? shareUrl : ''
+      const iframe = document.createElement('iframe')
+      iframe.src = safeUrl
+      iframe.style.cssText = 'width:100%;height:100%;border:none;background:#000'
+      iframe.allow = 'autoplay; fullscreen'
+      vidWrap.appendChild(iframe)
+    }
   }
 
   function parsePlaylist(from, url) {
