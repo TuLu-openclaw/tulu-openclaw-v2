@@ -180,7 +180,6 @@ pub fn run() {
             // Hermes Agent
             hermes::check_hermes,
             hermes::check_python,
-            hermes::hermes_auto_install,
             hermes::install_hermes,
             hermes::hermes_gateway_action,
             hermes::hermes_set_gateway_url,
