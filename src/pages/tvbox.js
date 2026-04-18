@@ -1,4 +1,4 @@
-﻿import './tvbox.css';
+import './tvbox.css';
 import '../style/movie-tool.css';
 
 const TVBOX_SOURCES_KEY = 'tvbox_sources_v2';
