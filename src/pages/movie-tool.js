@@ -839,9 +839,18 @@ function initApp(el) {
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
-    else // URL 格式校验
-        var safeUrl = url && /^https?:\/\//i.test(url) ? url : '';
-        body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else {
+      // URL 格式校验
+      var safeUrl = url && /^https?:\/\//i.test(url) ? url : ''
+      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+      // 超时兜底：10 秒内 iframe 未触发 load 事件则显示错误
+      setTimeout(() => {
+        const iframe = document.getElementById('tv-iframe')
+        if (iframe && iframe.style.display !== 'none') {
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+        }
+      }, 10000)
+    }
   }
 
   async function openDetail(id, name, sourceName, pic) {
@@ -944,7 +953,15 @@ function initApp(el) {
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
-    else body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeUrl(url) + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    else {
+      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl(url) + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+      setTimeout(() => {
+        const iframe = document.getElementById('tv-iframe')
+        if (iframe && iframe.style.display !== 'none') {
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl(url) + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+        }
+      }, 10000)
+    }
   }
 
   async function loadVideoPlayer(videoUrl, isM3u8, startProgress) {
@@ -960,10 +977,15 @@ function initApp(el) {
         window._movieHls = hls
         hls.loadSource(videoUrl)
         hls.attachMedia(video)
-        hls.on(window.Hls.Events.ERROR, () => {
-          window._movieHls = null
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
-        })
+        let hlsTimedOut = false
+        const hlsTimer = setTimeout(() => {
+          if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
+            body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 加载超时（15秒）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
+          }
+        }, 15000)
+        hls.on(window.Hls.Events.ERROR, () => { hlsTimedOut = true; clearTimeout(hlsTimer); window._movieHls = null
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>' })
+        hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer) })
         video.addEventListener('timeupdate', () => trackProgress(video))
         video.addEventListener('ended', () => markFinished())
         if (startProgress > 0) video.currentTime = startProgress
