@@ -6,6 +6,7 @@
  */
 import { registerRoute, setDefaultRoute } from '../../router.js'
 import { api } from '../../lib/tauri-api.js'
+import './hermes.css'
 
 // ==================== 引擎元数据 ====================
 export const engineMeta = {
