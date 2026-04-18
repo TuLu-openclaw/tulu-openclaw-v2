@@ -30,12 +30,13 @@ import assistant from './modules/assistant.js'
 import toast from './modules/toast.js'
 import modal from './modules/modal.js'
 import engagement from './modules/engagement.js'
+import engine from './modules/engine.js'
 
 const MODULES = {
   common, sidebar, instance, dashboard, services, settings,
   models, agents, agentDetail, gateway, security, communication, channels,
   memory, cron, usage, skills, chat, chatDebug, setup, about,
-  ext, logs, assistant, toast, modal, engagement,
+  ext, logs, assistant, toast, modal, engagement, engine,
 }
 
 /** 构建所有语言字典 { 'zh-CN': { common: {...}, sidebar: {...}, ... }, ... } */

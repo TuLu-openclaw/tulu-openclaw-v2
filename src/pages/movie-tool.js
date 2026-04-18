@@ -202,6 +202,22 @@ function updatePlayProgress(id, source, progress) {
 function clearPlayHistory() { savePlayHistory([]) }
 
 // ── 网络请求 ──
+// ── XML 解析（CMS 格式影视接口）─────────────────────────────
+function parseXml(raw) {
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(raw, 'text/xml')
+    const list = []
+    for (const item of doc.querySelectorAll('item')) {
+      const vod = {}
+      for (const child of item.children) vod[child.nodeName] = child.textContent
+      list.push(vod)
+    }
+    return { list, total: list.length }
+  } catch { return { list: [], total: 0 } }
+}
+
+// ── 网络请求 ──
 async function fetchJSON(url) {
   const resp = await fetch(url, {
     signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
@@ -209,7 +225,7 @@ async function fetchJSON(url) {
   })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
   const text = await resp.text()
-  try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return {} } }
+  try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return { list: [], total: 0 } } }
 }
 
 // ── NZK 解析 ──
