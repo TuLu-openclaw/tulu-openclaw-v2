@@ -151,15 +151,26 @@ jobs:
 
       - name: Build Tauri app (Windows)
         if: runner.os == 'Windows'
+        env:
+          CARGO_BUILD_JOBS: 2
+          RUSTFLAGS: "-C codegen-units=1"
         run: |
           choco install mingw -y --no-progress --ignore-checksums
-          npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          $t = "${{ matrix.platform.rust_target }}"
+          if ($t -ne "") { npm run tauri build -- --target $t } else { npm run tauri build }
         shell: powershell
 
       - name: Build Tauri app (macOS/Linux)
         if: runner.os != 'Windows'
+        env:
+          CARGO_BUILD_JOBS: 2
+          RUSTFLAGS: "-C codegen-units=1"
         run: |
-          npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          if [ -n "${{ matrix.platform.rust_target }}" ]; then
+            npm run tauri build -- --target ${{ matrix.platform.rust_target }}
+          else
+            npm run tauri build
+          fi
         shell: bash
 
       - name: Upload DMG (macOS)
