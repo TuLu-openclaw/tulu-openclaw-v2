@@ -10,6 +10,7 @@ use std::process::Stdio;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use tokio::process::Command;
+use tokio::time::{Duration, timeout};
 
 const HERMES_DEFAULT_PORT: u16 = 8642;
 
@@ -199,22 +200,25 @@ pub async fn hermes_auto_install(
     if has_uv {
         emit(&app, "✅ uv 已安装");
     } else {
-        emit(&app, "正在通过 pip 安装 uv...");
-        match Command::new("python")
+        emit(&app, "正在通过 pip 安装 uv（最多等待 120 秒）...");
+        match timeout(Duration::from_secs(120), Command::new("python")
             .args(["-m", "pip", "install", "uv", "-U"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output().await
+            .output()).await
         {
-            Ok(o) if o.status.success() => {
+            Ok(Ok(o)) if o.status.success() => {
                 emit(&app, "✅ uv 安装成功");
             }
-            Ok(o) => {
+            Ok(Ok(o)) => {
                 let err = String::from_utf8_lossy(&o.stderr);
                 emit(&app, &format!("⚠️ uv pip 安装返回非零: {}", err));
             }
-            Err(e) => {
-                emit(&app, &format!("⚠️ 无法安装 uv: {}", e));
+            Ok(Err(e)) => {
+                emit(&app, &format!("⚠️ uv 安装命令执行失败: {}", e));
+            }
+            Err(_) => {
+                emit(&app, "⚠️ uv 安装超时（120 秒），请检查网络后重试");
             }
         }
     }
@@ -228,7 +232,7 @@ pub async fn hermes_auto_install(
         emit(&app, "✅ hermes-agent 已安装，跳过安装步骤");
         emit_progress(&app, 80);
     } else {
-        emit(&app, "正在安装 hermes-agent（通过 uv tool）...");
+        emit(&app, "正在安装 hermes-agent（最多等待 300 秒）...");
         emit_progress(&app, 50);
 
         let install_out = if method == "uv-tool" || method == "uv" {
@@ -238,9 +242,8 @@ pub async fn hermes_auto_install(
                 .arg("hermes-agent");
             #[cfg(windows)]
             { cmd.creation_flags(0x08000000); }
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output().await
+            timeout(Duration::from_secs(300), cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output())
         } else {
-            // pip 安装后备
             let mut cmd = Command::new("python");
             cmd.arg("-m")
                 .arg("pip")
@@ -248,11 +251,11 @@ pub async fn hermes_auto_install(
                 .arg("hermes-agent");
             #[cfg(windows)]
             { cmd.creation_flags(0x08000000); }
-            cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output().await
+            timeout(Duration::from_secs(300), cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output())
         };
 
-        match install_out {
-            Ok(o) => {
+        match install_out.await {
+            Ok(Ok(o)) => {
                 let stdout = String::from_utf8_lossy(&o.stdout);
                 let stderr = String::from_utf8_lossy(&o.stderr);
                 if o.status.success() {
@@ -262,8 +265,15 @@ pub async fn hermes_auto_install(
                     return Err(format!("安装失败: {}", stderr));
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 emit(&app, &format!("❌ hermes-agent 安装命令执行失败: {}", e));
+                return Err(format!("安装命令失败: {}", e));
+            }
+            Err(_) => {
+                emit(&app, "❌ hermes-agent 安装超时（300 秒），请检查网络后重试");
+                return Err("安装超时".to_string());
+            }
+        }
                 return Err(format!("安装命令失败: {}", e));
             }
         }

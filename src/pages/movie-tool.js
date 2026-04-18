@@ -71,19 +71,50 @@ function saveCustomTvbox(a) { try { localStorage.setItem(KEY_CUSTOM_TVBOX, JSON.
 function getActiveTvboxKey() { try { return localStorage.getItem(KEY_ACTIVE_TVBOX) || '' } catch { return '' } }
 function setActiveTvboxKey(k) { try { localStorage.setItem(KEY_ACTIVE_TVBOX, k) } catch {} }
 
-// 加载 TVBox API 配置
+// 加载 TVBox API 配置（同时支持 JSON 和 XML，自动检测格式）
 async function loadTvboxConfig(api) {
   if (_tvboxCache[api.key]) return _tvboxCache[api.key]
   try {
     const resp = await fetch(api.url, { signal: AbortSignal.timeout(20000) })
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
-    const config = await resp.json()
+    const text = await resp.text()
+    let config
+    try { config = JSON.parse(text) }
+    catch { config = parseXml(text) }  // XML 格式兜底
+    // 检测是否有效（必须有 list 数组或 total > 0）
+    if (!config || (!(Array.isArray(config.list) ? config.list.length : config.list?.length) && !config.total)) {
+      console.warn('[movie-tool] TVBox config invalid or empty:', api.name, config)
+      return null
+    }
     _tvboxCache[api.key] = config
     return config
   } catch (e) { console.warn('[movie-tool] TVBox load failed:', api.name, e.message); return null }
 }
 
-// 解析 TVBox JSON list → 标准化视频列表
+// ── 解析 CMS 扁平格式（量子/暴风等 CMS API）───────────────────────────────
+// CMS API: config.list 是视频数组，不是分类数组
+function parseCMSList(config) {
+  const result = []
+  for (const v of (config?.list || [])) {
+    const dl = parseTvboxDl(v)
+    result.push({
+      vod_id:       v.vod_id || v.id || v.player_id || '',
+      vod_name:     v.vod_name || v.name || v.title || '',
+      vod_pic:      v.vod_pic || v.pic || v.thumb || '',
+      type_name:    v.type_name || '',
+      vod_actor:    v.vod_actor || v.actor || '',
+      vod_director: v.vod_director || v.director || '',
+      vod_blurb:    v.vod_content || v.content || v.des || '',
+      vod_year:     v.vod_year || v.year || '',
+      vod_area:     v.vod_area || v.area || '',
+      _dl:          dl,
+      _cat:         v.type_name || '',
+    })
+  }
+  return result
+}
+
+// ── 解析 TVBox 嵌套分类格式 ─────────────────────────────────────────────────
 function parseTvboxList(config) {
   const result = []
   for (const cat of (config?.list || [])) {
@@ -108,6 +139,16 @@ function parseTvboxList(config) {
   return result
 }
 
+// ── 统一解析入口（自动检测格式）──────────────────────────────────────────────
+function parseVideoList(config) {
+  if (!config) return []
+  const first = config.list?.[0]
+  // TVBox 嵌套格式：第一个分类对象的 list 属性是数组
+  if (first && Array.isArray(first.list)) return parseTvboxList(config)
+  // CMS 扁平格式（量子/暴风等）：直接是视频数组
+  return parseCMSList(config)
+}
+
 function parseTvboxDl(v) {
   const playFrom = v.vod_play_from || v.play_from || ''
   const playUrl  = v.vod_play_url  || v.play_url  || ''
@@ -128,7 +169,7 @@ function parseTvboxDl(v) {
 // TVBox 列表搜索
 function searchTvboxList(config, kw) {
   const q = kw.toLowerCase()
-  return parseTvboxList(config).filter(v =>
+  return parseVideoList(config).filter(v =>
     v.vod_name.toLowerCase().includes(q) ||
     (v.vod_actor && v.vod_actor.toLowerCase().includes(q))
   )
@@ -208,10 +249,11 @@ function parseXml(raw) {
     const parser = new DOMParser()
     const doc = parser.parseFromString(raw, 'text/xml')
     const list = []
-    for (const item of doc.querySelectorAll('item')) {
+    // 同时支持 <item>（RSS格式）和 <video>（量子CMS格式）
+    for (const item of doc.querySelectorAll('item, video')) {
       const vod = {}
       for (const child of item.children) vod[child.nodeName] = child.textContent
-      list.push(vod)
+      if (Object.keys(vod).length) list.push(vod)
     }
     return { list, total: list.length }
   } catch { return { list: [], total: 0 } }
@@ -562,7 +604,7 @@ function initApp(el) {
       el.querySelector('#t-switch-src-btn')?.addEventListener('click', renderTvboxSrcTabs)
       return
     }
-    const all = parseTvboxList(config)
+    const all = parseVideoList(config)
     const filtered = cat !== 'all' ? all.filter(v => (v.type_name || '').includes(VOD_CATEGORIES.find(c => c.id === cat)?.name || cat)) : all
     const total = filtered.length
     const start = (page - 1) * 20
