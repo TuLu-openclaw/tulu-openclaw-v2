@@ -4,7 +4,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:allow-invoke",
     "shell:allow-open",
     "autostart:allow-enable",
     "autostart:allow-disable",
