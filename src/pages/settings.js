@@ -599,7 +599,7 @@ async function loadGitPath(page) {
         <div id="git-scan-results"></div>
       </div>`
   } catch (e) {
-    bar.innerHTML = `<div class="stat-card" style="padding:16px;color:var(--error)">${e}</div>`
+    bar.innerHTML = `<div class="stat-card" style="padding:16px;color:var(--error)">${escapeHtml(String(e))}</div>`
   }
 }
 
@@ -641,7 +641,7 @@ async function handleScanGitPaths(page) {
       </div>`
     ).join('')}</div>`
   } catch (e) {
-    container.innerHTML = `<div style="margin-top:10px;font-size:12px;color:var(--error)">${e}</div>`
+    container.innerHTML = `<div style="margin-top:10px;font-size:12px;color:var(--error)">${escapeHtml(String(e))}</div>`
   }
 }
 
