@@ -26,6 +26,8 @@ const VOD_SOURCES = [
   { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
   { key: 'zyku',   name: '🌺1080资源', api: 'https://api.1080zyku.com/inc/api_mac10.php',   type: '1080' },
   { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
+  { key: 'wex_fantai', name: '🐼饭太硬', api: 'http://www.xn--sss604efuw.com/tv', type: 'wex' },
+  { key: 'wex_feimao', name: '🐼肥猫', api: 'http://hello.xn--z7x900a.com', type: 'wex' },
 ]
 
 const TV_SOURCES = [
@@ -713,6 +715,9 @@ function initApp(el) {
 
   async function loadList() {
     const source = VOD_SOURCES[src]
+    // Wex 类型源直接加载配置面板
+    if (source?.type === 'wex') { showWexPanel(); return }
+    // Regular source
     const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
     const catObj = VOD_CATEGORIES.find(c => c.id === cat)
     const typeId = typeMap[cat] ?? 1
@@ -731,6 +736,8 @@ function initApp(el) {
 
   async function loadSearch() {
     const source = VOD_SOURCES[src]
+    // Wex 类型源直接加载配置面板
+    if (source?.type === 'wex') { showWexPanel(); return }
     const q = encodeURIComponent(query)
     let json = { list: [], total: 0 }
     try {
