@@ -433,20 +433,6 @@ async function boot() {
   registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
-  registerRoute('/tvbox', async () => {
-    // 先加载 Hls.js
-    if (!window.Hls) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = './hls.min.js';
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-    const { } = await import('./pages/tvbox.js')
-    return { render: (el) => { el.innerHTML='<div id="tvbox-app"></div>'; window.__tvbox.init(); } }
-  })
   registerRoute('/coming-soon', () => import('./pages/coming-soon.js'))
   registerRoute('/security', () => import('./pages/security.js'))
   registerRoute('/about', () => import('./pages/about.js'))

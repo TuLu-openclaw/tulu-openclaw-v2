@@ -83,7 +83,6 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/miaogu-verify', label: '喵咕验证', icon: 'shield' },
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
-      { route: '/tvbox', label: '影视仓', icon: 'tv' },
       { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
     ]
   },
