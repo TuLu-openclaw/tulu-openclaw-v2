@@ -1,12 +1,14 @@
-﻿/**
- * 灞犳埉褰辫 - 褰辫鐐规挱 + 鐢佃鐩存挱
- * VOD: 澶氭簮鑱氬悎锛堟毚椋?閲忓瓙/澶╂动/鏄熶箣灏?1080锛? * TV: 澶氭簮鐩存挱锛坺dir/鑱氱湅/灏忚仛鍚堢瓑M3U婧愶級
- * 鍩轰簬 TVAPP (youhunwl/TVAPP) 褰辫浠撴鏋跺垎鏋? * 2026-04-13 v8
+/**
+ * 屠戮影视 - 影视点播 + 电视直播
+ * VOD: 多源聚合（暴风/量子/天涯/星之尘/1080）
+ * TV: 多源直播（zdir/聚看/小聚合等M3U源）
+ * 基于 TVAPP (youhunwl/TVAPP) 影视仓框架分析
+ * 2026-04-13 v8
  */
 
 import '../style/movie-tool.css'
 
-// 鈹€鈹€ HTML 杞箟锛堥槻姝?XSS锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── HTML 转义（防止 XSS）───────────────────────────────
 function escHtml(str) {
   if (str == null) return '';
   return String(str)
@@ -18,23 +20,23 @@ function escHtml(str) {
 }
 
 const VOD_SOURCES = [
-  { key: 'bfzy',   name: '馃尯鏆撮璧勬簮', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
-  { key: 'lziapi', name: '馃尯閲忓瓙璧勬簮', api: 'https://cj.lziapi.com/api.php/provide/vod',    type: 'tvbox' },
-  { key: 'xsd',    name: '馃尯鏄熶箣灏?,  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
-  { key: 'zyku',   name: '馃尯1080璧勬簮', api: 'https://api.1080zyku.com/inc/api_mac10.php',   type: '1080' },
-  { key: 'tyys',   name: '馃尯澶╂动璧勬簮', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
+  { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
+  { key: 'lziapi', name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',    type: 'tvbox' },
+  { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
+  { key: 'zyku',   name: '🌺1080资源', api: 'https://api.1080zyku.com/inc/api_mac10.php',   type: '1080' },
+  { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
 ]
 
 const TV_SOURCES = [
-  { key: 'zdir',  name: '馃摵zdir鑱氬悎',  api: 'http://zdir.kebedd69.repl.co/public/live.txt' },
-  { key: 'jukan', name: '馃摵鑱氱湅褰辫',   api: 'http://home.jundie.top:81/Cat/tv/live.txt' },
-  { key: 'xh',    name: '馃摵灏忚仛鍚?,     api: 'http://jiexi.bulisite.top/m3u.php' },
-  { key: 'ftyy',  name: '馃摵Ftyyy',     api: 'http://ftyyy.tk/live.txt' },
-  { key: 'rihou', name: '馃摵rihou',     api: 'http://rihou.cc:555/gggg.nzk' },
+  { key: 'zdir',  name: '📺zdir聚合',  api: 'http://zdir.kebedd69.repl.co/public/live.txt' },
+  { key: 'jukan', name: '📺聚看影视',   api: 'http://home.jundie.top:81/Cat/tv/live.txt' },
+  { key: 'xh',    name: '📺小聚合',     api: 'http://jiexi.bulisite.top/m3u.php' },
+  { key: 'ftyy',  name: '📺Ftyyy',     api: 'http://ftyyy.tk/live.txt' },
+  { key: 'rihou', name: '📺rihou',     api: 'http://rihou.cc:555/gggg.nzk' },
 ]
 
-// 鈹€鈹€ TVBox JSON API锛堥€氳繃 cdn.statically.io 浠ｇ悊 GitHub锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-// 鈹€鈹€ TVBox CDN 澶氶暅鍍忥紙statically.io 鎸備簡鏃惰嚜鍔ㄥ洖閫€锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── TVBox JSON API（通过 cdn.statically.io 代理 GitHub）────────────────────────
+// ── TVBox CDN 多镜像（statically.io 挂了时自动回退）──────────
 function tvboxMirrors(url) {
   if (!url || !url.includes('cdn.statically.io')) return [url];
   const parts = url.split('gh/');
@@ -47,15 +49,15 @@ function tvboxMirrors(url) {
 }
 
 const TVBOX_BUILTIN = [
-  { key: 'fongmi',    name: '馃尯FongMi',    url: 'https://cdn.statically.io/gh/FongMi/CatVodSpider/main/json/b.json',        note: '鎺ㄨ崘' },
-  { key: 'hjd',       name: '馃尯HJD TVBox', url: 'https://cdn.statically.io/gh/hjdhnx/Dr_TVBox/main/json/api.json',          note: '' },
-  { key: 'cattorn',   name: '馃尯Cat TVBox', url: 'https://cdn.statically.io/gh/CatTornado/TVBox/main/json/api.json',          note: '' },
-  { key: 'sunpolar',  name: '馃尯SunPolar',  url: 'https://cdn.statically.io/gh/SunPolar/TVBox/main/json/api.json',            note: '' },
-  { key: 'imdgo',     name: '馃尯imDgo',    url: 'https://cdn.statically.io/gh/imDgo/TVBox/main/json/api.json',              note: '' },
-  { key: 'q215',      name: '馃尯q215 TVBox',url: 'https://cdn.statically.io/gh/q215813905/TVBox/main/json/api.json',         note: '' },
-  { key: '173799616', name: '馃尯173浠?,     url: 'https://cdn.statically.io/gh/173799616/TVBox/master/json/api.json',        note: '' },
-  { key: '7wf',       name: '馃尯7灏垮６',     url: 'https://cdn.statically.io/gh/7灏垮６/TVBox/main/json/apijson.json',         note: '' },
-  { key: 'yyfxz',     name: '馃尯涓氫綑鎵撳彂',  url: 'https://cdn.statically.io/gh/yyfxz/qqtv/main/qq.json',                  note: '' },
+  { key: 'fongmi',    name: '🌺FongMi',    url: 'https://cdn.statically.io/gh/FongMi/CatVodSpider/main/json/b.json',        note: '推荐' },
+  { key: 'hjd',       name: '🌺HJD TVBox', url: 'https://cdn.statically.io/gh/hjdhnx/Dr_TVBox/main/json/api.json',          note: '' },
+  { key: 'cattorn',   name: '🌺Cat TVBox', url: 'https://cdn.statically.io/gh/CatTornado/TVBox/main/json/api.json',          note: '' },
+  { key: 'sunpolar',  name: '🌺SunPolar',  url: 'https://cdn.statically.io/gh/SunPolar/TVBox/main/json/api.json',            note: '' },
+  { key: 'imdgo',     name: '🌺imDgo',    url: 'https://cdn.statically.io/gh/imDgo/TVBox/main/json/api.json',              note: '' },
+  { key: 'q215',      name: '🌺q215 TVBox',url: 'https://cdn.statically.io/gh/q215813905/TVBox/main/json/api.json',         note: '' },
+  { key: '173799616', name: '🌺173仓',     url: 'https://cdn.statically.io/gh/173799616/TVBox/master/json/api.json',        note: '' },
+  { key: '7wf',       name: '🌺7尿壶',     url: 'https://cdn.statically.io/gh/7尿壶/TVBox/main/json/apijson.json',         note: '' },
+  { key: 'yyfxz',     name: '🌺业余打发',  url: 'https://cdn.statically.io/gh/yyfxz/qqtv/main/qq.json',                  note: '' },
 ]
 const KEY_CUSTOM_TVBOX = 'tulu_custom_tvbox'
 const KEY_ACTIVE_TVBOX = 'tulu_active_tvbox'
@@ -69,7 +71,7 @@ function saveCustomTvbox(a) { try { localStorage.setItem(KEY_CUSTOM_TVBOX, JSON.
 function getActiveTvboxKey() { try { return localStorage.getItem(KEY_ACTIVE_TVBOX) || '' } catch { return '' } }
 function setActiveTvboxKey(k) { try { localStorage.setItem(KEY_ACTIVE_TVBOX, k) } catch {} }
 
-// 鍔犺浇 TVBox API 閰嶇疆锛堝悓鏃舵敮鎸?JSON 鍜?XML锛岃嚜鍔ㄦ娴嬫牸寮忥級
+// 加载 TVBox API 配置（同时支持 JSON 和 XML，自动检测格式）
 async function loadTvboxConfig(api) {
   if (_tvboxCache[api.key]) return _tvboxCache[api.key]
   try {
@@ -78,8 +80,9 @@ async function loadTvboxConfig(api) {
     const text = await resp.text()
     let config
     try { config = JSON.parse(text) }
-    catch { config = parseXml(text) }  // XML 鏍煎紡鍏滃簳
-    // 妫€娴嬫槸鍚︽湁鏁堬紙蹇呴』鏈?list 鏁扮粍鎴?total > 0锛?    if (!config || (!(Array.isArray(config.list) ? config.list.length : config.list?.length) && !config.total)) {
+    catch { config = parseXml(text) }  // XML 格式兜底
+    // 检测是否有效（必须有 list 数组或 total > 0）
+    if (!config || (!(Array.isArray(config.list) ? config.list.length : config.list?.length) && !config.total)) {
       console.warn('[movie-tool] TVBox config invalid or empty:', api.name, config)
       return null
     }
@@ -88,8 +91,8 @@ async function loadTvboxConfig(api) {
   } catch (e) { console.warn('[movie-tool] TVBox load failed:', api.name, e.message); return null }
 }
 
-// 鈹€鈹€ 瑙ｆ瀽 CMS 鎵佸钩鏍煎紡锛堥噺瀛?鏆撮绛?CMS API锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
-// CMS API: config.list 鏄棰戞暟缁勶紝涓嶆槸鍒嗙被鏁扮粍
+// ── 解析 CMS 扁平格式（量子/暴风等 CMS API）───────────────────────────────
+// CMS API: config.list 是视频数组，不是分类数组
 function parseCMSList(config) {
   const result = []
   for (const v of (config?.list || [])) {
@@ -111,11 +114,11 @@ function parseCMSList(config) {
   return result
 }
 
-// 鈹€鈹€ 瑙ｆ瀽 TVBox 宓屽鍒嗙被鏍煎紡 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 解析 TVBox 嵌套分类格式 ─────────────────────────────────────────────────
 function parseTvboxList(config) {
   const result = []
   for (const cat of (config?.list || [])) {
-    const catName = cat.name || '鏈垎绫?
+    const catName = cat.name || '未分类'
     for (const v of (cat.list || [])) {
       const dl = parseTvboxDl(v)
       result.push({
@@ -136,13 +139,13 @@ function parseTvboxList(config) {
   return result
 }
 
-// 鈹€鈹€ 缁熶竴瑙ｆ瀽鍏ュ彛锛堣嚜鍔ㄦ娴嬫牸寮忥級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 统一解析入口（自动检测格式）──────────────────────────────────────────────
 function parseVideoList(config) {
   if (!config) return []
   const first = config.list?.[0]
-  // TVBox 宓屽鏍煎紡锛氱涓€涓垎绫诲璞＄殑 list 灞炴€ф槸鏁扮粍
+  // TVBox 嵌套格式：第一个分类对象的 list 属性是数组
   if (first && Array.isArray(first.list)) return parseTvboxList(config)
-  // CMS 鎵佸钩鏍煎紡锛堥噺瀛?鏆撮绛夛級锛氱洿鎺ユ槸瑙嗛鏁扮粍
+  // CMS 扁平格式（量子/暴风等）：直接是视频数组
   return parseCMSList(config)
 }
 
@@ -156,14 +159,14 @@ function parseTvboxDl(v) {
   flags.forEach((flag, fi) => {
     const urls = (urlGrps[fi] || urlGrps[0] || '').split('#').filter(Boolean)
     if (urls.length) result.push({
-      flag: flag.trim() || '榛樿',
+      flag: flag.trim() || '默认',
       urls: urls.map(u => { const [n, url] = u.split('$'); return (n || '') + '$' + url })
     })
   })
   return result
 }
 
-// TVBox 鍒楄〃鎼滅储
+// TVBox 列表搜索
 function searchTvboxList(config, kw) {
   const q = kw.toLowerCase()
   return parseVideoList(config).filter(v =>
@@ -172,34 +175,36 @@ function searchTvboxList(config, kw) {
   )
 }
 
-// 鈹€鈹€ 鑾峰彇褰撳墠娲昏穬 TVBox 婧愶紙鍐呯疆浼樺厛锛岃嚜瀹氫箟娆′箣锛?function getActiveTvbox() {
+// ── 获取当前活跃 TVBox 源（内置优先，自定义次之）
+function getActiveTvbox() {
   const key = getActiveTvboxKey()
   return TVBOX_BUILTIN.find(a => a.key === key) || _customTvbox.find(a => a.key === key) || null
 }
 
 function getTvboxSourceName(api) {
   const b = TVBOX_BUILTIN.find(a => a.key === api.key)
-  return b ? b.name : (api.name || '鑷畾涔?)
+  return b ? b.name : (api.name || '自定义')
 }
 
-// 鍒濆鍖栬嚜瀹氫箟 TVBox 鍒楄〃
+// 初始化自定义 TVBox 列表
 _customTvbox = getCustomTvbox()
 
-// 姣忎釜 VOD 婧愮殑鍒嗙被鏄犲皠锛圕MS type_id 浣撶郴鍚勫紓锛屽繀椤绘寜婧愬尯鍒嗭級
-// key: source key, value: { movie, tv, variety, anime, short } 瀵瑰簲鐨?type_id
+// 每个 VOD 源的分类映射（CMS type_id 体系各异，必须按源区分）
+// key: source key, value: { movie, tv, variety, anime, short } 对应的 type_id
 const VOD_TYPE_MAP = {
-  bfzy:   { movie: 20, tv: 30, variety: 45, anime: 39, short: 58 },  // 鏆撮璧勬簮
-  lziapi: { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 6  },  // 閲忓瓙璧勬簮
-  xsd:    { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 鏄熶箣灏?  zyku:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 1080璧勬簮
-  tyys:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 澶╂动璧勬簮
+  bfzy:   { movie: 20, tv: 30, variety: 45, anime: 39, short: 58 },  // 暴风资源
+  lziapi: { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 6  },  // 量子资源
+  xsd:    { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 星之尘
+  zyku:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 1080资源
+  tyys:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 天涯资源
 }
 
 const VOD_CATEGORIES = [
-  { id: 'movie',   name: '鐢靛奖' },
-  { id: 'tv',      name: '鐢佃鍓? },
-  { id: 'variety', name: '缁艰壓' },
-  { id: 'anime',   name: '鍔ㄦ极' },
-  { id: 'short',   name: '鐭墽' },
+  { id: 'movie',   name: '电影' },
+  { id: 'tv',      name: '电视剧' },
+  { id: 'variety', name: '综艺' },
+  { id: 'anime',   name: '动漫' },
+  { id: 'short',   name: '短剧' },
 ]
 
 const HLS_CDN = './hls.min.js'
@@ -215,9 +220,9 @@ let tvCache = {}
 let playingEp = null
 let _el = null
 let _viewStack = []
-let _tvboxMode = false  // true = TVBox JSON 妯″紡
+let _tvboxMode = false  // true = TVBox JSON 模式
 
-// 鈹€鈹€ 鍘嗗彶璁板綍 鈹€鈹€
+// ── 历史记录 ──
 function getSearchHistory() {
   try { return JSON.parse(localStorage.getItem(KEY_SEARCH) || '[]') } catch { return [] }
 }
@@ -247,14 +252,15 @@ function updatePlayProgress(id, source, progress) {
 }
 function clearPlayHistory() { savePlayHistory([]) }
 
-// 鈹€鈹€ 缃戠粶璇锋眰 鈹€鈹€
-// 鈹€鈹€ XML 瑙ｆ瀽锛圕MS 鏍煎紡褰辫鎺ュ彛锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 网络请求 ──
+// ── XML 解析（CMS 格式影视接口）─────────────────────────────
 function parseXml(raw) {
   try {
     const parser = new DOMParser()
     const doc = parser.parseFromString(raw, 'text/xml')
     const list = []
-    // 鍚屾椂鏀寔 <item>锛圧SS鏍煎紡锛夊拰 <video>锛堥噺瀛怌MS鏍煎紡锛?    for (const item of doc.querySelectorAll('item, video')) {
+    // 同时支持 <item>（RSS格式）和 <video>（量子CMS格式）
+    for (const item of doc.querySelectorAll('item, video')) {
       const vod = {}
       for (const child of item.children) vod[child.nodeName] = child.textContent
       if (Object.keys(vod).length) list.push(vod)
@@ -263,9 +269,10 @@ function parseXml(raw) {
   } catch { return { list: [], total: 0 } }
 }
 
-// 鈹€鈹€ 缃戠粶璇锋眰锛堜紭鍏?Rust 鍚庣浠ｇ悊锛岀粫杩?WebView CORS 闄愬埗锛?鈹€鈹€
+// ── 网络请求（优先 Rust 后端代理，绕过 WebView CORS 限制） ──
 
-// 灏濊瘯閫氳繃 Tauri Rust 鍚庣璇锋眰锛坴od_fetch 鍛戒护锛?async function vodApiFetch(url) {
+// 尝试通过 Tauri Rust 后端请求（vod_fetch 命令）
+async function vodApiFetch(url) {
   try {
     const { invoke } = window.__TAURI_INTERNALS__ || window.__TAURI__ || {}
     if (!invoke) return null
@@ -275,7 +282,7 @@ function parseXml(raw) {
   } catch { return null }
 }
 
-// 鏍囧噯 fetch锛堝鐢級
+// 标准 fetch（备用）
 async function webFetch(url) {
   const resp = await fetch(url, {
     signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
@@ -285,17 +292,17 @@ async function webFetch(url) {
   return resp.text()
 }
 
-// 閫氱敤 JSON 鑾峰彇锛堣嚜鍔ㄩ檷绾э級
+// 通用 JSON 获取（自动降级）
 async function fetchJSON(url) {
   let json = await vodApiFetch(url)
   if (json) return json
-  // Rust 鍚庣澶辫触锛岄檷绾у埌娴忚鍣?fetch
+  // Rust 后端失败，降级到浏览器 fetch
   let text
   try { text = await webFetch(url) } catch { return { list: [], total: 0 } }
   try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return { list: [], total: 0 } } }
 }
 
-// 鈹€鈹€ NZK 瑙ｆ瀽 鈹€鈹€
+// ── NZK 解析 ──
 function parseNzk(raw) {
   const lines = raw.split('\n').map(l => l.replace(/\r$/, '').trim()).filter(l => l)
   const categories = []
@@ -316,14 +323,14 @@ function parseNzk(raw) {
   return categories
 }
 
-// 鈹€鈹€ M3U 杞?NZK锛圱VAPP convertM3uToNormal 绠楁硶锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── M3U 转 NZK（TVAPP convertM3uToNormal 算法）──────────────────────────────
 function convertM3uToNormal(m3u) {
   try {
     const lines = m3u.split('\n'), parts = []
     let currentGroup = '', TV = ''
     for (const line of lines) {
       if (line.startsWith('#EXTINF:')) {
-        const g = line.split('"')[1]?.trim() || '鏈垎绫?
+        const g = line.split('"')[1]?.trim() || '未分类'
         TV = line.split('"')[2]?.substring(1) || ''
         if (currentGroup !== g) { currentGroup = g; parts.push('\n' + currentGroup + ',#genre#\n') }
       } else if (line.startsWith('http')) {
@@ -334,7 +341,7 @@ function convertM3uToNormal(m3u) {
   } catch (e) { return m3u }
 }
 
-// 鈹€鈹€ 鑷姩妫€娴嬫牸寮忓姞杞?TV 婧?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+// ── 自动检测格式加载 TV 源 ──────────────────────────────────────────────────
 async function loadTvSource(idx) {
   if (tvCache[idx]) return tvCache[idx]
   try {
@@ -346,11 +353,11 @@ async function loadTvSource(idx) {
 }
 
 /**
- * 娓叉煋鍏ュ彛 鈥?鎺ユ敹璺敱瀹瑰櫒锛屽皢鑷韩鎸傝浇鍒板鍣ㄥ唴
- * 涓嶅啀鐩存帴 appendChild(document.body)锛岄伩鍏嶈璺敱鐨?innerHTML='' 娓呴櫎
+ * 渲染入口 — 接收路由容器，将自身挂载到容器内
+ * 不再直接 appendChild(document.body)，避免被路由的 innerHTML='' 清除
  */
 export default function render(container) {
-  // 濡傛灉浼犲叆浜嗗鍣紙璺敱鐜锛夛紝娓叉煋鍒板鍣ㄥ唴锛涘惁鍒欓檷绾у埌 body
+  // 如果传入了容器（路由环境），渲染到容器内；否则降级到 body
   const root = container || document.body
   const el = document.createElement('div')
   el.className = 'tvbox-root'
@@ -365,46 +372,46 @@ function initApp(el) {
   el.innerHTML = `
     <nav class="tvbox-navbar">
       <div class="tvbox-brand">
-        <div class="tvbox-brand-icon">馃幀</div>
+        <div class="tvbox-brand-icon">🎬</div>
         <div>
-          <div class="tvbox-brand-name">灞犳埉褰辫</div>
+          <div class="tvbox-brand-name">屠戮影视</div>
         </div>
       </div>
 
       <div class="tvbox-search-wrap">
         <div class="tvbox-search-box">
-          <span class="tvbox-search-icon">馃攳</span>
-          <input class="tvbox-search-input" type="text" id="t-search" placeholder="鎼滅储鐢靛奖銆佸墽闆嗐€佺患鑹恒€佸姩婕?.." autocomplete="off" />
-          <button class="tvbox-search-btn" id="t-search-btn">鎼滅储</button>
+          <span class="tvbox-search-icon">🔍</span>
+          <input class="tvbox-search-input" type="text" id="t-search" placeholder="搜索电影、剧集、综艺、动漫..." autocomplete="off" />
+          <button class="tvbox-search-btn" id="t-search-btn">搜索</button>
         </div>
       </div>
 
       <div class="tvbox-mode-tabs">
-        <button class="tvbox-mode-tab active" data-mode="vod">馃摵 褰辫鐐规挱</button>
-        <button class="tvbox-mode-tab" data-mode="live">馃摗 鐢佃鐩存挱</button>
-        <button class="tvbox-mode-tab" data-mode="tvboxjson">馃敆 TVBox JSON</button>
+        <button class="tvbox-mode-tab active" data-mode="vod">📺 影视点播</button>
+        <button class="tvbox-mode-tab" data-mode="live">📡 电视直播</button>
+        <button class="tvbox-mode-tab" data-mode="tvboxjson">🔗 TVBox JSON</button>
       </div>
     </nav>
 
     <div class="tvbox-catbar" id="t-catbar">
-      <span class="tvbox-catbar-label">鍒嗙被</span>
+      <span class="tvbox-catbar-label">分类</span>
     </div>
 
     <div class="tvbox-srcbar" id="t-srcbar">
-      <span class="tvbox-srcbar-label">婧?/span>
+      <span class="tvbox-srcbar-label">源</span>
     </div>
 
     <div class="tvbox-content" id="t-content">
       <div class="tvbox-loading">
         <div class="tvbox-loading-icon"></div>
-        <span class="tvbox-loading-text">鍔犺浇涓?..</span>
+        <span class="tvbox-loading-text">加载中...</span>
       </div>
     </div>
 
     <div id="t-history-panel" style="display:none; position:fixed; top:120px; left:50%; transform:translateX(-50%); width:460px; max-width:90vw; background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; z-index:100; padding:12px 14px; box-shadow:0 16px 48px rgba(0,0,0,.7)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-size:12px;font-weight:600;color:var(--text-secondary)">鎼滅储鍘嗗彶</span>
-        <button id="t-clear-history" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">娓呴櫎</button>
+        <span style="font-size:12px;font-weight:600;color:var(--text-secondary)">搜索历史</span>
+        <button id="t-clear-history" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">清除</button>
       </div>
       <div id="t-history-tags" style="display:flex;flex-wrap:wrap;gap:7px"></div>
     </div>
@@ -412,14 +419,14 @@ function initApp(el) {
     <div class="tvbox-player-overlay" id="t-player-overlay" style="display:none">
       <div class="tvbox-player-box">
         <div class="tvbox-player-hdr">
-          <span class="tvbox-player-title" id="t-player-title">鎾斁涓?/span>
-          <button class="tvbox-player-close" id="t-player-close">鉁?/button>
+          <span class="tvbox-player-title" id="t-player-title">播放中</span>
+          <button class="tvbox-player-close" id="t-player-close">✕</button>
         </div>
         <div class="tvbox-player-body" id="t-player-body">
-          <div class="tvbox-player-loading">姝ｅ湪鍔犺浇鎾斁鍣?..</div>
+          <div class="tvbox-player-loading">正在加载播放器...</div>
         </div>
         <div class="tvbox-player-foot">
-          <a href="#" class="tvbox-open-ext" id="t-ext-link" target="_blank" rel="noopener">鈫?澶栭儴鎵撳紑</a>
+          <a href="#" class="tvbox-open-ext" id="t-ext-link" target="_blank" rel="noopener">↗ 外部打开</a>
         </div>
       </div>
     </div>
@@ -431,12 +438,13 @@ function initApp(el) {
   searchBtn.addEventListener('click', () => doSearch(searchInput.value))
   searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(searchInput.value) })
   searchInput.addEventListener('focus', () => showSearchHistory())
-  searchInput.addEventListener('blur', () => setTimeout(() => el.querySelector('#t-history-panel').style.display = 'none', 220))
+  searchInput.addEventListener('blur', () => setTimeout(() => el.querySelector('#t-history-panel').style.display = 'none', 200))
   el.querySelector('#t-clear-history').addEventListener('click', e => { e.stopPropagation(); clearSearchHistory(); renderSearchHistory() })
   el.querySelector('#t-player-close').addEventListener('click', closePlayer)
   el.querySelector('#t-player-overlay').addEventListener('click', e => { if (e.target === el.querySelector('#t-player-overlay')) closePlayer() })
 
-  // 妯″紡鍒囨崲锛坴od / live / tvboxjson锛?  let mode = 'vod'
+  // 模式切换（vod / live / tvboxjson）
+  let mode = 'vod'
   el.querySelectorAll('.tvbox-mode-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       const newMode = btn.dataset.mode
@@ -446,11 +454,11 @@ function initApp(el) {
       btn.classList.add('active')
       page = 1; query = ''; searchInput.value = ''; hideHistory(); _viewStack = []
       if (mode === 'live') {
-        el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">鍒嗙被</span><button class="tvbox-cat-chip active">鍏ㄩ儴棰戦亾</button>'
+        el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">分类</span><button class="tvbox-cat-chip active">全部频道</button>'
         el.querySelector('#t-catbar').querySelector('.tvbox-cat-chip').addEventListener('click', () => {})
         renderSrcBar()
       } else if (mode === 'tvboxjson') {
-        el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">鍒嗙被</span><button class="tvbox-cat-chip active">鍏ㄩ儴</button>'
+        el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">分类</span><button class="tvbox-cat-chip active">全部</button>'
         renderTvboxSrcTabs()
       } else {
         renderCatBar()
@@ -463,10 +471,10 @@ function initApp(el) {
     })
   })
 
-  // API 绠＄悊鎸夐挳
+  // API 管理按钮
   el.querySelector('#t-api-manage')?.addEventListener('click', showApiManage)
 
-  // 閾炬帴杈撳叆鎸夐挳
+  // 链接输入按钮
   el.querySelector('#t-url-input')?.addEventListener('click', showUrlInput)
 
   renderCatBar(); renderSrcBar()
@@ -485,9 +493,9 @@ function initApp(el) {
 
   function showSearchHistory() {
     const h = getSearchHistory()
-    const panel = el.querySelector('#t-history-panel')
-    if (!h.length) { panel.style.display = 'none'; return }
-    panel.style.display = 'block'
+    const wrap = el.querySelector('#t-history')
+    if (!h.length) { wrap.style.display = 'none'; return }
+    wrap.style.display = 'block'
     renderSearchHistory()
   }
 
@@ -504,8 +512,6 @@ function initApp(el) {
     })
   }
 
-  function hideHistory() { el.querySelector('#t-history').style.display = 'none' }
-
   function hideHistory() { el.querySelector('#t-history-panel').style.display = 'none' }
 
   function showPlayHistory() {
@@ -513,14 +519,14 @@ function initApp(el) {
     const content = el.querySelector('#t-content')
     if (!h.length) { loadData(); return }
 
-    let html = '<div class="tvbox-section-title"><span>馃摐</span>鏈€杩戞挱鏀?<button class="tvbox-clear-btn" id="t-clear-play" style="margin-left:auto">娓呴櫎鍏ㄩ儴</button></div>'
+    let html = '<div class="tvbox-section-title"><span>📜</span>最近播放 <button class="tvbox-clear-btn" id="t-clear-play" style="margin-left:auto">清除全部</button></div>'
     html += '<div style="display:flex;gap:10px;overflow-x:auto;padding:8px 0 16px;scrollbar-width:none"><style>.tvbox-hist-card{flex-shrink:0;width:100px;cursor:pointer}.tvbox-hist-card:hover .tvbox-card-inner{transform:translateY(-2px);border-color:var(--border-hover)}.tvbox-hist-pic{position:relative;aspect-ratio:2/3;background:var(--bg-elevated);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border);margin-bottom:6px}.tvbox-hist-pic img{width:100%;height:100%;object-fit:cover;display:block}.tvbox-hist-name{font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}.tvbox-hist-ep{font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}</style>'
     h.forEach(item => {
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
-      const resumeLabel = pct > 95 ? '宸茬湅瀹? : pct > 2 ? '缁?' + pct + '%' : ''
+      const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
       html += '<div class="tvbox-hist-card" data-id="' + item.id + '" data-source="' + item.source + '" data-name="' + item.name + '" data-pic="' + item.pic + '" data-epname="' + (item.epName || '') + '" data-epurl="' + (item.epUrl || '') + '" data-progress="' + item.progress + '" data-duration="' + (item.duration || 0) + '">' +
         '<div class="tvbox-hist-pic">' +
-          '<img src="' + escHtml(item.pic) + '" alt="' + escHtml(item.name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span style=display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px>馃幀</span>\'" />' +
+          '<img src="' + escHtml(item.pic) + '" alt="' + escHtml(item.name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span style=display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px>🎬</span>\'" />' +
           (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + resumeLabel + '</span>' : '') +
           '<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1)"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--accent),#ec4899)"></div></div>' +
         '</div>' +
@@ -530,7 +536,7 @@ function initApp(el) {
     })
     html += '</div>'
     html += '<div class="tvbox-divider"></div>'
-    html += '<div class="tvbox-section-header"><div class="tvbox-section-heading"><div class="tvbox-section-heading-dot"></div>褰辫鍒楄〃</div></div>'
+    html += '<div class="tvbox-section-header"><div class="tvbox-section-heading"><div class="tvbox-section-heading-dot"></div>影视列表</div></div>'
     content.innerHTML = html + '<div id="t-main-grid"></div><div id="t-pagination"></div>'
 
     content.querySelector('#t-clear-play')?.addEventListener('click', e => { e.stopPropagation(); clearPlayHistory(); loadData() })
@@ -549,28 +555,25 @@ function initApp(el) {
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = name + (epName ? ' ' + epName : '')
     el.querySelector('#t-ext-link').href = epUrl || '#'
-    body.innerHTML = '<div class="tvbox-player-loading">姝ｅ湪鍔犺浇...</div>'
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b6b8a">正在加载...</div>'
     overlay.style.display = 'flex'
     if (!epUrl || epUrl === '#' || epUrl === 'undefined') {
-      body.innerHTML = '<div class="tvbox-player-loading">鏆傛棤鎾斁鍦板潃</div>'
+      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'
       return
     }
     const isM3u8 = epUrl.includes('.m3u8')
     const isMp4  = epUrl.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(epUrl, isM3u8, progress)
-    else {
-      var safeEpUrl = /^https?:\/\//i.test(epUrl) ? epUrl : ''
-      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeEpUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
-    }
+    else // URL 格式校验
+        var safeEpUrl = epUrl && /^https?:\/\//i.test(epUrl) ? epUrl : '';
+        body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeEpUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
   }
 
-  // 鈹€鈹€ 娓叉煋鍒嗙被鏉★紙chip 椋庢牸锛夆攢鈹€
   function renderCatBar() {
     const container = el.querySelector('#t-catbar')
     const cats = VOD_CATEGORIES
-    container.innerHTML = '<span class="tvbox-catbar-label">鍒嗙被</span>' +
+    container.innerHTML = '<span class="tvbox-catbar-label">分类</span>' +
       cats.map(c => '<button class="tvbox-cat-chip' + (c.id === cat ? ' active' : '') + '" data-id="' + c.id + '">' + c.name + '</button>').join('')
-
     container.querySelectorAll('.tvbox-cat-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         cat = btn.dataset.id
@@ -582,14 +585,12 @@ function initApp(el) {
     })
   }
 
-  // 鈹€鈹€ 娓叉煋婧愰€夋嫨鏉★紙chip 椋庢牸锛夆攢鈹€
   function renderSrcBar() {
     const container = el.querySelector('#t-srcbar')
     const list = VOD_SOURCES
-    container.innerHTML = '<span class="tvbox-srcbar-label">婧?/span>' +
+    container.innerHTML = '<span class="tvbox-srcbar-label">源</span>' +
       list.map((s, i) => '<button class="tvbox-src-chip' + (i === src ? ' active' : '') + '" data-idx="' + i + '">' +
         '<span class="tvbox-src-dot"></span>' + s.name + '</button>').join('')
-
     container.querySelectorAll('.tvbox-src-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         src = parseInt(btn.dataset.idx)
@@ -598,10 +599,9 @@ function initApp(el) {
     })
   }
 
-  // 鈹€鈹€ 涓诲姞杞藉叆鍙?鈹€鈹€
   function loadData() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">鍔犺浇涓?..</span></div>'
+    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
     try {
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') { if (query) loadTvboxSearch(); else loadTvboxList() }
@@ -609,7 +609,7 @@ function initApp(el) {
       else if (getPlayHistory().length > 0 && page === 1 && !query) showPlayHistory()
       else loadList()
     } catch (e) {
-      content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">馃樀</div><div class="tvbox-empty-title">鍔犺浇澶辫触</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
+      content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
     }
   }
 
@@ -624,7 +624,10 @@ function initApp(el) {
       if (!json.total) { try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
       if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
     } catch {}
-    if (!json.list || !json.list.length) { try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {} }
+    // 如果列表为空（该 typeId 无数据），尝试全量接口拉取
+    if (!json.list || !json.list.length) {
+      try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {}
+    }
     renderVodGrid(json.list || [], json.total || 0)
   }
 
@@ -640,19 +643,19 @@ function initApp(el) {
     renderVodGrid(json.list || [], json.total || 0)
   }
 
-  // 鈹€鈹€ TVBox JSON 妯″紡 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── TVBox JSON 模式 ──────────────────────────────
   async function loadTvboxList() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">鍔犺浇 TVBox JSON 鏁版嵁...</div>'
+    content.innerHTML = '<div class="tvbox-loading">加载 TVBox JSON 数据...</div>'
     const api = getActiveTvbox()
     if (!api) {
-      content.innerHTML = '<div class="tvbox-empty">璇峰厛閫夋嫨涓€涓?TVBox 鏁版嵁婧愶紙鍐呯疆婧愭垨鑷畾涔夛級</div><div style="text-align:center;margin-top:20px"><button id="t-add-tvbox-btn" style="background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">娣诲姞鑷畾涔?TVBox API</button></div>'
+      content.innerHTML = '<div class="tvbox-empty">请先选择一个 TVBox 数据源（内置源或自定义）</div><div style="text-align:center;margin-top:20px"><button id="t-add-tvbox-btn" style="background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">添加自定义 TVBox API</button></div>'
       el.querySelector('#t-add-tvbox-btn')?.addEventListener('click', showApiManage)
       return
     }
     const config = await loadTvboxConfig(api)
     if (!config) {
-      content.innerHTML = '<div class="tvbox-empty">TVBox JSON 鍔犺浇澶辫触锛岃妫€鏌ョ綉缁滄垨鎹㈢敤鍏朵粬婧愩€?br><br><button id="t-switch-src-btn" style="background:#333;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer">鍒囨崲鏁版嵁婧?/button></div>'
+      content.innerHTML = '<div class="tvbox-empty">TVBox JSON 加载失败，请检查网络或换用其他源。<br><br><button id="t-switch-src-btn" style="background:#333;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer">切换数据源</button></div>'
       el.querySelector('#t-switch-src-btn')?.addEventListener('click', renderTvboxSrcTabs)
       return
     }
@@ -665,11 +668,11 @@ function initApp(el) {
 
   async function loadTvboxSearch() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">鎼滅储涓?..</div>'
+    content.innerHTML = '<div class="tvbox-loading">搜索中...</div>'
     const api = getActiveTvbox()
-    if (!api) { content.innerHTML = '<div class="tvbox-empty">璇峰厛閫夋嫨涓€涓?TVBox 鏁版嵁婧?/div>'; return }
+    if (!api) { content.innerHTML = '<div class="tvbox-empty">请先选择一个 TVBox 数据源</div>'; return }
     const config = await loadTvboxConfig(api)
-    if (!config) { content.innerHTML = '<div class="tvbox-empty">TVBox JSON 鍔犺浇澶辫触</div>'; return }
+    if (!config) { content.innerHTML = '<div class="tvbox-empty">TVBox JSON 加载失败</div>'; return }
     const results = searchTvboxList(config, query)
     renderVodGrid(results, results.length)
   }
@@ -682,12 +685,13 @@ function initApp(el) {
     container.innerHTML = allSources.map((s, i) =>
       '<button class="tvbox-tab ' + (s.key === activeKey || (i === 0 && !activeKey) ? 'active' : '') + '" data-key="' + s.key + '">' + s.name + '</button>'
     ).join('') +
-    '<button class="tvbox-tab" id="t-add-custom-btn" style="color:#e50914;font-size:13px">锛?鑷畾涔?/button>'
+    '<button class="tvbox-tab" id="t-add-custom-btn" style="color:#e50914;font-size:13px">＋ 自定义</button>'
     container.querySelectorAll('.tvbox-tab[data-key]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const key = btn.dataset.key
         setActiveTvboxKey(key)
-        _tvboxCache = {}  // 娓呴櫎缂撳瓨锛屽己鍒堕噸鏂板姞杞?        src = 0; page = 1
+        _tvboxCache = {}  // 清除缓存，强制重新加载
+        src = 0; page = 1
         container.querySelectorAll('.tvbox-tab').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
         if (query) await loadTvboxSearch()
@@ -697,7 +701,7 @@ function initApp(el) {
     el.querySelector('#t-add-custom-btn')?.addEventListener('click', showApiManage)
   }
 
-  // 鈹€鈹€ API 绠＄悊寮圭獥 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── API 管理弹窗 ───────────────────────────────
   function showApiManage() {
     const overlay = document.createElement('div')
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center'
@@ -705,26 +709,26 @@ function initApp(el) {
     const activeKey = getActiveTvboxKey()
     overlay.innerHTML = '<div style="background:#1a1a2e;border-radius:16px;padding:24px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;color:#fff;font-family:sans-serif">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-        '<div style="font-size:16px;font-weight:bold">鈿欙笍 TVBox API 绠＄悊</div>' +
-        '<button id="t-api-close" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:4px">鉁?/button>' +
+        '<div style="font-size:16px;font-weight:bold">⚙️ TVBox API 管理</div>' +
+        '<button id="t-api-close" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:4px">✕</button>' +
       '</div>' +
       '<div style="margin-bottom:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">鍐呯疆 TVBox JSON 婧愶紙鐐瑰嚮鍒囨崲锛?/div>' +
+        '<div style="font-size:13px;color:#888;margin-bottom:8px">内置 TVBox JSON 源（点击切换）</div>' +
         TVBOX_BUILTIN.map(a => '<div class="tvbox-src-item' + (a.key === activeKey ? ' active' : '') + '" data-key="' + a.key + '" data-type="builtin" style="padding:10px 12px;background:' + (a.key === activeKey ? '#2a2a4a' : '#252540') + ';border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
           '<span>' + a.name + '</span><span style="font-size:12px;color:#888">' + (a.note || '') + '</span></div>').join('') +
       '</div>' +
       '<div style="margin-bottom:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">鑷畾涔?TVBox 鎺ュ彛 <span style="color:#e50914">(' + custom.length + ')</span></div>' +
+        '<div style="font-size:13px;color:#888;margin-bottom:8px">自定义 TVBox 接口 <span style="color:#e50914">(' + custom.length + ')</span></div>' +
         (custom.length ? custom.map(a => '<div style="padding:10px 12px;background:#252540;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
           '<div style="overflow:hidden"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.name) + '</div>' +
           '<div style="font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.url) + '</div></div>' +
-          '<button class="t-del-api" data-key="' + a.key + '" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">鍒犻櫎</button></div>').join('') : '<div style="color:#555;font-size:13px;text-align:center;padding:12px">鏆傛棤鑷畾涔夋帴鍙?/div>') +
+          '<button class="t-del-api" data-key="' + a.key + '" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">删除</button></div>').join('') : '<div style="color:#555;font-size:13px;text-align:center;padding:12px">暂无自定义接口</div>') +
       '</div>' +
       '<div style="border-top:1px solid #333;padding-top:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">娣诲姞鑷畾涔?TVBox JSON API</div>' +
-        '<input id="t-api-name" placeholder="鍚嶇О锛堥€夊～锛? style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
-        '<input id="t-api-url" placeholder="杈撳叆 TVBox JSON API 鍦板潃..." style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
-        '<button id="t-api-add-btn" style="width:100%;background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">娣诲姞骞朵娇鐢?/button>' +
+        '<div style="font-size:13px;color:#888;margin-bottom:8px">添加自定义 TVBox JSON API</div>' +
+        '<input id="t-api-name" placeholder="名称（选填）" style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
+        '<input id="t-api-url" placeholder="输入 TVBox JSON API 地址..." style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
+        '<button id="t-api-add-btn" style="width:100%;background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">添加并使用</button>' +
       '</div>' +
     '</div>'
     document.body.appendChild(overlay)
@@ -752,7 +756,7 @@ function initApp(el) {
       const url = el.querySelector('#t-api-url')?.value.trim()
       if (!url) return
       const key = 'ctv_' + Date.now()
-      const api = { key, name: name || '鑷畾涔?' + (_customTvbox.length + 1), url }
+      const api = { key, name: name || '自定义-' + (_customTvbox.length + 1), url }
       const config = await loadTvboxConfig(api)
       if (config) {
         const apis = getCustomTvbox(); apis.push(api); saveCustomTvbox(apis); _customTvbox = apis
@@ -761,13 +765,13 @@ function initApp(el) {
         await loadTvboxList()
         renderTvboxSrcTabs()
       } else {
-        alert('API 鍦板潃鏃犳晥鎴栧姞杞藉け璐ワ紝璇锋鏌ュ悗閲嶈瘯')
+        alert('API 地址无效或加载失败，请检查后重试')
       }
     })
   }
 
   function fetchJsonp(url) {
-    // 鏀寔 CDN 闀滃儚鍥為€€
+    // 支持 CDN 镜像回退
     const mirrors = typeof tvboxMirrors === 'function' ? tvboxMirrors(url) : [url];
     let mirrorIdx = 0;
     function tryNext(errMsg) {
@@ -784,23 +788,22 @@ function initApp(el) {
             try { delete window[cbName]; } catch(e) {}
             if (script.parentNode) script.parentNode.removeChild(script);
           }
-          script.onerror = () => { cleanup(); tryNext('JSONP 璇锋眰澶辫触').then(resolve).catch(reject); };
+          script.onerror = () => { cleanup(); tryNext('JSONP 请求失败').then(resolve).catch(reject); };
           window[cbName] = (data) => { cleanup(); resolve(data); };
           document.head.appendChild(script);
-          setTimeout(() => { cleanup(); if (!settled) tryNext('JSONP 瓒呮椂').then(resolve).catch(reject); }, 15000);
+          setTimeout(() => { cleanup(); if (!settled) tryNext('JSONP 超时').then(resolve).catch(reject); }, 15000);
         });
-      } else reject(new Error(errMsg || 'JSONP 璇锋眰澶辫触'));
+      } else reject(new Error(errMsg || 'JSONP 请求失败'));
     }
     return tryNext();
   }
 
-  // 鈹€鈹€ 娓叉煋褰辫缃戞牸锛圥remium 绔栫増鍗＄墖锛夆攢鈹€
   function renderVodGrid(list, total) {
     const grid = el.querySelector('#t-main-grid')
     const pagination = el.querySelector('#t-pagination')
     if (!grid) return
     if (!list || !list.length) {
-      grid.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">馃摥</div><div class="tvbox-empty-title">鏆傛棤鏁版嵁</div><div class="tvbox-empty-sub">璇峰皾璇曞叾浠栧垎绫绘垨鍏抽敭璇?/div></div>'
+      grid.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📭</div><div class="tvbox-empty-title">暂无数据</div><div class="tvbox-empty-sub">请尝试其他分类或关键词</div></div>'
       if (pagination) pagination.innerHTML = ''
       return
     }
@@ -811,18 +814,18 @@ function initApp(el) {
     grid.innerHTML = '<div class="tvbox-grid">' + list.map(item => {
       const histItem = history.find(h => h.id == item.vod_id && h.source === sourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
-      const resumeLabel = pct > 95 ? '宸茬湅瀹? : pct > 2 ? '缁?' + pct + '%' : ''
+      const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
       return '<div class="tvbox-card" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
-            (item.vod_pic ? '<img src="' + escHtml(item.vod_pic) + '" alt="' + escHtml(item.vod_name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>馃幀</span>\'" />' : '<span class="tvbox-card-placeholder">馃幀</span>') +
-            '<span class="tvbox-card-tag">' + escHtml(item.type_name || '褰辫') + '</span>' +
+            (item.vod_pic ? '<img src="' + escHtml(item.vod_pic) + '" alt="' + escHtml(item.vod_name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
+            '<span class="tvbox-card-tag">' + escHtml(item.type_name || '影视') + '</span>' +
             (item.vod_score ? '<span class="tvbox-card-score">' + escHtml(item.vod_score) + '</span>' : '') +
             (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
           '</div>' +
           '<div class="tvbox-card-info">' +
             '<div class="tvbox-card-title">' + item.vod_name + '</div>' +
-            '<div class="tvbox-card-sub">' + (item.vod_actor || '鏈煡涓绘紨') + '</div>' +
+            '<div class="tvbox-card-sub">' + (item.vod_actor || '未知主演') + '</div>' +
           '</div>' +
         '</div>' +
       '</div>'
@@ -848,11 +851,10 @@ function initApp(el) {
     }
   }
 
-  // 鈹€鈹€ 鍔犺浇鐩存挱 鈹€鈹€
   async function loadLive() {
     const source = TV_SOURCES[tvSrc]
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">姝ｅ湪鍔犺浇鐩存挱棰戦亾...</span></div>'
+    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在加载直播频道...</span></div>'
     let cats = tvCache[tvSrc]
     if (!cats) {
       try {
@@ -861,26 +863,25 @@ function initApp(el) {
         cats = isM3u ? parseNzk(convertM3uToNormal(text)) : parseNzk(text)
         tvCache[tvSrc] = cats
       } catch (e) {
-        content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">馃摗</div><div class="tvbox-empty-title">鍔犺浇澶辫触</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
+        content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📡</div><div class="tvbox-empty-title">加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
         return
       }
     }
     renderTvGrid(cats)
   }
 
-  // 鈹€鈹€ 娓叉煋鐩存挱缃戞牸 鈹€鈹€
   function renderTvGrid(categories) {
     const content = el.querySelector('#t-content')
-    if (!categories || !categories.length) { content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">馃摗</div><div class="tvbox-empty-title">鏆傛棤棰戦亾鏁版嵁</div></div>'; return }
+    if (!categories || !categories.length) { content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📡</div><div class="tvbox-empty-title">暂无频道数据</div></div>'; return }
     content.innerHTML = categories.slice(0, 30).map(cat => {
       if (!cat.channels || !cat.channels.length) return ''
       const chHtml = cat.channels.slice(0, 80).map(ch =>
         '<div class="tvbox-live-card" data-url="' + escHtml(ch.url) + '" data-name="' + escHtml(ch.name) + '">' +
-          '<span class="tvbox-live-icon">馃摵</span><span class="tvbox-live-name">' + escHtml(ch.name) + '</span>' +
+          '<span class="tvbox-live-icon">📺</span><span class="tvbox-live-name">' + escHtml(ch.name) + '</span>' +
         '</div>'
       ).join('')
       return '<div class="tvbox-cat-section">' +
-        '<div class="tvbox-cat-heading">馃摵 ' + escHtml(cat.name) + ' <span class="tvbox-cat-heading-count">' + cat.channels.length + '</span></div>' +
+        '<div class="tvbox-cat-heading">📺 ' + escHtml(cat.name) + ' <span class="tvbox-cat-heading-count">' + cat.channels.length + '</span></div>' +
         '<div class="tvbox-live-grid">' + chHtml + '</div>' +
       '</div>'
     }).join('')
@@ -888,7 +889,7 @@ function initApp(el) {
       node.addEventListener('click', () => {
         const url = node.dataset.url, name = node.dataset.name
         if (url && url !== '#') openPlayerTv(name, url)
-        else alert('璇ラ閬撴殏鏃犳挱鏀惧湴鍧€')
+        else alert('该频道暂无播放地址')
       })
     })
   }
@@ -896,21 +897,22 @@ function initApp(el) {
   function openPlayerTv(name, url) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
-    el.querySelector('#t-player-title').textContent = '馃摵 ' + name
+    el.querySelector('#t-player-title').textContent = '📺 ' + name
     el.querySelector('#t-ext-link').href = url
-    body.innerHTML = '<div class="tvbox-player-loading">姝ｅ湪鍔犺浇...</div>'
+    body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
     overlay.style.display = 'flex'
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
     else {
-      // URL 鏍煎紡鏍￠獙
+      // URL 格式校验
       var safeUrl = url && /^https?:\/\//i.test(url) ? url : ''
       body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
-      // 瓒呮椂鍏滃簳锛?0 绉掑唴 iframe 鏈Е鍙?load 浜嬩欢鍒欐樉绀洪敊璇?      setTimeout(() => {
+      // 超时兜底：10 秒内 iframe 未触发 load 事件则显示错误
+      setTimeout(() => {
         const iframe = document.getElementById('tv-iframe')
         if (iframe && iframe.style.display !== 'none') {
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">鎾斁鍦板潃鏃犳晥鎴栧凡琚槻鐩楅摼</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">鈫?鍦ㄦ祻瑙堝櫒涓墦寮€</a></div>'
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
         }
       }, 10000)
     }
@@ -919,16 +921,15 @@ function initApp(el) {
   async function openDetail(id, name, sourceName, pic) {
     const source = VOD_SOURCES[src]
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">鍔犺浇涓?..</span></div>'
+    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
     let json = { list: null }
     try { json = await fetchJSON(source.api + '?ac=detail&ids=' + id) } catch {}
     if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=detail&ids=' + id) } catch {} }
     const item = json.list && json.list[0]
-    if (!item) { content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">馃攳</div><div class="tvbox-empty-title">鏈壘鍒拌褰辩墖</div></div>'; return }
+    if (!item) { content.innerHTML = '<div class="tvbox-empty">未找到该影片</div>'; return }
     showEpisodePicker(item, source.name)
   }
 
-  // 鈹€鈹€ 鍓ч泦閫夌墖锛圥remium 璇︽儏椤碉級鈹€鈹€
   function showEpisodePicker(item, sourceName) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
@@ -938,6 +939,7 @@ function initApp(el) {
     const hist = getPlayHistory().find(h => h.id == item.vod_id && h.source === sourceName)
     playingEp = null
 
+    // 优先选择包含直接 m3u8 的源（lzm3u8 > liangzi 的 share/xxx）
     let preferredSi = 0
     if (episodes.length > 1) {
       const scored = episodes.map((e, i) => {
@@ -949,43 +951,30 @@ function initApp(el) {
       preferredSi = scored[0].i
     }
 
-    const backBtn = '<button class="tvbox-detail-back" id="t-detail-back">鈫?杩斿洖鍒楄〃</button>'
-
-    const infoHtml = '<div class="tvbox-detail-info">' +
-      '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-detail-pic" onerror="this.style.display=\'none\'" />' +
-      '<div class="tvbox-detail-meta">' +
-        '<div class="tvbox-detail-name">' + item.vod_name + '</div>' +
-        '<div class="tvbox-detail-tags">' +
-          (item.type_name ? '<span class="tvbox-detail-tag">' + item.type_name + '</span>' : '') +
-          (item.vod_year ? '<span class="tvbox-detail-tag">' + item.vod_year + '</span>' : '') +
-          (item.vod_area ? '<span class="tvbox-detail-tag">' + item.vod_area + '</span>' : '') +
-        '</div>' +
-        '<div class="tvbox-detail-desc">' + (item.vod_content || '鏆傛棤绠€浠?) + '</div>' +
-      '</div>' +
-    '</div>'
-
-    const sourceSelectorHtml = episodes.length > 1
-      ? '<div class="tvbox-source-selector">' +
-          '<span class="tvbox-source-selector-label">閫夋嫨鎾斁婧?/span>' +
-          '<div class="tvbox-source-tabs">' +
-            episodes.map((e, i) => '<button class="tvbox-source-tab' + (i===preferredSi?' active':'') + '" data-si="' + i + '">' + e.name + '</button>').join('') +
-          '</div>' +
+    const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">← 返回列表</button></div>'
+    const firstUrls = episodes[preferredSi]?.urls || []
+    const siHtml = episodes.length > 1
+      ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">选择源：</span>' +
+          episodes.map((e, i) => '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + (i===preferredSi?' ★':'') + '</button>').join('') +
         '</div>'
       : ''
 
-    const firstUrls = episodes[preferredSi]?.urls || []
-
     body.innerHTML =
-      backBtn + infoHtml + sourceSelectorHtml +
-      '<div class="tvbox-episodes-title">鎾斁鍒楄〃 <span class="tvbox-episodes-count">' + firstUrls.length + ' 闆?/span></div>' +
+      backBtn +
+      '<div class="tvbox-ep-info">' +
+        '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" onerror="this.style.display=\'none\'" />' +
+        '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
+      '</div>' +
+      siHtml +
+      '<div class="tvbox-ep-list-title">播放列表 ' + firstUrls.length + ' 集</div>' +
       '<div class="tvbox-ep-grid" id="t-ep-grid">' +
-        firstUrls.map(ep => {
+        firstUrls.map((ep, i) => {
           const isResume = hist && hist.epName === ep.name
           return '<button class="tvbox-ep-btn' + (isResume?' playing':'') + '" ' +
             'data-url="' + ep.url + '" data-name="' + item.vod_name + ' ' + ep.name + '" ' +
             'data-epname="' + ep.name + '" data-pic="' + item.vod_pic + '" ' +
             'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' +
-            (isResume?'鈻?':'') + ep.name + '</button>'
+            (isResume?'▶ ':'') + ep.name + '</button>'
         }).join('') +
       '</div>'
 
@@ -1001,7 +990,7 @@ function initApp(el) {
         const si = parseInt(btn.dataset.si)
         const eps = episodes[si]?.urls || []
         const grid = body.querySelector('#t-ep-grid')
-        grid.innerHTML = eps.map(ep =>
+        grid.innerHTML = eps.map((ep, i) =>
           '<button class="tvbox-ep-btn" data-url="' + escHtml(ep.url) + '" data-name="' + escHtml(item.vod_name + ' ' + ep.name) + '" ' +
             'data-epname="' + escHtml(ep.name) + '" data-pic="' + escHtml(item.vod_pic) + '" ' +
             'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' + escHtml(ep.name) + '</button>'
@@ -1009,7 +998,6 @@ function initApp(el) {
         bindEpBtns()
         body.querySelectorAll('[data-si]').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
-        body.querySelector('.tvbox-episodes-count').textContent = eps.length + ' 闆?
       })
     })
 
@@ -1019,7 +1007,11 @@ function initApp(el) {
     function bindEpBtns() {
       body.querySelectorAll('.tvbox-ep-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          upsertPlayHistory({ id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic, source: btn.dataset.source, epName: btn.dataset.epname, epUrl: btn.dataset.url, progress: 0, duration: 0 })
+          upsertPlayHistory({
+            id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
+            source: btn.dataset.source, epName: btn.dataset.epname,
+            epUrl: btn.dataset.url, progress: 0, duration: 0,
+          })
           openPlayerVod(btn.dataset.name, btn.dataset.url, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic)
         })
       })
@@ -1032,22 +1024,18 @@ function initApp(el) {
     el.querySelector('#t-player-title').textContent = name
     el.querySelector('#t-ext-link').href = url
     playingEp = { id, source, epName, pic }
-    body.innerHTML = '<div class="tvbox-player-loading">姝ｅ湪鍔犺浇...</div>'
+    body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
     overlay.style.display = 'flex'
-    if (!url || url === '#') {
-      body.innerHTML = '<div class="tvbox-player-loading">鏆傛棤鎾斁鍦板潃</div>'
-      return
-    }
+    if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
     else {
-      var safeUrl = /^https?:\/\//i.test(url) ? url : ''
-      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl(url) + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
       setTimeout(() => {
         const iframe = document.getElementById('tv-iframe')
         if (iframe && iframe.style.display !== 'none') {
-          body.innerHTML = '<div class="tvbox-player-loading">鎾斁鍦板潃鏃犳晥鎴栧凡琚槻鐩楅摼</div>'
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl(url) + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
         }
       }, 10000)
     }
@@ -1069,18 +1057,18 @@ function initApp(el) {
         let hlsTimedOut = false
         const hlsTimer = setTimeout(() => {
           if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
-            body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 鍔犺浇瓒呮椂锛?5绉掞級</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 鍦ㄦ祻瑙堝櫒涓墦寮€</a></div>'
+            body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 加载超时（15秒）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
           }
         }, 15000)
         hls.on(window.Hls.Events.ERROR, () => { hlsTimedOut = true; clearTimeout(hlsTimer); window._movieHls = null
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 鎾斁澶辫触</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 鍦ㄦ祻瑙堝櫒涓墦寮€</a></div>' })
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>' })
         hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer) })
         video.addEventListener('timeupdate', () => trackProgress(video))
         video.addEventListener('ended', () => markFinished())
         if (startProgress > 0) video.currentTime = startProgress
         video.play().catch(() => {})
       } else {
-        body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">姝ｅ湪灏濊瘯鎾斁...</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">鈫?鍦ㄦ祻瑙堝櫒涓墦寮€</a></div>'
+        body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">正在尝试播放...</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
       }
     } else {
       const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'
@@ -1121,7 +1109,8 @@ function initApp(el) {
     playingEp = null
     el.querySelector('#t-player-overlay').style.display = 'none'
     el.querySelector('#t-player-body').innerHTML = ''
-    // 娓呯悊 HLS 瀹炰緥锛岄槻姝㈣棰戝悗鍙扮户缁挱鏀?    if (window._movieHls) {
+    // 清理 HLS 实例，防止视频后台继续播放
+    if (window._movieHls) {
       window._movieHls.destroy()
       window._movieHls = null
     }
@@ -1132,19 +1121,19 @@ function initApp(el) {
     const prev = page > 1 ? page - 1 : 1
     const next = page < total ? page + 1 : total
     return '<div class="tvbox-pagination">' +
-      '<button class="tvbox-page-btn" data-page="' + prev + '">鈼€ 涓婁竴椤?/button>' +
-      '<span class="tvbox-page-info">绗?' + page + ' / ' + total + ' 椤?/span>' +
-      '<button class="tvbox-page-btn" data-page="' + next + '">涓嬩竴椤?鈻?/button>' +
+      '<button class="tvbox-page-btn" data-page="' + prev + '">◀ 上一页</button>' +
+      '<span class="tvbox-page-info">第 ' + page + ' / ' + total + ' 页</span>' +
+      '<button class="tvbox-page-btn" data-page="' + next + '">下一页 ▶</button>' +
     '</div>'
   }
 
-  // 鈹€鈹€ 鎮诞鎾斁鍣紙鍙嫋鎷?鏈€灏忓寲/缃《锛夆攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── 悬浮播放器（可拖拽/最小化/置顶）───────────────────────────────────
   let _floatState = null   // { wrap, title, pinned, minimized, h, w, x, y }
 
   function openFloatPlayer(name, url, id, source, epName, pic) {
     closeFloatPlayer()
 
-    // 浼樺厛閫夋嫨鐩存帴 m3u8锛堥潪 /share/ 鐨勶級
+    // 优先选择直接 m3u8（非 /share/ 的）
     const useUrl = pickDirectUrl(url)
 
     const wrap = document.createElement('div')
@@ -1158,22 +1147,22 @@ function initApp(el) {
     wrap.innerHTML = `
       <div class="tvbox-float-header">
         <span class="tvbox-float-title">${escHtml(name)}</span>
-        <button class="tvbox-float-ctrl min-btn" id="_fmin" title="鏈€灏忓寲">鈹€</button>
-        <button class="tvbox-float-ctrl pin-btn" id="_fpin" title="缃《">馃搶</button>
-        <button class="tvbox-float-ctrl close" id="_fclose" title="鍏抽棴">鉁?/button>
+        <button class="tvbox-float-ctrl min-btn" id="_fmin" title="最小化">─</button>
+        <button class="tvbox-float-ctrl pin-btn" id="_fpin" title="置顶">📌</button>
+        <button class="tvbox-float-ctrl close" id="_fclose" title="关闭">✕</button>
       </div>
       <div class="tvbox-float-body" id="_fbody">
         ${canEmbed ? `<div class="tvbox-float-video-wrap" id="_fvid"></div>` :
           `<div style="aspect-ratio:16/9;background:#000;display:flex;align-items:center;justify-content:center;color:#6b6b8a;font-size:13px">
             <div style="text-align:center">
-              <div style="margin-bottom:8px">鈿狅笍 闈炵洿閾撅紝鏃犳硶鐩存帴鎾斁</div>
-              <div style="font-size:11px;color:#555">m3u8/MP4 鐩撮摼鎵嶅彲鎾斁</div>
+              <div style="margin-bottom:8px">⚠️ 非直链，无法直接播放</div>
+              <div style="font-size:11px;color:#555">m3u8/MP4 直链才可播放</div>
             </div>
           </div>`}
       </div>
       <div class="tvbox-float-url-bar">
         <a href="${escHtml(useUrl)}" target="_blank" rel="noopener" id="_fext" title="${escHtml(useUrl)}">${escHtml(useUrl)}</a>
-        <button class="tvbox-float-ctrl" id="_fcopy" title="澶嶅埗閾炬帴" style="font-size:10px;width:22px;height:22px">馃搵</button>
+        <button class="tvbox-float-ctrl" id="_fcopy" title="复制链接" style="font-size:10px;width:22px;height:22px">📋</button>
       </div>`
 
     document.body.appendChild(wrap)
@@ -1184,12 +1173,12 @@ function initApp(el) {
       y: window.innerHeight - 80 - (canEmbed ? Math.round(420 * 9/16 + 120) : 120)
     }
 
-    // 鎷栨嫿
+    // 拖拽
     const hdr = wrap.querySelector('.tvbox-float-header')
     hdr.addEventListener('mousedown', onFloatDragStart)
     hdr.addEventListener('touchstart', onFloatDragStart, { passive: false })
 
-    // 鎺у埗鎸夐挳
+    // 控制按钮
     wrap.querySelector('#_fclose').addEventListener('click', closeFloatPlayer)
     wrap.querySelector('#_fmin').addEventListener('click', () => toggleFloatMin())
     wrap.querySelector('#_fpin').addEventListener('click', () => toggleFloatPin())
@@ -1197,33 +1186,33 @@ function initApp(el) {
       navigator.clipboard?.writeText(useUrl).catch(() => {})
     })
 
-    // 鎾斁瑙嗛
+    // 播放视频
     if (canEmbed) {
       if (isM3u8) loadVideoIntoFloat(useUrl)
       else loadMp4IntoFloat(useUrl)
     }
 
-    // ESC 鍏抽棴
+    // ESC 关闭
     document.addEventListener('keydown', onFloatEsc)
   }
 
   function pickDirectUrl(url) {
-    // url 鍙兘鏄?"闆嗗悕$url#闆嗗悕$url" 鎴栧崟涓?url
+    // url 可能是 "集名$url#集名$url" 或单个 url
     if (!url.includes('#') && !url.includes('$$$')) return url
-    // 鎵剧涓€涓潪 /share/ 鐨?m3u8
+    // 找第一个非 /share/ 的 m3u8
     const parts = url.split('#').filter(Boolean)
     for (const p of parts) {
       const idx = p.indexOf('$')
       const u = idx >= 0 ? p.slice(idx + 1) : p
       if (u.includes('.m3u8') && !u.includes('/share/')) return u
     }
-    // 鍏舵閫夌涓€涓?m3u8
+    // 其次选第一个 m3u8
     for (const p of parts) {
       const idx = p.indexOf('$')
       const u = idx >= 0 ? p.slice(idx + 1) : p
       if (u.includes('.m3u8')) return u
     }
-    // fallback 绗竴涓?url
+    // fallback 第一个 url
     const idx0 = parts[0].indexOf('$')
     return idx0 >= 0 ? parts[0].slice(idx0 + 1) : parts[0]
   }
@@ -1243,17 +1232,17 @@ function initApp(el) {
       let timedOut = false
       const timer = setTimeout(() => {
         if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
-          vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">m3u8 鍔犺浇瓒呮椂锛?5绉掞級</div>'
+          vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">m3u8 加载超时（15秒）</div>'
         }
       }, 15000)
       hls.on(window.Hls.Events.ERROR, () => { clearTimeout(timer); window._floatHls = null
-        vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">m3u8 鎾斁澶辫触</div>'
+        vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">m3u8 播放失败</div>'
       })
       hls.on(window.Hls.Events.MANIFEST_PARSED, () => clearTimeout(timer))
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url
     } else {
-      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">娴忚鍣ㄤ笉鏀寔 HLS</div>'
+      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">浏览器不支持 HLS</div>'
     }
     video.play().catch(() => {})
   }
@@ -1272,7 +1261,7 @@ function initApp(el) {
     if (!_floatState) return
     _floatState.minimized = !_floatState.minimized
     _floatState.wrap.classList.toggle('minimized', _floatState.minimized)
-    _floatState.wrap.querySelector('#_fmin').textContent = _floatState.minimized ? '鈻? : '鈹€'
+    _floatState.wrap.querySelector('#_fmin').textContent = _floatState.minimized ? '□' : '─'
   }
 
   function toggleFloatPin() {
@@ -1336,7 +1325,7 @@ function initApp(el) {
     onFloatDragEnd()
   }
 
-  // 鈹€鈹€ 閾炬帴杈撳叆瑙ｆ瀽鍣?鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  // ── 链接输入解析器 ────────────────────────────────────────────────
   function showUrlInput() {
     const existing = document.querySelector('.tvbox-url-overlay')
     if (existing) { existing.remove(); return }
@@ -1345,17 +1334,17 @@ function initApp(el) {
     overlay.className = 'tvbox-url-overlay'
     overlay.innerHTML = `
       <div class="tvbox-url-box">
-        <div class="tvbox-url-title">馃敆 閾炬帴瑙ｆ瀽鎾斁</div>
+        <div class="tvbox-url-title">🔗 链接解析播放</div>
         <div class="tvbox-url-err" id="_urlerr"></div>
         <div class="tvbox-url-row">
-          <input id="_urlin" type="url" placeholder="绮樿创瑙嗛椤甸潰 URL銆乵3u8 鐩撮摼鎴栧垎浜〉閾炬帴..." autofocus />
-          <button class="tvbox-url-go" id="_urlgo">瑙ｆ瀽</button>
+          <input id="_urlin" type="url" placeholder="粘贴视频页面 URL、m3u8 直链或分享页链接..." autofocus />
+          <button class="tvbox-url-go" id="_urlgo">解析</button>
         </div>
         <div class="tvbox-url-hint">
-          鏀寔锛?span>m3u8/MP4 鐩撮摼</span>銆?span>閲忓瓙/鏆撮鍒嗕韩椤?/span>銆?span>浠绘剰瑙嗛椤?URL</span><br>
-          鎻愮ず锛氳В鏋愮粨鏋滀細灏藉彲鑳芥彁鍙栫洿閾?m3u8锛屾棤娉曟彁鍙栨椂鏄剧ず璇存槑
+          支持：<span>m3u8/MP4 直链</span>、<span>量子/暴风分享页</span>、<span>任意视频页 URL</span><br>
+          提示：解析结果会尽可能提取直链 m3u8，无法提取时显示说明
         </div>
-        <button class="tvbox-url-cancel" id="_urlcancel">鍙栨秷</button>
+        <button class="tvbox-url-cancel" id="_urlcancel">取消</button>
       </div>`
 
     document.body.appendChild(overlay)
@@ -1371,27 +1360,30 @@ function initApp(el) {
 
     async function doUrlParse(rawUrl) {
       rawUrl = rawUrl.trim()
-      if (!rawUrl) { showErr('璇疯緭鍏ラ摼鎺?); return }
-      if (!/^https?:/i.test(rawUrl)) { showErr('浠呮敮鎸?http/https 閾炬帴'); return }
+      if (!rawUrl) { showErr('请输入链接'); return }
+      if (!/^https?:/i.test(rawUrl)) { showErr('仅支持 http/https 链接'); return }
       clearErr()
 
-      // 鐩撮摼鐩存帴鎾?      if (rawUrl.includes('.m3u8') || rawUrl.includes('.mp4')) {
+      // 直链直接播
+      if (rawUrl.includes('.m3u8') || rawUrl.includes('.mp4')) {
         overlay.remove()
-        openFloatPlayer('鐩撮摼鎾斁', rawUrl)
+        openFloatPlayer('直链播放', rawUrl)
         return
       }
 
-      // 閲忓瓙/鏆撮鍒嗕韩椤?鈫?灏濊瘯 Rust vod_fetch 鎻愬彇璇︽儏
+      // 量子/暴风分享页 → 尝试 Rust vod_fetch 提取详情
       const isLzShare = /\/share\//.test(rawUrl) || rawUrl.includes('v.lfthirtytwo.com') || rawUrl.includes('vip.lz-')
       if (isLzShare) {
         overlay.remove()
-        openFloatPlayer('瑙ｆ瀽涓?, rawUrl)
-        // 鍏堝皾璇曠敤 vod_fetch 鎵捐鎯呮帴鍙?        await tryExtractFromSharePage(rawUrl)
+        openFloatPlayer('解析中', rawUrl)
+        // 先尝试用 vod_fetch 找详情接口
+        await tryExtractFromSharePage(rawUrl)
         return
       }
 
-      // 鍏朵粬椤甸潰 鈫?鏄剧ず涓嶆敮鎸?      overlay.remove()
-      openFloatPlayer('鏃犳硶瑙ｆ瀽', rawUrl)
+      // 其他页面 → 显示不支持
+      overlay.remove()
+      openFloatPlayer('无法解析', rawUrl)
     }
 
     overlay.querySelector('#_urlgo').addEventListener('click', () => doUrlParse(inp.value))
@@ -1402,19 +1394,20 @@ function initApp(el) {
   }
 
   async function tryExtractFromSharePage(shareUrl) {
-    // 浠庡垎浜〉 URL 鍙嶅悜鎺ㄦ柇 vod_id锛岃皟鐢ㄨ鎯呮帴鍙?    // 鍒嗕韩椤垫牸寮? https://v.lfthirtytwo.com/share/{hash}
-    // 鏃犳硶鐩存帴鎻愬彇 hash 鈫?vod_id 鏄犲皠锛屾敼鐢?iframe 灏濊瘯
+    // 从分享页 URL 反向推断 vod_id，调用详情接口
+    // 分享页格式: https://v.lfthirtytwo.com/share/{hash}
+    // 无法直接提取 hash → vod_id 映射，改用 iframe 尝试
     const vidWrap = document.querySelector('#_fvid')
     if (vidWrap) {
-      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">鈿狅笍 鍒嗕韩椤甸渶娴忚鍣ㄦ墦寮€闃茬洍閾?/div>'
+      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">⚠️ 分享页需浏览器打开防盗链</div>'
     }
-    // 鏇存柊璇存槑
+    // 更新说明
     const urlBar = document.querySelector('.tvbox-float-url-bar')
     if (urlBar) {
       const a = urlBar.querySelector('a')
       if (a) a.href = shareUrl
     }
-    // 灏濊瘯 iframe 鎾斁锛堝彲鑳藉け璐ワ級
+    // 尝试 iframe 播放（可能失败）
     if (vidWrap && !vidWrap.innerHTML.includes('iframe')) {
       const safeUrl = /^https?:\/[^\/]+/.test(shareUrl) ? shareUrl : ''
       const iframe = document.createElement('iframe')
@@ -1429,14 +1422,14 @@ function initApp(el) {
     if (!url) return []
     const sources = []
     url.split('$$$').forEach((part, i) => {
-      const name = (from || '').split('$$$')[i] || ('婧? + (i + 1))
+      const name = (from || '').split('$$$')[i] || ('源' + (i + 1))
       sources.push({
         name,
         urls: part.split('#').map(p => {
           const idx = p.indexOf('$')
           return idx >= 0
-            ? { name: p.slice(0, idx) || '鏈煡', url: p.slice(idx + 1) }
-            : { name: '鏈煡', url: p }
+            ? { name: p.slice(0, idx) || '未知', url: p.slice(idx + 1) }
+            : { name: '未知', url: p }
         }).filter(ep => ep.url)
       })
     })
