@@ -8,7 +8,6 @@
 
 import '../style/movie-tool.css'
 
-
 // ── HTML 转义（防止 XSS）───────────────────────────────
 function escHtml(str) {
   if (str == null) return '';
@@ -275,32 +274,18 @@ function parseXml(raw) {
 // 尝试通过 Tauri Rust 后端请求（vod_fetch 命令）
 async function vodApiFetch(url) {
   try {
-    // 优先使用 Rust 后端（绕过 CORS）
-    try {
-      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
-      if (invoke) {
-        const text = await invoke('vod_fetch', { url }).catch(() => null)
-        if (text && text.trim()) return JSON.parse(text)
-      }
-    } catch { /* 降级到浏览器 */ }
-    // 降级：直接 fetch（桌面端 WebView 可能不过滤 CORS）
-    const resp = await fetch(url, {
-      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
-      credentials: 'include'
-    })
-    if (resp.ok) {
-      const txt = await resp.text()
-      try { return JSON.parse(txt) } catch { return null }
-    }
-    return { list: [], total: 0 }
-  } catch { return { list: [], total: 0 } }
+    const { invoke } = window.__TAURI_INTERNALS__ || window.__TAURI__ || {}
+    if (!invoke) return null
+    const text = await invoke('vod_fetch', { url, timeoutSecs: 12 })
+    if (!text || !text.trim()) return null
+    return JSON.parse(text)
+  } catch { return null }
 }
 
-// 普通请求（非 JSON）
+// 标准 fetch（备用）
 async function webFetch(url) {
   const resp = await fetch(url, {
     signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
-    credentials: 'include',
     headers: { 'Referer': 'https://claw.qt.cool/' }
   })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
@@ -315,83 +300,6 @@ async function fetchJSON(url) {
   let text
   try { text = await webFetch(url) } catch { return { list: [], total: 0 } }
   try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return { list: [], total: 0 } } }
-}
-
-// ── Wex JSON 配置解析器 ───────────────────────────────────────────
-let _wexConfig = null
-let _wexSources = []
-let _currentWexSite = null
-
-async function loadWexConfig(url) {
-  try {
-    const text = await crawlFetch(url)
-    if (!text || text.length < 20) return { error: '配置内容为空' }
-    const cfg = JSON.parse(text)
-    if (!cfg.sites || !Array.isArray(cfg.sites)) return { error: '无效的 Wex 配置' }
-    _wexConfig = cfg
-    _wexSources = cfg.sites.filter(s => s.key && s.name)
-    return { ok: true, count: _wexSources.length }
-  } catch (e) { return { error: e.message } }
-}
-
-function showWexPanel() {
-  const content = el.querySelector('#t-content')
-  content.innerHTML = '<div class="tvbox-wex-panel"><div class="tvbox-wex-header"><div class="tvbox-wex-icon">🧩</div><div class="tvbox-wex-title">Wex 配置</div></div><div class="tvbox-wex-form"><input id="t-wex-url" type="url" placeholder="https://9280.kstore.vip/wex.json" /><button id="t-wex-load" class="tvbox-wex-btn">📥 加载</button></div><div id="t-wex-status" class="tvbox-wex-status"></div><div id="t-wex-list" class="tvbox-wex-list"></div></div>'
-  const input = content.querySelector('#t-wex-url')
-  const btn = content.querySelector('#t-wex-load')
-  btn.addEventListener('click', async() => {
-    btn.disabled = true
-    btn.textContent = '⏳'
-    const r = await loadWexConfig(input.value.trim())
-    btn.disabled = false
-    btn.textContent = '📥 加载'
-    if (r.error) showWexStatus(r.error, 'error')
-    else { showWexStatus('✅ 加载成功 ' + r.count + ' 个站点', 'success'); renderWexSources() }
-  })
-}
-
-function showWexStatus(msg, type) {
-  const el2 = el.querySelector('#t-wex-status')
-  if (el2) { el2.className = 'tvbox-wex-status tvbox-wex-status-' + (type || 'info'); el2.textContent = msg; el2.style.display = 'block' }
-}
-
-function renderWexSources() {
-  const container = el.querySelector('#t-wex-list')
-  if (!container || !_wexSources.length) return
-  container.innerHTML = '<div class="tvbox-grid">' + _wexSources.slice(0, 50).map((s, i) => '<div class="tvbox-card" data-wex="' + i + '"><div class="tvbox-card-inner"><div class="tvbox-card-pic"><span style="font-size:28px">🎬</span></div><div class="tvbox-card-info"><div class="tvbox-card-title" style="font-size:11px">' + escHtml(s.name.replace(/🐮|┃/g, ' ').slice(0, 20)) + '</div></div></div></div>').join('') + '</div>'
-  container.querySelectorAll('[data-wex]').forEach(card => card.addEventListener('click', () => openWexSite(_wexSources[card.dataset.wex])))
-}
-
-function openWexSite(site) {
-  currentView = 'search'
-  const content = el.querySelector('#t-content')
-  content.innerHTML = '<div class="tvbox-search-header"><button id="t-back">← 返回</button><div>' + escHtml(site.name) + '</div></div><div class="tvbox-search-box"><input id="t-search" placeholder="搜索..." /></div><div id="t-main-grid"></div>'
-  content.querySelector('#t-back').addEventListener('click', () => { currentView = 'home'; initApp(el) })
-  const input = content.querySelector('#t-search')
-  let t = null
-  input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => input.value && wexSearch(site, input.value.trim()), 500) })
-  setTimeout(() => input.focus(), 100)
-}
-
-async function wexSearch(site, q) {
-  const grid = el.querySelector('#t-main-grid')
-  if (!grid) return
-  grid.innerHTML = '<div class="tvbox-loading">🔍 搜索中...</div>'
-  try {
-    let url = (site.ext || site.api || '').replace(/\{(wd|kw|keyword)\}/g, encodeURIComponent(q)).replace(/([?&])(wd|kw)=([^&]+)/, '$1$2=' + encodeURIComponent(q))
-    if (!url) { grid.innerHTML = '<div class="tvbox-empty">无搜索接口</div>'; return }
-    const data = await crawlFetch(url)
-    const results = parseWexResult(data)
-    renderVodGrid(results, results.length)
-  } catch (e) { grid.innerHTML = '<div class="tvbox-empty">搜索失败</div>' }
-}
-
-function parseWexResult(data) {
-  try {
-    if (typeof data === 'string') data = JSON.parse(data)
-    const list = data?.list || data?.data || data?.results || data?.vod || []
-    return list.map(v => ({ vod_id: v.vod_id || v.id || '', vod_name: v.vod_name || v.title || v.name || '', vod_pic: v.vod_pic || v.pic || v.thumb || '', vod_actor: v.vod_actor || v.actor || '', _dl: parseTvboxDl(v), _cat: v.type_name || '' }))
-  } catch { return [] }
 }
 
 // ── NZK 解析 ──
@@ -482,7 +390,6 @@ function initApp(el) {
         <button class="tvbox-mode-tab active" data-mode="vod">📺 影视点播</button>
         <button class="tvbox-mode-tab" data-mode="live">📡 电视直播</button>
         <button class="tvbox-mode-tab" data-mode="tvboxjson">🔗 TVBox JSON</button>
-        <button class="tvbox-mode-tab" data-mode="crawl">🌐 网站爬虫</button>
       </div>
     </nav>
 
@@ -553,17 +460,12 @@ function initApp(el) {
       } else if (mode === 'tvboxjson') {
         el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">分类</span><button class="tvbox-cat-chip active">全部</button>'
         renderTvboxSrcTabs()
-      } else if (mode === 'crawl') {
-        el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">网站爬虫</span>'
-        el.querySelector('#t-srcbar').innerHTML = ''
-        showCrawlInput()
       } else {
         renderCatBar()
         renderSrcBar()
       }
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') loadTvboxList()
-      else if (mode === 'crawl') { /* 等待用户输入 */ }
       else if (getPlayHistory().length > 0 && !query) showPlayHistory()
       else loadData()
     })
@@ -1423,281 +1325,6 @@ function initApp(el) {
     onFloatDragEnd()
   }
 
-// ── 网站爬虫解析器 ───────────────────────────────────────────────
-
-  // 爬虫模式状态
-  let _crawlResults = []
-
-  function showCrawlInput() {
-    const content = el.querySelector('#t-content')
-    content.innerHTML = `
-      <div class="tvbox-crawl-panel">
-        <div class="tvbox-crawl-header">
-          <div class="tvbox-crawl-icon">🕷️</div>
-          <div class="tvbox-crawl-title">网站爬虫</div>
-          <div class="tvbox-crawl-sub">输入任意视频网站 URL，自动分析并提取可播放的视频链接</div>
-        </div>
-        <div class="tvbox-crawl-form">
-          <input id="t-crawl-url" type="url" placeholder="https://example.com/video/123" />
-          <button id="t-crawl-go" class="tvbox-crawl-btn">🔍 爬取</button>
-        </div>
-        <div class="tvbox-crawl-hint">
-          <p>💡 支持：m3u8/mp4直链、视频详情页、播放器iframe嵌入</p>
-        </div>
-        <div id="t-crawl-status" class="tvbox-crawl-status"></div>
-        <div id="t-crawl-results" class="tvbox-crawl-results"></div>
-      </div>
-    `
-
-    const input = content.querySelector('#t-crawl-url')
-    const btn = content.querySelector('#t-crawl-go')
-
-    async function doCrawl() {
-      const url = input.value.trim()
-      if (!url) return
-      if (!/^https?:/i.test(url)) {
-        showCrawlStatus('❌ 请输入有效的 http/https URL', 'error')
-        return
-      }
-      btn.disabled = true
-      btn.textContent = '⏳ 爬取中...'
-      showCrawlStatus('🔍 正在分析页面结构...', 'loading')
-      _crawlResults = []
-      const results = await crawlSite(url)
-      _crawlResults = results
-      btn.disabled = false
-      btn.textContent = '🔍 爬取'
-      renderCrawlResults(results)
-    }
-
-    btn.addEventListener('click', doCrawl)
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') doCrawl() })
-    setTimeout(() => input.focus(), 100)
-  }
-
-  function showCrawlStatus(msg, type) {
-    const el2 = el.querySelector('#t-crawl-status')
-    if (!el2) return
-    el2.className = 'tvbox-crawl-status tvbox-crawl-status-' + (type || 'info')
-    el2.textContent = msg
-    el2.style.display = 'block'
-  }
-
-  async function crawlSite(url) {
-    const results = []
-    if (url.includes('.m3u8') || url.includes('.mp4')) {
-      const name = url.split('/').pop().replace(/\.(m3u8|mp4)/i, '') || '直链视频'
-      return [{ name, url, thumb: '', type: 'direct' }]
-    }
-    let html = ''
-    try {
-      html = await crawlFetch(url)
-    } catch (e) {
-      showCrawlStatus('❌ 页面获取失败: ' + e.message, 'error')
-      return []
-    }
-    showCrawlStatus('📄 页面已获取，正在分析视频链接...', 'loading')
-
-    const m3u8Links = extractM3u8(html, url)
-    m3u8Links.forEach(item => results.push(item))
-
-    const mp4Links = extractMp4(html, url)
-    mp4Links.forEach(item => results.push(item))
-
-    const iframes = extractIframes(html, url)
-    for (const iframe of iframes) {
-      showCrawlStatus('🔗 发现嵌入式播放器: ' + iframe.src, 'loading')
-      try {
-        const iframeHtml = await crawlFetch(iframe.src).catch(() => '')
-        const frameM3u8 = extractM3u8(iframeHtml, iframe.src)
-        frameM3u8.forEach(item => results.push(item))
-        const frameMp4 = extractMp4(iframeHtml, iframe.src)
-        frameMp4.forEach(item => results.push(item))
-      } catch {}
-    }
-
-    const listItems = extractVideoList(html, url)
-    listItems.forEach(item => results.push(item))
-
-    const jsUrls = extractFromScript(html, url)
-    jsUrls.forEach(item => results.push(item))
-
-    const seen = new Set()
-    return results.filter(r => {
-      const key = r.url
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }
-
-  async function crawlFetch(pageUrl) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
-      if (invoke) {
-        const html = await invoke('fetch_page', { url: pageUrl }).catch(() => null)
-        if (html) return html
-      }
-    } catch {}
-    const resp = await fetch(pageUrl, {
-      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
-      credentials: 'include',
-      headers: { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9' }
-    })
-    if (!resp.ok) throw new Error('HTTP ' + resp.status)
-    return resp.text()
-  }
-
-  function extractM3u8(html, base) {
-    const results = []
-    const re = /(?:src|href|url|video|media)[\s"'=]*(\S+\.m3u8[^"'<>\s]*)/gi
-    let m
-    while ((m = re.exec(html)) !== null) {
-      const raw = m[1].replace(/['"]/g, '').split('?')[0]
-      const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
-      if (resolved.includes('.m3u8')) {
-        const name = raw.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
-        results.push({ name, url: resolved, thumb: '', type: 'm3u8' })
-      }
-    }
-    const jsonRe = /"(https?:[^"]+\.m3u8[^"]*)"/g
-    while ((m = jsonRe.exec(html)) !== null) {
-      const resolved = m[1].split('?')[0]
-      if (resolved.includes('.m3u8')) {
-        const name = resolved.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
-        results.push({ name, url: resolved, thumb: '', type: 'm3u8' })
-      }
-    }
-    return results
-  }
-
-  function extractMp4(html, base) {
-    const results = []
-    const re = /(?:src|href|url|video|media)[\s"'=]*(\S+\.mp4[^"'<>\s]*)/gi
-    let m
-    while ((m = re.exec(html)) !== null) {
-      const raw = m[1].replace(/['"]/g, '').split('?')[0]
-      const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
-      if (resolved.includes('.mp4')) {
-        const name = raw.split('/').pop().replace('.mp4', '') || 'MP4 视频'
-        results.push({ name, url: resolved, thumb: '', type: 'mp4' })
-      }
-    }
-    return results
-  }
-
-  function extractIframes(html, base) {
-    const results = []
-    const re = /<iframe[^>]+src=["']([^"']+)["'][^>]*>/gi
-    let m
-    while ((m = re.exec(html)) !== null) {
-      const src = m[1].trim()
-      if (src && !src.startsWith('about:') && !src.startsWith('javascript:')) {
-        const resolved = src.startsWith('http') ? src : new URL(src, base).href
-        results.push({ src: resolved })
-      }
-    }
-    const re2 = /<iframe[^>]+data-src=["']([^"']+)["'][^>]*>/gi
-    while ((m = re2.exec(html)) !== null) {
-      const src = m[1].trim()
-      if (src) {
-        const resolved = src.startsWith('http') ? src : new URL(src, base).href
-        results.push({ src: resolved })
-      }
-    }
-    return results
-  }
-
-  function extractVideoList(html, base) {
-    const results = []
-    const re = /<(?:a|div|li)[^>]+(?:href|data-url|data-src)[\s="']*([^"'<>\s]+)[^>]*>([^<]{2,60})/gi
-    let m
-    while ((m = re.exec(html)) !== null) {
-      const rawUrl = m[1].trim()
-      const title = m[2].replace(/<[^>]+>/g, '').trim()
-      if (!rawUrl || !title || rawUrl.length < 5) continue
-      const resolved = rawUrl.startsWith('http') ? rawUrl : new URL(rawUrl, base).href
-      if (resolved.includes('.m3u8') || resolved.includes('.mp4') ||
-          /player|video|play|watch|episode|detail/i.test(resolved)) {
-        results.push({ name: title || resolved.split('/').pop(), url: resolved, thumb: '', type: 'link' })
-      }
-    }
-    return results
-  }
-
-  function extractFromScript(html, base) {
-    const results = []
-    const jsonBlocks = html.match(/\{[^{}]{50,2000}"/g) || []
-    jsonBlocks.forEach(block => {
-      const m3u8Matches = block.match(/"'( ]+(https?:[^\s"')]{10,300}\.m3u8[^\s"')]*)/gi) || []
-      m3u8Matches.forEach(raw => {
-        const url = raw.replace(/["' >]/g, '').split('?')[0]
-        if (url.includes('.m3u8') && url.startsWith('http')) {
-          results.push({ name: url.split('/').pop().replace('.m3u8', ''), url, thumb: '', type: 'm3u8' })
-        }
-      })
-    })
-    return results
-  }
-
-  function renderCrawlResults(results) {
-    const container = el.querySelector('#t-crawl-results')
-    if (!results || results.length === 0) {
-      container.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">🔍</div><div class="tvbox-empty-title">未找到视频</div><div class="tvbox-empty-sub">该页面无法提取视频链接，可能是非视频类网站或需要登录</div></div>'
-      showCrawlStatus('', 'info')
-      return
-    }
-    showCrawlStatus('✅ 找到 ' + results.length + ' 个可播放链接', 'success')
-    container.innerHTML = '<div class="tvbox-grid">' + results.map((r, i) => {
-      const typeIcon = r.type === 'direct' ? '🎬' : r.type === 'm3u8' ? '📺' : r.type === 'mp4' ? '🎞️' : '🔗'
-      return '<div class="tvbox-card tvbox-crawl-card" data-index="' + i + '">' +
-        '<div class="tvbox-card-inner">' +
-          '<div class="tvbox-card-pic">' +
-            '<span class="tvbox-card-placeholder" style="font-size:32px;display:flex;align-items:center;justify-content:center;width:100%;height:100%">' + typeIcon + '</span>' +
-          '</div>' +
-          '<div class="tvbox-card-info">' +
-            '<div class="tvbox-card-title" style="font-size:12px;line-height:1.3">' + escHtml(r.name.slice(0, 40)) + '</div>' +
-            '<div class="tvbox-card-sub">' + r.type.toUpperCase() + '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>'
-    }).join('') + '</div>'
-
-    container.querySelectorAll('.tvbox-crawl-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const idx = parseInt(card.dataset.index)
-        const r = _crawlResults[idx]
-        if (r) playCrawlVideo(r.name, r.url)
-      })
-    })
-  }
-
-  function playCrawlVideo(name, url) {
-    const isM3u8 = url.includes('.m3u8')
-    const isMp4 = url.includes('.mp4')
-    if (isM3u8 || isMp4) {
-      openFloatPlayer(name, url)
-    } else {
-      showCrawlStatus('🔗 正在抓取: ' + url, 'loading')
-      crawlFetch(url).then(html => {
-        const m3u8s = extractM3u8(html, url)
-        const mp4s = extractMp4(html, url)
-        if (m3u8s.length > 0) {
-          openFloatPlayer(name, m3u8s[0].url)
-        } else if (mp4s.length > 0) {
-          openFloatPlayer(name, mp4s[0].url)
-        } else {
-          openFloatPlayer(name, url)
-        }
-        showCrawlStatus('', 'info')
-      }).catch(e => {
-        showCrawlStatus('❌ 抓取失败: ' + e.message, 'error')
-        openFloatPlayer(name, url)
-      })
-    }
-  }
-
-// ── 链接输入解析器 ────────────────────────────────────────────────
   // ── 链接输入解析器 ────────────────────────────────────────────────
   function showUrlInput() {
     const existing = document.querySelector('.tvbox-url-overlay')
