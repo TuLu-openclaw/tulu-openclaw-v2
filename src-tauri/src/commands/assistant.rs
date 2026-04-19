@@ -276,7 +276,7 @@ pub async fn assistant_list_processes(filter: Option<String>) -> Result<String, 
         output = tokio::process::Command::new("powershell")
             .args(["-NoProfile", "-Command",
                 "Get-Process | Select-Object Id, ProcessName, CPU, WorkingSet64 | Sort-Object ProcessName | Format-Table -AutoSize | Out-String -Width 200"])
-            .creation_flags(0x08000000)
+            
             .output()
             .await;
     }
@@ -345,7 +345,7 @@ async fn get_port_process(port: u16) -> String {
         output = tokio::process::Command::new("powershell")
             .args(["-NoProfile", "-Command",
                 &format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | Select-Object OwningProcess | ForEach-Object {{ (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName }}", port)])
-            .creation_flags(0x08000000)
+            
             .output()
             .await;
     }
@@ -468,7 +468,7 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
     );
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", &ps])
-        .creation_flags(0x08000000)
+        
         .output()
         .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -538,7 +538,7 @@ pub async fn fetch_page(url: String) -> Result<String, String> {
     );
     let output = Command::new("powershell")
         .args(["-NoProfile", "-Command", &ps])
-        .creation_flags(0x08000000)
+        
         .output()
         .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
