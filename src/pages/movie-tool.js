@@ -317,6 +317,83 @@ async function fetchJSON(url) {
   try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return { list: [], total: 0 } } }
 }
 
+// ── Wex JSON 配置解析器 ───────────────────────────────────────────
+let _wexConfig = null
+let _wexSources = []
+let _currentWexSite = null
+
+async function loadWexConfig(url) {
+  try {
+    const text = await crawlFetch(url)
+    if (!text || text.length < 20) return { error: '配置内容为空' }
+    const cfg = JSON.parse(text)
+    if (!cfg.sites || !Array.isArray(cfg.sites)) return { error: '无效的 Wex 配置' }
+    _wexConfig = cfg
+    _wexSources = cfg.sites.filter(s => s.key && s.name)
+    return { ok: true, count: _wexSources.length }
+  } catch (e) { return { error: e.message } }
+}
+
+function showWexPanel() {
+  const content = el.querySelector('#t-content')
+  content.innerHTML = '<div class="tvbox-wex-panel"><div class="tvbox-wex-header"><div class="tvbox-wex-icon">🧩</div><div class="tvbox-wex-title">Wex 配置</div></div><div class="tvbox-wex-form"><input id="t-wex-url" type="url" placeholder="https://9280.kstore.vip/wex.json" /><button id="t-wex-load" class="tvbox-wex-btn">📥 加载</button></div><div id="t-wex-status" class="tvbox-wex-status"></div><div id="t-wex-list" class="tvbox-wex-list"></div></div>'
+  const input = content.querySelector('#t-wex-url')
+  const btn = content.querySelector('#t-wex-load')
+  btn.addEventListener('click', async() => {
+    btn.disabled = true
+    btn.textContent = '⏳'
+    const r = await loadWexConfig(input.value.trim())
+    btn.disabled = false
+    btn.textContent = '📥 加载'
+    if (r.error) showWexStatus(r.error, 'error')
+    else { showWexStatus('✅ 加载成功 ' + r.count + ' 个站点', 'success'); renderWexSources() }
+  })
+}
+
+function showWexStatus(msg, type) {
+  const el2 = el.querySelector('#t-wex-status')
+  if (el2) { el2.className = 'tvbox-wex-status tvbox-wex-status-' + (type || 'info'); el2.textContent = msg; el2.style.display = 'block' }
+}
+
+function renderWexSources() {
+  const container = el.querySelector('#t-wex-list')
+  if (!container || !_wexSources.length) return
+  container.innerHTML = '<div class="tvbox-grid">' + _wexSources.slice(0, 50).map((s, i) => '<div class="tvbox-card" data-wex="' + i + '"><div class="tvbox-card-inner"><div class="tvbox-card-pic"><span style="font-size:28px">🎬</span></div><div class="tvbox-card-info"><div class="tvbox-card-title" style="font-size:11px">' + escHtml(s.name.replace(/🐮|┃/g, ' ').slice(0, 20)) + '</div></div></div></div>').join('') + '</div>'
+  container.querySelectorAll('[data-wex]').forEach(card => card.addEventListener('click', () => openWexSite(_wexSources[card.dataset.wex])))
+}
+
+function openWexSite(site) {
+  currentView = 'search'
+  const content = el.querySelector('#t-content')
+  content.innerHTML = '<div class="tvbox-search-header"><button id="t-back">← 返回</button><div>' + escHtml(site.name) + '</div></div><div class="tvbox-search-box"><input id="t-search" placeholder="搜索..." /></div><div id="t-main-grid"></div>'
+  content.querySelector('#t-back').addEventListener('click', () => { currentView = 'home'; initApp(el) })
+  const input = content.querySelector('#t-search')
+  let t = null
+  input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => input.value && wexSearch(site, input.value.trim()), 500) })
+  setTimeout(() => input.focus(), 100)
+}
+
+async function wexSearch(site, q) {
+  const grid = el.querySelector('#t-main-grid')
+  if (!grid) return
+  grid.innerHTML = '<div class="tvbox-loading">🔍 搜索中...</div>'
+  try {
+    let url = (site.ext || site.api || '').replace(/\{(wd|kw|keyword)\}/g, encodeURIComponent(q)).replace(/([?&])(wd|kw)=([^&]+)/, '$1$2=' + encodeURIComponent(q))
+    if (!url) { grid.innerHTML = '<div class="tvbox-empty">无搜索接口</div>'; return }
+    const data = await crawlFetch(url)
+    const results = parseWexResult(data)
+    renderVodGrid(results, results.length)
+  } catch (e) { grid.innerHTML = '<div class="tvbox-empty">搜索失败</div>' }
+}
+
+function parseWexResult(data) {
+  try {
+    if (typeof data === 'string') data = JSON.parse(data)
+    const list = data?.list || data?.data || data?.results || data?.vod || []
+    return list.map(v => ({ vod_id: v.vod_id || v.id || '', vod_name: v.vod_name || v.title || v.name || '', vod_pic: v.vod_pic || v.pic || v.thumb || '', vod_actor: v.vod_actor || v.actor || '', _dl: parseTvboxDl(v), _cat: v.type_name || '' }))
+  } catch { return [] }
+}
+
 // ── NZK 解析 ──
 function parseNzk(raw) {
   const lines = raw.split('\n').map(l => l.replace(/\r$/, '').trim()).filter(l => l)
