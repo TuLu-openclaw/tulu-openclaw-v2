@@ -252,9 +252,9 @@ _customTvbox = getCustomTvbox()
 // 每个 VOD 源的分类映射（CMS type_id 体系各异，必须按源区分）
 // key: source key, value: { movie, tv, variety, anime, short } 对应的 type_id
 const VOD_TYPE_MAP = {
-  bfzy:   { movie: 20, tv: 30, variety: 45, anime: 39, short: 58 },  // 暴风资源
-  xsd:    { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 星之尘
-  tyys:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 天涯资源
+  bfzy:   { movie: 20, tv: 30, variety: 27, anime: 25, short: 28 },  // 暴风资源
+  xsd:    { movie: 6,  tv: 7,  variety: 16, anime: 25, short: 28 },   // 星之尘（实际typeId从6开始，非1）
+  tyys:   { movie: 6,  tv: 7,  variety: 16, anime: 25, short: 28 },   // 天涯资源
 }
 
 const VOD_CATEGORIES = [
