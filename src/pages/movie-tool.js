@@ -98,7 +98,25 @@ async function loadTvboxConfig(api) {
   if (api.type === 'wex') return loadWexConfig(api)
   if (_tvboxCache[api.key]) return _tvboxCache[api.key]
 
-  // ── 优先：Tauri 后端代理（绕过 CORS）────────────────
+  // ── 优先：直接 fetch（Tauri WebView 无 CORS 限制）──────────
+  try {
+    const resp = await fetch(api.url, {
+      signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined,
+      credentials: 'include'
+    })
+    if (resp.ok) {
+      const text = await resp.text()
+      let config
+      try { config = JSON.parse(text) }
+      catch { config = parseXml(text) }
+      if (config && (config.list?.length || config.total)) {
+        _tvboxCache[api.key] = config
+        return config
+      }
+    }
+  } catch { /* 降级到 Tauri 后端 */ }
+
+  // ── 降级：Tauri 后端代理（绕过 CORS）────────────────
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
@@ -118,9 +136,9 @@ async function loadTvboxConfig(api) {
     }
   } catch { /* 降级到直接 fetch */ }
 
-  // ── 降级：直接 fetch（带超时）──────────────────────
+  // ── 最终降级：直接 fetch（网络问题兜底）─────────────
   try {
-    const resp = await fetch(api.url, { signal: AbortSignal.timeout(20000) })
+    const resp = await fetch(api.url, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined })
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     const text = await resp.text()
     let config
@@ -313,18 +331,10 @@ function parseXml(raw) {
 
 // ── 网络请求（优先 Rust 后端代理，绕过 WebView CORS 限制） ──
 
-// 尝试通过 Tauri Rust 后端请求（vod_fetch 命令）
+// 优先直接 fetch（Tauri WebView 无 CORS），失败再走 Rust 后端
 async function vodApiFetch(url) {
+  // ── 优先：直接 fetch（桌面端 WebView 不过滤 CORS）────────
   try {
-    // 优先使用 Rust 后端（绕过 CORS）
-    try {
-      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
-      if (invoke) {
-        const text = await invoke('vod_fetch', { url }).catch(() => null)
-        if (text && text.trim()) return JSON.parse(text)
-      }
-    } catch { /* 降级到浏览器 */ }
-    // 降级：直接 fetch（桌面端 WebView 可能不过滤 CORS）
     const resp = await fetch(url, {
       signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
       credentials: 'include'
@@ -333,8 +343,18 @@ async function vodApiFetch(url) {
       const txt = await resp.text()
       try { return JSON.parse(txt) } catch { return null }
     }
-    return { list: [], total: 0 }
-  } catch { return { list: [], total: 0 } }
+  } catch { /* 降级到 Tauri 后端 */ }
+
+  // ── 降级：Tauri Rust 后端代理（绕过 CORS）────────────────
+  try {
+    const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+    if (invoke) {
+      const text = await invoke('vod_fetch', { url }).catch(() => null)
+      if (text && text.trim()) return JSON.parse(text)
+    }
+  } catch { /* 降级到浏览器 */ }
+
+  return { list: [], total: 0 }
 }
 
 // 普通请求（非 JSON）
@@ -1541,6 +1561,17 @@ function initApp(el) {
   }
 
   async function crawlFetch(pageUrl) {
+    // ── 优先：直接 fetch（Tauri WebView 无 CORS）───────────
+    try {
+      const resp = await fetch(pageUrl, {
+        signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
+        credentials: 'include',
+        headers: { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9' }
+      })
+      if (resp.ok) return resp.text()
+    } catch { /* 降级到 Tauri 后端 */ }
+
+    // ── 降级：Tauri Rust 后端代理 ──────────────────────
     try {
       const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
       if (invoke) {
@@ -1548,6 +1579,8 @@ function initApp(el) {
         if (html) return html
       }
     } catch {}
+
+    // ── 最终降级：直接 fetch ──────────────────────────
     const resp = await fetch(pageUrl, {
       signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
       credentials: 'include',
