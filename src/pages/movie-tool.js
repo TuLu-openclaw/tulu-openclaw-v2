@@ -7,7 +7,7 @@
  */
 
 import '../style/movie-tool.css'
-import { setupCrawlModule } from './movie-tool-crawl.js'
+
 
 // ── HTML 转义（防止 XSS）───────────────────────────────
 function escHtml(str) {
