@@ -274,18 +274,32 @@ function parseXml(raw) {
 // 尝试通过 Tauri Rust 后端请求（vod_fetch 命令）
 async function vodApiFetch(url) {
   try {
-    const { invoke } = window.__TAURI_INTERNALS__ || window.__TAURI__ || {}
-    if (!invoke) return null
-    const text = await invoke('vod_fetch', { url, timeoutSecs: 12 })
-    if (!text || !text.trim()) return null
-    return JSON.parse(text)
-  } catch { return null }
+    // 优先使用 Rust 后端（绕过 CORS）
+    try {
+      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+      if (invoke) {
+        const text = await invoke('vod_fetch', { url }).catch(() => null)
+        if (text && text.trim()) return JSON.parse(text)
+      }
+    } catch { /* 降级到浏览器 */ }
+    // 降级：直接 fetch（桌面端 WebView 可能不过滤 CORS）
+    const resp = await fetch(url, {
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+      credentials: 'include'
+    })
+    if (resp.ok) {
+      const txt = await resp.text()
+      try { return JSON.parse(txt) } catch { return null }
+    }
+    return { list: [], total: 0 }
+  } catch { return { list: [], total: 0 } }
 }
 
-// 标准 fetch（备用）
+// 普通请求（非 JSON）
 async function webFetch(url) {
   const resp = await fetch(url, {
     signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined,
+    credentials: 'include',
     headers: { 'Referer': 'https://claw.qt.cool/' }
   })
   if (!resp.ok) throw new Error('HTTP ' + resp.status)
@@ -390,6 +404,7 @@ function initApp(el) {
         <button class="tvbox-mode-tab active" data-mode="vod">📺 影视点播</button>
         <button class="tvbox-mode-tab" data-mode="live">📡 电视直播</button>
         <button class="tvbox-mode-tab" data-mode="tvboxjson">🔗 TVBox JSON</button>
+        <button class="tvbox-mode-tab" data-mode="crawl">🌐 网站爬虫</button>
       </div>
     </nav>
 
@@ -460,12 +475,17 @@ function initApp(el) {
       } else if (mode === 'tvboxjson') {
         el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">分类</span><button class="tvbox-cat-chip active">全部</button>'
         renderTvboxSrcTabs()
+      } else if (mode === 'crawl') {
+        el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">网站爬虫</span>'
+        el.querySelector('#t-srcbar').innerHTML = ''
+        showCrawlInput()
       } else {
         renderCatBar()
         renderSrcBar()
       }
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') loadTvboxList()
+      else if (mode === 'crawl') { /* 等待用户输入 */ }
       else if (getPlayHistory().length > 0 && !query) showPlayHistory()
       else loadData()
     })
@@ -1325,6 +1345,281 @@ function initApp(el) {
     onFloatDragEnd()
   }
 
+// ── 网站爬虫解析器 ───────────────────────────────────────────────
+
+  // 爬虫模式状态
+  let _crawlResults = []
+
+  function showCrawlInput() {
+    const content = el.querySelector('#t-content')
+    content.innerHTML = `
+      <div class="tvbox-crawl-panel">
+        <div class="tvbox-crawl-header">
+          <div class="tvbox-crawl-icon">🕷️</div>
+          <div class="tvbox-crawl-title">网站爬虫</div>
+          <div class="tvbox-crawl-sub">输入任意视频网站 URL，自动分析并提取可播放的视频链接</div>
+        </div>
+        <div class="tvbox-crawl-form">
+          <input id="t-crawl-url" type="url" placeholder="https://example.com/video/123" />
+          <button id="t-crawl-go" class="tvbox-crawl-btn">🔍 爬取</button>
+        </div>
+        <div class="tvbox-crawl-hint">
+          <p>💡 支持：m3u8/mp4直链、视频详情页、播放器iframe嵌入</p>
+        </div>
+        <div id="t-crawl-status" class="tvbox-crawl-status"></div>
+        <div id="t-crawl-results" class="tvbox-crawl-results"></div>
+      </div>
+    `
+
+    const input = content.querySelector('#t-crawl-url')
+    const btn = content.querySelector('#t-crawl-go')
+
+    async function doCrawl() {
+      const url = input.value.trim()
+      if (!url) return
+      if (!/^https?:/i.test(url)) {
+        showCrawlStatus('❌ 请输入有效的 http/https URL', 'error')
+        return
+      }
+      btn.disabled = true
+      btn.textContent = '⏳ 爬取中...'
+      showCrawlStatus('🔍 正在分析页面结构...', 'loading')
+      _crawlResults = []
+      const results = await crawlSite(url)
+      _crawlResults = results
+      btn.disabled = false
+      btn.textContent = '🔍 爬取'
+      renderCrawlResults(results)
+    }
+
+    btn.addEventListener('click', doCrawl)
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doCrawl() })
+    setTimeout(() => input.focus(), 100)
+  }
+
+  function showCrawlStatus(msg, type) {
+    const el2 = el.querySelector('#t-crawl-status')
+    if (!el2) return
+    el2.className = 'tvbox-crawl-status tvbox-crawl-status-' + (type || 'info')
+    el2.textContent = msg
+    el2.style.display = 'block'
+  }
+
+  async function crawlSite(url) {
+    const results = []
+    if (url.includes('.m3u8') || url.includes('.mp4')) {
+      const name = url.split('/').pop().replace(/\.(m3u8|mp4)/i, '') || '直链视频'
+      return [{ name, url, thumb: '', type: 'direct' }]
+    }
+    let html = ''
+    try {
+      html = await crawlFetch(url)
+    } catch (e) {
+      showCrawlStatus('❌ 页面获取失败: ' + e.message, 'error')
+      return []
+    }
+    showCrawlStatus('📄 页面已获取，正在分析视频链接...', 'loading')
+
+    const m3u8Links = extractM3u8(html, url)
+    m3u8Links.forEach(item => results.push(item))
+
+    const mp4Links = extractMp4(html, url)
+    mp4Links.forEach(item => results.push(item))
+
+    const iframes = extractIframes(html, url)
+    for (const iframe of iframes) {
+      showCrawlStatus('🔗 发现嵌入式播放器: ' + iframe.src, 'loading')
+      try {
+        const iframeHtml = await crawlFetch(iframe.src).catch(() => '')
+        const frameM3u8 = extractM3u8(iframeHtml, iframe.src)
+        frameM3u8.forEach(item => results.push(item))
+        const frameMp4 = extractMp4(iframeHtml, iframe.src)
+        frameMp4.forEach(item => results.push(item))
+      } catch {}
+    }
+
+    const listItems = extractVideoList(html, url)
+    listItems.forEach(item => results.push(item))
+
+    const jsUrls = extractFromScript(html, url)
+    jsUrls.forEach(item => results.push(item))
+
+    const seen = new Set()
+    return results.filter(r => {
+      const key = r.url
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+
+  async function crawlFetch(pageUrl) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+      if (invoke) {
+        const html = await invoke('fetch_page', { url: pageUrl }).catch(() => null)
+        if (html) return html
+      }
+    } catch {}
+    const resp = await fetch(pageUrl, {
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+      credentials: 'include',
+      headers: { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9' }
+    })
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    return resp.text()
+  }
+
+  function extractM3u8(html, base) {
+    const results = []
+    const re = /(?:src|href|url|video|media)[\s"'=]*(\S+\.m3u8[^"'<>\s]*)/gi
+    let m
+    while ((m = re.exec(html)) !== null) {
+      const raw = m[1].replace(/['"]/g, '').split('?')[0]
+      const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
+      if (resolved.includes('.m3u8')) {
+        const name = raw.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
+        results.push({ name, url: resolved, thumb: '', type: 'm3u8' })
+      }
+    }
+    const jsonRe = /"(https?:[^"]+\.m3u8[^"]*)"/g
+    while ((m = jsonRe.exec(html)) !== null) {
+      const resolved = m[1].split('?')[0]
+      if (resolved.includes('.m3u8')) {
+        const name = resolved.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
+        results.push({ name, url: resolved, thumb: '', type: 'm3u8' })
+      }
+    }
+    return results
+  }
+
+  function extractMp4(html, base) {
+    const results = []
+    const re = /(?:src|href|url|video|media)[\s"'=]*(\S+\.mp4[^"'<>\s]*)/gi
+    let m
+    while ((m = re.exec(html)) !== null) {
+      const raw = m[1].replace(/['"]/g, '').split('?')[0]
+      const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
+      if (resolved.includes('.mp4')) {
+        const name = raw.split('/').pop().replace('.mp4', '') || 'MP4 视频'
+        results.push({ name, url: resolved, thumb: '', type: 'mp4' })
+      }
+    }
+    return results
+  }
+
+  function extractIframes(html, base) {
+    const results = []
+    const re = /<iframe[^>]+src=["']([^"']+)["'][^>]*>/gi
+    let m
+    while ((m = re.exec(html)) !== null) {
+      const src = m[1].trim()
+      if (src && !src.startsWith('about:') && !src.startsWith('javascript:')) {
+        const resolved = src.startsWith('http') ? src : new URL(src, base).href
+        results.push({ src: resolved })
+      }
+    }
+    const re2 = /<iframe[^>]+data-src=["']([^"']+)["'][^>]*>/gi
+    while ((m = re2.exec(html)) !== null) {
+      const src = m[1].trim()
+      if (src) {
+        const resolved = src.startsWith('http') ? src : new URL(src, base).href
+        results.push({ src: resolved })
+      }
+    }
+    return results
+  }
+
+  function extractVideoList(html, base) {
+    const results = []
+    const re = /<(?:a|div|li)[^>]+(?:href|data-url|data-src)[\s="']*([^"'<>\s]+)[^>]*>([^<]{2,60})/gi
+    let m
+    while ((m = re.exec(html)) !== null) {
+      const rawUrl = m[1].trim()
+      const title = m[2].replace(/<[^>]+>/g, '').trim()
+      if (!rawUrl || !title || rawUrl.length < 5) continue
+      const resolved = rawUrl.startsWith('http') ? rawUrl : new URL(rawUrl, base).href
+      if (resolved.includes('.m3u8') || resolved.includes('.mp4') ||
+          /player|video|play|watch|episode|detail/i.test(resolved)) {
+        results.push({ name: title || resolved.split('/').pop(), url: resolved, thumb: '', type: 'link' })
+      }
+    }
+    return results
+  }
+
+  function extractFromScript(html, base) {
+    const results = []
+    const jsonBlocks = html.match(/\{[^{}]{50,2000}"/g) || []
+    jsonBlocks.forEach(block => {
+      const m3u8Matches = block.match(/"(https?:[^"]+\.m3u8[^"]*)"/gi) || []
+      m3u8Matches.forEach(raw => {
+        const url = raw.replace(/["' >]/g, '').split('?')[0]
+        if (url.includes('.m3u8') && url.startsWith('http')) {
+          results.push({ name: url.split('/').pop().replace('.m3u8', ''), url, thumb: '', type: 'm3u8' })
+        }
+      })
+    })
+    return results
+  }
+
+  function renderCrawlResults(results) {
+    const container = el.querySelector('#t-crawl-results')
+    if (!results || results.length === 0) {
+      container.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">🔍</div><div class="tvbox-empty-title">未找到视频</div><div class="tvbox-empty-sub">该页面无法提取视频链接，可能是非视频类网站或需要登录</div></div>'
+      showCrawlStatus('', 'info')
+      return
+    }
+    showCrawlStatus('✅ 找到 ' + results.length + ' 个可播放链接', 'success')
+    container.innerHTML = '<div class="tvbox-grid">' + results.map((r, i) => {
+      const typeIcon = r.type === 'direct' ? '🎬' : r.type === 'm3u8' ? '📺' : r.type === 'mp4' ? '🎞️' : '🔗'
+      return '<div class="tvbox-card tvbox-crawl-card" data-index="' + i + '">' +
+        '<div class="tvbox-card-inner">' +
+          '<div class="tvbox-card-pic">' +
+            '<span class="tvbox-card-placeholder" style="font-size:32px;display:flex;align-items:center;justify-content:center;width:100%;height:100%">' + typeIcon + '</span>' +
+          '</div>' +
+          '<div class="tvbox-card-info">' +
+            '<div class="tvbox-card-title" style="font-size:12px;line-height:1.3">' + escHtml(r.name.slice(0, 40)) + '</div>' +
+            '<div class="tvbox-card-sub">' + r.type.toUpperCase() + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    }).join('') + '</div>'
+
+    container.querySelectorAll('.tvbox-crawl-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const idx = parseInt(card.dataset.index)
+        const r = _crawlResults[idx]
+        if (r) playCrawlVideo(r.name, r.url)
+      })
+    })
+  }
+
+  function playCrawlVideo(name, url) {
+    const isM3u8 = url.includes('.m3u8')
+    const isMp4 = url.includes('.mp4')
+    if (isM3u8 || isMp4) {
+      openFloatPlayer(name, url)
+    } else {
+      showCrawlStatus('🔗 正在抓取: ' + url, 'loading')
+      crawlFetch(url).then(html => {
+        const m3u8s = extractM3u8(html, url)
+        const mp4s = extractMp4(html, url)
+        if (m3u8s.length > 0) {
+          openFloatPlayer(name, m3u8s[0].url)
+        } else if (mp4s.length > 0) {
+          openFloatPlayer(name, mp4s[0].url)
+        } else {
+          openFloatPlayer(name, url)
+        }
+        showCrawlStatus('', 'info')
+      }).catch(e => {
+        showCrawlStatus('❌ 抓取失败: ' + e.message, 'error')
+        openFloatPlayer(name, url)
+      })
+    }
+  }
+
+// ── 链接输入解析器 ────────────────────────────────────────────────
   // ── 链接输入解析器 ────────────────────────────────────────────────
   function showUrlInput() {
     const existing = document.querySelector('.tvbox-url-overlay')
