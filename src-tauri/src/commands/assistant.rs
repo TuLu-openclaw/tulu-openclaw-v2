@@ -518,6 +518,7 @@ pub async fn assistant_fetch_url(url: String) -> Result<String, String> {
 }
 
 /// 爬虫用：抓取任意网页 HTML
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn fetch_page(url: String) -> Result<String, String> {
     use std::process::Command;
