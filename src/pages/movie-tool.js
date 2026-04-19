@@ -1636,7 +1636,7 @@ function initApp(el) {
     const results = []
     const jsonBlocks = html.match(/\{[^{}]{50,2000}"/g) || []
     jsonBlocks.forEach(block => {
-      const m3u8Matches = block.match(/"'( ]+(https?:[^\s"')]{10,300}\.m3u8[^\s"')]*)/gi) || []
+      const m3u8Matches = block.match(/"(https?:[^" + "\\s]{10,300}\\.m3u8[^" + "\\s]*)/gi) || []
       m3u8Matches.forEach(raw => {
         const url = raw.replace(/["' >]/g, '').split('?')[0]
         if (url.includes('.m3u8') && url.startsWith('http')) {
