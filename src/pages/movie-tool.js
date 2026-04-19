@@ -1669,6 +1669,8 @@ function initApp(el) {
 
   function extractFromScript(html, base) {
     const results = []
+    // 预处理：把 JavaScript 转义的 \/ 替换成 /
+    const fixed = html.replace(/\\\//g, '/')
     // ── 1. 从 <script> 块中提取 JS 变量赋值的 URL ──────────
     const varPatterns = [
       /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
@@ -1677,7 +1679,7 @@ function initApp(el) {
     ]
     const varRe = /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']|player\.src\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)|video\.src\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)/gi
     // 通用：寻找包含 m3u8/mp4 的赋值语句或对象属性
-    const scriptBlocks = html.match(/<script[^>]*>[\s\S]*?<\/script>/gi) || []
+    const scriptBlocks = fixed.match(/<script[^>]*>[\s\S]*?<\/script>/gi) || []
     scriptBlocks.forEach(block => {
       const lines = block.replace(/<\/script>/i, '').replace(/<script[^>]*>/i, '')
       const matches = lines.match(/["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/g) || []
@@ -1691,7 +1693,7 @@ function initApp(el) {
       })
     })
     // ── 2. JSON 块中提取 m3u8/mp4 ──────────────────────
-    const jsonBlocks = html.match(/\{[^{}]{50,3000}\}/g) || []
+    const jsonBlocks = fixed.match(/\{[^{}]{50,50000}\}/g) || []
     jsonBlocks.forEach(block => {
       const m3u8Matches = block.match(/"(https?:[^"]+\.m3u8[^"]*)"/gi) || []
       const mp4Matches = block.match(/"(https?:[^"]+\.mp4[^"]*)"/gi) || []
