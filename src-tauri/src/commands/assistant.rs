@@ -455,12 +455,37 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
     let escaped = url.replace("'", "''");
+    // 关键：GBK→UTF8 正确处理，并自动处理 gzip/deflate 压缩
     let ps = format!(
         r#"try {{
-            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-            $r = Invoke-WebRequest '{}' -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' -Headers @{{'Accept'='application/json, text/plain, */*'; 'Accept-Language'='zh-CN,zh;q=0.9'}} -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
-            $bytes = [System.Text.Encoding]::GetEncoding('UTF-8').GetBytes($r.Content)
-            Write-Output ([System.Text.Encoding]::UTF8.GetString($bytes))
+            Add-Type -AssemblyName System.IO.Compression
+            Add-Type -AssemblyName System.IO.Compression.Filesystem
+            $req = [System.Net.WebRequest]::Create('{}')
+            $req.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            $req.Headers['Accept'] = 'application/json, text/plain, */*'
+            $req.Headers['Accept-Encoding'] = 'gzip, deflate'
+            $req.Headers['Accept-Language'] = 'zh-CN,zh;q=0.9'
+            $req.Timeout = 30000
+            $resp = $req.GetResponse()
+            $rs = $resp.GetResponseStream()
+            $decompressed = $null
+            $encoding = [System.Text.Encoding]::UTF8
+            if ($resp.ContentEncoding -and $resp.ContentEncoding.ToLower().Contains('gzip')) {{
+                $ds = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
+                $decompressed = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
+            }} else {{
+                $decompressed = $rs
+            }}
+            $sr = [System.IO.StreamReader]::new($decompressed, $encoding)
+            $text = $sr.ReadToEnd()
+            $sr.Close(); $rs.Close(); $resp.Close()
+            # GBK 检测：尝试把 UTF8 乱码转回 GBK 再转 UTF8
+            try {{
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
+                $gbk = [System.Text.Encoding]::Convert([System.Text.Encoding]::UTF8, [System.Text.Encoding]::GetEncoding('GBK'), $bytes)
+                $text = [System.Text.Encoding]::UTF8.GetString($gbk)
+            }} catch {{ }}
+            Write-Output $text
         }} catch {{
             Write-Output ('VOD_ERROR:' + $_.Exception.Message)
         }}"#,
