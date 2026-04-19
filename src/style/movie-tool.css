@@ -811,3 +811,21 @@
 }
 
 .tvbox-url-cancel:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+
+/* 网站爬虫面板 */
+.tvbox-crawl-panel { padding: 20px; }
+.tvbox-crawl-header { text-align: center; margin-bottom: 24px; }
+.tvbox-crawl-icon { font-size: 48px; margin-bottom: 12px; }
+.tvbox-crawl-title { font-size: 24px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+.tvbox-crawl-sub { font-size: 14px; color: var(--text-secondary); }
+.tvbox-crawl-form { display: flex; gap: 10px; margin-bottom: 16px; }
+.tvbox-crawl-form input { flex: 1; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; }
+.tvbox-crawl-btn { padding: 12px 24px; background: linear-gradient(135deg, #667eea, #764ba2); border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; }
+.tvbox-crawl-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.tvbox-crawl-hint { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 20px; }
+.tvbox-crawl-status { padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 13px; display: none; }
+.tvbox-crawl-status-loading { background: rgba(102, 126, 234, 0.2); color: #667eea; }
+.tvbox-crawl-status-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+.tvbox-crawl-status-error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.tvbox-crawl-results { margin-top: 20px; }

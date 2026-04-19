@@ -171,6 +171,7 @@ pub fn run() {
             assistant::assistant_check_port,
             assistant::assistant_web_search,
             assistant::assistant_fetch_url,
+            assistant::fetch_page,
             #[cfg(target_os = "windows")]
             assistant::vod_fetch,
             // 数据目录 & 图片存储
