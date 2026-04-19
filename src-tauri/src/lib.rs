@@ -171,6 +171,7 @@ pub fn run() {
             assistant::assistant_check_port,
             assistant::assistant_web_search,
             assistant::assistant_fetch_url,
+            #[cfg(target_os = "windows")]
             assistant::fetch_page,
             #[cfg(target_os = "windows")]
             assistant::vod_fetch,
