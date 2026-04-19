@@ -1,7 +1,7 @@
 /**
  * 屠戮影视 - 影视点播 + 电视直播
- * VOD: 多源聚合（暴风/量子/天涯/星之尘/1080）
- * TV: 多源直播（zdir/聚看/小聚合等M3U源）
+ * VOD: 多源聚合（暴风/星之尘/天涯/饭太稀/肥猫）
+ * TV: 多源直播（繁星/聚浪等M3U源）
  * 基于 TVAPP (youhunwl/TVAPP) 影视仓框架分析
  * 2026-04-13 v8
  */
@@ -21,43 +21,46 @@ function escHtml(str) {
 
 const VOD_SOURCES = [
   { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
-  { key: 'lziapi', name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',    type: 'tvbox' },
   { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
-  { key: 'zyku',   name: '🌺1080资源', api: 'https://api.1080zyku.com/inc/api_mac10.php',   type: '1080' },
   { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
+  { key: 'wex_fantai', name: '🐼饭太稀', api: 'http://www.xn--sss604efuw.com/tv', type: 'wex' },
+  { key: 'wex_feimao', name: '🐼肥猫', api: 'http://hello.xn--z7x900a.com', type: 'wex' },
 ]
 
 const TV_SOURCES = [
-  { key: 'zdir',  name: '📺zdir聚合',  api: 'http://zdir.kebedd69.repl.co/public/live.txt' },
-  { key: 'jukan', name: '📺聚看影视',   api: 'http://home.jundie.top:81/Cat/tv/live.txt' },
-  { key: 'xh',    name: '📺小聚合',     api: 'http://jiexi.bulisite.top/m3u.php' },
-  { key: 'ftyy',  name: '📺Ftyyy',     api: 'http://ftyyy.tk/live.txt' },
-  { key: 'rihou', name: '📺rihou',     api: 'http://rihou.cc:555/gggg.nzk' },
+  { key: 'fanming', name: '📺繁星直播', api: 'https://live.fanmingming.com/live.txt' },
+  { key: 'julan',   name: '📺聚浪TV',   api: 'http://julan.ml/live.txt' },
 ]
 
-// ── TVBox JSON API（通过 cdn.statically.io 代理 GitHub）────────────────────────
-// ── TVBox CDN 多镜像（statically.io 挂了时自动回退）──────────
+// ── TVBox JSON API（通过 cdn.jsdelivr.net 代理 GitHub）───────────────────────
+// ── TVBox CDN 多镜像（jsdelivr 挂了时自动回退）──────────
 function tvboxMirrors(url) {
-  if (!url || !url.includes('cdn.statically.io')) return [url];
-  const parts = url.split('gh/');
-  const path = parts[1] || '';
+  if (!url || !url.includes('cdn.jsdelivr.net')) return [url];
+  // https://cdn.jsdelivr.net/gh/user/repo@branch/path → 提取 user/repo@branch 和 path
+  const match = url.match(/cdn\.jsdelivr\.net\/gh\/([^@]+)\/(.+)/);
+  if (!match) return [url];
+  const repoPart = match[1]; // user/repo@branch
+  const path = match[2];
   return [
     url,
-    'https://ghproxy.com/https://raw.githubusercontent.com/' + path,
-    'https://mirror.ghproxy.com/https://raw.githubusercontent.com/' + path,
+    'https://ghproxy.com/https://raw.githubusercontent.com/' + repoPart + '/' + path,
+    'https://mirror.ghproxy.com/https://raw.githubusercontent.com/' + repoPart + '/' + path,
   ].filter(Boolean);
 }
 
 const TVBOX_BUILTIN = [
-  { key: 'fongmi',    name: '🌺FongMi',    url: 'https://cdn.statically.io/gh/FongMi/CatVodSpider/main/json/b.json',        note: '推荐' },
-  { key: 'hjd',       name: '🌺HJD TVBox', url: 'https://cdn.statically.io/gh/hjdhnx/Dr_TVBox/main/json/api.json',          note: '' },
-  { key: 'cattorn',   name: '🌺Cat TVBox', url: 'https://cdn.statically.io/gh/CatTornado/TVBox/main/json/api.json',          note: '' },
-  { key: 'sunpolar',  name: '🌺SunPolar',  url: 'https://cdn.statically.io/gh/SunPolar/TVBox/main/json/api.json',            note: '' },
-  { key: 'imdgo',     name: '🌺imDgo',    url: 'https://cdn.statically.io/gh/imDgo/TVBox/main/json/api.json',              note: '' },
-  { key: 'q215',      name: '🌺q215 TVBox',url: 'https://cdn.statically.io/gh/q215813905/TVBox/main/json/api.json',         note: '' },
-  { key: '173799616', name: '🌺173仓',     url: 'https://cdn.statically.io/gh/173799616/TVBox/master/json/api.json',        note: '' },
-  { key: '7wf',       name: '🌺7尿壶',     url: 'https://cdn.statically.io/gh/7尿壶/TVBox/main/json/apijson.json',         note: '' },
-  { key: 'yyfxz',     name: '🌺业余打发',  url: 'https://cdn.statically.io/gh/yyfxz/qqtv/main/qq.json',                  note: '' },
+  { key: 'fongmi',    name: '🌺FongMi',    url: 'https://cdn.jsdelivr.net/gh/FongMi/CatVodSpider@main/json/b.json',        note: '推荐' },
+  { key: 'hjd',       name: '🌺HJD TVBox', url: 'https://cdn.jsdelivr.net/gh/hjdhnx/Dr_TVBox@main/json/api.json',          note: '' },
+  { key: 'cattorn',   name: '🌺Cat TVBox', url: 'https://cdn.jsdelivr.net/gh/CatTornado/TVBox@main/json/api.json',          note: '' },
+  { key: 'sunpolar',  name: '🌺SunPolar',  url: 'https://cdn.jsdelivr.net/gh/SunPolar/TVBox@main/json/api.json',            note: '' },
+  { key: 'imdgo',     name: '🌺imDgo',    url: 'https://cdn.jsdelivr.net/gh/imDgo/TVBox@main/json/api.json',              note: '' },
+  { key: 'q215',      name: '🌺q215 TVBox',url: 'https://cdn.jsdelivr.net/gh/q215813905/TVBox@main/json/api.json',         note: '' },
+  { key: '173799616', name: '🌺173仓',     url: 'https://cdn.jsdelivr.net/gh/173799616/TVBox@master/json/api.json',        note: '' },
+  { key: '7wf',       name: '🌺7尿壶',     url: 'https://cdn.jsdelivr.net/gh/7%E5%B0%BF%E5%A3%B6/TVBox@main/json/apijson.json', note: '' },
+  { key: 'yyfxz',     name: '🌺业余打发',  url: 'https://cdn.jsdelivr.net/gh/yyfxz/qqtv@main/qq.json',                  note: '' },
+  { key: '240584984', name: '🌺240仓',     url: 'https://cdn.jsdelivr.net/gh/240584984/TVBox@master/json/TVBox.json',      note: '' },
+  { key: 'gaomingxu', name: '🌺高命续',    url: 'https://cdn.jsdelivr.net/gh/gaomingxu/TVBox@main/json.json',             note: '' },
+  { key: '881014',    name: '🌺881仓',    url: 'https://cdn.jsdelivr.net/gh/881014/TVBox@main/TVBox.json',              note: '' },
 ]
 const KEY_CUSTOM_TVBOX = 'tulu_custom_tvbox'
 const KEY_ACTIVE_TVBOX = 'tulu_active_tvbox'
@@ -72,16 +75,57 @@ function getActiveTvboxKey() { try { return localStorage.getItem(KEY_ACTIVE_TVBO
 function setActiveTvboxKey(k) { try { localStorage.setItem(KEY_ACTIVE_TVBOX, k) } catch {} }
 
 // 加载 TVBox API 配置（同时支持 JSON 和 XML，自动检测格式）
-async function loadTvboxConfig(api) {
+// ── Wex JSON 配置加载───────────────────────────────
+async function loadWexConfig(api) {
   if (_tvboxCache[api.key]) return _tvboxCache[api.key]
+  try {
+    const resp = await fetch(api.url, { signal: AbortSignal.timeout(15000) })
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    const text = await resp.text()
+    let config
+    try { config = JSON.parse(text) }
+    catch { config = null }
+    if (!config || !(config.list || config.urls || Array.isArray(config))) {
+      console.warn('[movie-tool] Wex config invalid:', api.name)
+      return null
+    }
+    _tvboxCache[api.key] = config
+    return config
+  } catch (e) { console.warn('[movie-tool] Wex load failed:', e.message); return null }
+}
+
+async function loadTvboxConfig(api) {
+  if (api.type === 'wex') return loadWexConfig(api)
+  if (_tvboxCache[api.key]) return _tvboxCache[api.key]
+
+  // ── 优先：Tauri 后端代理（绕过 CORS）────────────────
+  try {
+    const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+    if (invoke) {
+      const text = await Promise.race([
+        invoke('vod_fetch', { url: api.url }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), 20000))
+      ])
+      if (text && typeof text === 'string') {
+        let config
+        try { config = JSON.parse(text) }
+        catch { config = parseXml(text) }
+        if (config && (config.list?.length || config.total)) {
+          _tvboxCache[api.key] = config
+          return config
+        }
+      }
+    }
+  } catch { /* 降级到直接 fetch */ }
+
+  // ── 降级：直接 fetch（带超时）──────────────────────
   try {
     const resp = await fetch(api.url, { signal: AbortSignal.timeout(20000) })
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     const text = await resp.text()
     let config
     try { config = JSON.parse(text) }
-    catch { config = parseXml(text) }  // XML 格式兜底
-    // 检测是否有效（必须有 list 数组或 total > 0）
+    catch { config = parseXml(text) }
     if (!config || (!(Array.isArray(config.list) ? config.list.length : config.list?.length) && !config.total)) {
       console.warn('[movie-tool] TVBox config invalid or empty:', api.name, config)
       return null
@@ -193,9 +237,7 @@ _customTvbox = getCustomTvbox()
 // key: source key, value: { movie, tv, variety, anime, short } 对应的 type_id
 const VOD_TYPE_MAP = {
   bfzy:   { movie: 20, tv: 30, variety: 45, anime: 39, short: 58 },  // 暴风资源
-  lziapi: { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 6  },  // 量子资源
   xsd:    { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 星之尘
-  zyku:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 1080资源
   tyys:   { movie: 1,  tv: 2,  variety: 3,  anime: 4,  short: 0  },  // 天涯资源
 }
 
@@ -1082,7 +1124,27 @@ function initApp(el) {
         }, 15000)
         hls.on(window.Hls.Events.ERROR, () => { hlsTimedOut = true; clearTimeout(hlsTimer); window._movieHls = null
           body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>' })
-        hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer) })
+        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+          clearTimeout(hlsTimer)
+          const levels = hls.levels || []
+          if (levels.length > 1) {
+            const qBtn = document.createElement('button')
+            qBtn.textContent = '🎯 自动'
+            qBtn.title = '画质/速度切换'
+            qBtn.style.cssText = 'position:absolute;top:8px;right:120px;z-index:10;background:rgba(30,30,50,0.9);color:#fff;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer'
+            const speeds = [0.5, 1, 1.25, 1.5, 2]
+            let speedIdx = 1
+            qBtn.addEventListener('click', () => {
+              speedIdx = (speedIdx + 1) % speeds.length
+              const s = speeds[speedIdx]
+              video.playbackRate = s
+              qBtn.textContent = '🎯 ' + s + 'x'
+            })
+            wrap.style.position = 'relative'
+            wrap.appendChild(qBtn)
+          }
+          hls.currentLevel = -1 // 自适应
+        })
         video.addEventListener('timeupdate', () => trackProgress(video))
         video.addEventListener('ended', () => markFinished())
         if (startProgress > 0) video.currentTime = startProgress
@@ -1249,6 +1311,31 @@ function initApp(el) {
       window._floatHls = hls
       hls.loadSource(url)
       hls.attachMedia(video)
+
+      // ── 画质选择（MANIFEST_PARSED 后）────────────────
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        const levels = hls.levels || []
+        if (levels.length > 1) {
+          const qBtn = document.createElement('button')
+          qBtn.id = '_fquality'
+          qBtn.textContent = '🎯 自动'
+          qBtn.title = '画质选择'
+          qBtn.style.cssText = 'background:rgba(30,30,50,0.9);color:#fff;border:1px solid #444;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer'
+          const wrap = document.querySelector('.tvbox-float-header')
+          if (wrap) wrap.appendChild(qBtn)
+          const speeds = [0.5, 1, 1.25, 1.5, 2]
+          let speedIdx = 1 // 默认 1x
+          qBtn.addEventListener('click', () => {
+            speedIdx = (speedIdx + 1) % speeds.length
+            const s = speeds[speedIdx]
+            video.playbackRate = s
+            qBtn.textContent = '🎯 ' + s + 'x'
+          })
+        }
+        // HLS.js 默认自适应码率：level = -1
+        hls.currentLevel = -1
+      })
+
       let timedOut = false
       const timer = setTimeout(() => {
         if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
@@ -1462,7 +1549,7 @@ function initApp(el) {
       }
     } catch {}
     const resp = await fetch(pageUrl, {
-      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
       credentials: 'include',
       headers: { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9' }
     })
@@ -1549,13 +1636,38 @@ function initApp(el) {
 
   function extractFromScript(html, base) {
     const results = []
-    const jsonBlocks = html.match(/\{[^{}]{50,2000}"/g) || []
+    // ── 1. 从 <script> 块中提取 JS 变量赋值的 URL ──────────
+    const varPatterns = [
+      /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
+      /(?:player|video|src|media|videoUrl|video_url|playUrl|play_url)\s*[=:]\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
+      /url\s*:\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
+    ]
+    const varRe = /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']|player\.src\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)|video\.src\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)/gi
+    // 通用：寻找包含 m3u8/mp4 的赋值语句或对象属性
+    const scriptBlocks = html.match(/<script[^>]*>[\s\S]*?<\/script>/gi) || []
+    scriptBlocks.forEach(block => {
+      const lines = block.replace(/<\/script>/i, '').replace(/<script[^>]*>/i, '')
+      const matches = lines.match(/["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/g) || []
+      matches.forEach(raw => {
+        const url = raw.replace(/["' >]/g, '').split('?')[0]
+        if (url.startsWith('http')) {
+          const type = url.includes('.m3u8') ? 'm3u8' : 'mp4'
+          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || (type === 'm3u8' ? 'M3U8' : 'MP4') + ' 视频'
+          results.push({ name, url, thumb: '', type })
+        }
+      })
+    })
+    // ── 2. JSON 块中提取 m3u8/mp4 ──────────────────────
+    const jsonBlocks = html.match(/\{[^{}]{50,3000}\}/g) || []
     jsonBlocks.forEach(block => {
       const m3u8Matches = block.match(/"(https?:[^"]+\.m3u8[^"]*)"/gi) || []
-      m3u8Matches.forEach(raw => {
+      const mp4Matches = block.match(/"(https?:[^"]+\.mp4[^"]*)"/gi) || []
+      ;[...m3u8Matches, ...mp4Matches].forEach(raw => {
         const url = raw.replace(/["' >]/g, '').split('?')[0]
-        if (url.includes('.m3u8') && url.startsWith('http')) {
-          results.push({ name: url.split('/').pop().replace('.m3u8', ''), url, thumb: '', type: 'm3u8' })
+        if (url.startsWith('http')) {
+          const type = url.includes('.m3u8') ? 'm3u8' : 'mp4'
+          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || (type === 'm3u8' ? 'M3U8' : 'MP4') + ' 视频'
+          results.push({ name, url, thumb: '', type })
         }
       })
     })
