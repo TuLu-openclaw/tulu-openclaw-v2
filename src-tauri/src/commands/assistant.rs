@@ -455,11 +455,10 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
     let escaped = url.replace("'", "''");
-    // 关键：GBK→UTF8 正确处理，并自动处理 gzip/deflate 压缩
+    // 正确处理 GBK 编码 + gzip/deflate 自动解压
     let ps = format!(
         r#"try {{
             Add-Type -AssemblyName System.IO.Compression
-            Add-Type -AssemblyName System.IO.Compression.Filesystem
             $req = [System.Net.WebRequest]::Create('{}')
             $req.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             $req.Headers['Accept'] = 'application/json, text/plain, */*'
@@ -468,23 +467,29 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
             $req.Timeout = 30000
             $resp = $req.GetResponse()
             $rs = $resp.GetResponseStream()
-            $decompressed = $null
-            $encoding = [System.Text.Encoding]::UTF8
+            $ms = [System.IO.MemoryStream]::new()
             if ($resp.ContentEncoding -and $resp.ContentEncoding.ToLower().Contains('gzip')) {{
-                $ds = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
-                $decompressed = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
+                $gz = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
+                $gz.CopyTo($ms)
+                $gz.Close()
             }} else {{
-                $decompressed = $rs
+                $rs.CopyTo($ms)
             }}
-            $sr = [System.IO.StreamReader]::new($decompressed, $encoding)
-            $text = $sr.ReadToEnd()
-            $sr.Close(); $rs.Close(); $resp.Close()
-            # GBK 检测：尝试把 UTF8 乱码转回 GBK 再转 UTF8
-            try {{
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
-                $gbk = [System.Text.Encoding]::Convert([System.Text.Encoding]::UTF8, [System.Text.Encoding]::GetEncoding('GBK'), $bytes)
-                $text = [System.Text.Encoding]::UTF8.GetString($gbk)
-            }} catch {{ }}
+            $rs.Close(); $resp.Close()
+            $bytes = $ms.ToArray()
+            $ms.Close()
+            # ── 编码检测：GBK 特征是中文在 UTF8 解码后变成乱码（包含 或非ASCII Latin）
+            # 方法：先用 UTF8 解码，若出现大量 (U+FFFD) 则认为是 GBK
+            $textUtf8 = [System.Text.Encoding]::UTF8.GetString($bytes)
+            $replacementCount = ($textUtf8.ToCharArray() | Where-Object {{ [int]$_ -eq 0xFFFD }} | Measure-Object).Count
+            $text = if ($replacementCount -gt 5) {{
+                # GBK → UTF8 重试
+                $gbk = [System.Text.Encoding]::GetEncoding('GBK')
+                $utf8 = [System.Text.Encoding]::UTF8
+                $gbk.GetString($bytes) | ForEach-Object {{ $_.Replace('\"', '\\\\"') }}
+            }} else {{
+                $textUtf8
+            }}
             Write-Output $text
         }} catch {{
             Write-Output ('VOD_ERROR:' + $_.Exception.Message)
