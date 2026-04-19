@@ -23,8 +23,6 @@ const VOD_SOURCES = [
   { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
   { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
   { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
-  { key: 'wex_fantai', name: '🐼饭太稀', api: 'http://www.xn--sss604efuw.com/tv', type: 'wex' },
-  { key: 'wex_feimao', name: '🐼肥猫', api: 'http://hello.xn--z7x900a.com', type: 'wex' },
 ]
 
 const TV_SOURCES = [
@@ -696,9 +694,9 @@ function initApp(el) {
   }
 
   async function loadList() {
+    const content = el.querySelector('#t-content')
     const source = VOD_SOURCES[src]
     const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
-    const catObj = VOD_CATEGORIES.find(c => c.id === cat)
     const typeId = typeMap[cat] ?? 1
     let json = { list: [], total: 0 }
     try {
@@ -706,11 +704,14 @@ function initApp(el) {
       if (!json.total) { try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
       if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
     } catch {}
-    // 如果列表为空（该 typeId 无数据），尝试全量接口拉取
     if (!json.list || !json.list.length) {
       try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {}
     }
-    renderVodGrid(json.list || [], json.total || 0)
+    if (!json.list || !json.list.length) {
+      renderVodGrid([], 0)
+    } else {
+      renderVodGrid(json.list, json.total || json.list.length)
+    }
   }
 
   async function loadSearch() {
