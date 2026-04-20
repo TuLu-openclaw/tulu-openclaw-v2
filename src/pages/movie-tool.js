@@ -933,17 +933,17 @@ function setDebug(msg, detail) {
   function renderVodGrid(list, total) {
     const root = _el // 用全局根元素（initApp 里设置的 _el）
     if (!root) { console.warn('[renderVodGrid] _el 全局根元素不存在!'); return }
-    const grid = root.querySelector('#t-main-grid')
-    const pagination = root.querySelector('#t-pagination')
-    // 诊断：打印 root 的实际子元素
-    if (!grid) {
-      const children = root.children
-      const childIds = Array.from(children).map(c => c.id || c.className || c.tagName)
-      console.warn('[renderVodGrid] grid元素不存在！root.childCount=', children.length, 'ids=', childIds.slice(0,5))
-      const allIds = Array.from(root.querySelectorAll('[id]')).map(e => e.id).slice(0,10)
-      console.warn('[renderVodGrid] root内所有id=', allIds)
-      setTimeout(() => renderVodGrid(list, total), 150)
-      return
+    let grid = root.querySelector('#t-main-grid')
+    let pagination = root.querySelector('#t-pagination')
+    // 保证 grid 和 pagination 存在（initApp/renderHistory 等可能用 innerHTML 替换了 content 区域）
+    if (!grid || !pagination) {
+      let content = root.querySelector('#t-content')
+      if (!content) { content = root.appendChild(Object.assign(document.createElement('div'), { id: 't-content' })) }
+      grid = content.querySelector('#t-main-grid')
+      if (!grid) { grid = content.appendChild(Object.assign(document.createElement('div'), { id: 't-main-grid' })) }
+      pagination = content.querySelector('#t-pagination')
+      if (!pagination) { pagination = content.appendChild(Object.assign(document.createElement('div'), { id: 't-pagination' })) }
+      console.info('[renderVodGrid] 修复: 重建grid/pagination完成')
     }
     console.info('[renderVodGrid] 收到: list.len=', list?.length, 'total=', total)
     if (!list || !list.length) {
