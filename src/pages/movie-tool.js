@@ -921,12 +921,13 @@ function setDebug(msg, detail) {
   }
 
   function renderVodGrid(list, total) {
-    const grid = el.querySelector('#t-main-grid')
-    const pagination = el.querySelector('#t-pagination')
+    const root = _el // 用全局根元素（initApp 里设置的 _el）
+    if (!root) { console.warn('[renderVodGrid] _el 全局根元素不存在!'); return }
+    const grid = root.querySelector('#t-main-grid')
+    const pagination = root.querySelector('#t-pagination')
     if (!grid) {
-      // 元素尚未渲染，延迟 100ms 重试
       console.warn('[renderVodGrid] grid元素不存在，延迟重试...')
-      setTimeout(() => renderVodGrid(list, total), 100)
+      setTimeout(() => renderVodGrid(list, total), 150)
       return
     }
     console.info('[renderVodGrid] 收到: list.len=', list?.length, 'total=', total)
