@@ -331,37 +331,34 @@ function parseXml(raw) {
 
 // 优先直接 fetch，失败走 Tauri Rust 后端，再失败走 CORS 代理
 async function vodApiFetch(url) {
-  // ── 方式1: 直接 fetch（如果 Tauri WebView 没 CORS）────────
-  try {
-    const resp = await fetch(url, {
-      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
-      credentials: 'include'
-    })
-    if (resp.ok) {
-      const txt = await resp.text()
-      try { console.info('[vodApiFetch] 直接fetch成功:', url.slice(0, 80)); return JSON.parse(txt) } catch { return null }
-    } else {
-      console.warn('[vodApiFetch] 直接fetch失败:', resp.status, url.slice(0, 80))
-    }
-  } catch (e) { console.warn('[vodApiFetch] 直接fetch异常:', e.message, url.slice(0, 80)) }
-
-  // ── 方式2: Tauri Rust 后端代理（绕过 CORS）────────────────
+  // ── 方式1: Tauri Rust 后端代理（绕过 CORS，Tauri 2.x 必须走这里）────────
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
-      const text = await invoke('vod_fetch', { url }).catch(e => { console.warn('[vodApiFetch] Tauri invoke失败:', e.message || String(e)); return null })
-      if (text && text.trim()) {
-        console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80))
-        return JSON.parse(text)
+      const text = await Promise.race([
+        invoke('vod_fetch', { url }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), 20000))
+      ]).catch(e => { console.warn('[vodApiFetch] Tauri invoke失败:', e.message || String(e)); return null })
+      if (text && typeof text === 'string' && text.trim()) {
+        try {
+          const json = JSON.parse(text)
+          console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80))
+          return json
+        } catch(e) {
+          console.warn('[vodApiFetch] Tauri返回JSON解析失败:', e.message, '原始:', text.slice(0, 100))
+          return null
+        }
+      } else if (text === null) {
+        // invoke 失败，已在 catch 记录
       } else {
-        console.warn('[vodApiFetch] Tauri后端返回空:', url.slice(0, 80))
+        console.warn('[vodApiFetch] Tauri后端返回空或无效:', url.slice(0, 80), 'text=', typeof text, text?.slice(0, 50))
       }
     } else {
-      console.warn('[vodApiFetch] Tauri API 不可用')
+      console.warn('[vodApiFetch] Tauri API 不可用，尝试直接fetch')
     }
   } catch (e) { console.warn('[vodApiFetch] Tauri降级异常:', e.message) }
 
-  // ── 方式3: CORS 代理（最后 fallback）───────────────────────
+  // ── 方式2: CORS 代理（allorigins → corsproxy.io）───────────────────────
   const proxies = [
     'https://api.allorigins.win/raw?url=',
     'https://corsproxy.io/?',
@@ -371,13 +368,26 @@ async function vodApiFetch(url) {
       const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined })
       if (resp.ok) {
         const txt = await resp.text()
-        console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50))
-        return JSON.parse(txt)
+        try {
+          console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50))
+          return JSON.parse(txt)
+        } catch(e) { console.warn('[vodApiFetch] 代理返回JSON解析失败:', proxy, e.message) }
+      } else {
+        console.warn('[vodApiFetch] 代理失败:', proxy, 'HTTP', resp.status)
       }
-    } catch (e) {
-      console.warn('[vodApiFetch] 代理失败:', proxy, e.message)
-    }
+    } catch (e) { console.warn('[vodApiFetch] 代理异常:', proxy, e.message) }
   }
+
+  // ── 方式3: 直接 fetch（最后兜底，不推荐但在某些环境可能可用）─────────
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined })
+    if (resp.ok) {
+      const txt = await resp.text()
+      try { console.info('[vodApiFetch] 直接fetch成功(兜底):', url.slice(0, 80)); return JSON.parse(txt) } catch { return null }
+    } else {
+      console.warn('[vodApiFetch] 直接fetch失败(兜底):', resp.status, url.slice(0, 80))
+    }
+  } catch (e) { console.warn('[vodApiFetch] 直接fetch异常(兜底):', e.message, url.slice(0, 80)) }
 
   console.error('[vodApiFetch] 所有方式均失败，返回空:', url.slice(0, 80))
   return { list: [], total: 0 }

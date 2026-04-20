@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>屠戮影视 - 可视化测试</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f23; color: #fff; min-height: 100vh; }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center; }
+    .header h1 { font-size: 24px; margin-bottom: 5px; }
+    .header p { font-size: 14px; opacity: 0.8; }
+    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+    .test-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: #fff; padding: 15px 30px; font-size: 16px; border-radius: 8px; cursor: pointer; margin: 10px; transition: transform 0.2s; }
+    .test-btn:hover { transform: scale(1.05); }
+    .test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .result { background: #1a1a2e; border-radius: 12px; padding: 20px; margin: 15px 0; }
+    .result h3 { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+    .status-icon { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+    .status-pending { background: #666; }
+    .status-loading { background: #f59e0b; animation: pulse 1s infinite; }
+    .status-success { background: #10b981; }
+    .status-error { background: #ef4444; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .video-card { background: #252540; border-radius: 8px; padding: 15px; margin: 10px 0; display: flex; gap: 15px; }
+    .video-card img { width: 120px; height: 160px; object-fit: cover; border-radius: 8px; background: #333; }
+    .video-info { flex: 1; }
+    .video-info h4 { margin-bottom: 8px; }
+    .video-info p { font-size: 12px; color: #888; margin-bottom: 5px; }
+    .play-btn { background: #e50914; border: none; color: #fff; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+    .player { background: #000; border-radius: 12px; overflow: hidden; margin: 20px 0; }
+    .player video { width: 100%; display: block; }
+    .log { background: #1a1a2e; border-radius: 8px; padding: 15px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    .log-item { margin: 5px 0; }
+    .log-time { color: #666; }
+    .log-ok { color: #10b981; }
+    .log-err { color: #ef4444; }
+    .log-info { color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎬 屠戮影视 - 可视化测试</h1>
+    <p>自动测试 VOD 搜索 → 详情 → 播放地址解析</p>
+  </div>
+  
+  <div class="container">
+    <div style="text-align: center;">
+      <button class="test-btn" id="startTest" onclick="startTest()">🚀 开始测试</button>
+    </div>
+
+    <div id="results"></div>
+    
+    <div class="log" id="log"></div>
+  </div>
+
+  <script>
+    const VOD_SOURCES = [
+      { key: 'bfzy', name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod' },
+    ];
+
+    function log(msg, type = 'info') {
+      const logEl = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      logEl.innerHTML += `<div class="log-item"><span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span></div>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function showResult(id, title, status, detail) {
+      const el = document.getElementById(id);
+      const iconMap = { pending: '⏳', loading: '🔄', success: '✅', error: '❌' };
+      el.innerHTML = `
+        <h3><span class="status-icon status-${status}">${iconMap[status]}</span> ${title}</h3>
+        <div>${detail}</div>
+      `;
+    }
+
+    async function startTest() {
+      document.getElementById('startTest').disabled = true;
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('log').innerHTML = '';
+      
+      log('开始测试流程...');
+      
+      // Step 1: 搜索
+      showResult('step1', '1. 搜索视频', 'loading', '正在搜索「流浪地球」...');
+      try {
+        const source = VOD_SOURCES[0];
+        const url = `${source.api}?ac=detail&wd=${encodeURIComponent('流浪地球')}`;
+        log(`请求: ${url}`, 'info');
+        
+        const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+        const json = await resp.json();
+        
+        if (json.list?.length) {
+          log(`搜索成功: ${json.list.length} 条结果`, 'ok');
+          const first = json.list[0];
+          showResult('step1', '1. 搜索视频', 'success', `
+            <div class="video-card">
+              <div style="width:120px;height:160px;background:#333;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:40px">🎬</div>
+              <div class="video-info">
+                <h4>${first.vod_name}</h4>
+                <p>ID: ${first.vod_id}</p>
+                <p>类型: ${first.type_name}</p>
+                <p>主演: ${first.vod_actor || '未知'}</p>
+              </div>
+            </div>
+          `);
+          window.testVideo = first;
+          window.testSource = source;
+          
+          // Step 2: 获取详情
+          await getDetail(first, source);
+        } else {
+          log('搜索无结果', 'err');
+          showResult('step1', '1. 搜索视频', 'error', '未找到相关视频');
+        }
+      } catch (e) {
+        log(`搜索失败: ${e.message}`, 'err');
+        showResult('step1', '1. 搜索视频', 'error', e.message);
+      }
+      
+      document.getElementById('startTest').disabled = false;
+    }
+
+    async function getDetail(video, source) {
+      showResult('step2', '2. 获取详情', 'loading', '正在获取播放地址...');
+      try {
+        const url = `${source.api}?ac=detail&ids=${video.vod_id}`;
+        log(`请求: ${url}`, 'info');
+        
+        const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+        const json = await resp.json();
+        const v = json.list?.[0] || video;
+        
+        log('获取详情成功', 'ok');
+        
+        // 解析播放源
+        const playFrom = v.vod_play_from || '';
+        const playUrl = v.vod_play_url || '';
+        const flags = playFrom.split('$$$');
+        const urlGrps = playUrl.split('$$$');
+        
+        let episodesHtml = '';
+        for (let fi = 0; fi < flags.length; fi++) {
+          const urls = (urlGrps[fi] || '').split('#').filter(Boolean);
+          const firstEp = urls[0]?.split('$');
+          const epName = firstEp?.[0] || '第1集';
+          const epUrl = firstEp?.[1] || '';
+          
+          episodesHtml += `
+            <div style="margin:10px 0;padding:10px;background:#252540;border-radius:8px;">
+              <div><strong>播放源:</strong> ${flags[fi] || '默认'}</div>
+              <div><strong>总集数:</strong> ${urls.length} 集</div>
+              <div style="margin-top:10px;">
+                <button class="play-btn" onclick="playVideo('${epUrl}', '${v.vod_name} ${epName}')">
+                  ▶ 播放第1集
+                </button>
+              </div>
+            </div>
+          `;
+          
+          window.firstPlayUrl = epUrl;
+          window.firstPlayName = `${v.vod_name} ${epName}`;
+        }
+        
+        showResult('step2', '2. 获取详情', 'success', episodesHtml);
+        log(`播放源: ${flags.join(', ')}`, 'ok');
+        
+      } catch (e) {
+        log(`获取详情失败: ${e.message}`, 'err');
+        showResult('step2', '2. 获取详情', 'error', e.message);
+      }
+    }
+
+    function playVideo(url, name) {
+      log(`播放: ${url}`, 'ok');
+      
+      const playerHtml = `
+        <div class="player">
+          <div style="padding:20px;text-align:center;background:#1a1a2e;">
+            <h3>${name}</h3>
+            <p style="color:#888;margin:10px 0;">播放地址: ${url}</p>
+          </div>
+          <video id="videoPlayer" controls poster="" style="max-height:400px;">
+            您的浏览器不支持 video 标签
+          </video>
+        </div>
+      `;
+      
+      let playerEl = document.getElementById('playerContainer');
+      if (!playerEl) {
+        playerEl = document.createElement('div');
+        playerEl.id = 'playerContainer';
+        document.getElementById('results').appendChild(playerEl);
+      }
+      playerEl.innerHTML = playerHtml;
+      
+      const video = document.getElementById('videoPlayer');
+      if (url.includes('.m3u8')) {
+        // HLS
+        if (Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(url);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => log('HLS 加载成功', 'ok'));
+          hls.on(Hls.Events.ERROR, (e, data) => log(`HLS 错误: ${data.type}`, 'err'));
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = url;
+        }
+      } else if (url.includes('.mp4')) {
+        video.src = url;
+      }
+      
+      video.play().catch(e => log(`自动播放被阻止: ${e.message}`, 'err'));
+    }
+  </script>
+  
+  <!-- HLS.js -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</body>
+</html>
