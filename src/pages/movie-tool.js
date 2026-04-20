@@ -446,6 +446,8 @@ export default function render(container) {
   _el = el
   _viewStack = []
   root.appendChild(el)
+  // 全局调试状态
+  window._tuluMovieDebug = { status: '初始化中...', api: '', error: '' }
   initApp(el)
   return el
 }
@@ -457,6 +459,7 @@ function initApp(el) {
         <div class="tvbox-brand-icon">🎬</div>
         <div>
           <div class="tvbox-brand-name">屠戮影视</div>
+          <div id="t-debug-status" style="font-size:10px;color:var(--text-muted);margin-top:2px"></div>
         </div>
       </div>
 
@@ -701,24 +704,33 @@ function initApp(el) {
     }
   }
 
+  // 更新调试面板（界面可见状态）
+function setDebug(msg, detail) {
+  const el = document.querySelector('#t-debug-status')
+  if (!el) return
+  el.textContent = new Date().toLocaleTimeString('zh-CN') + ' ' + msg
+  console.info('[DEBUG]', msg, detail || '')
+}
+
   async function loadList() {
     const content = el.querySelector('#t-content')
     const source = VOD_SOURCES[src]
     const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
     const typeId = typeMap[cat] ?? 1
-    console.info('[loadList] 开始加载:', source.name, 'cat=', cat, 'typeId=', typeId, 'page=', page)
+    setDebug('加载中...', source.name + ' cat=' + cat + ' typeId=' + typeId)
     let json = { list: [], total: 0 }
     try {
-      try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page); console.info('[loadList] 第1次返回:', json.total, '条') } catch (e) { console.warn('[loadList] 第1次异常:', e.message) }
+      try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page); setDebug('API返回', 'total=' + json.total + ' list.len=' + (json.list?.length || 0)) } catch (e) { setDebug('第1次异常', e.message) }
       if (!json.total) { try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
       if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
-    } catch (e) { console.warn('[loadList] 所有方式异常:', e.message) }
+    } catch (e) { setDebug('所有方式异常', e.message) }
     if (!json.list || !json.list.length) {
-      console.warn('[loadList] 有typeId返回空，尝试无typeId...')
+      setDebug('typeId返回空，尝试无typeId', '')
       try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {}
     }
-    console.info('[loadList] 最终结果: total=', json.total, 'list.len=', json.list?.length)
-    renderVodGrid(json.list || [], json.total || json.list?.length || 0)
+    const count = json.list?.length || 0
+    setDebug('结果: ' + (json.total || count) + '条', 'list.len=' + count)
+    renderVodGrid(json.list || [], json.total || count)
   }
 
   async function loadSearch() {
