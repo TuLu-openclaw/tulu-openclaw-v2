@@ -461,9 +461,7 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
             Add-Type -AssemblyName System.IO.Compression
             $req = [System.Net.WebRequest]::Create('{}')
             $req.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            $req.Headers['Accept'] = 'application/json, text/plain, */*'
-            $req.Headers['Accept-Encoding'] = 'gzip, deflate'
-            $req.Headers['Accept-Language'] = 'zh-CN,zh;q=0.9'
+            $req.Accept = 'application/json, text/plain, */*'
             $req.Timeout = 30000
             $resp = $req.GetResponse()
             $rs = $resp.GetResponseStream()

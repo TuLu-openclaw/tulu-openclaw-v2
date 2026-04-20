@@ -923,7 +923,12 @@ function setDebug(msg, detail) {
   function renderVodGrid(list, total) {
     const grid = el.querySelector('#t-main-grid')
     const pagination = el.querySelector('#t-pagination')
-    if (!grid) { console.warn('[renderVodGrid] grid元素不存在!'); return }
+    if (!grid) {
+      // 元素尚未渲染，延迟 100ms 重试
+      console.warn('[renderVodGrid] grid元素不存在，延迟重试...')
+      setTimeout(() => renderVodGrid(list, total), 100)
+      return
+    }
     console.info('[renderVodGrid] 收到: list.len=', list?.length, 'total=', total)
     if (!list || !list.length) {
       grid.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📭</div><div class="tvbox-empty-title">暂无数据</div><div class="tvbox-empty-sub">请尝试其他分类或关键词</div></div>'
