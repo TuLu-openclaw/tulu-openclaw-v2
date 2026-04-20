@@ -329,9 +329,9 @@ function parseXml(raw) {
 
 // ── 网络请求（优先 Rust 后端代理，绕过 WebView CORS 限制） ──
 
-// 优先直接 fetch（Tauri WebView 无 CORS），失败再走 Rust 后端
+// 优先直接 fetch，失败走 Tauri Rust 后端，再失败走 CORS 代理
 async function vodApiFetch(url) {
-  // ── 优先：直接 fetch（桌面端 WebView 不过滤 CORS）────────
+  // ── 方式1: 直接 fetch（如果 Tauri WebView 没 CORS）────────
   try {
     const resp = await fetch(url, {
       signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
@@ -345,19 +345,39 @@ async function vodApiFetch(url) {
     }
   } catch (e) { console.warn('[vodApiFetch] 直接fetch异常:', e.message, url.slice(0, 80)) }
 
-  // ── 降级：Tauri Rust 后端代理（绕过 CORS）────────────────
+  // ── 方式2: Tauri Rust 后端代理（绕过 CORS）────────────────
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
-      const text = await invoke('vod_fetch', { url }).catch(e => { console.warn('[vodApiFetch] Tauri invoke失败:', e.message); return null })
+      const text = await invoke('vod_fetch', { url }).catch(e => { console.warn('[vodApiFetch] Tauri invoke失败:', e.message || String(e)); return null })
       if (text && text.trim()) {
         console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80))
         return JSON.parse(text)
       } else {
         console.warn('[vodApiFetch] Tauri后端返回空:', url.slice(0, 80))
       }
+    } else {
+      console.warn('[vodApiFetch] Tauri API 不可用')
     }
   } catch (e) { console.warn('[vodApiFetch] Tauri降级异常:', e.message) }
+
+  // ── 方式3: CORS 代理（最后 fallback）───────────────────────
+  const proxies = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?',
+  ]
+  for (const proxy of proxies) {
+    try {
+      const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined })
+      if (resp.ok) {
+        const txt = await resp.text()
+        console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50))
+        return JSON.parse(txt)
+      }
+    } catch (e) {
+      console.warn('[vodApiFetch] 代理失败:', proxy, e.message)
+    }
+  }
 
   console.error('[vodApiFetch] 所有方式均失败，返回空:', url.slice(0, 80))
   return { list: [], total: 0 }
