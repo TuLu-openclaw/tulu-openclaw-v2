@@ -935,8 +935,13 @@ function setDebug(msg, detail) {
     if (!root) { console.warn('[renderVodGrid] _el 全局根元素不存在!'); return }
     const grid = root.querySelector('#t-main-grid')
     const pagination = root.querySelector('#t-pagination')
+    // 诊断：打印 root 的实际子元素
     if (!grid) {
-      console.warn('[renderVodGrid] grid元素不存在，延迟重试...')
+      const children = root.children
+      const childIds = Array.from(children).map(c => c.id || c.className || c.tagName)
+      console.warn('[renderVodGrid] grid元素不存在！root.childCount=', children.length, 'ids=', childIds.slice(0,5))
+      const allIds = Array.from(root.querySelectorAll('[id]')).map(e => e.id).slice(0,10)
+      console.warn('[renderVodGrid] root内所有id=', allIds)
       setTimeout(() => renderVodGrid(list, total), 150)
       return
     }
