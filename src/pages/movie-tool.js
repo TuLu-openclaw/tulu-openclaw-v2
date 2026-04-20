@@ -339,19 +339,27 @@ async function vodApiFetch(url) {
     })
     if (resp.ok) {
       const txt = await resp.text()
-      try { return JSON.parse(txt) } catch { return null }
+      try { console.info('[vodApiFetch] 直接fetch成功:', url.slice(0, 80)); return JSON.parse(txt) } catch { return null }
+    } else {
+      console.warn('[vodApiFetch] 直接fetch失败:', resp.status, url.slice(0, 80))
     }
-  } catch { /* 降级到 Tauri 后端 */ }
+  } catch (e) { console.warn('[vodApiFetch] 直接fetch异常:', e.message, url.slice(0, 80)) }
 
   // ── 降级：Tauri Rust 后端代理（绕过 CORS）────────────────
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
-      const text = await invoke('vod_fetch', { url }).catch(() => null)
-      if (text && text.trim()) return JSON.parse(text)
+      const text = await invoke('vod_fetch', { url }).catch(e => { console.warn('[vodApiFetch] Tauri invoke失败:', e.message); return null })
+      if (text && text.trim()) {
+        console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80))
+        return JSON.parse(text)
+      } else {
+        console.warn('[vodApiFetch] Tauri后端返回空:', url.slice(0, 80))
+      }
     }
-  } catch { /* 降级到浏览器 */ }
+  } catch (e) { console.warn('[vodApiFetch] Tauri降级异常:', e.message) }
 
+  console.error('[vodApiFetch] 所有方式均失败，返回空:', url.slice(0, 80))
   return { list: [], total: 0 }
 }
 
@@ -698,20 +706,19 @@ function initApp(el) {
     const source = VOD_SOURCES[src]
     const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
     const typeId = typeMap[cat] ?? 1
+    console.info('[loadList] 开始加载:', source.name, 'cat=', cat, 'typeId=', typeId, 'page=', page)
     let json = { list: [], total: 0 }
     try {
-      try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {}
+      try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page); console.info('[loadList] 第1次返回:', json.total, '条') } catch (e) { console.warn('[loadList] 第1次异常:', e.message) }
       if (!json.total) { try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
       if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
-    } catch {}
+    } catch (e) { console.warn('[loadList] 所有方式异常:', e.message) }
     if (!json.list || !json.list.length) {
+      console.warn('[loadList] 有typeId返回空，尝试无typeId...')
       try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {}
     }
-    if (!json.list || !json.list.length) {
-      renderVodGrid([], 0)
-    } else {
-      renderVodGrid(json.list, json.total || json.list.length)
-    }
+    console.info('[loadList] 最终结果: total=', json.total, 'list.len=', json.list?.length)
+    renderVodGrid(json.list || [], json.total || json.list?.length || 0)
   }
 
   async function loadSearch() {
@@ -884,7 +891,8 @@ function initApp(el) {
   function renderVodGrid(list, total) {
     const grid = el.querySelector('#t-main-grid')
     const pagination = el.querySelector('#t-pagination')
-    if (!grid) return
+    if (!grid) { console.warn('[renderVodGrid] grid元素不存在!'); return }
+    console.info('[renderVodGrid] 收到: list.len=', list?.length, 'total=', total)
     if (!list || !list.length) {
       grid.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📭</div><div class="tvbox-empty-title">暂无数据</div><div class="tvbox-empty-sub">请尝试其他分类或关键词</div></div>'
       if (pagination) pagination.innerHTML = ''
