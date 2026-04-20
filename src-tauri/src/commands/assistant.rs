@@ -455,7 +455,7 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
     let escaped = url.replace("'", "''");
-    // 正确处理 GBK 编码 + gzip/deflate 自动解压
+    // 正确处理 GBK 编码 + gzip/deflate 自动解压，用 Base64 传输避免编码问题
     let ps = format!(
         r#"try {{
             Add-Type -AssemblyName System.IO.Compression
@@ -476,19 +476,19 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
             $rs.Close(); $resp.Close()
             $bytes = $ms.ToArray()
             $ms.Close()
-            # ── 编码检测：GBK 特征是中文在 UTF8 解码后变成乱码（包含 或非ASCII Latin）
-            # 方法：先用 UTF8 解码，若出现大量 (U+FFFD) 则认为是 GBK
+            # ── 编码检测：先试 UTF8，若含 U+FFFD 则为 GBK
             $textUtf8 = [System.Text.Encoding]::UTF8.GetString($bytes)
-            $replacementCount = ($textUtf8.ToCharArray() | Where-Object {{ [int]$_ -eq 0xFFFD }} | Measure-Object).Count
-            $text = if ($replacementCount -gt 5) {{
-                # GBK → UTF8 重试
+            $ffc = ($textUtf8.ToCharArray() | Where-Object {{ [int]$_ -eq 0xFFFD }} | Measure-Object).Count
+            if ($ffc -gt 0) {{
+                # GBK 解码 → 用 .NET Convert 转 UTF8 字节
                 $gbk = [System.Text.Encoding]::GetEncoding('GBK')
-                $utf8 = [System.Text.Encoding]::UTF8
-                $gbk.GetString($bytes) | ForEach-Object {{ $_.Replace('\"', '\\\\"') }}
+                $decoded = $gbk.GetString($bytes)
+                $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($decoded)
+                $b64 = [Convert]::ToBase64String($utf8Bytes)
+                Write-Output "B64:$b64"
             }} else {{
-                $textUtf8
+                Write-Output $textUtf8
             }}
-            Write-Output $text
         }} catch {{
             Write-Output ('VOD_ERROR:' + $_.Exception.Message)
         }}"#,
@@ -509,7 +509,17 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
         };
         return Err(format!("vod_fetch failed: {}", msg));
     }
-    Ok(stdout.trim().to_string())
+    // 检查是否为 Base64 编码的 GBK→UTF8 内容
+    let stdout_str = stdout.trim();
+    if stdout_str.starts_with("B64:") {
+        let b64 = &stdout_str[4..];
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| format!("Base64 decode failed: {}", e))?;
+        Ok(String::from_utf8(bytes).unwrap_or_else(|_| stdout_str.to_string()))
+    } else {
+        Ok(stdout_str.to_string())
+    }
 }
 
 /// 抓取 URL 内容（通过 Jina Reader API）

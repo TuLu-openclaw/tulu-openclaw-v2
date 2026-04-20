@@ -727,7 +727,7 @@ function initApp(el) {
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') { if (query) loadTvboxSearch(); else loadTvboxList() }
       else if (query) loadSearch()
-      else if (getPlayHistory().length > 0 && page === 1 && !query) showPlayHistory()
+      else if (getPlayHistory().length > 0 && page === 1 && !query) { showPlayHistory(); return }
       else loadList()
     } catch (e) {
       content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
@@ -1232,7 +1232,18 @@ function setDebug(msg, detail) {
         if (startProgress > 0) video.currentTime = startProgress
         video.play().catch(() => {})
       } else {
-        body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">正在尝试播放...</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+        // HLS.js 不可用，尝试原生 video 标签（部分 WebView2 支持 HLS）
+        const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'; wrap.style.position = 'relative'
+        const video = document.createElement('video'); video.controls = true; video.style.width = '100%'; video.style.maxHeight = '70vh'
+        video.src = videoUrl
+        video.addEventListener('error', () => {
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败（当前环境不支持 HLS）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+        })
+        video.addEventListener('loadeddata', () => { /* 播放成功 */ })
+        wrap.appendChild(video)
+        body.innerHTML = ''; body.appendChild(wrap)
+        if (startProgress > 0) video.currentTime = startProgress
+        video.play().catch(() => {})
       }
     } else {
       const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'
