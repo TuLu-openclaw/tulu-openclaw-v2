@@ -174,6 +174,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::fetch_page,
             #[cfg(target_os = "windows")]
+            assistant::fetch_page_js,
+            #[cfg(target_os = "windows")]
             assistant::vod_fetch,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,

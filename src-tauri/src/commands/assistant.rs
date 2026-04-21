@@ -581,6 +581,198 @@ pub async fn fetch_page(url: String) -> Result<String, String> {
     Ok(stdout.trim().to_string())
 }
 
+/// 使用 WebView2/Edge 渲染 JS 页面，提取视频 URL（用于 JS 动态渲染站）
+/// 策略：Edge headless + Chrome DevTools Protocol (CDP)
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn fetch_page_js(url: String) -> Result<String, String> {
+    use std::process::Command;
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL 必须以 http:// 或 https:// 开头".into());
+    }
+
+    // Edge 通常在这里
+    let msedge_paths = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Windows\System32\msedge.exe",
+    ];
+    let msedge_exe = msedge_paths.iter().find(|p| std::path::Path::new(p).exists());
+    let browser_exe = match msedge_exe {
+        Some(p) => p.as_str(),
+        None => {
+            // 回退：尝试从 PATH 找 edge
+            if let Ok(output) = Command::new("where").arg("edge").output() {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("").trim().to_string();
+                    if !path.is_empty() {
+                        // 找到了但不使用
+                        return Err("Edge 浏览器未安装，请安装 Edge 后重试".into());
+                    }
+                }
+            }
+            return Err("Edge 浏览器未安装，请安装 Edge 后重试".into());
+        }
+    };
+
+    // 用 CDP 的提取脚本
+    let extract_js = r#"
+(function() {
+    var r = [];
+    var seen = new Set();
+    function add(u, n, t) {
+        if (!u || seen.has(u)) return;
+        seen.add(u);
+        r.push({url: u, name: n || u.split('/').pop().replace(/\.[^.]+$/,''), type: t || 'unknown'});
+    }
+    // video / source
+    document.querySelectorAll('video').forEach(function(v) {
+        add(v.src, 'video.src', 'video');
+        v.querySelectorAll('source').forEach(function(s) { add(s.src, 'source.src', 'video'); });
+    });
+    // a[href] with m3u8/mp4
+    document.querySelectorAll('a[href]').forEach(function(a) {
+        var h = a.getAttribute('href');
+        if (h && (h.includes('.m3u8') || h.includes('.mp4'))) add(h, a.textContent.trim().slice(0,40) || 'link', 'a.href');
+    });
+    // data-url / data-src
+    document.querySelectorAll('[data-url]').forEach(function(el) { add(el.getAttribute('data-url'), 'data-url', 'data-url'); });
+    document.querySelectorAll('[data-src]').forEach(function(el) { add(el.getAttribute('data-src'), 'data-src', 'data-src'); });
+    document.querySelectorAll('[data-play]').forEach(function(el) { add(el.getAttribute('data-play'), 'data-play', 'data-play'); });
+    // script text with m3u8/mp4
+    var scripts = document.querySelectorAll('script');
+    for (var i=0; i<scripts.length; i++) {
+        var txt = scripts[i].textContent;
+        var m;
+        var re = /(?:https?:)?[^\s\"\'<>]+\.(?:m3u8|mp4)[^\s\"\'<>]*/gi;
+        while ((m = re.exec(txt)) !== null) { add(m[0], 'script.m3u8mp4', 'script'); }
+        // player_xxxx = {...}
+        var pm = txt.match(/var\s+\w+\s*=\s*(\{[^;]+\})/gi);
+        if (pm) {
+            for (var j=0; j<pm.length; j++) {
+                var u = (pm[j].match(/"url"\s*:\s*"([^"]+)"/) || ['',''])[1];
+                if (u) {
+                    u = u.replace(/\\\//g,'/').replace(/\\u([0-9a-f]{2})/gi, function(_,h){return String.fromCharCode(parseInt(h,16));});
+                    add(u, 'player.var', 'player');
+                }
+            }
+        }
+    }
+    // iframe src
+    document.querySelectorAll('iframe').forEach(function(f) {
+        var s = f.src;
+        if (s && !s.startsWith('about:') && !s.startsWith('javascript:')) add(s, 'iframe.src', 'iframe');
+        var ds = f.getAttribute('data-src');
+        if (ds) add(ds, 'iframe.data-src', 'iframe');
+    });
+    return JSON.stringify(r);
+})()"#;
+
+    // Base64 编码避免转义问题
+    let extract_b64 = base64::engine::general_purpose::STANDARD.encode(extract_js);
+
+    let ps = format!(
+        r#"
+$ErrorActionPreference = 'SilentlyContinue'
+$json = ""
+
+# Edge DevTools Protocol - 启动临时用户目录避免冲突
+$tmpDir = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName())
+New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+
+$dbgPort = {port}
+$userDirArg = "--user-data-dir=`"$tmpDir`""
+
+# 启动 Edge headless + CDP
+$proc = Start-Process '{browser}' -ArgumentList "--headless=new","--no-sandbox","--disable-gpu","--remote-debugging-port=$dbgPort",$userDirArg,'{url}' -PassThru -WindowStyle Hidden
+
+Start-Sleep 3
+
+try {{
+    # CDP: 获取 target 列表
+    $jsonUrl = "http://localhost:$dbgPort/json"
+    $resp = Invoke-RestMethod $jsonUrl -TimeoutSec 5 -ErrorAction Stop
+    if (-not $resp) {{ throw "CDP: 无法获取 target" }}
+
+    $target = ($resp | Select-Object -First 1)
+    if (-not $target.id) {{ throw "CDP: 未找到 target id" }}
+
+    # CDP WebSocket URL
+    $wsUrl = $target.webSocketDebuggerUrl
+    if (-not $wsUrl) {{ throw "CDP: 未获取 websocket URL" }}
+
+    $ws = New-Object System.Net.WebSockets.ClientWebSocket
+    $ct = [Threading.CancellationToken]::None
+    $ws.ConnectAsync($wsUrl, $ct).Wait(5000)
+    if ($ws.State -ne 'Open') {{ throw "CDP: websocket 连接失败" }}
+
+    # 启用 Runtime
+    $ws.SendAsync([ArraySegment[byte]][Text.Encoding]::UTF8.GetBytes('{"id":1,"method":"Runtime.enable"}'), 'Text', $true, $ct).Wait(1000)
+
+    # 等 JS 执行
+    Start-Sleep -Seconds 3
+
+    # 执行提取脚本
+    $scriptB64 = '{extract_b64}'
+    $evalCmd = '{"id":10,"method":"Runtime.evaluate","params":{"expression":"eval(atob(`"' + $scriptB64 + '`'))","returnByValue":true}}'
+    $ws.SendAsync([ArraySegment[byte]][Text.Encoding]::UTF8.GetBytes($evalCmd), 'Text', $true, $ct).Wait(5000)
+
+    # 读取结果
+    $buf = [byte[]]::new(16384)
+    $result = $ws.ReceiveAsync([ArraySegment[byte]]$buf, $ct).Wait(8000)
+    if ($result.Count -gt 0) {{
+        $json = [Text.Encoding]::UTF8.GetString($buf, 0, $result.Count)
+    }}
+
+    $ws.CloseAsync('NormalClosure', '', $ct).Wait(1000)
+
+    if ($json -match 'JS_OK:') {{
+        $json = ($json -split 'JS_OK:')[1]
+        Write-Output ("JS_OK:" + $json)
+    }} elseif ($json -match '"result":{"value":') {{
+        Write-Output ("JS_OK:" + ($json -split '"value":')[1].TrimEnd('}'))
+    }} else {{
+        Write-Output "JS_EMPTY"
+    }}
+}} catch {{
+    Write-Output ("JS_ERROR:" + $_.Exception.Message)
+}} finally {{
+    if ($proc -and -not $proc.HasExited) {{ Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue }}
+    Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+}}
+"#,
+        browser = browser_exe,
+        url = url,
+        port = 9222,
+        extract_b64 = extract_b64
+    );
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps])
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !output.status.success() {
+        return Err(format!("fetch_page_js 失败: {}", stderr.trim()));
+    }
+
+    let out = stdout.trim();
+    if let Some(pos) = out.find("JS_OK:") {
+        let json_str = &out[pos + 7..];
+        Ok(json_str.to_string())
+    } else if out.starts_with("JS_EMPTY") {
+        Ok("[]".to_string())
+    } else if out.starts_with("JS_ERROR:") {
+        Err(format!("fetch_page_js 错误: {}", &out[9..].trim()))
+    } else {
+        Err(format!("fetch_page_js 未返回有效结果: {}", out))
+    }
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {

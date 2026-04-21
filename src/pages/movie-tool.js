@@ -2017,6 +2017,23 @@ function setDebug(msg, detail) {
       }},
       { name: '列表提取', fn: () => extractVideoList(html, url) },
       { name: '脚本解析', fn: () => extractFromScript(html, url) },
+      // 策略6：JS渲染（用 Edge headless + CDP 渲染后提取）
+      { name: 'JS渲染提取', fn: async () => {
+        const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+        if (!invoke) return []
+        try {
+          const result = await invoke('fetch_page_js', { url })
+          if (!result || result === '[]' || !result.startsWith('[')) return []
+          const arr = JSON.parse(result)
+          if (!Array.isArray(arr)) return []
+          return arr.filter(r => r && r.url).map(r => ({
+            name: r.name || r.url.split('/').pop().replace(/\.[^.]+$/, '') || 'JS视频',
+            url: r.url,
+            thumb: r.thumb || '',
+            type: r.url.includes('.m3u8') ? 'm3u8' : (r.url.includes('.mp4') ? 'mp4' : r.type || 'unknown')
+          }))
+        } catch { return [] }
+      }},
     ]
 
     // 已通知自动播放的 url 集合（防重复）
