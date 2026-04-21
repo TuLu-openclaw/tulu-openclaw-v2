@@ -59,6 +59,12 @@ const TVBOX_BUILTIN = [
   { key: '240584984', name: '🌺240仓',     url: 'https://cdn.jsdelivr.net/gh/240584984/TVBox@master/json/TVBox.json',      note: '' },
   { key: 'gaomingxu', name: '🌺高命续',    url: 'https://cdn.jsdelivr.net/gh/gaomingxu/TVBox@main/json.json',             note: '' },
   { key: '881014',    name: '🌺881仓',    url: 'https://cdn.jsdelivr.net/gh/881014/TVBox@main/TVBox.json',              note: '' },
+  { key: 'kvymin',    name: '🌺KvyMin',   url: 'https://cdn.jsdelivr.net/gh/kvymin/TVBox@main/json/api.json',            note: '' },
+  { key: 'mochi',     name: '🌺Mochi',    url: 'https://cdn.jsdelivr.net/gh/dmdql037/TVBox_Mochi@main/json/bili.json',    note: '' },
+  { key: 'laoe',      name: '🌺老鹅',     url: 'https://cdn.jsdelivr.net/gh/laoe/TVBox@main/json/api.json',              note: '' },
+  { key: 'wxtvbox',   name: '🌺WxtvBox',  url: 'https://cdn.jsdelivr.net/gh/s情妖/TVBox@main/json.json',                note: '' },
+  { key: 'dd520',     name: '🌺DD520',    url: 'https://cdn.jsdelivr.net/gh/dd520666/TVBox@main/json/api.json',         note: '' },
+  { key: 'tvcloud',   name: '🌺TVCloud', url: 'https://cdn.jsdelivr.net/gh/Guovin/TV@main/json/gq.json',              note: '' },
 ]
 const KEY_CUSTOM_TVBOX = 'tulu_custom_tvbox'
 const KEY_ACTIVE_TVBOX = 'tulu_active_tvbox'
