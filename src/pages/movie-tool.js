@@ -1267,29 +1267,34 @@ function setDebug(msg, detail) {
     function bindEpBtns() {
       body.querySelectorAll('.tvbox-ep-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+          const epUrl = btn.dataset.url
+          // 提取历史进度（如果有）
+          const hist = getPlayHistory().find(h => h.id == btn.dataset.id && h.source === btn.dataset.source && h.epName === btn.dataset.epname)
+          const sp = (hist && hist.duration > 0) ? parseFloat(hist.progress) : 0
           upsertPlayHistory({
             id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
             source: btn.dataset.source, epName: btn.dataset.epname,
-            epUrl: btn.dataset.url, progress: 0, duration: 0,
+            epUrl: epUrl, progress: sp, duration: 0,
           })
-          openPlayerVod(btn.dataset.name, btn.dataset.url, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url))
+          openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url), sp)
         })
       })
     }
   }
 
-  function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls) {
+  function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = name
-    el.querySelector('#t-ext-link').href = url
+    el.querySelector('#t-ext-link').href = url || '#'
     playingEp = { id, source, epName, pic, allUrls: fallbackUrls || [] }
     body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
     overlay.style.display = 'flex'
     if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
-    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0, playingEp?.allUrls || [])
+    const sp = typeof startProgress === 'number' ? startProgress : 0
+    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, sp, playingEp?.allUrls || [])
     else {
       const safeUrl = url && /^https?:\/\//i.test(url) ? url : ''
       body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
@@ -1448,14 +1453,14 @@ function setDebug(msg, detail) {
   }
 
   function closePlayer() {
+    const vid = document.querySelector('#t-player-body video') || document.querySelector('#t-player-body .tvbox-video-wrap video')
+    if (vid && vid.duration > 0 && playingEp) {
+      updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime)
+    }
     playingEp = null
     el.querySelector('#t-player-overlay').style.display = 'none'
     el.querySelector('#t-player-body').innerHTML = ''
-    // 清理 HLS 实例，防止视频后台继续播放
-    if (window._movieHls) {
-      window._movieHls.destroy()
-      window._movieHls = null
-    }
+    if (window._movieHls) { window._movieHls.destroy(); window._movieHls = null }
   }
 
   function renderPagination(page, total) {
@@ -1698,6 +1703,11 @@ function setDebug(msg, detail) {
   }
 
   function closeFloatPlayer() {
+    // 保存当前播放进度
+    const vid = document.querySelector('#_fvid video') || document.querySelector('.tvbox-float-video-wrap video')
+    if (vid && vid.duration > 0 && playingEp) {
+      updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime)
+    }
     if (window._floatHls) { window._floatHls.destroy(); window._floatHls = null }
     if (_floatState?.wrap) { _floatState.wrap.remove(); _floatState = null }
     document.removeEventListener('keydown', onFloatEsc)
@@ -2199,28 +2209,8 @@ function setDebug(msg, detail) {
   }
 
   function playCrawlVideo(name, url) {
-    const isM3u8 = url.includes('.m3u8')
-    const isMp4 = url.includes('.mp4')
-    if (isM3u8 || isMp4) {
-      openFloatPlayer(name, url)
-    } else {
-      showCrawlStatus('🔗 正在抓取: ' + url, 'loading')
-      crawlFetch(url).then(html => {
-        const m3u8s = extractM3u8(html, url, '')
-        const mp4s = extractMp4(html, url)
-        if (m3u8s.length > 0) {
-          openFloatPlayer(name, m3u8s[0].url)
-        } else if (mp4s.length > 0) {
-          openFloatPlayer(name, mp4s[0].url)
-        } else {
-          openFloatPlayer(name, url)
-        }
-        showCrawlStatus('', 'info')
-      }).catch(e => {
-        showCrawlStatus('❌ 抓取失败: ' + e.message, 'error')
-        openFloatPlayer(name, url)
-      })
-    }
+    // 统一走内置播放器（openPlayerVod 支持直链和 iframe，有记忆功能）
+    openPlayerVod(name, url, 'crawl', 'crawl', '', '', [], 0)
   }
 
 // ── 链接输入解析器 ────────────────────────────────────────────────
