@@ -1261,16 +1261,16 @@ function setDebug(msg, detail) {
             'data-epname="' + escHtml(ep.name) + '" data-pic="' + escHtml(item.vod_pic) + '" ' +
             'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' + escHtml(ep.name) + '</button>'
         ).join('')
-        bindEpBtns()
+        bindEpBtns(si)
         body.querySelectorAll('[data-si]').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
       })
     })
 
-    bindEpBtns()
+    bindEpBtns(preferredSi)
     overlay.style.display = 'flex'
 
-    function bindEpBtns() {
+    function bindEpBtns(si) {
       body.querySelectorAll('.tvbox-ep-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const epUrl = btn.dataset.url
