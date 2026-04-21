@@ -704,7 +704,33 @@ function initApp(el) {
       card.addEventListener('click', () => {
         const d = card.dataset
         const pct = d.duration > 0 ? Math.round((parseFloat(d.progress) / parseFloat(d.duration)) * 100) : 0
-        openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, pct > 2 ? parseFloat(d.progress) : 0)
+        const progress = pct > 2 ? parseFloat(d.progress) : 0
+        // 续播提示
+        if (progress > 0) {
+          const mins = Math.floor(progress / 60)
+          const secs = Math.round(progress % 60)
+          openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, progress)
+          // 显示续播提示
+          try {
+            const body = document.querySelector('#t-player-body')
+            if (body) {
+              const existing = body.querySelector('.tvbox-resume-tip')
+              if (existing) existing.remove()
+              const tip = document.createElement('div')
+              tip.className = 'tvbox-resume-tip'
+              tip.style.cssText = 'text-align:center;padding:8px;color:var(--accent);font-size:13px;cursor:pointer'
+              tip.textContent = '▶ 从 ' + mins + '分' + secs + '秒继续播放'
+              tip.addEventListener('click', () => {
+                tip.remove()
+                openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, progress)
+              })
+              body.insertBefore(tip, body.firstChild)
+              setTimeout(() => tip.remove(), 5000)
+            }
+          } catch {}
+        } else {
+          openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, 0)
+        }
       })
     })
     loadList()
@@ -1818,7 +1844,7 @@ function setDebug(msg, detail) {
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-secondary)">
-            <input id="t-crawl-auto" type="checkbox" style="width:15px;height:15px" />
+            <input id="t-crawl-auto" type="checkbox" style="width:15px;height:15px" checked />
             🚀 自动播放（找到第一个链接直接播放）
           </label>
           <button id="t-crawl-urlbtn" class="tvbox-tab" style="font-size:12px;padding:2px 10px">📋 直接输入m3u8/mp4链接</button>
@@ -2309,9 +2335,28 @@ function setDebug(msg, detail) {
     })
   }
 
-  function playCrawlVideo(name, url) {
-    // 统一走内置播放器（openPlayerVod 支持直链和 iframe，有记忆功能）
-    openPlayerVod(name, url, 'crawl', 'crawl', '', '', [], 0)
+  // playCrawlVideo: 独立窗口播放（不影响主界面，支持继续播放）
+  async function playCrawlVideo(name, url, resume = 0) {
+    // 先查一下 playHistory 里的进度
+    if (resume === 0) {
+      try {
+        const h = getPlayHistory().filter(s => s.source === 'crawl')
+        const prev = h.find(s => s.url === url)
+        if (prev && prev.progress > 0) resume = prev.progress
+      } catch {}
+    }
+    const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+    if (invoke) {
+      try {
+        await invoke('open_player_window', { url, title: name, resume })
+      } catch {
+        // 回退：内置播放器
+        openPlayerVod(name, url, 'crawl', 'crawl', '', '', [], 0)
+      }
+    } else {
+      // 回退：内置播放器
+      openPlayerVod(name, url, 'crawl', 'crawl', '', '', [], 0)
+    }
   }
 
 // ── 链接输入解析器 ────────────────────────────────────────────────
