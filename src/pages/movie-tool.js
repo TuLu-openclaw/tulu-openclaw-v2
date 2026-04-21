@@ -720,15 +720,15 @@ function initApp(el) {
     })
   }
 
-  function loadData() {
+  async function loadData() {
     const content = el.querySelector('#t-content')
     content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
     try {
       if (mode === 'live') loadLive()
-      else if (mode === 'tvboxjson') { if (query) loadTvboxSearch(); else loadTvboxList() }
-      else if (query) loadSearch()
-      else if (getPlayHistory().length > 0 && page === 1 && !query) { showPlayHistory(); return }
-      else loadList()
+      else if (mode === 'tvboxjson') { if (query) await loadTvboxSearch(); else await loadTvboxList() }
+      else if (query) await loadSearch()
+      else if (getPlayHistory().length > 0 && page === 1 && !query) { await showPlayHistory(); return }
+      else await loadList()
     } catch (e) {
       content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
     }
@@ -768,11 +768,19 @@ function setDebug(msg, detail) {
     const q = encodeURIComponent(query)
     let json = { list: [], total: 0 }
     try {
-      try { json = await fetchJSON(source.api + '?ac=detail&zm=' + q + '&pg=' + page) } catch {}
-      if (!json.list?.length) { try { json = await fetchJSON(source.api + '?ac=detail&wd=' + q + '&pg=' + page) } catch {} }
-      if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=detail&zm=' + q) } catch {} }
+      // 优先 videolist（CMS标准搜索接口）
+      try { json = await fetchJSON(source.api + '?ac=videolist&wd=' + q + '&pg=' + page) } catch {}
+      if (!json.list?.length) { try { json = await fetchJSON(source.api + '?ac=videolist&zm=' + q + '&pg=' + page) } catch {} }
+      if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=videolist&wd=' + q) } catch {} }
     } catch {}
-    renderVodGrid(json.list || [], json.total || 0)
+    const count = json.list?.length || 0
+    if (!count) {
+      // 兜底：直接 fetch 搜索（部分源搜索接口不同）
+      try { json = await fetchJSON(source.api + '?ac=detail&wd=' + q) } catch {}
+    }
+    const total = json.total || count
+    setDebug(total > 0 ? '搜索到' + total + '条结果' : '未找到相关影片', 'list.len=' + count)
+    renderVodGrid(json.list || [], total)
   }
 
   // ── TVBox JSON 模式 ──────────────────────────────

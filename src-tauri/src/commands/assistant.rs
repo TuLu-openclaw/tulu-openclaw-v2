@@ -476,18 +476,22 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
             $rs.Close(); $resp.Close()
             $bytes = $ms.ToArray()
             $ms.Close()
-            # ── 编码检测：先试 UTF8，若含 U+FFFD 则为 GBK
+            # ── 编码处理：用 UTF-8 直接输出，绕过控制台编码问题
+            [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+            $OutputEncoding = [System.Text.Encoding]::UTF8
             $textUtf8 = [System.Text.Encoding]::UTF8.GetString($bytes)
             $ffc = ($textUtf8.ToCharArray() | Where-Object {{ [int]$_ -eq 0xFFFD }} | Measure-Object).Count
             if ($ffc -gt 0) {{
-                # GBK 解码 → 用 .NET Convert 转 UTF8 字节
+                # 含乱码 → GBK 字节序列，用 [Console] 输出绕过编码
                 $gbk = [System.Text.Encoding]::GetEncoding('GBK')
                 $decoded = $gbk.GetString($bytes)
-                $utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($decoded)
-                $b64 = [Convert]::ToBase64String($utf8Bytes)
-                Write-Output "B64:$b64"
+                [System.Console]::Out.Flush()
+                [System.Console]::Out.NewLine = ''
+                [System.Console]::Out.Write($decoded)
             }} else {{
-                Write-Output $textUtf8
+                [System.Console]::Out.Flush()
+                [System.Console]::Out.NewLine = ''
+                [System.Console]::Out.Write($textUtf8)
             }}
         }} catch {{
             Write-Output ('VOD_ERROR:' + $_.Exception.Message)
@@ -499,7 +503,7 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
         .creation_flags(0x08000000) // CREATE_NO_WINDOW
         .output()
         .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success() || stdout.contains("VOD_ERROR:") {
         let msg = if stdout.starts_with("VOD_ERROR:") {
@@ -509,17 +513,7 @@ pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String
         };
         return Err(format!("vod_fetch failed: {}", msg));
     }
-    // 检查是否为 Base64 编码的 GBK→UTF8 内容
-    let stdout_str = stdout.trim();
-    if stdout_str.starts_with("B64:") {
-        let b64 = &stdout_str[4..];
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(b64)
-            .map_err(|e| format!("Base64 decode failed: {}", e))?;
-        Ok(String::from_utf8(bytes).unwrap_or_else(|_| stdout_str.to_string()))
-    } else {
-        Ok(stdout_str.to_string())
-    }
+    Ok(stdout)
 }
 
 /// 抓取 URL 内容（通过 Jina Reader API）
