@@ -709,8 +709,7 @@ function initApp(el) {
         cat = btn.dataset.id
         page = 1; query = ''; searchInput.value = ''; hideHistory(); _viewStack = []
         renderCatBar(); renderSrcBar()
-        if (getPlayHistory().length > 0 && !query) showPlayHistory()
-        else loadData()
+        loadData()
       })
     })
   }
@@ -1001,7 +1000,11 @@ function setDebug(msg, detail) {
       if (!grid) { grid = content.appendChild(Object.assign(document.createElement('div'), { id: 't-main-grid' })) }
       pagination = content.querySelector('#t-pagination')
       if (!pagination) { pagination = content.appendChild(Object.assign(document.createElement('div'), { id: 't-pagination' })) }
-      console.info('[renderVodGrid] 修复: 重建grid/pagination完成')
+      // 清除残留的加载中状态
+      content.innerHTML = ''
+      content.appendChild(grid)
+      content.appendChild(pagination)
+      console.info('[renderVodGrid] 修复: 重建grid/pagination并清除loading完成')
     }
     console.info('[renderVodGrid] 收到: list.len=', list?.length, 'total=', total)
     if (!list || !list.length) {
@@ -1013,6 +1016,19 @@ function setDebug(msg, detail) {
     const sourceName = VOD_SOURCES[src]?.name || ''
     const totalPages = Math.max(1, Math.ceil(total / 20))
 
+    // 图片 URL 处理：支持多源合并搜索（item._srcKey）和当前源
+    function getSrcBase(itemSrcKey) {
+      const key = itemSrcKey || VOD_SOURCES[src]?.key
+      const s = VOD_SOURCES.find(s => s.key === key)
+      return s?.api ? s.api.replace(/\/api\.php.*$/, '') : ''
+    }
+    function fixPic(url, itemSrcKey) {
+      if (!url) return ''
+      if (/^https?:\/\//i.test(url)) return url
+      if (url.startsWith('//')) return 'https:' + url
+      return getSrcBase(itemSrcKey) + (url.startsWith('/') ? url : '/' + url)
+    }
+
     grid.innerHTML = '<div class="tvbox-grid">' + list.map(item => {
       const histItem = history.find(h => h.id == item.vod_id && h.source === sourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
@@ -1020,7 +1036,7 @@ function setDebug(msg, detail) {
       return '<div class="tvbox-card" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
-            (item.vod_pic ? '<img src="' + escHtml(item.vod_pic) + '" alt="' + escHtml(item.vod_name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
+            (item.vod_pic ? '<img src="' + escHtml(fixPic(item.vod_pic, item._srcKey)) + '" alt="' + escHtml(item.vod_name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
             '<span class="tvbox-card-tag">' + escHtml(item.type_name || '影视') + '</span>' +
             (item.vod_score ? '<span class="tvbox-card-score">' + escHtml(item.vod_score) + '</span>' : '') +
             (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
