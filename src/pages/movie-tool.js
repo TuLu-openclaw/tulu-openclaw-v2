@@ -1868,6 +1868,59 @@ function setDebug(msg, detail) {
         }
         return found
       }},
+      { name: 'CMS播放页JS提取', fn: async () => {
+        // 很多CMS详情页（如ruvodplay/dianxia）通过播放页的JS变量提供视频
+        // 先从详情页HTML中找播放页链接，如 /ruvodplay/77645-1-1.html
+        const playPageMatch = html.match(/href=["'](\/[^"']*\/ruvodplay\/\d+[^"']*)["']/i)
+          || html.match(/href=["'](\/[^"']*\/play\/\d+[^"']*)["']/i)
+          || html.match(/href=["'](\/[^"']*\/vodplay\/\d+[^"']*)["']/i)
+        if (!playPageMatch) return []
+        const playUrl = playPageMatch[1].replace(/[?#].*$/, '')
+        if (!playUrl) return []
+        let base = ''
+        try { base = new URL(url).origin } catch {}
+        const fullPlayUrl = playUrl.startsWith('http') ? playUrl : base + playUrl
+        const playHtml = await crawlFetch(fullPlayUrl).catch(() => '')
+        if (!playHtml) return []
+        // 把 \/ 替换成 /（JS转义）
+        const fixed = playHtml.replace(/\\\//g, '/')
+        // 找 var player_aaaa = {...} 或类似JS变量
+        const playerVars = fixed.match(/var\s+player_\w+\s*=\s*(\{[^;]+\});?/i)
+          || fixed.match(/player(?:_\w+)?\s*=\s*(\{[^;]+\});?/i)
+          || fixed.match(/"url"\s*:\s*"([^"]+)"/i)
+        const found = []
+        if (playerVars) {
+          const jsonStr = playerVars[1] || playerVars[0]
+          // 尝试提取 vod_data.url 或直接 url 字段
+          const m3u8Match = jsonStr.match(/"url"\s*:\s*"([^"]+\.m3u8[^"]*)"/i)
+            || jsonStr.match(/"(https?:[^"\\]+\.m3u8[^"\\]*)"/i)
+            || jsonStr.match(/"vod_data"\s*:\s*\{[^}]+\}/i)
+          if (m3u8Match) {
+            let vodDataStr = m3u8Match[0]
+            // 提取 vod_data 对象
+            const vodUrlMatch = vodDataStr.match(/"url"\s*:\s*"([^"]+)"/i)
+            if (vodUrlMatch) {
+              let videoUrl = vodUrlMatch[1].replace(/\\/g, '')
+              // 反转义 JS Unicode 转义 \u3a \\u3a → :
+              try { videoUrl = JSON.parse('"' + videoUrl + '"') } catch {}
+              if (videoUrl && (videoUrl.includes('.m3u8') || videoUrl.includes('.mp4'))) {
+                const name = fullPlayUrl.split('/').pop().replace(/\.html/i, '') || 'CMS视频'
+                found.push({ name, url: videoUrl, thumb, type: videoUrl.includes('.m3u8') ? 'm3u8' : 'mp4' })
+              }
+            }
+          }
+        }
+        // 也直接从页面HTML找m3u8/mp4（转义或未转义）
+        const directM3u8 = fixed.match(/"(https?:[^"\\]+\.m3u8[^"\\]*)"/i) || []
+        const directMp4 = fixed.match(/"(https?:[^"\\]+\.mp4[^"\\]*)"/i) || []
+        ;[...directM3u8, ...directMp4].forEach(raw => {
+          const u = raw.replace(/[\\"]/g, '').split('?')[0]
+          if (u.startsWith('http') && (u.includes('.m3u8') || u.includes('.mp4'))) {
+            found.push({ name: u.split('/').pop().replace(/\.(m3u8|mp4).*/i, '') || '视频', url: u, thumb, type: u.includes('.m3u8') ? 'm3u8' : 'mp4' })
+          }
+        })
+        return found
+      }},
       { name: '列表提取', fn: () => extractVideoList(html, url) },
       { name: '脚本解析', fn: () => extractFromScript(html, url) },
     ]
@@ -2053,8 +2106,8 @@ function setDebug(msg, detail) {
 
   function extractFromScript(html, base) {
     const results = []
-    // 预处理：把 JavaScript 转义的 \/ 替换成 /
-    const fixed = html.replace(/\\\//g, '/')
+    // 预处理：把 JavaScript 转义的 \/ 和 \u 替换成正常字符
+    const fixed = html.replace(/\\\//g, '/').replace(/\\u([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
     // ── 1. 从 <script> 块中提取 JS 变量赋值的 URL ──────────
     const varPatterns = [
       /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
