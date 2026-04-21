@@ -365,27 +365,14 @@ async function vodApiFetch(url, signal) {
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
-      const text = await Promise.race([
-        invoke('vod_fetch', { url }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), 20000))
-      ]).catch(e => { console.warn('[vodApiFetch] Tauri invoke失败:', e.message || String(e)); return null })
+      const ctrl = new AbortController()
+      const tid = setTimeout(() => ctrl.abort(), 5000) // 5秒超时，不等20秒
+      const text = await invoke('vod_fetch', { url }).catch(e => { clearTimeout(tid); return null })
+      clearTimeout(tid)
       if (text && typeof text === 'string' && text.trim()) {
-        try {
-          const json = JSON.parse(text)
-          console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80))
-          return json
-        } catch(e) {
-          console.warn('[vodApiFetch] Tauri返回JSON解析失败:', e.message, '原始:', text.slice(0, 100))
-          return null
-        }
-      } else if (text === null) {
-        // invoke 失败，已在 catch 记录
-      } else {
-        console.warn('[vodApiFetch] Tauri后端返回空或无效:', url.slice(0, 80), 'text=', typeof text, text?.slice(0, 50))
+        try { console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80)); return JSON.parse(text) } catch(e) { console.warn('[vodApiFetch] Tauri JSON解析失败:', e.message); return null }
       }
-    } else {
-      console.warn('[vodApiFetch] Tauri API 不可用，尝试直接fetch')
-    }
+    } else { console.warn('[vodApiFetch] Tauri API 不可用') }
   } catch (e) { console.warn('[vodApiFetch] Tauri降级异常:', e.message) }
 
   // ── 方式2: CORS 代理（allorigins → corsproxy.io）───────────────────────
@@ -395,31 +382,23 @@ async function vodApiFetch(url, signal) {
   ]
   for (const proxy of proxies) {
     try {
-      const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined })
+      const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined })
       if (resp.ok) {
         const txt = await resp.text()
-        try {
-          console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50))
-          return JSON.parse(txt)
-        } catch(e) { console.warn('[vodApiFetch] 代理返回JSON解析失败:', proxy, e.message) }
-      } else {
-        console.warn('[vodApiFetch] 代理失败:', proxy, 'HTTP', resp.status)
+        try { console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50)); return JSON.parse(txt) } catch(e) { console.warn('[vodApiFetch] 代理JSON解析失败:', proxy, e.message) }
       }
     } catch (e) { console.warn('[vodApiFetch] 代理异常:', proxy, e.message) }
   }
 
-  // ── 方式3: 直接 fetch（最后兜底，不推荐但在某些环境可能可用）─────────
+  // ── 方式3: 直接 fetch（最后兜底，5秒超时）─────────────────────────────
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined })
+    const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined })
     if (resp.ok) {
       const txt = await resp.text()
       try { console.info('[vodApiFetch] 直接fetch成功(兜底):', url.slice(0, 80)); return JSON.parse(txt) } catch { return null }
-    } else {
-      console.warn('[vodApiFetch] 直接fetch失败(兜底):', resp.status, url.slice(0, 80))
     }
   } catch (e) { console.warn('[vodApiFetch] 直接fetch异常(兜底):', e.message, url.slice(0, 80)) }
 
-  console.error('[vodApiFetch] 所有方式均失败，返回空:', url.slice(0, 80))
   return { list: [], total: 0 }
 }
 
@@ -566,7 +545,10 @@ function initApp(el) {
       <div class="tvbox-player-box">
         <div class="tvbox-player-hdr">
           <span class="tvbox-player-title" id="t-player-title">播放中</span>
-          <button class="tvbox-player-close" id="t-player-close">✕</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="tvbox-player-mini" id="t-player-mini" title="最小化到悬浮">─</button>
+            <button class="tvbox-player-close" id="t-player-close">✕</button>
+          </div>
         </div>
         <div class="tvbox-player-body" id="t-player-body">
           <div class="tvbox-player-loading">正在加载播放器...</div>
@@ -587,6 +569,13 @@ function initApp(el) {
   searchInput.addEventListener('blur', () => setTimeout(() => el.querySelector('#t-history-panel').style.display = 'none', 200))
   el.querySelector('#t-clear-history').addEventListener('click', e => { e.stopPropagation(); clearSearchHistory(); renderSearchHistory() })
   el.querySelector('#t-player-close').addEventListener('click', closePlayer)
+  el.querySelector('#t-player-mini').addEventListener('click', () => {
+    const ep = playingEp
+    const title = document.querySelector('#t-player-title')?.textContent || ep?.epName || '播放中'
+    const extUrl = document.querySelector('#t-ext-link')?.href || ep?.epUrl || ''
+    closePlayer()
+    if (ep?.epUrl) openFloatPlayer(title, ep.epUrl, ep.id, ep.source, ep.epName, ep.pic)
+  })
   el.querySelector('#t-player-overlay').addEventListener('click', e => { if (e.target === el.querySelector('#t-player-overlay')) closePlayer() })
 
   // 模式切换（vod / live / tvboxjson）
@@ -1302,11 +1291,12 @@ function setDebug(msg, detail) {
     const isMp4  = url.includes('.mp4')
     if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0, playingEp?.allUrls || [])
     else {
-      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl(url) + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+      const safeUrl = url && /^https?:\/\//i.test(url) ? url : ''
+      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
       setTimeout(() => {
         const iframe = document.getElementById('tv-iframe')
         if (iframe && iframe.style.display !== 'none') {
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl(url) + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
         }
       }, 10000)
     }
