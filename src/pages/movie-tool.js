@@ -330,7 +330,7 @@ function parseXml(raw) {
 // ── 网络请求（优先 Rust 后端代理，绕过 WebView CORS 限制） ──
 
 // 优先直接 fetch，失败走 Tauri Rust 后端，再失败走 CORS 代理
-async function vodApiFetch(url) {
+async function vodApiFetch(url, signal) {
   // ── 方式1: Tauri Rust 后端代理（绕过 CORS，Tauri 2.x 必须走这里）────────
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
@@ -405,8 +405,8 @@ async function webFetch(url) {
 }
 
 // 通用 JSON 获取（自动降级）
-async function fetchJSON(url) {
-  let json = await vodApiFetch(url)
+async function fetchJSON(url, signal) {
+  let json = await vodApiFetch(url, signal)
   if (json) return json
   // Rust 后端失败，降级到浏览器 fetch
   let text
@@ -609,7 +609,16 @@ function initApp(el) {
     page = 1
     hideHistory()
     _viewStack = []
-    loadData()
+    // 搜索时：VOD 模式全源搜索，TVBox 模式走 loadData 里的 loadTvboxSearch
+    if (!_tvboxMode) {
+      const content = el.querySelector('#t-content')
+      content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">全网搜索中...</span></div>'
+      searchAllSources(query).catch(e => {
+        el.querySelector('#t-content').innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">搜索失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
+      })
+    } else {
+      loadData()
+    }
   }
 
   function showSearchHistory() {
@@ -761,6 +770,47 @@ function setDebug(msg, detail) {
     const count = json.list?.length || 0
     setDebug('结果: ' + (json.total || count) + '条', 'list.len=' + count)
     renderVodGrid(json.list || [], json.total || count)
+  }
+
+  // 全源并发搜索（所有 VOD CMS 源同时搜，合并去重）
+  async function searchAllSources(q) {
+    const qe = encodeURIComponent(q)
+    const perSourceTimeout = 10000 // 每源 10 秒超时
+    const sourceResults = await Promise.allSettled(
+      VOD_SOURCES.map(async (source) => {
+        const ctrl = new AbortController()
+        const tid = setTimeout(() => ctrl.abort(), perSourceTimeout)
+        try {
+          let json = { list: [] }
+          try { json = await fetchJSON(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal) } catch {}
+          if (!json.list?.length) { try { json = await fetchJSON(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
+          if (!json.list?.length) { try { json = await fetchJSON(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
+          clearTimeout(tid)
+          return { source, items: json.list || [] }
+        } catch {
+          clearTimeout(tid)
+          return { source, items: [] }
+        }
+      })
+    )
+    // 合并 + 按 vod_name 去重，保留源信息
+    const seen = new Set()
+    const merged = []
+    for (const r of sourceResults) {
+      if (r.status !== 'fulfilled') continue
+      for (const item of r.value.items) {
+        const key = item.vod_name || item.name || Math.random().toString()
+        if (!seen.has(key)) {
+          seen.add(key)
+          merged.push({ ...item, _srcKey: r.value.source.key, _srcName: r.value.source.name })
+        }
+      }
+    }
+    const succeeded = sourceResults.filter(r => r.status === 'fulfilled' && r.value.items.length > 0)
+    const totalS = succeeded.reduce((a, r) => a + r.value.items.length, 0)
+    const srcS = succeeded.map(r => r.value.source.name).join('、')
+    setDebug('全网搜索完成', succeeded.length + '/' + VOD_SOURCES.length + '源返回，共' + totalS + '条[' + srcS + ']')
+    renderVodGrid(merged, totalS)
   }
 
   async function loadSearch() {
