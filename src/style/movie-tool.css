@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    屠戮影视 - Premium OTT UI 样式
    2026-04-19 v9
    ============================================ */
@@ -832,3 +832,10 @@
 
 /* Wex 配置面板 */
 .tvbox-wex-panel{padding:20px}.tvbox-wex-header{text-align:center;margin-bottom:20px}.tvbox-wex-icon{font-size:40px}.tvbox-wex-title{font-size:22px;font-weight:600}.tvbox-wex-form{display:flex;gap:10px;margin-bottom:16px}.tvbox-wex-form input{flex:1;padding:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text-primary)}.tvbox-wex-btn{padding:12px 20px;background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:8px;color:#fff;cursor:pointer}.tvbox-wex-btn:disabled{opacity:0.6}.tvbox-wex-status{padding:12px;border-radius:8px;margin-bottom:16px;text-align:center;display:none}.tvbox-wex-status-success{background:rgba(16,185,129,0.2);color:#10b981}.tvbox-wex-status-error{background:rgba(239,68,68,0.2);color:#ef4444}
+
+/* 骨架屏 */
+.tvbox-skeleton{background:linear-gradient(90deg,#1e1e2e 25%,#2a2a3e 50%,#1e1e2e 75%);background-size:200% 100%;animation:skeleton-shine 1.4s infinite;border-radius:8px}
+@keyframes skeleton-shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.tvbox-skeleton-card{border-radius:8px;height:160px;margin-bottom:8px}
+.tvbox-skeleton-text{height:14px;margin-bottom:8px;border-radius:4px}
+.tvbox-skeleton-sub{height:10px;width:60%;border-radius:4px}

@@ -275,6 +275,7 @@ let tvSrc = 0
 let page = 1
 let query = ''
 let tvCache = {}
+const _sourceHealth = {}
 let playingEp = null
 let _el = null
 let _viewStack = []
@@ -309,6 +310,35 @@ function updatePlayProgress(id, source, progress) {
   savePlayHistory(h)
 }
 function clearPlayHistory() { savePlayHistory([]) }
+
+function exportFavorites() {
+  const data = getPlayHistory()
+  if (!data.length) { alert('收藏为空'); return }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'tulu_favorites.json' })
+  a.click()
+}
+function importFavorites() {
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.json' })
+  inp.addEventListener('change', () => {
+    const f = inp.files[0]; if (!f) return
+    const reader = new FileReader()
+    reader.onload = e => {
+      try {
+        const arr = JSON.parse(e.target.result)
+        if (!Array.isArray(arr)) throw new Error('not array')
+        const existing = getPlayHistory()
+        const merged = [...arr.reverse(), ...existing]
+        const seen = new Set(); const deduped = merged.filter(s => { if (seen.has(s.id + '|' + s.source)) return false; seen.add(s.id + '|' + s.source); return true }).slice(0, 30)
+        savePlayHistory(deduped)
+        alert('导入成功，共 ' + deduped.length + ' 条')
+        loadData()
+      } catch { alert('文件格式错误') }
+    }
+    reader.readAsText(f)
+  })
+  inp.click()
+}
 
 // ── 网络请求 ──
 // ── XML 解析（CMS 格式影视接口）─────────────────────────────
@@ -649,7 +679,10 @@ function initApp(el) {
     const content = el.querySelector('#t-content')
     if (!h.length) { loadData(); return }
 
-    let html = '<div class="tvbox-section-title"><span>📜</span>最近播放 <button class="tvbox-clear-btn" id="t-clear-play" style="margin-left:auto">清除全部</button></div>'
+    let html = '<div class="tvbox-section-title"><span>📜</span>最近播放 ' +
+      '<button id="_h-import" class="tvbox-clear-btn" style="margin-left:8px">📥 导入</button>' +
+      '<button id="_h-export" class="tvbox-clear-btn" style="margin-left:4px">📤 导出</button>' +
+      '<button id="t-clear-play" class="tvbox-clear-btn" style="margin-left:auto">清除全部</button></div>'
     html += '<div style="display:flex;gap:10px;overflow-x:auto;padding:8px 0 16px;scrollbar-width:none"><style>.tvbox-hist-card{flex-shrink:0;width:100px;cursor:pointer}.tvbox-hist-card:hover .tvbox-card-inner{transform:translateY(-2px);border-color:var(--border-hover)}.tvbox-hist-pic{position:relative;aspect-ratio:2/3;background:var(--bg-elevated);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border);margin-bottom:6px}.tvbox-hist-pic img{width:100%;height:100%;object-fit:cover;display:block}.tvbox-hist-name{font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}.tvbox-hist-ep{font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}</style>'
     h.forEach(item => {
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
@@ -670,6 +703,8 @@ function initApp(el) {
     content.innerHTML = html + '<div id="t-main-grid"></div><div id="t-pagination"></div>'
 
     content.querySelector('#t-clear-play')?.addEventListener('click', e => { e.stopPropagation(); clearPlayHistory(); loadData() })
+    content.querySelector('#_h-import')?.addEventListener('click', e => { e.stopPropagation(); importFavorites() })
+    content.querySelector('#_h-export')?.addEventListener('click', e => { e.stopPropagation(); exportFavorites() })
     content.querySelectorAll('.tvbox-hist-card').forEach(card => {
       card.addEventListener('click', () => {
         const d = card.dataset
@@ -693,7 +728,7 @@ function initApp(el) {
     }
     const isM3u8 = epUrl.includes('.m3u8')
     const isMp4  = epUrl.includes('.mp4')
-    if (isM3u8 || isMp4) loadVideoPlayer(epUrl, isM3u8, progress)
+    if (isM3u8 || isMp4) loadVideoPlayer(epUrl, isM3u8, progress, [])
     else // URL 格式校验
         var safeEpUrl = epUrl && /^https?:\/\//i.test(epUrl) ? epUrl : '';
         body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeEpUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
@@ -719,7 +754,8 @@ function initApp(el) {
     const list = VOD_SOURCES
     container.innerHTML = '<span class="tvbox-srcbar-label">源</span>' +
       list.map((s, i) => '<button class="tvbox-src-chip' + (i === src ? ' active' : '') + '" data-idx="' + i + '">' +
-        '<span class="tvbox-src-dot"></span>' + s.name + '</button>').join('')
+        '<span class="tvbox-src-dot' + (_sourceHealth[s.api] > 5000 ? ' tvbox-src-warn' : '') + '"></span>' +
+        s.name + (_sourceHealth[s.api] > 5000 ? ' ⚠️' : '') + '</button>').join('')
     container.querySelectorAll('.tvbox-src-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         src = parseInt(btn.dataset.idx)
@@ -757,8 +793,13 @@ function setDebug(msg, detail) {
     const typeId = typeMap[cat] ?? 1
     setDebug('加载中...', source.name + ' cat=' + cat + ' typeId=' + typeId)
     let json = { list: [], total: 0 }
+    const t0 = Date.now()
     try {
-      try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page); setDebug('API返回', 'total=' + json.total + ' list.len=' + (json.list?.length || 0)) } catch (e) { setDebug('第1次异常', e.message) }
+      try {
+        json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
+        _sourceHealth[source.api] = Date.now() - t0
+        setDebug('API返回', 'total=' + json.total + ' list.len=' + (json.list?.length || 0) + ' (' + _sourceHealth[source.api] + 'ms)')
+      } catch (e) { setDebug('第1次异常', e.message) }
       if (!json.total) { try { json = await fetchJSON(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
       if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
     } catch (e) { setDebug('所有方式异常', e.message) }
@@ -767,6 +808,8 @@ function setDebug(msg, detail) {
       try { json = await fetchJSON(source.api + '?ac=list&pg=' + page) } catch {}
     }
     const count = json.list?.length || 0
+    // 标记超时源（>5s）
+    if (_sourceHealth[source.api] > 5000) renderSrcBar()
     setDebug('结果: ' + (json.total || count) + '条', 'list.len=' + count)
     renderVodGrid(json.list || [], json.total || count)
   }
@@ -1036,7 +1079,7 @@ function setDebug(msg, detail) {
       return '<div class="tvbox-card" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
-            (item.vod_pic ? '<img src="' + escHtml(fixPic(item.vod_pic, item._srcKey)) + '" alt="' + escHtml(item.vod_name) + '" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
+            (item.vod_pic ? '<img src="' + escHtml(fixPic(item.vod_pic, item._srcKey)) + '" alt="' + escHtml(item.vod_name) + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
             '<span class="tvbox-card-tag">' + escHtml(item.type_name || '影视') + '</span>' +
             (item.vod_score ? '<span class="tvbox-card-score">' + escHtml(item.vod_score) + '</span>' : '') +
             (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
@@ -1121,7 +1164,7 @@ function setDebug(msg, detail) {
     overlay.style.display = 'flex'
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
-    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
+    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0, playingEp?.allUrls || [])
     else {
       // URL 格式校验
       var safeUrl = url && /^https?:\/\//i.test(url) ? url : ''
@@ -1145,10 +1188,10 @@ function setDebug(msg, detail) {
     if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=detail&ids=' + id) } catch {} }
     const item = json.list && json.list[0]
     if (!item) { content.innerHTML = '<div class="tvbox-empty">未找到该影片</div>'; return }
-    showEpisodePicker(item, source.name)
+    await showEpisodePicker(item, source.name)
   }
 
-  function showEpisodePicker(item, sourceName) {
+  async function showEpisodePicker(item, sourceName) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = item.vod_name
@@ -1157,7 +1200,16 @@ function setDebug(msg, detail) {
     const hist = getPlayHistory().find(h => h.id == item.vod_id && h.source === sourceName)
     playingEp = null
 
-    // 优先选择包含直接 m3u8 的源（lzm3u8 > liangzi 的 share/xxx）
+    // ── 豆瓣评分异步获取 ───────────────────────────────
+    let doubanRating = ''
+    try {
+      const r = await fetch('https://api.douban.com/v2/movie/search?q=' + encodeURIComponent(item.vod_name), { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined })
+      const d = await r.json().catch(() => null)
+      const score = d?.subjects?.[0]?.rating?.average
+      if (score && score > 0) doubanRating = '⭐ 豆瓣 ' + score
+    } catch {}
+
+    // 优先选择包含直接 m3u8 的源
     let preferredSi = 0
     if (episodes.length > 1) {
       const scored = episodes.map((e, i) => {
@@ -1181,6 +1233,7 @@ function setDebug(msg, detail) {
       backBtn +
       '<div class="tvbox-ep-info">' +
         '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" onerror="this.style.display=\'none\'" />' +
+        (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
         '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
       '</div>' +
       siHtml +
@@ -1230,24 +1283,24 @@ function setDebug(msg, detail) {
             source: btn.dataset.source, epName: btn.dataset.epname,
             epUrl: btn.dataset.url, progress: 0, duration: 0,
           })
-          openPlayerVod(btn.dataset.name, btn.dataset.url, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic)
+          openPlayerVod(btn.dataset.name, btn.dataset.url, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url))
         })
       })
     }
   }
 
-  function openPlayerVod(name, url, id, source, epName, pic) {
+  function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = name
     el.querySelector('#t-ext-link').href = url
-    playingEp = { id, source, epName, pic }
+    playingEp = { id, source, epName, pic, allUrls: fallbackUrls || [] }
     body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
     overlay.style.display = 'flex'
     if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
     const isM3u8 = url.includes('.m3u8')
     const isMp4  = url.includes('.mp4')
-    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0)
+    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, 0, playingEp?.allUrls || [])
     else {
       body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl(url) + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
       setTimeout(() => {
@@ -1259,92 +1312,127 @@ function setDebug(msg, detail) {
     }
   }
 
-  async function loadVideoPlayer(videoUrl, isM3u8, startProgress) {
+  async function loadVideoPlayer(videoUrl, isM3u8, startProgress, fallbackUrls) {
     const body = el.querySelector('#t-player-body')
-    if (isM3u8) {
-      await ensureHls()
-      if (window.Hls && window.Hls.isSupported()) {
+    const fallbackArr = (fallbackUrls && fallbackUrls.length) ? fallbackUrls : []
+    let lineIdx = 0  // 当前尝试的线路索引（0=主URL）
+    let errCount = 0
+    const MAX_ERR = 3
+
+    function showOtip(vid, msg) {
+      let tip = document.getElementById('_ttip')
+      if (!tip) { tip = Object.assign(document.createElement('div'), { id: '_ttip' }); tip.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.7);color:#fff;padding:8px 16px;border-radius:8px;font-size:16px;pointer-events:none;z-index:100' }
+      tip.textContent = msg; if (!document.body.contains(tip)) vid.parentElement.appendChild(tip)
+      clearTimeout(showOtip._t); showOtip._t = setTimeout(() => tip.remove(), 1200)
+    }
+
+    function addPipBtn(vid) {
+      if (!document.pictureInPictureEnabled) return
+      const pip = Object.assign(document.createElement('button'), { textContent: '📺 PiP', title: '画中画' })
+      pip.style.cssText = 'position:absolute;top:8px;right:180px;z-index:10;background:rgba(30,30,50,0.9);color:#fff;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer'
+      pip.addEventListener('click', () => { vid.requestPictureInPicture().catch(() => {}) }, { once: true })
+      return pip
+    }
+
+    function addTouchGesture(vid) {
+      let tx = 0, ty = 0, tt = 0, startVol = 1
+      vid.addEventListener('touchstart', e => {
+        tx = e.touches[0].clientX; ty = e.touches[0].clientY; tt = vid.currentTime; startVol = vid.volume
+      }, { passive: true })
+      vid.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - tx
+        const dy = e.changedTouches[0].clientY - ty
+        const pct = dx / vid.offsetWidth
+        if (Math.abs(pct) > 0.04) {
+          vid.currentTime = Math.max(0, Math.min(vid.duration, tt + pct * 60))
+          showOtip(vid, (pct > 0 ? '＋' : '－') + Math.round(Math.abs(pct) * 60) + 's')
+        } else if (Math.abs(dy) > 30) {
+          vid.volume = Math.max(0, Math.min(1, startVol - dy / 300))
+          showOtip(vid, '🔊 ' + Math.round(vid.volume * 100) + '%')
+        }
+      }, { passive: true })
+    }
+
+    async function tryNextLine(failedUrl) {
+      lineIdx++
+      const next = fallbackArr.find((u, i) => i >= lineIdx && u !== failedUrl)
+      if (next) { lineIdx = fallbackArr.indexOf(next); await tryPlay(next, next.includes('.m3u8') || next.includes('.mp4'), 0) }
+    }
+
+    async function tryPlay(url, isM3u8, sp) {
+      if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
+
+      if (isM3u8) {
+        await ensureHls()
+        if (window.Hls && window.Hls.isSupported()) {
+          const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'
+          const video = document.createElement('video'); video.controls = true
+          wrap.appendChild(video)
+          body.innerHTML = ''; body.appendChild(wrap)
+          const hls = new window.Hls({ autoStartLoad: true, startLevel: -1 })
+          window._movieHls = hls
+          hls.loadSource(url)
+          hls.attachMedia(video)
+          let hlsTimedOut = false
+          const hlsTimer = setTimeout(() => {
+            if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
+              body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 加载超时（15秒）</p><a href="' + url + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
+              if (fallbackArr.length > 0) tryNextLine(url)
+            }
+          }, 15000)
+          hls.on(window.Hls.Events.ERROR, (evt, data) => {
+            clearTimeout(hlsTimer)
+            if (data.fatal) {
+              errCount++
+              if (errCount < MAX_ERR && (data.type === window.Hls.ErrorTypes.NETWORK_ERROR || data.type === window.Hls.ErrorTypes.MEDIA_ERROR)) {
+                console.warn('[HLS] 可恢复错误，尝试恢复 (#' + errCount + '):', data.type, data.details)
+                hls.startLoad(); return
+              }
+              hlsTimedOut = true; hls.destroy(); window._movieHls = null
+              body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</p><a href="' + url + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
+              if (fallbackArr.length > 0) tryNextLine(url)
+            }
+          })
+          hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer); hls.currentLevel = -1 })
+          const pipBtn = addPipBtn(video); if (pipBtn) wrap.appendChild(pipBtn)
+          addTouchGesture(video)
+          video.addEventListener('timeupdate', () => trackProgress(video))
+          video.addEventListener('ended', () => markFinished())
+          if (sp > 0) video.currentTime = sp
+          video.play().catch(() => {})
+        } else {
+          const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'; wrap.style.position = 'relative'
+          const video = document.createElement('video'); video.controls = true; video.style.width = '100%'; video.style.maxHeight = '70vh'
+          video.src = url
+          const pipBtn = addPipBtn(video); if (pipBtn) wrap.appendChild(pipBtn)
+          addTouchGesture(video)
+          video.addEventListener('error', () => {
+            if (fallbackArr.length > 0) tryNextLine(url)
+            else { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放失败</p><a href="' + url + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>' }
+          })
+          wrap.appendChild(video)
+          body.innerHTML = ''; body.appendChild(wrap)
+          if (sp > 0) video.currentTime = sp
+          video.play().catch(() => {})
+        }
+      } else {
         const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'
         const video = document.createElement('video'); video.controls = true
         wrap.appendChild(video)
         body.innerHTML = ''; body.appendChild(wrap)
-        const hls = new window.Hls({ autoStartLoad: true, startLevel: -1 })
-        window._movieHls = hls
-        hls.loadSource(videoUrl)
-        hls.attachMedia(video)
-        let hlsTimedOut = false
-        let errCount = 0
-        const MAX_ERR = 3
-        const hlsTimer = setTimeout(() => {
-          if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
-            body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 加载超时（15秒）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
-          }
-        }, 15000)
-        hls.on(window.Hls.Events.ERROR, (evt, data) => {
-          clearTimeout(hlsTimer)
-          // 网络/媒体错误大多数可恢复，尝试自动恢复
-          if (data.fatal) {
-            errCount++
-            if (errCount < MAX_ERR && (data.type === window.Hls.ErrorTypes.NETWORK_ERROR || data.type === window.Hls.ErrorTypes.MEDIA_ERROR)) {
-              console.warn('[HLS] 可恢复错误，尝试恢复 (#' + errCount + '):', data.type, data.details)
-              hls.startLoad()
-              return
-            }
-            // 不可恢复或重试次数用完
-            hlsTimedOut = true; hls.destroy(); window._movieHls = null
-            body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
-          }
-        })
-        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-          clearTimeout(hlsTimer)
-          const levels = hls.levels || []
-          if (levels.length > 1) {
-            const qBtn = document.createElement('button')
-            qBtn.textContent = '🎯 自动'
-            qBtn.title = '画质/速度切换'
-            qBtn.style.cssText = 'position:absolute;top:8px;right:120px;z-index:10;background:rgba(30,30,50,0.9);color:#fff;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer'
-            const speeds = [0.5, 1, 1.25, 1.5, 2]
-            let speedIdx = 1
-            qBtn.addEventListener('click', () => {
-              speedIdx = (speedIdx + 1) % speeds.length
-              const s = speeds[speedIdx]
-              video.playbackRate = s
-              qBtn.textContent = '🎯 ' + s + 'x'
-            })
-            wrap.style.position = 'relative'
-            wrap.appendChild(qBtn)
-          }
-          hls.currentLevel = -1 // 自适应
-        })
+        const pipBtn = addPipBtn(video); if (pipBtn) wrap.appendChild(pipBtn)
+        addTouchGesture(video)
         video.addEventListener('timeupdate', () => trackProgress(video))
         video.addEventListener('ended', () => markFinished())
-        if (startProgress > 0) video.currentTime = startProgress
-        video.play().catch(() => {})
-      } else {
-        // HLS.js 不可用，尝试原生 video 标签（部分 WebView2 支持 HLS）
-        const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'; wrap.style.position = 'relative'
-        const video = document.createElement('video'); video.controls = true; video.style.width = '100%'; video.style.maxHeight = '70vh'
-        video.src = videoUrl
-        video.addEventListener('error', () => {
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败（当前环境不支持 HLS）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
-        })
-        video.addEventListener('loadeddata', () => { /* 播放成功 */ })
-        wrap.appendChild(video)
-        body.innerHTML = ''; body.appendChild(wrap)
-        if (startProgress > 0) video.currentTime = startProgress
+        video.addEventListener('error', () => { if (fallbackArr.length > 0) tryNextLine(url) })
+        video.src = url
+        if (sp > 0) video.currentTime = sp
         video.play().catch(() => {})
       }
-    } else {
-      const wrap = document.createElement('div'); wrap.className = 'tvbox-video-wrap'
-      const video = document.createElement('video'); video.controls = true
-      wrap.appendChild(video)
-      body.innerHTML = ''; body.appendChild(wrap)
-      video.addEventListener('timeupdate', () => trackProgress(video))
-      video.addEventListener('ended', () => markFinished())
-      video.src = videoUrl
-      if (startProgress > 0) video.currentTime = startProgress
-      video.play().catch(() => {})
     }
+
+    // 先尝试主URL
+    tryPlay(videoUrl, isM3u8, startProgress)
   }
 
   function trackProgress(video) {
@@ -1686,12 +1774,59 @@ function setDebug(msg, detail) {
     el2.style.display = 'block'
   }
 
-  async function crawlSite(url) {
+  // ── 缩略图提取 ─────────────────────────────────────
+  function extractThumb(html) {
+    const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+    if (og && og[1]) return og[1]
+    const twitter = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+    if (twitter && twitter[1]) return twitter[1]
+    return ''
+  }
+
+  // ── DASH / MPD 检测 ─────────────────────────────────
+  function extractDash(html, base) {
     const results = []
-    if (url.includes('.m3u8') || url.includes('.mp4')) {
-      const name = url.split('/').pop().replace(/\.(m3u8|mp4)/i, '') || '直链视频'
+    const mpdLinks = html.match(/["']([^"']+\.mpd[^"']*)["']/gi) || []
+    mpdLinks.forEach(raw => {
+      const url = raw.replace(/['">]/g, '')
+      if (url.startsWith('http')) results.push({ name: 'DASH manifest', url, thumb: '', type: 'dash' })
+    })
+    // init.mp4 + seg*.m4s 模式
+    const segMatches = html.match(/["']([^"']*init\.mp4[^"']*)["']/gi) || []
+    segMatches.forEach(raw => {
+      const url = raw.replace(/['">]/g, '')
+      if (url.startsWith('http')) results.push({ name: 'M4S片段视频', url, thumb: '', type: 'm4s' })
+    })
+    return results
+  }
+
+  // ── 站点指纹策略记忆 ────────────────────────────────
+  const CRAWL_FP_KEY = (domain) => 'crawl_fp_' + domain
+  function getSiteStrategy(domain) {
+    try { return JSON.parse(localStorage.getItem(CRAWL_FP_KEY(domain)) || 'null') } catch { return null }
+  }
+  function saveSiteStrategy(domain, strat) {
+    try { localStorage.setItem(CRAWL_FP_KEY(domain), JSON.stringify(strat)) } catch {}
+  }
+
+  async function crawlSite(url) {
+    if (url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd')) {
+      const name = url.split('/').pop().replace(/\.(m3u8|mp4|mpd)/i, '') || '直链视频'
       return [{ name, url, thumb: '', type: 'direct' }]
     }
+
+    // 云盘检测
+    const panDomains = ['pan.baidu.com', 'yun.baidu.com', 'wangpan.cn', 'uc.cn', 'quark.cn']
+    if (panDomains.some(d => url.includes(d))) {
+      showCrawlStatus('☁️ 检测到云盘链接，尝试解析...', 'loading')
+      try {
+        const resp = await fetch('https://api.pan666.cn/?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined })
+        const json = await resp.json().catch(() => null)
+        if (json && json.url) return [{ name: '云盘直链', url: json.url, thumb: '', type: 'direct' }]
+      } catch {}
+      return [{ name: '云盘待解析', url, thumb: '', type: 'cloud' }]
+    }
+
     let html = ''
     try {
       html = await crawlFetch(url)
@@ -1699,34 +1834,69 @@ function setDebug(msg, detail) {
       showCrawlStatus('❌ 页面获取失败: ' + e.message, 'error')
       return []
     }
-    showCrawlStatus('📄 页面已获取，正在分析视频链接...', 'loading')
 
-    const m3u8Links = extractM3u8(html, url)
-    m3u8Links.forEach(item => results.push(item))
+    // 缩略图
+    const thumb = extractThumb(html)
+    // 域名策略记忆
+    let domain = ''
+    try { domain = new URL(url).hostname.replace(/\./g, '_') } catch {}
+    const siteStrat = domain ? getSiteStrategy(domain) : null
 
-    const mp4Links = extractMp4(html, url)
-    mp4Links.forEach(item => results.push(item))
+    // 提取策略列表（定义顺序即优先级）
+    const strategies = [
+      { name: 'm3u8正则', fn: () => extractM3u8(html, url, thumb) },
+      { name: 'mp4正则',  fn: () => extractMp4(html, url) },
+      { name: 'DASH检测', fn: () => extractDash(html, url) },
+      { name: 'iframe递归', fn: async () => {
+        const iframes = extractIframes(html, url)
+        const found = []
+        for (const iframe of iframes.slice(0, 3)) {
+          try {
+            const frameHtml = await crawlFetch(iframe.src).catch(() => '')
+            const fi = extractM3u8(frameHtml, iframe.src, thumb)
+            const fp = extractMp4(frameHtml, iframe.src)
+            fi.forEach(i => { i.thumb = i.thumb || thumb; found.push(i) })
+            fp.forEach(i => { i.thumb = i.thumb || thumb; found.push(i) })
+            // 二层 iframe（最多3个）
+            const nested = extractIframes(frameHtml, iframe.src).slice(0, 3)
+            for (const n of nested) {
+              try {
+                const nHtml = await crawlFetch(n.src).catch(() => '')
+                extractM3u8(nHtml, n.src, thumb).forEach(i => { i.thumb = i.thumb || thumb; found.push(i) })
+                extractMp4(nHtml, n.src).forEach(i => { i.thumb = i.thumb || thumb; found.push(i) })
+              } catch {}
+            }
+          } catch {}
+        }
+        return found
+      }},
+      { name: '列表提取', fn: () => extractVideoList(html, url) },
+      { name: '脚本解析', fn: () => extractFromScript(html, url) },
+    ]
 
-    const iframes = extractIframes(html, url)
-    for (const iframe of iframes) {
-      showCrawlStatus('🔗 发现嵌入式播放器: ' + iframe.src, 'loading')
-      try {
-        const iframeHtml = await crawlFetch(iframe.src).catch(() => '')
-        const frameM3u8 = extractM3u8(iframeHtml, iframe.src)
-        frameM3u8.forEach(item => results.push(item))
-        const frameMp4 = extractMp4(iframeHtml, iframe.src)
-        frameMp4.forEach(item => results.push(item))
-      } catch {}
-    }
+    // 并行执行所有策略，先到先得
+    const allResults = []
+    const settled = await Promise.allSettled(strategies.map(async (s, i) => {
+      showCrawlStatus('[' + (i + 1) + '/' + strategies.length + '] ' + s.name + '中...', 'loading')
+      const r = await s.fn()
+      showCrawlStatus('[' + (i + 1) + '/' + strategies.length + '] ' + s.name + '完成，找到 ' + (Array.isArray(r) ? r.length : 0) + ' 个', 'loading')
+      return r
+    }))
 
-    const listItems = extractVideoList(html, url)
-    listItems.forEach(item => results.push(item))
+    settled.forEach((p, i) => {
+      if (p.status === 'fulfilled' && Array.isArray(p.value)) {
+        p.value.forEach(item => { item.thumb = item.thumb || thumb; allResults.push(item) })
+        // 记录首个成功策略
+        if (p.value.length > 0 && domain && !siteStrat) {
+          saveSiteStrategy(domain, strategies[i].name)
+        }
+      }
+    })
 
-    const jsUrls = extractFromScript(html, url)
-    jsUrls.forEach(item => results.push(item))
-
+    // 去重
     const seen = new Set()
-    return results.filter(r => {
+    return allResults.filter(r => {
+      if (!r.url) return false
       const key = r.url
       if (seen.has(key)) return false
       seen.add(key)
@@ -1734,38 +1904,56 @@ function setDebug(msg, detail) {
     })
   }
 
-  async function crawlFetch(pageUrl) {
-    // ── 优先：直接 fetch（Tauri WebView 无 CORS）───────────
-    try {
-      const resp = await fetch(pageUrl, {
-        signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
-        credentials: 'include',
-        headers: { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9' }
-      })
-      if (resp.ok) return resp.text()
-    } catch { /* 降级到 Tauri 后端 */ }
+  // User-Agent 随机池（防反爬）
+  const CRAWL_UAS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  ]
+  const CRAWL_TIMEOUT = 10000  // 10秒超时
+  const CRAWL_RETRIES = 2     // 最多重试2次
 
-    // ── 降级：Tauri Rust 后端代理 ──────────────────────
-    try {
-      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
-      if (invoke) {
-        const html = await invoke('fetch_page', { url: pageUrl }).catch(() => null)
-        if (html) return html
+  async function crawlFetch(pageUrl, depth = 0) {
+    const ua = CRAWL_UAS[Math.floor(Math.random() * CRAWL_UAS.length)]
+    const headers = { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9', 'User-Agent': ua }
+
+    async function _doFetch(signal) {
+      // ── 优先：Tauri Rust 后端代理（CORS 穿透）────────
+      try {
+        const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+        if (invoke) {
+          const html = await invoke('fetch_page', { url: pageUrl }).catch(() => null)
+          if (html) return html
+        }
+      } catch {}
+      // ── 降级：浏览器 fetch ───────────────────────
+      const resp = await fetch(pageUrl, { signal, credentials: 'include', headers })
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+      return resp.text()
+    }
+
+    // 尝试 fetch，带超时
+    let lastErr
+    for (let i = 0; i <= CRAWL_RETRIES; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 1000)) // 重试前等1秒
+      try {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), CRAWL_TIMEOUT)
+        const html = await _doFetch(controller.signal)
+        clearTimeout(timer)
+        return html
+      } catch (e) {
+        lastErr = e
+        if (e.name === 'AbortError') lastErr = new Error('请求超时（' + CRAWL_TIMEOUT / 1000 + 's）')
       }
-    } catch {}
-
-    // ── 最终降级：直接 fetch ──────────────────────────
-    const resp = await fetch(pageUrl, {
-      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
-      credentials: 'include',
-      headers: { 'Accept': 'text/html,application/xhtml+xml,*/*', 'Accept-Language': 'zh-CN,zh;q=0.9' }
-    })
-    if (!resp.ok) throw new Error('HTTP ' + resp.status)
-    return resp.text()
+    }
+    throw lastErr || new Error('fetch 失败')
   }
 
-  function extractM3u8(html, base) {
+  function extractM3u8(html, base, baseThumb) {
     const results = []
+    // 1) 页面直接 URL
     const re = /(?:src|href|url|video|media)[\s"'=]*(\S+\.m3u8[^"'<>\s]*)/gi
     let m
     while ((m = re.exec(html)) !== null) {
@@ -1773,15 +1961,35 @@ function setDebug(msg, detail) {
       const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
       if (resolved.includes('.m3u8')) {
         const name = raw.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
-        results.push({ name, url: resolved, thumb: '', type: 'm3u8' })
+        results.push({ name, url: resolved, thumb: baseThumb || '', type: 'm3u8' })
       }
     }
-    const jsonRe = /"(https?:[^"]+\.m3u8[^"]*)"/g
+    // 2) JSON 字符串
+    const jsonRe = /"(https?:[^"]+\.m3u8[^"]*)"/gi
     while ((m = jsonRe.exec(html)) !== null) {
       const resolved = m[1].split('?')[0]
       if (resolved.includes('.m3u8')) {
-        const name = resolved.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
-        results.push({ name, url: resolved, thumb: '', type: 'm3u8' })
+        const name = resolved.split('/').pop().replace('.m3u8', '').split(/[,&?]/)[0] || 'M3U8 视频'
+        results.push({ name, url: resolved, thumb: baseThumb || '', type: 'm3u8' })
+      }
+    }
+    // 3) M3U8 多分辨率变体（#EXT-X-STREAM-INF）
+    if (html.includes('#EXTM3U') && html.includes('#EXT-X-STREAM-INF')) {
+      const lines = html.split('\n')
+      let curRes = '', curBw = '', curUrl = ''
+      for (const line of lines) {
+        const l = line.trim()
+        if (l.startsWith('#EXT-X-STREAM-INF:')) {
+          const bw = l.match(/BANDWIDTH=(\d+)/)?.[1]
+          const res = l.match(/RESOLUTION=([^,]+)/)?.[1] || ''
+          curBw = bw ? Math.round(parseInt(bw) / 1000) + 'k' : ''
+          curRes = res ? res.replace('x', 'p ') : ''
+        } else if (l && !l.startsWith('#')) {
+          curUrl = l.startsWith('http') ? l : new URL(l, base).href
+          const label = (curRes + ' ' + curBw).trim() || '流'
+          results.push({ name: '[' + label + '] ' + (curUrl.split('/').pop().replace('.m3u8', '') || 'M3U8'), url: curUrl, thumb: baseThumb || '', type: 'm3u8' })
+          curUrl = ''
+        }
       }
     }
     return results
@@ -1891,13 +2099,19 @@ function setDebug(msg, detail) {
       return
     }
     showCrawlStatus('✅ 找到 ' + results.length + ' 个可播放链接', 'success')
-    container.innerHTML = '<div class="tvbox-grid">' + results.map((r, i) => {
-      const typeIcon = r.type === 'direct' ? '🎬' : r.type === 'm3u8' ? '📺' : r.type === 'mp4' ? '🎞️' : '🔗'
+
+    // 导出按钮
+    const exportBar = '<div style="display:flex;gap:10px;margin-bottom:16px">' +
+      '<button id="_crawl-export-json" class="tvbox-crawl-btn" style="flex:1">📥 导出 JSON</button>' +
+      '<button id="_crawl-export-m3u" class="tvbox-crawl-btn" style="flex:1">📄 导出 M3U</button></div>'
+    container.innerHTML = exportBar + '<div class="tvbox-grid">' + results.map((r, i) => {
+      const typeIcon = { direct: '🎬', m3u8: '📺', mp4: '🎞️', dash: '📡', m4s: '🎞️', cloud: '☁️', link: '🔗' }[r.type] || '📺'
+      const picHtml = r.thumb
+        ? '<img src="' + escHtml(r.thumb) + '" alt="' + escHtml(r.name) + '" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span style=font-size:32px;display:flex;align-items:center;justify-content:center;width:100%;height:100%>' + typeIcon + '</span>\'" />'
+        : '<span style="font-size:32px;display:flex;align-items:center;justify-content:center;width:100%;height:100%">' + typeIcon + '</span>'
       return '<div class="tvbox-card tvbox-crawl-card" data-index="' + i + '">' +
         '<div class="tvbox-card-inner">' +
-          '<div class="tvbox-card-pic">' +
-            '<span class="tvbox-card-placeholder" style="font-size:32px;display:flex;align-items:center;justify-content:center;width:100%;height:100%">' + typeIcon + '</span>' +
-          '</div>' +
+          '<div class="tvbox-card-pic"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:8px">' + picHtml + '</div></div>' +
           '<div class="tvbox-card-info">' +
             '<div class="tvbox-card-title" style="font-size:12px;line-height:1.3">' + escHtml(r.name.slice(0, 40)) + '</div>' +
             '<div class="tvbox-card-sub">' + r.type.toUpperCase() + '</div>' +
@@ -1905,6 +2119,20 @@ function setDebug(msg, detail) {
         '</div>' +
       '</div>'
     }).join('') + '</div>'
+
+    // JSON 导出
+    container.querySelector('#_crawl-export-json')?.addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' })
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'crawl_results.json' })
+      a.click()
+    })
+    // M3U 导出
+    container.querySelector('#_crawl-export-m3u')?.addEventListener('click', () => {
+      const m3u = '#EXTM3U\n' + results.filter(r => r.url.includes('.m3u8') || r.url.includes('.mp4')).map(r => '#EXTINF:-1,' + r.name + '\n' + r.url).join('\n')
+      const blob = new Blob([m3u], { type: 'audio/x-mpegurl' })
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'crawl_results.m3u' })
+      a.click()
+    })
 
     container.querySelectorAll('.tvbox-crawl-card').forEach(card => {
       card.addEventListener('click', () => {
@@ -1923,7 +2151,7 @@ function setDebug(msg, detail) {
     } else {
       showCrawlStatus('🔗 正在抓取: ' + url, 'loading')
       crawlFetch(url).then(html => {
-        const m3u8s = extractM3u8(html, url)
+        const m3u8s = extractM3u8(html, url, '')
         const mp4s = extractMp4(html, url)
         if (m3u8s.length > 0) {
           openFloatPlayer(name, m3u8s[0].url)
