@@ -265,7 +265,7 @@ const VOD_CATEGORIES = [
   { id: 'short',   name: '短剧' },
 ]
 
-const HLS_CDN = './hls.min.js'
+const HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'
 const KEY_SEARCH = 'tulu_vod_search'
 const KEY_PLAY   = 'tulu_vod_play'
 
@@ -1268,18 +1268,33 @@ function setDebug(msg, detail) {
         const video = document.createElement('video'); video.controls = true
         wrap.appendChild(video)
         body.innerHTML = ''; body.appendChild(wrap)
-        const hls = new window.Hls()
+        const hls = new window.Hls({ autoStartLoad: true, startLevel: -1 })
         window._movieHls = hls
         hls.loadSource(videoUrl)
         hls.attachMedia(video)
         let hlsTimedOut = false
+        let errCount = 0
+        const MAX_ERR = 3
         const hlsTimer = setTimeout(() => {
           if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
             body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 加载超时（15秒）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
           }
         }, 15000)
-        hls.on(window.Hls.Events.ERROR, () => { hlsTimedOut = true; clearTimeout(hlsTimer); window._movieHls = null
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 播放失败</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>' })
+        hls.on(window.Hls.Events.ERROR, (evt, data) => {
+          clearTimeout(hlsTimer)
+          // 网络/媒体错误大多数可恢复，尝试自动恢复
+          if (data.fatal) {
+            errCount++
+            if (errCount < MAX_ERR && (data.type === window.Hls.ErrorTypes.NETWORK_ERROR || data.type === window.Hls.ErrorTypes.MEDIA_ERROR)) {
+              console.warn('[HLS] 可恢复错误，尝试恢复 (#' + errCount + '):', data.type, data.details)
+              hls.startLoad()
+              return
+            }
+            // 不可恢复或重试次数用完
+            hlsTimedOut = true; hls.destroy(); window._movieHls = null
+            body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</p><a href="' + videoUrl + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
+          }
+        })
         hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
           clearTimeout(hlsTimer)
           const levels = hls.levels || []
@@ -1504,13 +1519,25 @@ function setDebug(msg, detail) {
       })
 
       let timedOut = false
+      let errCount = 0
+      const MAX_ERR = 3
       const timer = setTimeout(() => {
         if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
           vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">m3u8 加载超时（15秒）</div>'
         }
       }, 15000)
-      hls.on(window.Hls.Events.ERROR, () => { clearTimeout(timer); window._floatHls = null
-        vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">m3u8 播放失败</div>'
+      hls.on(window.Hls.Events.ERROR, (evt, data) => {
+        clearTimeout(timer)
+        if (data.fatal) {
+          errCount++
+          if (errCount < MAX_ERR && (data.type === window.Hls.ErrorTypes.NETWORK_ERROR || data.type === window.Hls.ErrorTypes.MEDIA_ERROR)) {
+            console.warn('[FloatHLS] 可恢复错误，尝试恢复 (#' + errCount + '):', data.type, data.details)
+            hls.startLoad()
+            return
+          }
+          timedOut = true; hls.destroy(); window._floatHls = null
+          vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</div>'
+        }
       })
       hls.on(window.Hls.Events.MANIFEST_PARSED, () => clearTimeout(timer))
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
