@@ -723,10 +723,12 @@ function initApp(el) {
     }
     const isM3u8 = epUrl.includes('.m3u8')
     const isMp4  = epUrl.includes('.mp4')
-    if (isM3u8 || isMp4) loadVideoPlayer(epUrl, isM3u8, progress, [])
-    else // URL 格式校验
+    if (isM3u8 || isMp4) {
+      loadVideoPlayer(epUrl, isM3u8, progress, [])
+    } else {
         var safeEpUrl = epUrl && /^https?:\/\//i.test(epUrl) ? epUrl : '';
         body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeEpUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
+    }
   }
 
   function renderCatBar() {
@@ -1662,6 +1664,7 @@ function setDebug(msg, detail) {
     _floatState.wrap.querySelector('#_fpin').classList.toggle('pin-on', _floatState.pinned)
   }
 
+  // 拖拽
   let _floatDrag = null
 
   function onFloatDragStart(e) {

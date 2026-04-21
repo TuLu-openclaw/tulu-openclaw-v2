@@ -696,6 +696,19 @@
 .tvbox-float-wrap.minimized .tvbox-float-body { display: none; }
 .tvbox-float-wrap.minimized .tvbox-float-url-bar { display: none; }
 
+/* 拖拽调整大小手柄 */
+.tvbox-float-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.15) 50%);
+  border-radius: 0 0 var(--radius-lg) 0;
+}
+
 .tvbox-float-header {
   display: flex;
   align-items: center;
