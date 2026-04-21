@@ -971,6 +971,19 @@ function setDebug(msg, detail) {
       await loadTvboxList()
       renderTvboxSrcTabs()
     }))
+    el.querySelectorAll('.tvbox-src-item[data-type="builtin"]').forEach(item => {
+      item.addEventListener('contextmenu', e => {
+        e.preventDefault()
+        const key = item.dataset.key
+        const src = TVBOX_BUILTIN.find(a => a.key === key)
+        if (src?.url) {
+          navigator.clipboard?.writeText(src.url).catch(() => {})
+          const orig = item.style.background
+          item.style.background = '#3a3a6a'
+          setTimeout(() => { item.style.background = orig }, 300)
+        }
+      })
+    })
     el.querySelectorAll('.t-del-api').forEach(btn => btn.addEventListener('click', e => {
       e.stopPropagation()
       const key = btn.dataset.key
@@ -1263,31 +1276,31 @@ function setDebug(msg, detail) {
             'data-epname="' + escHtml(ep.name) + '" data-pic="' + escHtml(item.vod_pic) + '" ' +
             'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' + escHtml(ep.name) + '</button>'
         ).join('')
-        bindEpBtns(si)
         body.querySelectorAll('[data-si]').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
       })
     })
 
-    bindEpBtns(preferredSi)
     overlay.style.display = 'flex'
 
-    function bindEpBtns(si) {
-      body.querySelectorAll('.tvbox-ep-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const epUrl = btn.dataset.url
-          // 提取历史进度（如果有）
-          const hist = getPlayHistory().find(h => h.id == btn.dataset.id && h.source === btn.dataset.source && h.epName === btn.dataset.epname)
-          const sp = (hist && hist.duration > 0) ? parseFloat(hist.progress) : 0
-          upsertPlayHistory({
-            id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
-            source: btn.dataset.source, epName: btn.dataset.epname,
-            epUrl: epUrl, progress: sp, duration: 0,
-          })
-          openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url), sp)
-        })
+    // 使用事件委托，避免重复绑定监听器
+    const epGrid = body.querySelector('#t-ep-grid')
+    epGrid.addEventListener('click', e => {
+      const btn = e.target.closest('.tvbox-ep-btn')
+      if (!btn) return
+      const epUrl = btn.dataset.url
+      const hist = getPlayHistory().find(h => h.id == btn.dataset.id && h.source === btn.dataset.source && h.epName === btn.dataset.epname)
+      const sp = (hist && hist.duration > 0) ? parseFloat(hist.progress) : 0
+      upsertPlayHistory({
+        id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
+        source: btn.dataset.source, epName: btn.dataset.epname,
+        epUrl: epUrl, progress: sp, duration: 0,
       })
-    }
+      // 获取当前显示的源的 si（从 active 的 [data-si] 按钮获取）
+      const activeSiBtn = body.querySelector('[data-si].active')
+      const si = activeSiBtn ? parseInt(activeSiBtn.dataset.si) : preferredSi
+      openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url), sp)
+    })
   }
 
   function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress) {
@@ -1485,6 +1498,29 @@ function setDebug(msg, detail) {
   // ── 悬浮播放器（可拖拽/最小化/置顶）───────────────────────────────────
   let _floatState = null   // { wrap, title, pinned, minimized, h, w, x, y }
 
+  function saveFloatState() {
+    if (!_floatState) return
+    try {
+      localStorage.setItem('float_x', _floatState.x)
+      localStorage.setItem('float_y', _floatState.y)
+      localStorage.setItem('float_w', _floatState.w)
+      localStorage.setItem('float_h', _floatState.h)
+      localStorage.setItem('float_pinned', _floatState.pinned ? '1' : '0')
+    } catch(e) {}
+  }
+
+  function loadFloatState() {
+    try {
+      const x = parseInt(localStorage.getItem('float_x'))
+      const y = parseInt(localStorage.getItem('float_y'))
+      const w = parseInt(localStorage.getItem('float_w'))
+      const h = parseInt(localStorage.getItem('float_h'))
+      const pinned = localStorage.getItem('float_pinned') === '1'
+      if (!isNaN(x) && !isNaN(y)) return { x, y, w: w || 420, h: h || 300, pinned }
+    } catch(e) {}
+    return null
+  }
+
   function openFloatPlayer(name, url, id, source, epName, pic) {
     closeFloatPlayer()
 
@@ -1521,17 +1557,54 @@ function setDebug(msg, detail) {
       </div>`
 
     document.body.appendChild(wrap)
+    const saved = loadFloatState()
     _floatState = {
-      wrap, pinned: false, minimized: false,
-      h: wrap.offsetHeight, w: wrap.offsetWidth,
-      x: window.innerWidth - 420 - 20,
-      y: window.innerHeight - 80 - (canEmbed ? Math.round(420 * 9/16 + 120) : 120)
+      wrap, pinned: saved ? saved.pinned : false,
+      minimized: false,
+      h: saved?.h || wrap.offsetHeight,
+      w: saved?.w || 420,
+      x: saved?.x ?? (window.innerWidth - 420 - 20),
+      y: saved?.y ?? (window.innerHeight - 80 - (canEmbed ? Math.round(420 * 9/16 + 120) : 120))
+    }
+
+    // 应用位置和尺寸
+    wrap.style.cssText = `right:${window.innerWidth - _floatState.x - _floatState.w}px;bottom:${_floatState.y}px;width:${_floatState.w}px`
+
+    // 应用置顶状态
+    if (_floatState.pinned) {
+      wrap.classList.add('pinned')
+      wrap.style.zIndex = '9999999'
+      wrap.querySelector('#_fpin')?.classList.add('pin-on')
     }
 
     // 拖拽
     const hdr = wrap.querySelector('.tvbox-float-header')
     hdr.addEventListener('mousedown', onFloatDragStart)
     hdr.addEventListener('touchstart', onFloatDragStart, { passive: false })
+
+    // 调整大小（右下角手柄）
+    let _floatResize = null
+    wrap.addEventListener('mousedown', e => {
+      const rect = wrap.getBoundingClientRect()
+      if (e.clientX >= rect.right - 8 && e.clientY >= rect.bottom - 8) {
+        e.preventDefault()
+        _floatResize = { ox: e.clientX, oy: e.clientY, ow: _floatState.w, oh: _floatState.h }
+      }
+    })
+    document.addEventListener('mousemove', e => {
+      if (!_floatResize) return
+      e.preventDefault()
+      const dw = e.clientX - _floatResize.ox
+      const dh = e.clientY - _floatResize.oy
+      const newW = Math.max(240, Math.min(window.innerWidth, _floatResize.ow + dw))
+      const newH = Math.max(180, Math.min(window.innerHeight, _floatResize.oh + dh))
+      wrap.style.width = newW + 'px'
+      _floatState.w = newW
+      _floatState.h = newH
+    })
+    document.addEventListener('mouseup', () => {
+      if (_floatResize) { _floatResize = null; saveFloatState() }
+    })
 
     // 控制按钮
     wrap.querySelector('#_fclose').addEventListener('click', closeFloatPlayer)
@@ -1699,7 +1772,10 @@ function setDebug(msg, detail) {
   }
 
   function onFloatDragEnd() {
-    if (_floatState) _floatState.wrap.classList.remove('dragging')
+    if (_floatState) {
+      _floatState.wrap.classList.remove('dragging')
+      saveFloatState()
+    }
     _floatDrag = null
     document.removeEventListener('mousemove', onFloatDragMove)
     document.removeEventListener('mouseup', onFloatDragEnd)
@@ -1720,7 +1796,6 @@ function setDebug(msg, detail) {
     if (window._floatHls) { window._floatHls.destroy(); window._floatHls = null }
     if (_floatState?.wrap) { _floatState.wrap.remove(); _floatState = null }
     document.removeEventListener('keydown', onFloatEsc)
-    onFloatDragEnd()
   }
 
 // ── 网站爬虫解析器 ───────────────────────────────────────────────
