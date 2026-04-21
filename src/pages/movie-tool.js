@@ -1873,7 +1873,7 @@ function setDebug(msg, detail) {
       showCrawlStatus(autoPlay.checked ? '🚀 正在边爬边播...' : '🔍 正在分析页面结构...', 'loading')
       _crawlResults = []
       const results = await crawlSite(url, autoPlay.checked ? (name, u) => {
-        // 第一个可用链接 → 直接播放
+        // 第一个可用链接 → 直接播放（独立窗口）
         showCrawlStatus('✅ 找到可用链接，正在播放: ' + name, 'success')
         btn.disabled = false; btn.textContent = '🔍 爬取'
         playCrawlVideo(name, u)
