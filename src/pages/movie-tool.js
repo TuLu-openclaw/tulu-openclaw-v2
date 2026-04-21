@@ -1715,15 +1715,22 @@ function setDebug(msg, detail) {
       <div class="tvbox-crawl-panel">
         <div class="tvbox-crawl-header">
           <div class="tvbox-crawl-icon">🕷️</div>
-          <div class="tvbox-crawl-title">网站爬虫</div>
-          <div class="tvbox-crawl-sub">输入任意视频网站 URL，自动分析并提取可播放的视频链接</div>
+          <div class="tvbox-crawl-title">万能播放器</div>
+          <div class="tvbox-crawl-sub">粘贴任意视频链接，自动提取并播放</div>
         </div>
-        <div class="tvbox-crawl-form">
-          <input id="t-crawl-url" type="url" placeholder="https://example.com/video/123" />
-          <button id="t-crawl-go" class="tvbox-crawl-btn">🔍 爬取</button>
+        <div class="tvbox-crawl-form" style="margin-bottom:8px">
+          <input id="t-crawl-url" type="url" placeholder="https://...（粘贴视频页地址，试试看）" />
+          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#e74c3c">▶ 播放</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-secondary)">
+            <input id="t-crawl-auto" type="checkbox" style="width:15px;height:15px" />
+            🚀 自动播放（找到第一个链接直接播放）
+          </label>
+          <button id="t-crawl-urlbtn" class="tvbox-tab" style="font-size:12px;padding:2px 10px">📋 直接输入m3u8/mp4链接</button>
         </div>
         <div class="tvbox-crawl-hint">
-          <p>💡 支持：m3u8/mp4直链、视频详情页、播放器iframe嵌入</p>
+          <p>💡 支持：m3u8/mp4直链、视频详情页、播放器iframe、百度/夸克云盘</p>
         </div>
         <div id="t-crawl-status" class="tvbox-crawl-status"></div>
         <div id="t-crawl-results" class="tvbox-crawl-results"></div>
@@ -1731,7 +1738,8 @@ function setDebug(msg, detail) {
     `
 
     const input = content.querySelector('#t-crawl-url')
-    const btn = content.querySelector('#t-crawl-go')
+    const btn   = content.querySelector('#t-crawl-go')
+    const autoPlay = content.querySelector('#t-crawl-auto')
 
     async function doCrawl() {
       const url = input.value.trim()
@@ -1741,14 +1749,19 @@ function setDebug(msg, detail) {
         return
       }
       btn.disabled = true
-      btn.textContent = '⏳ 爬取中...'
-      showCrawlStatus('🔍 正在分析页面结构...', 'loading')
+      btn.textContent = autoPlay.checked ? '⏳ 边爬边播...' : '⏳ 爬取中...'
+      showCrawlStatus(autoPlay.checked ? '🚀 正在边爬边播...' : '🔍 正在分析页面结构...', 'loading')
       _crawlResults = []
-      const results = await crawlSite(url)
+      const results = await crawlSite(url, autoPlay.checked ? (name, u) => {
+        // 第一个可用链接 → 直接播放
+        showCrawlStatus('✅ 找到可用链接，正在播放: ' + name, 'success')
+        btn.disabled = false; btn.textContent = '🔍 爬取'
+        playCrawlVideo(name, u)
+      } : null)
       _crawlResults = results
       btn.disabled = false
       btn.textContent = '🔍 爬取'
-      renderCrawlResults(results)
+      if (!autoPlay.checked || !results.length) renderCrawlResults(results)
     }
 
     btn.addEventListener('click', doCrawl)
@@ -1799,10 +1812,14 @@ function setDebug(msg, detail) {
     try { localStorage.setItem(CRAWL_FP_KEY(domain), JSON.stringify(strat)) } catch {}
   }
 
-  async function crawlSite(url) {
+  // crawlSite: 爬取URL的视频链接
+  // onFirstMatch(url, name): 每条策略首次找到结果时的回调（用于自动播放模式）
+  async function crawlSite(url, onFirstMatch) {
     if (url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd')) {
       const name = url.split('/').pop().replace(/\.(m3u8|mp4|mpd)/i, '') || '直链视频'
-      return [{ name, url, thumb: '', type: 'direct' }]
+      const results = [{ name, url, thumb: '', type: 'direct' }]
+      onFirstMatch?.(name, url)
+      return results
     }
 
     // 云盘检测
@@ -1812,27 +1829,19 @@ function setDebug(msg, detail) {
       try {
         const resp = await fetch('https://api.pan666.cn/?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined })
         const json = await resp.json().catch(() => null)
-        if (json && json.url) return [{ name: '云盘直链', url: json.url, thumb: '', type: 'direct' }]
+        if (json && json.url) { onFirstMatch?.('云盘直链', json.url); return [{ name: '云盘直链', url: json.url, thumb: '', type: 'direct' }] }
       } catch {}
       return [{ name: '云盘待解析', url, thumb: '', type: 'cloud' }]
     }
 
     let html = ''
-    try {
-      html = await crawlFetch(url)
-    } catch (e) {
-      showCrawlStatus('❌ 页面获取失败: ' + e.message, 'error')
-      return []
-    }
+    try { html = await crawlFetch(url) } catch (e) { showCrawlStatus('❌ 页面获取失败: ' + e.message, 'error'); return [] }
 
-    // 缩略图
     const thumb = extractThumb(html)
-    // 域名策略记忆
     let domain = ''
     try { domain = new URL(url).hostname.replace(/\./g, '_') } catch {}
     const siteStrat = domain ? getSiteStrategy(domain) : null
 
-    // 提取策略列表（定义顺序即优先级）
     const strategies = [
       { name: 'm3u8正则', fn: () => extractM3u8(html, url, thumb) },
       { name: 'mp4正则',  fn: () => extractMp4(html, url) },
@@ -1847,7 +1856,6 @@ function setDebug(msg, detail) {
             const fp = extractMp4(frameHtml, iframe.src)
             fi.forEach(i => { i.thumb = i.thumb || thumb; found.push(i) })
             fp.forEach(i => { i.thumb = i.thumb || thumb; found.push(i) })
-            // 二层 iframe（最多3个）
             const nested = extractIframes(frameHtml, iframe.src).slice(0, 3)
             for (const n of nested) {
               try {
@@ -1864,32 +1872,36 @@ function setDebug(msg, detail) {
       { name: '脚本解析', fn: () => extractFromScript(html, url) },
     ]
 
-    // 并行执行所有策略，先到先得
+    // 已通知自动播放的 url 集合（防重复）
+    const notifiedUrls = new Set()
+    function notifyMatch(item) {
+      if (!item?.url || notifiedUrls.has(item.url)) return
+      notifiedUrls.add(item.url)
+      onFirstMatch?.(item.name, item.url)
+    }
+
     const allResults = []
     const settled = await Promise.allSettled(strategies.map(async (s, i) => {
       showCrawlStatus('[' + (i + 1) + '/' + strategies.length + '] ' + s.name + '中...', 'loading')
       const r = await s.fn()
       showCrawlStatus('[' + (i + 1) + '/' + strategies.length + '] ' + s.name + '完成，找到 ' + (Array.isArray(r) ? r.length : 0) + ' 个', 'loading')
+      // 自动播放：每条策略首次找到结果立即通知
+      if (onFirstMatch && Array.isArray(r) && r.length > 0) notifyMatch(r[0])
       return r
     }))
 
     settled.forEach((p, i) => {
       if (p.status === 'fulfilled' && Array.isArray(p.value)) {
         p.value.forEach(item => { item.thumb = item.thumb || thumb; allResults.push(item) })
-        // 记录首个成功策略
-        if (p.value.length > 0 && domain && !siteStrat) {
-          saveSiteStrategy(domain, strategies[i].name)
-        }
+        if (p.value.length > 0 && domain && !siteStrat) saveSiteStrategy(domain, strategies[i].name)
       }
     })
 
-    // 去重
     const seen = new Set()
     return allResults.filter(r => {
       if (!r.url) return false
-      const key = r.url
-      if (seen.has(key)) return false
-      seen.add(key)
+      if (seen.has(r.url)) return false
+      seen.add(r.url)
       return true
     })
   }
