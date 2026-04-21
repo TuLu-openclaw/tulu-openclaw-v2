@@ -773,6 +773,60 @@ try {{
     }
 }
 
+/// 打开独立播放器窗口（新窗口，不影响主界面）
+#[tauri::command]
+pub async fn open_player_window(url: String, title: String, resume: f64) -> Result<String, String> {
+    use std::process::Command;
+    use std::os::windows::process::CommandExt;
+    if url.is_empty() {
+        return Err("视频URL不能为空".into());
+    }
+    // 获取 exe 所在目录，找 player.html
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("获取程序路径失败: {}", e))?;
+    let base_dir = exe_path.parent()
+        .ok_or_else(|| "无法获取程序目录".into())?;
+    
+    // 优先找 src/player.html（开发目录）
+    let dev_html = base_dir.join("src").join("player.html");
+    let html_path = if dev_html.exists() {
+        dev_html
+    } else {
+        // 尝试根目录
+        let root_html = base_dir.join("player.html");
+        if root_html.exists() { root_html }
+        else { base_dir.join("player.html") }
+    };
+    
+    if !html_path.exists() {
+        // 找不到 player.html，用默认浏览器打开（备用方案）
+        Command::new("cmd")
+            .args(["/c", "start", "", &url])
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|e| format!("打开链接失败: {}", e))?;
+        return Ok("ok (外部浏览器)".into());
+    }
+    
+    // 构建 file:// URL
+    let encoded_url = url.replace('&', "%26").replace('?', "%3f");
+    let file_url = format!(
+        "file:///{}/player.html?url={}&title={}&resume={}",
+        html_path.to_string_lossy().replace('\\', "/"),
+        encoded_url.replace("/", "%2f"),
+        title.replace("/", "%2f").replace(" ", "%20"),
+        resume
+    );
+    
+    // 用 cmd start 打开独立窗口（不阻塞，不受主窗口影响）
+    Command::new("cmd")
+        .args(["/c", "start", "", &file_url])
+        .creation_flags(0x08000000)
+        .spawn()
+        .map_err(|e| format!("打开播放器失败: {}", e))?;
+    Ok("ok".into())
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {
