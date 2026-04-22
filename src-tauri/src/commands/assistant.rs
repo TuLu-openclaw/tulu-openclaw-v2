@@ -758,19 +758,31 @@ try {{
     }
 }
 
-/// 打开独立播放器窗口（新窗口，不影响主界面）
+/// 打开独立播放器窗口（Tauri 内嵌窗口，不影响主界面）
 #[tauri::command]
-pub async fn open_player_window(url: String, title: String, resume: f64, allEps: String, allUrls: String, playbackCtx: String, pic: String) -> Result<String, String> {
+pub async fn open_player_window(
+    app: tauri::AppHandle,
+    url: String,
+    title: String,
+    resume: f64,
+    allEps: String,
+    allUrls: String,
+    playbackCtx: String,
+    pic: String,
+) -> Result<String, String> {
+    use tauri::WebviewWindowBuilder;
+    use tauri::WebviewUrl;
+
     if url.is_empty() {
         return Err("视频URL不能为空".into());
     }
+
     // 获取 exe 所在目录，找 player.html
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("获取程序路径失败: {}", e))?;
     let base_dir = exe_path.parent()
         .ok_or_else(|| String::from("无法获取程序目录"))?;
 
-    // 优先找 src/player.html（开发目录）
     let dev_html = base_dir.join("src").join("player.html");
     let html_path = if dev_html.exists() {
         dev_html
@@ -780,52 +792,55 @@ pub async fn open_player_window(url: String, title: String, resume: f64, allEps:
         else { base_dir.join("player.html") }
     };
 
-    #[cfg(target_os = "windows")]
-    {
-        use std::process::Command;
-        use std::os::windows::process::CommandExt;
+    // 构建 player.html URL 参数
+    let encoded_url = urlencoding_encode(&url);
+    let encoded_title = urlencoding_encode(&title);
+    let encoded_alleps = urlencoding_encode(&allEps);
+    let encoded_allurls = urlencoding_encode(&allUrls);
+    let encoded_ctx = urlencoding_encode(&playbackCtx);
+    let encoded_pic = urlencoding_encode(&pic);
 
-        if !html_path.exists() {
-            Command::new("cmd")
-                .args(["/c", "start", "", &url])
-                .creation_flags(0x08000000)
-                .spawn()
-                .map_err(|e| format!("打开链接失败: {}", e))?;
-            return Ok("ok (外部浏览器)".into());
-        }
-
-        let encoded_url = url.replace('&', "%26").replace('?', "%3f");
-        let encoded_title = title.replace("/", "%2f").replace(" ", "%20");
-        let encoded_alleps = urlencoding_encode(&allEps);
-        let encoded_allurls = urlencoding_encode(&allUrls);
-        let encoded_ctx = urlencoding_encode(&playbackCtx);
-        let encoded_pic = urlencoding_encode(&pic);
-
-        let file_url = format!(
+    let player_url = if html_path.exists() {
+        format!(
             "file:///{}/player.html?url={}&title={}&resume={}&allEps={}&allUrls={}&playbackCtx={}&pic={}",
             html_path.to_string_lossy().replace('\\', "/"),
-            encoded_url.replace("/", "%2f"),
+            encoded_url,
             encoded_title,
             resume,
             encoded_alleps,
             encoded_allurls,
             encoded_ctx,
             encoded_pic,
-        );
+        )
+    } else {
+        // player.html 不存在则直接打开原始 URL
+        url.clone()
+    };
 
-        Command::new("cmd")
-            .args(["/c", "start", "", &file_url])
-            .creation_flags(0x08000000)
-            .spawn()
-            .map_err(|e| format!("打开播放器失败: {}", e))?;
-        Ok("ok".into())
-    }
+    // 生成唯一窗口标签（避免重复）
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let window_label = format!("player_{}", ts);
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (html_path, url, title, resume, allEps, allUrls, playbackCtx, pic);
-        Err("open_player_window 仅支持 Windows 平台".into())
-    }
+    // 用 Tauri WebviewWindowBuilder 创建真正的内嵌窗口
+    WebviewWindowBuilder::new(
+        &app,
+        &window_label,
+        WebviewUrl::App(player_url.into()),
+    )
+    .title(&title)
+    .inner_size(960.0, 600.0)
+    .min_inner_size(640.0, 400.0)
+    .resizable(true)
+    .decorations(true)
+    .center()
+    .build()
+    .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+
+    Ok("ok".into())
 }
 
 fn urlencoding_encode(s: &str) -> String {
