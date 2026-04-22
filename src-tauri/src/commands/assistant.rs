@@ -699,7 +699,7 @@ try {{
 
     # 执行提取脚本
     $scriptB64 = '{extract_b64}'
-    $evalCmd = '{"id":10,"method":"Runtime.evaluate","params":{"expression":"eval(atob(`"' + $scriptB64 + '`'))","returnByValue":true}}'
+    $evalCmd = '{{"id":10,"method":"Runtime.evaluate","params":{{"expression":"eval(atob(`"' + $scriptB64 + '`'))","returnByValue":true}}}}'
     $ws.SendAsync([ArraySegment[byte]][Text.Encoding]::UTF8.GetBytes($evalCmd), 'Text', $true, $ct).Wait(5000)
 
     # 读取结果
@@ -760,6 +760,7 @@ try {{
 
 /// 打开独立播放器窗口（新窗口，不影响主界面）
 #[tauri::command]
+#[cfg(windows)]
 pub async fn open_player_window(url: String, title: String, resume: f64) -> Result<String, String> {
     use std::process::Command;
     use std::os::windows::process::CommandExt;
@@ -771,18 +772,15 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
         .map_err(|e| format!("获取程序路径失败: {}", e))?;
     let base_dir = exe_path.parent()
         .ok_or_else(|| String::from("无法获取程序目录"))?;
-    
+
     // 优先找 src/player.html（开发目录）
     let dev_html = base_dir.join("src").join("player.html");
     let html_path = if dev_html.exists() {
         dev_html
     } else {
-        // 尝试根目录
-        let root_html = base_dir.join("player.html");
-        if root_html.exists() { root_html }
-        else { base_dir.join("player.html") }
+        base_dir.join("player.html")
     };
-    
+
     if !html_path.exists() {
         // 找不到 player.html，用默认浏览器打开（备用方案）
         Command::new("cmd")
@@ -792,7 +790,7 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
             .map_err(|e| format!("打开链接失败: {}", e))?;
         return Ok("ok (外部浏览器)".into());
     }
-    
+
     // 构建 file:// URL
     let encoded_url = url.replace('&', "%26").replace('?', "%3f");
     let file_url = format!(
@@ -802,7 +800,7 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
         title.replace("/", "%2f").replace(" ", "%20"),
         resume
     );
-    
+
     // 用 cmd start 打开独立窗口（不阻塞，不受主窗口影响）
     Command::new("cmd")
         .args(["/c", "start", "", &file_url])
@@ -810,6 +808,16 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
         .spawn()
         .map_err(|e| format!("打开播放器失败: {}", e))?;
     Ok("ok".into())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+pub async fn open_player_window(url: String, _title: String, _resume: f64) -> Result<String, String> {
+    if url.is_empty() {
+        return Err("视频URL不能为空".into());
+    }
+    open::that(&url).map_err(|e| format!("打开链接失败: {}", e))?;
+    Ok("ok (外部浏览器)".into())
 }
 
 /// 列出目录内容
