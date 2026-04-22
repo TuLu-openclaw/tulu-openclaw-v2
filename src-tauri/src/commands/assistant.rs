@@ -597,7 +597,6 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         r"C:\Windows\System32\msedge.exe",
     ];
-    let msedge_exe = msedge_paths.iter().find(|p| std::path::Path::new(p).exists());
     let msedge_exe = msedge_paths.iter().find(|p| std::path::Path::new(p).exists()).copied().unwrap_or("");
 
     // 用 CDP 的提取脚本
@@ -726,7 +725,7 @@ try {{
     Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
 }}
 "#,
-        browser = browser_exe,
+        browser = msedge_exe,
         url = url,
         port = 9222,
         extract_b64 = extract_b64
