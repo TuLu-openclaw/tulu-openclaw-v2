@@ -12,7 +12,6 @@ export default function render(el) {
       <div class="page-title">微验验证</div>
       <div class="page-desc">网络卡密验证系统 · 快速接入验证服务</div>
     </div>
-    </div>
     <div class="verify-container">
       <div class="verify-card">
         <div class="verify-card-header">

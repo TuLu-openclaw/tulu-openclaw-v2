@@ -1,5 +1,3 @@
-import '../style/movie-tool.css';
-
 /**
  * 喵咕验证页面
  * 访问 https://yz.blyfw.cn/ 自动查找文档，为用户指定的应用或源码加入最适合的网络卡密验证
