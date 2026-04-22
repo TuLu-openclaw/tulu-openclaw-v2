@@ -715,7 +715,7 @@ try {{
         $json = ($json -split 'JS_OK:')[1]
         Write-Output ("JS_OK:" + $json)
     }} elseif ($json -match '"result":{{"value":') {{
-        Write-Output ("JS_OK:" + ($json -split '"value":')[1].TrimEnd('}'))
+        Write-Output ("JS_OK:" + ($json -split '"value":')[1].TrimEnd('}}'))
     }} else {{
         Write-Output "JS_EMPTY"
     }}
