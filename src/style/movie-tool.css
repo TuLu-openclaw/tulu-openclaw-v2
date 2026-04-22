@@ -758,7 +758,97 @@
 .tvbox-float-url-bar a { flex: 1; font-size: 10px; color: var(--text-muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .tvbox-float-url-bar a:hover { color: var(--accent2); }
 
-/* ── URL 输入弹窗 ── */
+/* ── 悬浮播放器自定义控制条 ── */
+.float-ctrl-bar {
+  background: rgba(16, 16, 28, 0.88);
+  backdrop-filter: blur(8px);
+  padding: 5px 8px 6px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  user-select: none;
+}
+.float-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.float-time {
+  font-size: 10px;
+  color: rgba(200,200,220,0.8);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  flex-shrink: 0;
+}
+.float-seekbar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+}
+.float-seek-bg { position: absolute; inset: 0; border-radius: 2px; }
+.float-seek-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: var(--accent, #e74c3c);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.1s;
+}
+.float-seek-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px; height: 10px;
+  background: #fff;
+  border-radius: 50%;
+  left: 0%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.float-seekbar:hover .float-seek-thumb { opacity: 1; }
+.float-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.float-ctrl-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: rgba(220,220,240,0.9);
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  min-width: 28px;
+  text-align: center;
+}
+.float-ctrl-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
+.float-play-btn { font-size: 13px; min-width: 34px; }
+.float-vol-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
+}
+.float-vol-slider {
+  width: 44px;
+  height: 3px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+}
+.float-vol-fill {
+  height: 100%;
+  background: rgba(220,220,240,0.7);
+  border-radius: 2px;
+  width: 100%;
+}
 .tvbox-url-overlay {
   position: fixed;
   inset: 0;

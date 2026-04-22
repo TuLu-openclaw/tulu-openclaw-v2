@@ -760,7 +760,7 @@ try {{
 
 /// 打开独立播放器窗口（新窗口，不影响主界面）
 #[tauri::command]
-pub async fn open_player_window(url: String, title: String, resume: f64) -> Result<String, String> {
+pub async fn open_player_window(url: String, title: String, resume: f64, allEps: String, allUrls: String, playbackCtx: String, pic: String) -> Result<String, String> {
     if url.is_empty() {
         return Err("视频URL不能为空".into());
     }
@@ -795,12 +795,22 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
         }
 
         let encoded_url = url.replace('&', "%26").replace('?', "%3f");
+        let encoded_title = title.replace("/", "%2f").replace(" ", "%20");
+        let encoded_alleps = urlencoding_encode(&allEps);
+        let encoded_allurls = urlencoding_encode(&allUrls);
+        let encoded_ctx = urlencoding_encode(&playbackCtx);
+        let encoded_pic = urlencoding_encode(&pic);
+
         let file_url = format!(
-            "file:///{}/player.html?url={}&title={}&resume={}",
+            "file:///{}/player.html?url={}&title={}&resume={}&allEps={}&allUrls={}&playbackCtx={}&pic={}",
             html_path.to_string_lossy().replace('\\', "/"),
             encoded_url.replace("/", "%2f"),
-            title.replace("/", "%2f").replace(" ", "%20"),
-            resume
+            encoded_title,
+            resume,
+            encoded_alleps,
+            encoded_allurls,
+            encoded_ctx,
+            encoded_pic,
         );
 
         Command::new("cmd")
@@ -813,9 +823,20 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (html_path, url, title, resume);
+        let _ = (html_path, url, title, resume, allEps, allUrls, playbackCtx, pic);
         Err("open_player_window 仅支持 Windows 平台".into())
     }
+}
+
+fn urlencoding_encode(s: &str) -> String {
+    let mut r = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => r.push(b as char),
+            _ => for c in format!("{:02X}", b).chars() { r.push('%'); r.push(c); }
+        }
+    }
+    r
 }
 
 /// 列出目录内容

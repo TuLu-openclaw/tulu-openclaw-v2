@@ -1,119 +1,435 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>播放器</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-    body { display: flex; align-items: center; justify-content: center; }
-    .video-wrap { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-    video { max-width: 100%; max-height: 100%; outline: none; }
-    .error-msg { color: #fff; text-align: center; padding: 20px; }
-    .error-msg a { color: #4a9eff; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>播放器</title>
+<style>
+:root{--bg:#0d0d0d;--surface:rgba(20,20,28,0.82);--accent:#e50914;--text:#e8e8f0;--text-dim:#8888a0}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--bg);overflow:hidden;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+body{display:flex;flex-direction:column;user-select:none}
+#bg{position:fixed;inset:0;z-index:0;background-size:cover;background-position:center;filter:blur(28px) brightness(0.22) saturate(1.5);transition:background-image 0.6s ease}
+#bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.78) 0%,rgba(0,0,0,0.2) 40%,rgba(0,0,0,0.5) 100%)}
+.top-bar{position:relative;z-index:10;flex-shrink:0;background:linear-gradient(to bottom,rgba(0,0,0,0.8),transparent);padding:16px 20px 24px;display:flex;align-items:flex-start;gap:14px}
+#poster{width:56px;height:80px;border-radius:6px;object-fit:cover;box-shadow:0 4px 24px rgba(0,0,0,0.7);flex-shrink:0;display:none}
+.top-info{flex:1;min-width:0}
+.top-title{color:#fff;font-size:18px;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.top-sub{color:var(--text-dim);font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.top-badge{background:var(--accent);color:#fff;border-radius:3px;padding:2px 7px;font-size:11px;font-weight:600;letter-spacing:0.03em}
+.ctrl-top-right{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.sel-group{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.sel-group select{background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:5px 10px;font-size:13px;outline:none;cursor:pointer;backdrop-filter:blur(12px)}
+.sel-group select:focus{border-color:var(--accent)}
+.sel-label{color:var(--text-dim);font-size:12px;flex-shrink:0}
+.video-wrap{flex:1;position:relative;overflow:hidden;z-index:1;display:flex;align-items:center;justify-content:center}
+video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;height:100%;object-fit:contain;background:#000}
+.overlay-msg{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);color:var(--text);gap:14px;pointer-events:none}
+.overlay-msg.show{display:flex}
+.spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 0.75s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.msg-text{font-size:14px;color:var(--text-dim)}
+.err-icon{font-size:44px;color:#f87171}
+.err-text{color:#f87171;font-size:14px;text-align:center;max-width:340px}
+.retry-btn{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 22px;font-size:14px;cursor:pointer;pointer-events:all}
+.retry-btn:hover{background:#ff2020}
+.ctrl-bar{position:relative;z-index:10;flex-shrink:0;background:linear-gradient(to top,rgba(0,0,0,0.9) 0%,transparent 100%);padding:0 20px 16px;display:flex;flex-direction:column;gap:6px}
+.seek-row{display:flex;align-items:center;gap:8px;padding:10px 0 2px}
+.time{color:rgba(255,255,255,0.7);font-size:12px;min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.seek-wrap{flex:1;height:20px;display:flex;align-items:center;cursor:pointer;position:relative}
+.seek-track{position:absolute;left:0;right:0;height:4px;background:rgba(255,255,255,0.14);border-radius:3px}
+.seek-buffer{position:absolute;left:0;height:100%;background:rgba(255,255,255,0.25);border-radius:3px;transition:width 0.4s}
+.seek-fill{position:absolute;left:0;height:100%;background:var(--accent);border-radius:3px;pointer-events:none}
+.seek-thumb{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;background:#fff;border-radius:50%;box-shadow:0 0 8px rgba(0,0,0,0.5);pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.1s}
+.seek-wrap:hover .seek-thumb{opacity:1}
+.seek-wrap:active .seek-thumb{transform:translate(-50%,-50%) scale(1.25)}
+.seek-tooltip{position:absolute;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,0.88);color:#fff;font-size:11px;padding:3px 8px;border-radius:4px;pointer-events:none;white-space:nowrap;display:none}
+.seek-wrap:hover .seek-tooltip{display:block}
+.btn-row{display:flex;align-items:center;justify-content:space-between}
+.btn-group{display:flex;align-items:center;gap:2px}
+.ctrl-btn{background:transparent;color:rgba(255,255,255,0.85);border:none;border-radius:6px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.15s,color 0.15s,transform 0.1s;font-size:15px;flex-shrink:0}
+.ctrl-btn:hover{background:rgba(255,255,255,0.1);color:#fff}
+.ctrl-btn:active{transform:scale(0.92)}
+.ctrl-btn.active{color:var(--accent)}
+.ctrl-btn.priority{color:var(--accent)}
+.ctrl-btn.danger:hover{background:rgba(229,9,20,0.2);color:var(--accent)}
+.divider{width:1px;height:20px;background:rgba(255,255,255,0.1);margin:0 6px}
+.vol-group{display:flex;align-items:center;gap:4px}
+.vol-slider-wrap{width:0;overflow:hidden;transition:width 0.2s ease}
+.vol-group:hover .vol-slider-wrap{width:70px}
+.vol-slider{width:70px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;position:relative;cursor:pointer}
+.vol-fill{height:100%;background:rgba(255,255,255,0.8);border-radius:2px;pointer-events:none}
+.popup-panel{display:none;position:absolute;bottom:calc(100% + 10px);background:var(--surface);border:1px solid rgba(255,255,255,0.1);border-radius:10px;overflow:hidden;z-index:20;backdrop-filter:blur(20px);min-width:96px;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.popup-panel.open{display:block}
+.popup-panel button{display:block;width:100%;padding:9px 16px;background:none;border:none;color:var(--text);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s}
+.popup-panel button:hover{background:rgba(255,255,255,0.08)}
+.popup-panel button.active{color:var(--accent);font-weight:600}
+#shortcuts{display:none;position:absolute;bottom:calc(100% + 10px);right:8px;background:var(--surface);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px 18px;min-width:230px;z-index:20;backdrop-filter:blur(20px);color:var(--text);font-size:12px;line-height:1.8;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+#shortcuts.open{display:block}
+#shortcuts h4{font-size:11px;color:var(--text-dim);margin-bottom:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase}
+.shortcut-row{display:flex;justify-content:space-between;gap:18px}
+.shortcut-key{background:rgba(255,255,255,0.1);border-radius:4px;padding:1px 7px;font-size:11px;color:rgba(255,255,255,0.85);font-family:Consolas,monospace}
+.shortcut-desc{color:var(--text-dim)}
+:fullscreen .ctrl-bar{padding-bottom:28px}
+:fullscreen .top-bar{padding-top:24px}
+</style>
 </head>
 <body>
-  <div class="video-wrap" id="wrap"></div>
-  <script>
-    // 从 URL 参数获取视频信息
-    const params = new URLSearchParams(location.search)
-    const url = params.get('url') || ''
-    const title = params.get('title') || '视频'
-    const resume = parseFloat(params.get('resume') || '0')
-    const isM3u8 = url.includes('.m3u8')
-    
-    const wrap = document.getElementById('wrap')
-    
-    function reportProgress(currentTime, duration) {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({
-          type: 'playerProgress',
-          url: url,
-          title: title,
-          currentTime: currentTime,
-          duration: duration
-        }, '*')
-      }
-    }
-    
-    function reportEnded() {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({
-          type: 'playerEnded',
-          url: url,
-          title: title
-        }, '*')
-      }
-    }
-    
-    if (!url) {
-      wrap.innerHTML = '<div class="error-msg">无效的视频链接</div>'
-    } else if (isM3u8) {
-      // 加载 HLS.js
-      const hlsScript = document.createElement('script')
-      hlsScript.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest'
-      hlsScript.onload = () => {
-        if (window.Hls.isSupported()) {
-          const video = document.createElement('video')
-          video.controls = true
-          video.style.maxWidth = '100%'
-          video.style.maxHeight = '100%'
-          wrap.appendChild(video)
-          
-          const hls = new window.Hls()
-          hls.loadSource(url)
-          hls.attachMedia(video)
-          
-          hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-            if (resume > 0) video.currentTime = resume
-            video.play().catch(() => {})
-          })
-          
-          video.addEventListener('timeupdate', () => {
-            if (video.duration > 0) {
-              reportProgress(video.currentTime, video.duration)
-            }
-          })
-          video.addEventListener('ended', () => reportEnded())
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          const video = document.createElement('video')
-          video.controls = true
-          video.src = url
-          wrap.appendChild(video)
-          if (resume > 0) video.currentTime = resume
-          video.play().catch(() => {})
-          video.addEventListener('timeupdate', () => reportProgress(video.currentTime, video.duration))
-          video.addEventListener('ended', () => reportEnded())
-        } else {
-          wrap.innerHTML = '<div class="error-msg">您的浏览器不支持 HLS 播放<br><a href="' + url + '" target="_blank">点击下载视频</a></div>'
-        }
-      }
-      hlsScript.onerror = () => {
-        wrap.innerHTML = '<div class="error-msg">HLS.js 加载失败</div>'
-      }
-      document.head.appendChild(hlsScript)
-    } else {
-      // 直接视频
-      const video = document.createElement('video')
-      video.controls = true
-      video.src = url
-      video.style.maxWidth = '100%'
-      video.style.maxHeight = '100%'
-      wrap.appendChild(video)
-      
-      if (resume > 0) video.currentTime = resume
-      video.play().catch(() => {})
-      
-      video.addEventListener('timeupdate', () => reportProgress(video.currentTime, video.duration))
-      video.addEventListener('ended', () => reportEnded())
-    }
-    
-    // ESC 关闭
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') window.close()
+<div id="bg"></div>
+<div class="top-bar">
+  <img id="poster" alt="poster">
+  <div class="top-info">
+    <div class="top-title" id="titleEl">视频</div>
+    <div class="top-sub" id="topSub"></div>
+  </div>
+  <div class="ctrl-top-right">
+    <div class="sel-group" id="epGroup" style="display:none"><span class="sel-label">选集</span><select id="epSelect"><option>加载中...</option></select></div>
+    <div class="sel-group" id="urlGroup" style="display:none"><span class="sel-label">线路</span><select id="urlSelect"><option>加载中...</option></select></div>
+  </div>
+</div>
+<div class="video-wrap" id="wrap">
+  <video id="vid" playsinline></video>
+  <div class="overlay-msg" id="overlay">
+    <div class="spinner" id="spinEl"></div>
+    <div class="err-icon" id="errIcon" style="display:none">!</div>
+    <div class="msg-text" id="msgEl">正在加载...</div>
+    <div class="err-text" id="errEl" style="display:none"></div>
+    <button class="retry-btn" id="retryBtn" style="display:none">重试</button>
+  </div>
+</div>
+<div class="ctrl-bar" id="ctrlBar">
+  <div class="seek-row">
+    <span class="time" id="curEl">0:00</span>
+    <div class="seek-wrap" id="seekWrap">
+      <div class="seek-track"><div class="seek-buffer" id="bufEl"></div><div class="seek-fill" id="fillEl"></div><div class="seek-thumb" id="thumbEl"></div></div>
+      <div class="seek-tooltip" id="seekTip">0:00</div>
+    </div>
+    <span class="time" id="totEl">0:00</span>
+  </div>
+  <div class="btn-row">
+    <div class="btn-group">
+      <button class="ctrl-btn" id="prevBtn" title="上一集 (P)">&lt;</button>
+      <button class="ctrl-btn" id="playBtn" title="播放/暂停 (Space)">&#9654;</button>
+      <button class="ctrl-btn" id="nextBtn" title="下一集 (N)">&gt;</button>
+      <div class="divider"></div>
+      <div class="vol-group">
+        <button class="ctrl-btn" id="muteBtn" title="静音 (M)">&#128266;</button>
+        <div class="vol-slider-wrap"><div class="vol-slider" id="volSlider"><div class="vol-fill" id="volFill"></div></div></div>
+      </div>
+      <div class="divider"></div>
+      <button class="ctrl-btn" id="speedBtn" title="倍速 (S)">1x</button>
+      <div class="popup-panel" id="speedMenu"></div>
+    </div>
+    <div class="btn-group">
+      <button class="ctrl-btn" id="qualityBtn" title="画质">&#9881;</button>
+      <div class="popup-panel" id="qualityMenu"></div>
+      <div style="position:relative">
+        <button class="ctrl-btn" id="shortcutsBtn" title="快捷键 (?)">?</button>
+        <div id="shortcuts">
+          <h4>快捷键</h4>
+          <div class="shortcut-row"><span class="shortcut-key">Space</span><span class="shortcut-desc">播放 / 暂停</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">← →</span><span class="shortcut-desc">快退 / 快进 10s</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">↑ ↓</span><span class="shortcut-desc">音量调节</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">全屏</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc">静音</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc">倍速菜单</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">I</span><span class="shortcut-desc">画中画</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc">上一集 / 下一集</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">X</span><span class="shortcut-desc">截图</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">?</span><span class="shortcut-desc">显示/隐藏此面板</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">退出 / 关闭</span></div>
+        </div>
+      </div>
+      <button class="ctrl-btn" id="pipBtn" title="画中画 (I)">PiP</button>
+      <button class="ctrl-btn" id="pipWinBtn" title="窗口置顶">&#9103;</button>
+      <button class="ctrl-btn" id="ssBtn" title="截图 (X)">&#128247;</button>
+      <button class="ctrl-btn danger" id="closeBtn" title="关闭">&#10005;</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var params = new URLSearchParams(location.search)
+  var url = params.get('url') || ''
+  var title = decodeURIComponent(params.get('title') || '视频')
+  var resume = parseFloat(params.get('resume') || '0')
+  var picRaw = params.get('pic') || ''
+  var playbackCtx = null
+  try{playbackCtx=JSON.parse(decodeURIComponent(params.get('playbackCtx')||'null'))}catch(e){}
+  var allEps=[]
+  try{var r=params.get('allEps');if(r)allEps=JSON.parse(decodeURIComponent(r))}catch(e){}
+  var allUrls=[]
+  try{var r=params.get('allUrls');if(r)allUrls=JSON.parse(decodeURIComponent(r))}catch(e){}
+  if(!allUrls.length&&url)allUrls=[url]
+  var pic=picRaw?decodeURIComponent(picRaw):''
+  var curUrlIdx=url?allUrls.indexOf(url):0
+  if(curUrlIdx<0)curUrlIdx=0
+  var vid=document.getElementById('vid')
+  var bg=document.getElementById('bg')
+  var poster=document.getElementById('poster')
+  var titleEl=document.getElementById('titleEl')
+  var topSub=document.getElementById('topSub')
+  var epGroup=document.getElementById('epGroup')
+  var epSelect=document.getElementById('epSelect')
+  var urlGroup=document.getElementById('urlGroup')
+  var urlSelect=document.getElementById('urlSelect')
+  var playBtn=document.getElementById('playBtn')
+  var prevBtn=document.getElementById('prevBtn')
+  var nextBtn=document.getElementById('nextBtn')
+  var muteBtn=document.getElementById('muteBtn')
+  var speedBtn=document.getElementById('speedBtn')
+  var qualityBtn=document.getElementById('qualityBtn')
+  var qualityMenu=document.getElementById('qualityMenu')
+  var shortcutsBtn=document.getElementById('shortcutsBtn')
+  var shortcuts=document.getElementById('shortcuts')
+  var pipBtn=document.getElementById('pipBtn')
+  var pipWinBtn=document.getElementById('pipWinBtn')
+  var ssBtn=document.getElementById('ssBtn')
+  var closeBtn=document.getElementById('closeBtn')
+  var seekWrap=document.getElementById('seekWrap')
+  var fillEl=document.getElementById('fillEl')
+  var bufEl=document.getElementById('bufEl')
+  var thumbEl=document.getElementById('thumbEl')
+  var seekTip=document.getElementById('seekTip')
+  var curEl=document.getElementById('curEl')
+  var totEl=document.getElementById('totEl')
+  var volSlider=document.getElementById('volSlider')
+  var volFill=document.getElementById('volFill')
+  var speedMenu=document.getElementById('speedMenu')
+  var overlay=document.getElementById('overlay')
+  var spinEl=document.getElementById('spinEl')
+  var errIcon=document.getElementById('errIcon')
+  var msgEl=document.getElementById('msgEl')
+  var errEl=document.getElementById('errEl')
+  var retryBtn=document.getElementById('retryBtn')
+  titleEl.textContent=title
+  document.title=title
+  if(pic){poster.src=pic;poster.style.display='block';bg.style.backgroundImage='url('+pic+')'}
+  topSub.innerHTML='<span class="top-badge">独立窗口</span><span>'+title+'</span>'
+  if(allEps.length>1){
+    epGroup.style.display='flex'
+    epSelect.innerHTML=allEps.map(function(e,i){return'<option value="'+i+'"'+(e.url===url?' selected':'')+'>'+e.epName+'</option>'}).join('')
+    epSelect.addEventListener('change',function(){
+      var idx=parseInt(epSelect.value)
+      var ep=allEps[idx]
+      playUrl(ep.url,ep.epName,ep.pic||pic)
     })
-  </script>
+  }
+  if(allUrls.length>1){
+    urlGroup.style.display='flex'
+    urlSelect.innerHTML=allUrls.map(function(u,i){return'<option value="'+i+'"'+(i===curUrlIdx?' selected':'')+'>线路 '+(i+1)+'</option>'}).join('')
+    urlSelect.addEventListener('change',function(){playUrl(allUrls[parseInt(urlSelect.value)],title)})
+  }
+  var hls=null
+  var wantResume=resume
+  var retryCount=0
+  function showOverlay(msg,isErr){
+    spinEl.style.display=isErr?'none':'block'
+    errIcon.style.display=isErr?'block':'none'
+    msgEl.style.display=isErr?'none':'block'
+    msgEl.textContent=msg
+    errEl.style.display=isErr?'block':'none'
+    errEl.textContent=msg
+    retryBtn.style.display=(isErr&&retryCount<2)?'block':'none'
+    overlay.classList.add('show')
+  }
+  function hideOverlay(){overlay.classList.remove('show')}
+  retryBtn.addEventListener('click',function(){retryCount++;playUrl(vid._lastUrl||url,title,pic)})
+  function fmtTime(s){
+    if(!s||isNaN(s))return'0:00'
+    var h=Math.floor(s/3600)
+    var m=Math.floor((s%3600)/60)
+    var sec=Math.floor(s%60)
+    return h>0?h+':'+(m<10?'0':'')+m+':'+(sec<10?'0':'')+sec:m+':'+(sec<10?'0':'')+sec
+  }
+  async function playUrl(newUrl,newTitle,newPic){
+    if(!newUrl)return
+    vid._lastUrl=newUrl
+    retryCount=0
+    showOverlay('正在加载...')
+    if(hls){hls.destroy();hls=null}
+    vid.src=''
+    if(newTitle){titleEl.textContent=newTitle;document.title=newTitle}
+    if(newPic){poster.src=newPic;poster.style.display='block';bg.style.backgroundImage='url('+newPic+')'}
+    var uidx=allUrls.indexOf(newUrl)
+    if(uidx>=0&&urlSelect.options[uidx])urlSelect.selectedIndex=uidx
+    var isM3u8New=newUrl.indexOf('.m3u8')!==-1
+    if(isM3u8New){
+      await ensureHlsJs()
+      if(window.Hls&&window.Hls.isSupported()){
+        hls=new window.Hls({enableWorker:true,lowLatencyMode:false})
+        hls.loadSource(newUrl)
+        hls.attachMedia(vid)
+        hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
+          hideOverlay();buildQualityMenu(hls)
+          if(wantResume>0){vid.addEventListener('loadedmetadata',function(){vid.currentTime=Math.min(wantResume,vid.duration);wantResume=0},{once:true})}
+          vid.play().catch(function(){})
+        })
+        hls.on(window.Hls.Events.ERROR,function(evt,data){
+          if(data.fatal){
+            if(data.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+              showOverlay('网络错误，尝试切换线路...',true)
+              tryNextUrl(uidx)
+            }else if(data.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+              hls.recoverMediaError()
+            }else{
+              showOverlay('播放失败：'+(data.details||''),true)
+            }
+          }
+        })
+      }else if(vid.canPlayType('application/vnd.apple.mpegurl')){
+        vid.src=newUrl;hideOverlay()
+        if(wantResume>0)vid.currentTime=wantResume
+        vid.play().catch(function(){})
+      }else{
+        showOverlay('浏览器不支持 HLS 播放',true)
+      }
+    }else{
+      vid.src=newUrl
+      vid.load()
+      vid.addEventListener('loadedmetadata',function(){
+        hideOverlay()
+        if(wantResume>0){vid.currentTime=Math.min(wantResume,vid.duration);wantResume=0}
+        vid.play().catch(function(){})
+      },{once:true})
+      vid.addEventListener('error',function(){
+        showOverlay('视频加载失败，尝试切换线路...',true)
+        tryNextUrl(uidx)
+      })
+    }
+  }
+  function tryNextUrl(curIdx){
+    var next=(curIdx+1)%allUrls.length
+    if(next!==curIdx&&allUrls[next]){
+      setTimeout(function(){playUrl(allUrls[next],title,pic)},1800)
+    }
+  }
+  async function ensureHlsJs(){
+    if(window.Hls)return
+    await new Promise(function(res,rej){
+      var s=document.createElement('script')
+      s.src='https://cdn.jsdelivr.net/npm/hls.js@latest'
+      s.onload=res;s.onerror=rej
+      document.head.appendChild(s)
+    })
+  }
+  function buildQualityMenu(hlsInstance){
+    qualityMenu.innerHTML=''
+    var levels=hlsInstance.levels||[]
+    if(levels.length<=1){qualityBtn.style.display='';return}
+    qualityBtn.style.display=''
+    var autoItem=document.createElement('button')
+    autoItem.textContent='自动'
+    autoItem.className='active'
+    autoItem.addEventListener('click',function(){hlsInstance.currentLevel=-1;setActive(qualityMenu,autoItem);qualityMenu.classList.remove('open')})
+    qualityMenu.appendChild(autoItem)
+    levels.forEach(function(lv,i){
+      var btn=document.createElement('button')
+      btn.textContent=lv.height?(lv.height+'p'):('等级 '+(i+1))
+      if(i===hlsInstance.currentLevel)btn.classList.add('active')
+      btn.addEventListener('click',function(){hlsInstance.currentLevel=i;setActive(qualityMenu,btn);qualityMenu.classList.remove('open')})
+      qualityMenu.appendChild(btn)
+    })
+  }
+  function setActive(menu,activeBtn){
+    var btns=menu.querySelectorAll('button')
+    for(var i=0;i<btns.length;i++)btns[i].classList.remove('active')
+    activeBtn.classList.add('active')
+  }
+  qualityBtn.addEventListener('click',function(e){e.stopPropagation();qualityMenu.classList.toggle('open');shortcuts.classList.remove('open')})
+  document.addEventListener('click',function(){qualityMenu.classList.remove('open');shortcuts.classList.remove('open')})
+  var speeds=[0.5,0.75,1,1.25,1.5,2,3]
+  var speedIdx=2
+  speeds.forEach(function(s,i){
+    var b=document.createElement('button')
+    b.textContent=s===1?'正常':s+'x'
+    if(i===speedIdx)b.classList.add('active')
+    b.addEventListener('click',function(){
+      speedIdx=i;vid.playbackRate=s
+      speedBtn.textContent=s===1?'1x':s+'x'
+      speedBtn.classList.toggle('priority',s!==1)
+      setActive(speedMenu,b);speedMenu.classList.remove('open')
+    })
+    speedMenu.appendChild(b)
+  })
+  speedBtn.addEventListener('click',function(e){e.stopPropagation();speedMenu.classList.toggle('open');shortcuts.classList.remove('open')})
+  document.addEventListener('click',function(){speedMenu.classList.remove('open')})
+  playBtn.addEventListener('click',function(){vid.paused?vid.play().catch(function(){}):vid.pause()})
+  prevBtn.addEventListener('click',function(){var idx=allUrls.indexOf(vid.src);if(idx>0)playUrl(allUrls[idx-1],title,pic)})
+  nextBtn.addEventListener('click',function(){var idx=allUrls.indexOf(vid.src);if(idx>=0&&idx<allUrls.length-1)playUrl(allUrls[idx+1],title,pic)})
+  muteBtn.addEventListener('click',function(){vid.muted=!vid.muted;muteBtn.innerHTML=vid.muted||vid.volume===0?'&#128263;':'&#128266;'})
+  vid.addEventListener('volumechange',function(){volFill.style.width=(vid.volume*100)+'%';muteBtn.innerHTML=vid.muted||vid.volume===0?'&#128263;':'&#128266;'})
+  volSlider.addEventListener('click',function(e){var r=volSlider.getBoundingClientRect();vid.volume=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));vid.muted=false})
+  vid.addEventListener('wheel',function(e){e.preventDefault();vid.volume=Math.max(0,Math.min(1,vid.volume+(e.deltaY<0?0.05:-0.05)))},{passive:false})
+  vid.volume=0.8;volFill.style.width='80%'
+  seekWrap.addEventListener('click',function(e){if(!vid.duration)return;var r=seekWrap.getBoundingClientRect();vid.currentTime=(e.clientX-r.left)/r.width*vid.duration})
+  seekWrap.addEventListener('mousemove',function(e){
+    if(!vid.duration)return
+    var r=seekWrap.getBoundingClientRect()
+    var pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))
+    seekTip.textContent=fmtTime(pct*vid.duration)
+    seekTip.style.left=(pct*100)+'%'
+  })
+  function updateBuffer(){if(!vid.buffered.length||!vid.duration)return;var end=vid.buffered.end(vid.buffered.length-1);bufEl.style.width=Math.round((end/vid.duration)*100)+'%'}
+  vid.addEventListener('progress',updateBuffer)
+  vid.addEventListener('timeupdate',function(){
+    if(!vid.duration)return
+    var pct=(vid.currentTime/vid.duration)*100
+    fillEl.style.width=pct+'%'
+    thumbEl.style.left=pct+'%'
+    curEl.textContent=fmtTime(vid.currentTime)
+    totEl.textContent=fmtTime(vid.duration)
+    reportProgress(vid.currentTime,vid.duration)
+  })
+  vid.addEventListener('loadedmetadata',function(){totEl.textContent=fmtTime(vid.duration)})
+  vid.addEventListener('play',function(){playBtn.innerHTML='&#9208;';playBtn.classList.add('active')})
+  vid.addEventListener('pause',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active')})
+  vid.addEventListener('ended',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active');reportEnded()})
+  function reportProgress(ct,dur){if(window.opener&&!window.opener.closed)window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')}
+  function reportEnded(){if(window.opener&&!window.opener.closed)window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')}
+  shortcutsBtn.addEventListener('click',function(e){e.stopPropagation();shortcuts.classList.toggle('open')})
+  shortcuts.addEventListener('click',function(e){e.stopPropagation()})
+  pipBtn.addEventListener('click',function(){try{if(document.pictureInPictureElement)document.exitPictureInPicture();else if(vid.requestPictureInPicture)vid.requestPictureInPicture()}catch(e){}})
+  var winMode=false
+  pipWinBtn.addEventListener('click',function(){
+    winMode=!winMode
+    pipWinBtn.classList.toggle('active',winMode)
+    try{if(window.__TAURI__&&window.__TAURI__.window){window.__TAURI__.window.getCurrentWindow().setAlwaysOnTop(winMode).catch(function(){})}}catch(e){}
+  })
+  ssBtn.addEventListener('click',function(){
+    try{
+      var c=document.createElement('canvas')
+      c.width=vid.videoWidth;c.height=vid.videoHeight
+      c.getContext('2d').drawImage(vid,0,0)
+      var link=document.createElement('a')
+      link.download=title+'_'+fmtTime(vid.currentTime).replace(/:/g,'-')+'.png'
+      link.href=c.toDataURL('image/png')
+      link.click()
+    }catch(e){}
+  })
+  closeBtn.addEventListener('click',function(){try{if(window.close)window.close()}catch(e){}})
+  vid.addEventListener('dblclick',function(){try{if(document.fullscreenElement)document.exitFullscreen();else vid.requestFullscreen().catch(function(){})}catch(e){}})
+  document.addEventListener('keydown',function(e){
+    if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return
+    switch(e.key){
+      case' ':e.preventDefault();vid.paused?vid.play().catch(function(){}):vid.pause();break
+      case'ArrowLeft':e.preventDefault();vid.currentTime=Math.max(0,vid.currentTime-10);break
+      case'ArrowRight':e.preventDefault();vid.currentTime=Math.min(vid.duration||0,vid.currentTime+10);break
+      case'ArrowUp':e.preventDefault();vid.volume=Math.min(1,vid.volume+0.05);break
+      case'ArrowDown':e.preventDefault();vid.volume=Math.max(0,vid.volume-0.05);break
+      case'f':case'F':try{vid.requestFullscreen().catch(function(){})}catch(e){};break
+      case'm':case'M':vid.muted=!vid.muted;break
+      case'i':case'I':try{if(document.pictureInPictureElement)document.exitPictureInPicture();else vid.requestPictureInPicture()}catch(e){};break
+      case'p':case'P':var idx=allUrls.indexOf(vid.src);if(idx>0)playUrl(allUrls[idx-1],title,pic);break
+      case'n':case'N':var idx=allUrls.indexOf(vid.src);if(idx>=0&&idx<allUrls.length-1)playUrl(allUrls[idx+1],title,pic);break
+      case's':case'S':speedMenu.classList.toggle('open');shortcuts.classList.remove('open');break
+      case'?':shortcuts.classList.toggle('open');break
+      case'x':case'X':try{var c=document.createElement('canvas');c.width=vid.videoWidth;c.height=vid.videoHeight;c.getContext('2d').drawImage(vid,0,0);var link=document.createElement('a');link.download=title+'_'+fmtTime(vid.currentTime).replace(/:/g,'-')+'.png';link.href=c.toDataURL('image/png');link.click()}catch(e){};break
+      case'Escape':try{if(document.fullscreenElement)document.exitFullscreen();else if(shortcuts.classList.contains('open'))shortcuts.classList.remove('open');else window.close()}catch(e){};break
+    }
+  })
+  if(url)playUrl(url,title,pic)
+})()
+</script>
 </body>
 </html>

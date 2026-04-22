@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 屠戮影视 - 影视点播 + 电视直播
  * VOD: 多源聚合（暴风/星之尘/天涯/饭太稀/肥猫）
  * TV: 多源直播（繁星/聚浪等M3U源）
@@ -305,17 +305,34 @@ function getPlayHistory() {
 }
 function savePlayHistory(list) { try { localStorage.setItem(KEY_PLAY, JSON.stringify(list)) } catch {} }
 function upsertPlayHistory(item) {
-  let h = getPlayHistory().filter(s => !(s.id === item.id && s.source === item.source))
+  // 用 id + source + epName 三元组区分同一部剧的不同集数
+  let h = getPlayHistory().filter(s => !(
+    s.id === item.id && s.source === item.source && s.epName === item.epName
+  ))
   h.unshift({ ...item, updatedAt: Date.now() })
-  savePlayHistory(h.slice(0, 30))
+  savePlayHistory(h.slice(0, 50))
 }
-function updatePlayProgress(id, source, progress) {
+function updatePlayProgress(id, source, progress, epName) {
   let h = getPlayHistory()
-  let idx = h.findIndex(s => s.id === id && s.source === source)
+  let idx = h.findIndex(s => s.id === id && s.source === source && (epName == null || s.epName === epName))
   if (idx >= 0) { h[idx].progress = progress; h[idx].updatedAt = Date.now() }
   savePlayHistory(h)
 }
 function clearPlayHistory() { savePlayHistory([]) }
+
+// ── 监听独立播放器窗口的消息 ─────────────────────────────
+window.addEventListener('message', (e) => {
+  const d = e.data
+  if (!d || d.type !== 'playerProgress' && d.type !== 'playerEnded') return
+  const { id, source, epName } = d.playbackCtx || {}
+  if (!id || !source) return
+  if (d.type === 'playerProgress') {
+    const pct = d.duration > 0 ? Math.round((d.currentTime / d.duration) * 1000) / 10 : 0
+    updatePlayProgress(id, source, pct, epName)
+  } else if (d.type === 'playerEnded') {
+    updatePlayProgress(id, source, 999, epName)
+  }
+})
 
 function exportFavorites() {
   const data = getPlayHistory()
@@ -578,9 +595,15 @@ function initApp(el) {
   el.querySelector('#t-player-mini').addEventListener('click', () => {
     const ep = playingEp
     const title = document.querySelector('#t-player-title')?.textContent || ep?.epName || '播放中'
-    const extUrl = document.querySelector('#t-ext-link')?.href || ep?.epUrl || ''
     closePlayer()
-    if (ep?.epUrl) openFloatPlayer(title, ep.epUrl, ep.id, ep.source, ep.epName, ep.pic)
+    if (ep?.epUrl) {
+      // 查找当前剧集的历史进度
+      const sp = (() => {
+        const hist = getPlayHistory().find(h => h.id === ep.id && h.source === ep.source && h.epName === ep.epName)
+        return (hist && hist.progress > 0 && hist.progress < 999) ? hist.progress : 0
+      })()
+      openFloatPlayer(title, ep.epUrl, ep.id, ep.source, ep.epName, ep.pic, ep.allUrls || [], sp, ep.allEps || null)
+    }
   })
   el.querySelector('#t-player-overlay').addEventListener('click', e => { if (e.target === el.querySelector('#t-player-overlay')) closePlayer() })
 
@@ -1316,7 +1339,7 @@ function setDebug(msg, detail) {
       if (!btn) return
       const epUrl = btn.dataset.url
       const hist = getPlayHistory().find(h => h.id == btn.dataset.id && h.source === btn.dataset.source && h.epName === btn.dataset.epname)
-      const sp = (hist && hist.duration > 0) ? parseFloat(hist.progress) : 0
+      const sp = (hist && hist.progress > 0 && hist.progress < 999) ? parseFloat(hist.progress) : 0
       upsertPlayHistory({
         id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
         source: btn.dataset.source, epName: btn.dataset.epname,
@@ -1325,33 +1348,27 @@ function setDebug(msg, detail) {
       // 获取当前显示的源的 si（从 active 的 [data-si] 按钮获取）
       const activeSiBtn = body.querySelector('[data-si].active')
       const si = activeSiBtn ? parseInt(activeSiBtn.dataset.si) : preferredSi
-      openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url), sp)
+      // 传入当前剧集所有集数列表（用于悬浮窗选集）
+      const allEps = (episodes[si]?.urls || []).map(e => ({ epName: e.name, url: e.url }))
+      openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url), sp, allEps)
     })
   }
 
-  function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress) {
-    const overlay = el.querySelector('#t-player-overlay')
-    const body = el.querySelector('#t-player-body')
-    el.querySelector('#t-player-title').textContent = name
-    el.querySelector('#t-ext-link').href = url || '#'
-    playingEp = { id, source, epName, pic, allUrls: fallbackUrls || [] }
-    body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
-    overlay.style.display = 'flex'
-    if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
-    const isM3u8 = url.includes('.m3u8')
-    const isMp4  = url.includes('.mp4')
-    const sp = typeof startProgress === 'number' ? startProgress : 0
-    if (isM3u8 || isMp4) loadVideoPlayer(url, isM3u8, sp, playingEp?.allUrls || [])
-    else {
-      const safeUrl = url && /^https?:\/\//i.test(url) ? url : ''
-      body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe id="tv-iframe" src="' + safeUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
-      setTimeout(() => {
-        const iframe = document.getElementById('tv-iframe')
-        if (iframe && iframe.style.display !== 'none') {
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放地址无效或已被防盗链</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>'
-        }
-      }, 10000)
-    }
+  function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress, allEps) {
+    // 全部改为独立 Tauri 窗口播放（关闭内嵌播放器）
+    if (!url || url === '#') return
+    playingEp = { id, source, epName, pic, epUrl: url, allUrls: fallbackUrls || [], allEps: allEps || null }
+    const resume = (typeof startProgress === 'number' && startProgress > 0 && startProgress < 999) ? startProgress : 0
+    const ctx = JSON.stringify({ id, source, epName })
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke('open_player_window', {
+        url, title: name, resume,
+        allEps: JSON.stringify(allEps || []),
+        allUrls: JSON.stringify(fallbackUrls || [url]),
+        playbackCtx: ctx,
+        pic: pic || '',
+      }).catch(() => {})
+    }).catch(() => {})
   }
 
   async function loadVideoPlayer(videoUrl, isM3u8, startProgress, fallbackUrls) {
@@ -1480,12 +1497,12 @@ function setDebug(msg, detail) {
   function trackProgress(video) {
     if (!playingEp || !video.duration) return
     const pct = (video.currentTime / video.duration) * 100
-    if (pct > 1) updatePlayProgress(playingEp.id, playingEp.source, video.currentTime)
+    if (pct > 1) updatePlayProgress(playingEp.id, playingEp.source, video.currentTime, playingEp.epName)
   }
 
   function markFinished() {
     if (!playingEp) return
-    updatePlayProgress(playingEp.id, playingEp.source, 999)
+    updatePlayProgress(playingEp.id, playingEp.source, 999, playingEp.epName)
   }
 
   function ensureHls() {
@@ -1502,7 +1519,7 @@ function setDebug(msg, detail) {
   function closePlayer() {
     const vid = document.querySelector('#t-player-body video') || document.querySelector('#t-player-body .tvbox-video-wrap video')
     if (vid && vid.duration > 0 && playingEp) {
-      updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime)
+      updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime, playingEp.epName)
     }
     playingEp = null
     el.querySelector('#t-player-overlay').style.display = 'none'
@@ -1547,110 +1564,26 @@ function setDebug(msg, detail) {
     return null
   }
 
-  function openFloatPlayer(name, url, id, source, epName, pic) {
-    closeFloatPlayer()
-
-    // 优先选择直接 m3u8（非 /share/ 的）
+  
+  function openFloatPlayer(name, url, id, source, epName, pic, allUrls, startProgress, allEps) {
+    // 鍏ㄩ儴鏀逛负鐙珛 Tauri 绐楀彛鎾斁
+    if (!url || url === '#') return
     const useUrl = pickDirectUrl(url)
-
-    const wrap = document.createElement('div')
-    wrap.className = 'tvbox-float-wrap'
-    wrap.style.cssText = 'right:20px;bottom:80px;width:420px;'
-
-    const isM3u8 = useUrl.includes('.m3u8')
-    const isMp4  = useUrl.includes('.mp4')
-    const canEmbed = isM3u8 || isMp4
-
-    wrap.innerHTML = `
-      <div class="tvbox-float-header">
-        <span class="tvbox-float-title">${escHtml(name)}</span>
-        <button class="tvbox-float-ctrl min-btn" id="_fmin" title="最小化">─</button>
-        <button class="tvbox-float-ctrl pin-btn" id="_fpin" title="置顶">📌</button>
-        <button class="tvbox-float-ctrl close" id="_fclose" title="关闭">✕</button>
-      </div>
-      <div class="tvbox-float-body" id="_fbody">
-        ${canEmbed ? `<div class="tvbox-float-video-wrap" id="_fvid"></div>` :
-          `<div style="aspect-ratio:16/9;background:#000;display:flex;align-items:center;justify-content:center;color:#6b6b8a;font-size:13px">
-            <div style="text-align:center">
-              <div style="margin-bottom:8px">⚠️ 非直链，无法直接播放</div>
-              <div style="font-size:11px;color:#555">m3u8/MP4 直链才可播放</div>
-            </div>
-          </div>`}
-      </div>
-      <div class="tvbox-float-url-bar">
-        <a href="${escHtml(useUrl)}" target="_blank" rel="noopener" id="_fext" title="${escHtml(useUrl)}">${escHtml(useUrl)}</a>
-        <button class="tvbox-float-ctrl" id="_fcopy" title="复制链接" style="font-size:10px;width:22px;height:22px">📋</button>
-      </div>`
-
-    document.body.appendChild(wrap)
-    const saved = loadFloatState()
-    _floatState = {
-      wrap, pinned: saved ? saved.pinned : false,
-      minimized: false,
-      h: saved?.h || wrap.offsetHeight,
-      w: saved?.w || 420,
-      x: saved?.x ?? (window.innerWidth - 420 - 20),
-      y: saved?.y ?? (window.innerHeight - 80 - (canEmbed ? Math.round(420 * 9/16 + 120) : 120))
-    }
-
-    // 应用位置和尺寸
-    wrap.style.cssText = `right:${window.innerWidth - _floatState.x - _floatState.w}px;bottom:${_floatState.y}px;width:${_floatState.w}px`
-
-    // 应用置顶状态
-    if (_floatState.pinned) {
-      wrap.classList.add('pinned')
-      wrap.style.zIndex = '9999999'
-      wrap.querySelector('#_fpin')?.classList.add('pin-on')
-    }
-
-    // 拖拽
-    const hdr = wrap.querySelector('.tvbox-float-header')
-    hdr.addEventListener('mousedown', onFloatDragStart)
-    hdr.addEventListener('touchstart', onFloatDragStart, { passive: false })
-
-    // 调整大小（右下角手柄）
-    let _floatResize = null
-    wrap.addEventListener('mousedown', e => {
-      const rect = wrap.getBoundingClientRect()
-      if (e.clientX >= rect.right - 8 && e.clientY >= rect.bottom - 8) {
-        e.preventDefault()
-        _floatResize = { ox: e.clientX, oy: e.clientY, ow: _floatState.w, oh: _floatState.h }
-      }
-    })
-    document.addEventListener('mousemove', e => {
-      if (!_floatResize) return
-      e.preventDefault()
-      const dw = e.clientX - _floatResize.ox
-      const dh = e.clientY - _floatResize.oy
-      const newW = Math.max(240, Math.min(window.innerWidth, _floatResize.ow + dw))
-      const newH = Math.max(180, Math.min(window.innerHeight, _floatResize.oh + dh))
-      wrap.style.width = newW + 'px'
-      _floatState.w = newW
-      _floatState.h = newH
-    })
-    document.addEventListener('mouseup', () => {
-      if (_floatResize) { _floatResize = null; saveFloatState() }
-    })
-
-    // 控制按钮
-    wrap.querySelector('#_fclose').addEventListener('click', closeFloatPlayer)
-    wrap.querySelector('#_fmin').addEventListener('click', () => toggleFloatMin())
-    wrap.querySelector('#_fpin').addEventListener('click', () => toggleFloatPin())
-    wrap.querySelector('#_fcopy')?.addEventListener('click', () => {
-      navigator.clipboard?.writeText(useUrl).catch(() => {})
-    })
-
-    // 播放视频
-    if (canEmbed) {
-      if (isM3u8) loadVideoIntoFloat(useUrl)
-      else loadMp4IntoFloat(useUrl)
-    }
-
-    // ESC 关闭
-    document.addEventListener('keydown', onFloatEsc)
+    const resume = (typeof startProgress === 'number' && startProgress > 0 && startProgress < 999) ? startProgress : 0
+    playingEp = { id, source, epName, epUrl: useUrl, pic, allUrls: allUrls || [], allEps: allEps || [] }
+    const ctx = JSON.stringify({ id, source, epName })
+    import('@tauri-apps/api/core').then(({ invoke }) => {
+      invoke('open_player_window', {
+        url: useUrl, title: name, resume,
+        allEps: JSON.stringify(allEps || []),
+        allUrls: JSON.stringify(allUrls || [useUrl]),
+        playbackCtx: ctx,
+        pic: pic || '',
+      }).catch(() => {})
+    }).catch(() => {})
   }
 
-  function pickDirectUrl(url) {
+function pickDirectUrl(url) {
     // url 可能是 "集名$url#集名$url" 或单个 url
     if (!url.includes('#') && !url.includes('$$$')) return url
     // 找第一个非 /share/ 的 m3u8
@@ -1671,7 +1604,7 @@ function setDebug(msg, detail) {
     return idx0 >= 0 ? parts[0].slice(idx0 + 1) : parts[0]
   }
 
-  async function loadVideoIntoFloat(url) {
+  async function loadVideoIntoFloat(url, resumeProgress = 0) {
     await ensureHls()
     const vidWrap = document.querySelector('#_fvid')
     if (!vidWrap) return
@@ -1683,29 +1616,14 @@ function setDebug(msg, detail) {
       window._floatHls = hls
       hls.loadSource(url)
       hls.attachMedia(video)
-
-      // ── 画质选择（MANIFEST_PARSED 后）────────────────
       hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
         const levels = hls.levels || []
-        if (levels.length > 1) {
-          const qBtn = document.createElement('button')
-          qBtn.id = '_fquality'
-          qBtn.textContent = '🎯 自动'
-          qBtn.title = '画质选择'
-          qBtn.style.cssText = 'background:rgba(30,30,50,0.9);color:#fff;border:1px solid #444;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer'
-          const wrap = document.querySelector('.tvbox-float-header')
-          if (wrap) wrap.appendChild(qBtn)
-          const speeds = [0.5, 1, 1.25, 1.5, 2]
-          let speedIdx = 1 // 默认 1x
-          qBtn.addEventListener('click', () => {
-            speedIdx = (speedIdx + 1) % speeds.length
-            const s = speeds[speedIdx]
-            video.playbackRate = s
-            qBtn.textContent = '🎯 ' + s + 'x'
-          })
-        }
-        // HLS.js 默认自适应码率：level = -1
         hls.currentLevel = -1
+        if (resumeProgress > 0) {
+          video.addEventListener('loadedmetadata', () => {
+            video.currentTime = Math.min(resumeProgress, video.duration)
+          }, { once: true })
+        }
       })
 
       let timedOut = false
@@ -1722,30 +1640,244 @@ function setDebug(msg, detail) {
           errCount++
           if (errCount < MAX_ERR && (data.type === window.Hls.ErrorTypes.NETWORK_ERROR || data.type === window.Hls.ErrorTypes.MEDIA_ERROR)) {
             console.warn('[FloatHLS] 可恢复错误，尝试恢复 (#' + errCount + '):', data.type, data.details)
-            hls.startLoad()
-            return
+            hls.startLoad(); return
           }
           timedOut = true; hls.destroy(); window._floatHls = null
           vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</div>'
         }
       })
       hls.on(window.Hls.Events.MANIFEST_PARSED, () => clearTimeout(timer))
+      setupFloatControls(video, hls)
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url
+      if (resumeProgress > 0) {
+        video.addEventListener('loadedmetadata', () => {
+          video.currentTime = Math.min(resumeProgress, video.duration)
+        }, { once: true })
+      }
+      setupFloatControls(video, null)
     } else {
       vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">浏览器不支持 HLS</div>'
     }
-    video.play().catch(() => {})
   }
 
-  function loadMp4IntoFloat(url) {
+  function loadMp4IntoFloat(url, resumeProgress = 0) {
     const vidWrap = document.querySelector('#_fvid')
     if (!vidWrap) return
     const video = document.createElement('video')
     video.controls = true
-    video.src = url
     vidWrap.appendChild(video)
-    video.play().catch(() => {})
+    video.src = url
+    if (resumeProgress > 0) {
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = Math.min(resumeProgress, video.duration)
+      }, { once: true })
+    }
+    setupFloatControls(video, null)
+  }
+
+  // ── 悬浮播放器完整控制条 ──────────────────────────────
+  function setupFloatControls(video, hls) {
+    const ctrl = document.getElementById('_fctrl')
+    if (!ctrl) return
+    const playBtn = document.getElementById('_fplay')
+    const prevBtn = document.getElementById('_fprev')
+    const nextBtn = document.getElementById('_fnext')
+    const muteBtn = document.getElementById('_fmute')
+    const volWrap = document.getElementById('_fvol')
+    const volFill = document.getElementById('_fvolfill')
+    const speedBtn = document.getElementById('_fspeed')
+    const pipBtn = document.getElementById('_fsp')
+    const epBtn = document.getElementById('_fep')
+    const seek = document.getElementById('_fseek')
+    const fill = document.getElementById('_ffill')
+    const thumb = document.getElementById('_fthumb')
+    const curT = document.getElementById('_fcur')
+    const totT = document.getElementById('_ftot')
+
+    const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3]
+    let speedIdx = 2 // 默认 1x
+    let _dragging = false
+    let _vol = 1
+
+    function fmt(s) {
+      s = Math.floor(s)
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+    }
+    function updateTime() {
+      if (!video.duration || !isFinite(video.duration)) return
+      const pct = (video.currentTime / video.duration) * 100
+      if (fill) fill.style.width = pct + '%'
+      if (thumb) thumb.style.left = pct + '%'
+      if (curT) curT.textContent = fmt(video.currentTime)
+      if (totT) totT.textContent = fmt(video.duration)
+    }
+    function updateVol() {
+      if (volFill) volFill.style.width = (_vol * 100) + '%'
+    }
+
+    playBtn?.addEventListener('click', () => {
+      if (video.paused) video.play().catch(() => {})
+      else video.pause()
+    })
+    video.addEventListener('play', () => { if (playBtn) playBtn.textContent = '⏸' })
+    video.addEventListener('pause', () => { if (playBtn) playBtn.textContent = '▶' })
+    video.addEventListener('ended', () => {
+      if (playBtn) playBtn.textContent = '▶'
+      // 自动下一集
+      if (_floatState?.allUrls && _floatState.allUrls.length > 1) {
+        const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
+        if (idx >= 0 && idx < _floatState.allUrls.length - 1) {
+          const next = _floatState.allUrls[idx + 1]
+          _floatState.currentUrl = next
+          const isM3u8 = next.includes('.m3u8'); const isMp4 = next.includes('.mp4')
+          const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
+          if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(next, 0); else loadMp4IntoFloat(next, 0) }
+        }
+      }
+    })
+    video.addEventListener('timeupdate', () => {
+      updateTime()
+      if (!_dragging && playingEp) {
+        const pct = (video.currentTime / video.duration) * 100
+        if (pct > 1) updatePlayProgress(playingEp.id, playingEp.source, video.currentTime, playingEp.epName)
+      }
+    })
+
+    // 进度条拖拽
+    seek?.addEventListener('mousedown', e => {
+      _dragging = true
+      const rect = seek.getBoundingClientRect()
+      video.currentTime = Math.max(0, Math.min(video.duration, (e.clientX - rect.left) / rect.width * video.duration))
+      updateTime()
+    })
+    document.addEventListener('mousemove', e => {
+      if (!_dragging || !seek) return
+      const rect = seek.getBoundingClientRect()
+      video.currentTime = Math.max(0, Math.min(video.duration, (e.clientX - rect.left) / rect.width * video.duration))
+      updateTime()
+    })
+    document.addEventListener('mouseup', () => { _dragging = false })
+
+    // 上一集/下一集
+    prevBtn?.addEventListener('click', () => {
+      if (!_floatState?.allUrls) return
+      const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
+      if (idx > 0) {
+        const prev = _floatState.allUrls[idx - 1]
+        _floatState.currentUrl = prev
+        const isM3u8 = prev.includes('.m3u8'); const isMp4 = prev.includes('.mp4')
+        const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
+        if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(prev, 0); else loadMp4IntoFloat(prev, 0) }
+      }
+    })
+    nextBtn?.addEventListener('click', () => {
+      if (!_floatState?.allUrls) return
+      const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
+      if (idx >= 0 && idx < _floatState.allUrls.length - 1) {
+        const next = _floatState.allUrls[idx + 1]
+        _floatState.currentUrl = next
+        const isM3u8 = next.includes('.m3u8'); const isMp4 = next.includes('.mp4')
+        const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
+        if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(next, 0); else loadMp4IntoFloat(next, 0) }
+      }
+    })
+
+    // 静音
+    muteBtn?.addEventListener('click', () => {
+      if (video.muted || _vol === 0) {
+        video.muted = false; video.volume = _vol > 0 ? _vol : 1
+        if (muteBtn) muteBtn.textContent = '🔊'
+      } else {
+        video.muted = true
+        if (muteBtn) muteBtn.textContent = '🔇'
+      }
+    })
+    volWrap?.addEventListener('click', e => {
+      const rect = volWrap.getBoundingClientRect()
+      _vol = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+      video.volume = _vol; video.muted = false
+      updateVol()
+      if (muteBtn) muteBtn.textContent = '🔊'
+    })
+
+    // 倍速
+    speedBtn?.addEventListener('click', () => {
+      speedIdx = (speedIdx + 1) % SPEEDS.length
+      const s = SPEEDS[speedIdx]
+      video.playbackRate = s
+      if (speedBtn) speedBtn.textContent = s + 'x'
+    })
+
+    // 画中画
+    pipBtn?.addEventListener('click', () => {
+      if (document.pictureInPictureEnabled) video.requestPictureInPicture().catch(() => {})
+    })
+
+    // 选集
+    epBtn?.addEventListener('click', () => showFloatEpPicker())
+
+    // 双击全屏
+    video.addEventListener('dblclick', () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+      else video.requestFullscreen().catch(() => {})
+    })
+
+    updateTime(); updateVol()
+  }
+
+  function showFloatEpPicker() {
+    if (!_floatState?.epList) return
+    const existing = document.getElementById('_fepmenu')
+    if (existing) { existing.remove(); return }
+    const menu = document.createElement('div')
+    menu.id = '_fepmenu'
+    menu.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:rgba(20,20,35,0.96);border:1px solid #444;border-radius:8px;padding:6px 0;z-index:999999;min-width:160px;max-height:220px;overflow-y:auto'
+    _floatState.epList.forEach(ep => {
+      const btn = document.createElement('button')
+      btn.textContent = ep.epName || ep.name || ep.url
+      btn.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;color:' + (ep.url === _floatState.currentUrl ? '#e74c3c' : '#ccc') + ';font-size:12px;cursor:pointer'
+      btn.addEventListener('click', () => {
+        const isM3u8 = ep.url.includes('.m3u8'); const isMp4 = ep.url.includes('.mp4')
+        _floatState.currentUrl = ep.url
+        playingEp = { ...playingEp, epName: ep.epName || ep.name, epUrl: ep.url }
+        const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
+        if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(ep.url, 0); else loadMp4IntoFloat(ep.url, 0) }
+        menu.remove()
+      })
+      menu.appendChild(btn)
+    })
+    document.getElementById('_fep')?.parentElement?.appendChild(menu)
+    document.addEventListener('click', () => menu.remove(), { once: true })
+  }
+
+  function buildQualityMenu(hls, video) {
+    const levels = hls.levels || []
+    if (levels.length <= 1) return
+    const qBtn = document.getElementById('_fspeed')
+    if (!qBtn) return
+    let menu = null
+    qBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      if (menu) { menu.remove(); menu = null; return }
+      menu = document.createElement('div')
+      menu.style.cssText = 'position:absolute;bottom:100%;right:0;background:rgba(20,20,35,0.96);border:1px solid #444;border-radius:6px;padding:4px 0;z-index:999999;min-width:80px'
+      levels.forEach((lv, i) => {
+        const label = lv.height ? lv.height + 'p' : 'Level ' + i
+        const btn = document.createElement('button')
+        btn.textContent = (hls.currentLevel === i ? '✅ ' : '') + label
+        btn.style.cssText = 'display:block;width:100%;text-align:left;padding:5px 10px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer'
+        btn.addEventListener('click', () => { hls.currentLevel = i; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); btn.textContent = '✅ ' + label; menu = null })
+        menu.appendChild(btn)
+      })
+      const autoBtn = document.createElement('button')
+      autoBtn.textContent = (hls.currentLevel === -1 ? '✅ ' : '') + '🔀 自动'
+      autoBtn.style.cssText = 'display:block;width:100%;text-align:left;padding:5px 10px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer'
+      autoBtn.addEventListener('click', () => { hls.currentLevel = -1; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); autoBtn.textContent = '✅ 🔀 自动'; menu = null })
+      menu.appendChild(autoBtn)
+      qBtn.parentElement?.appendChild(menu)
+      document.addEventListener('click', () => { if (menu) { menu.remove(); menu = null } }, { once: true })
+    })
   }
 
   function toggleFloatMin() {
@@ -1817,7 +1949,7 @@ function setDebug(msg, detail) {
     // 保存当前播放进度
     const vid = document.querySelector('#_fvid video') || document.querySelector('.tvbox-float-video-wrap video')
     if (vid && vid.duration > 0 && playingEp) {
-      updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime)
+      updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime, playingEp.epName)
     }
     if (window._floatHls) { window._floatHls.destroy(); window._floatHls = null }
     if (_floatState?.wrap) { _floatState.wrap.remove(); _floatState = null }
@@ -1876,7 +2008,7 @@ function setDebug(msg, detail) {
         // 第一个可用链接 → 直接播放（独立窗口）
         showCrawlStatus('✅ 找到可用链接，正在播放: ' + name, 'success')
         btn.disabled = false; btn.textContent = '🔍 爬取'
-        playCrawlVideo(name, u)
+        playCrawlVideo(name, u, 0, [], [u])
       } : null)
       _crawlResults = results
       btn.disabled = false
@@ -2330,32 +2462,37 @@ function setDebug(msg, detail) {
       card.addEventListener('click', () => {
         const idx = parseInt(card.dataset.index)
         const r = _crawlResults[idx]
-        if (r) playCrawlVideo(r.name, r.url)
+        if (r) playCrawlVideo(r.name, r.url, 0, [], [r.url])
       })
     })
   }
 
   // playCrawlVideo: 独立窗口播放（不影响主界面，支持继续播放）
-  async function playCrawlVideo(name, url, resume = 0) {
-    // 先查一下 playHistory 里的进度
+  async function playCrawlVideo(name, url, resume = 0, allEps, allUrls) {
+    // 从历史记录读进度
     if (resume === 0) {
       try {
         const h = getPlayHistory().filter(s => s.source === 'crawl')
         const prev = h.find(s => s.url === url)
-        if (prev && prev.progress > 0) resume = prev.progress
+        if (prev && prev.progress > 0 && prev.progress < 999) resume = prev.progress
       } catch {}
     }
+    const ctx = { id: url, source: 'crawl', epName: name }
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
       try {
-        await invoke('open_player_window', { url, title: name, resume })
+        await invoke('open_player_window', {
+          url, title: name, resume,
+          allEps: JSON.stringify(allEps || []),
+          allUrls: JSON.stringify(allUrls || [url]),
+          playbackCtx: JSON.stringify(ctx),
+          pic: '',
+        })
       } catch {
-        // 回退：内置播放器
-        openPlayerVod(name, url, 'crawl', 'crawl', '', '', [], 0)
+        openPlayerVod(name, url, 'crawl', 'crawl', name, '', [url], resume, [])
       }
     } else {
-      // 回退：内置播放器
-      openPlayerVod(name, url, 'crawl', 'crawl', '', '', [], 0)
+      openPlayerVod(name, url, 'crawl', 'crawl', name, '', [url], resume, [])
     }
   }
 
@@ -2402,7 +2539,7 @@ function setDebug(msg, detail) {
       // 直链直接播
       if (rawUrl.includes('.m3u8') || rawUrl.includes('.mp4')) {
         overlay.remove()
-        openFloatPlayer('直链播放', rawUrl)
+        openFloatPlayer('直链播放', rawUrl, 'url_input', 'url_input', '直链播放', '', [], 0)
         return
       }
 
@@ -2410,7 +2547,7 @@ function setDebug(msg, detail) {
       const isLzShare = /\/share\//.test(rawUrl) || rawUrl.includes('v.lfthirtytwo.com') || rawUrl.includes('vip.lz-')
       if (isLzShare) {
         overlay.remove()
-        openFloatPlayer('解析中', rawUrl)
+        openFloatPlayer('解析中', rawUrl, 'share_page', 'share_page', '解析中', '', [], 0)
         // 先尝试用 vod_fetch 找详情接口
         await tryExtractFromSharePage(rawUrl)
         return
@@ -2418,7 +2555,7 @@ function setDebug(msg, detail) {
 
       // 其他页面 → 显示不支持
       overlay.remove()
-      openFloatPlayer('无法解析', rawUrl)
+      openFloatPlayer('无法解析', rawUrl, 'url_input', 'url_input', '无法解析', '', [], 0)
     }
 
     overlay.querySelector('#_urlgo').addEventListener('click', () => doUrlParse(inp.value))
