@@ -598,22 +598,7 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         r"C:\Windows\System32\msedge.exe",
     ];
     let msedge_exe = msedge_paths.iter().find(|p| std::path::Path::new(p).exists());
-    let browser_exe = match msedge_exe {
-        Some(p) => p.as_str(),
-        None => {
-            // 回退：尝试从 PATH 找 edge
-            if let Ok(output) = Command::new("where").arg("edge").output() {
-                if output.status.success() {
-                    let path = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("").trim().to_string();
-                    if !path.is_empty() {
-                        // 找到了但不使用
-                        return Err("Edge 浏览器未安装，请安装 Edge 后重试".into());
-                    }
-                }
-            }
-            return Err("Edge 浏览器未安装，请安装 Edge 后重试".into());
-        }
-    };
+    let browser_exe = msedge_exe.copied().unwrap_or("");
 
     // 用 CDP 的提取脚本
     let extract_js = r#"
@@ -707,14 +692,14 @@ try {{
     if ($ws.State -ne 'Open') {{ throw "CDP: websocket 连接失败" }}
 
     # 启用 Runtime
-    $ws.SendAsync([ArraySegment[byte]][Text.Encoding]::UTF8.GetBytes('{"id":1,"method":"Runtime.enable"}'), 'Text', $true, $ct).Wait(1000)
+    $ws.SendAsync([ArraySegment[byte]][Text.Encoding]::UTF8.GetBytes('{{"id":1,"method":"Runtime.enable"}}'), 'Text', $true, $ct).Wait(1000)
 
     # 等 JS 执行
     Start-Sleep -Seconds 3
 
     # 执行提取脚本
     $scriptB64 = '{extract_b64}'
-    $evalCmd = '{"id":10,"method":"Runtime.evaluate","params":{"expression":"eval(atob(`"' + $scriptB64 + '`'))","returnByValue":true}}'
+    $evalCmd = '{{"id":10,"method":"Runtime.evaluate","params":{{"expression":"eval(atob(`\"" + $scriptB64 + "`\"))","returnByValue":true}}}}'
     $ws.SendAsync([ArraySegment[byte]][Text.Encoding]::UTF8.GetBytes($evalCmd), 'Text', $true, $ct).Wait(5000)
 
     # 读取结果
@@ -729,8 +714,8 @@ try {{
     if ($json -match 'JS_OK:') {{
         $json = ($json -split 'JS_OK:')[1]
         Write-Output ("JS_OK:" + $json)
-    }} elseif ($json -match '"result":{"value":') {{
-        Write-Output ("JS_OK:" + ($json -split '"value":')[1].TrimEnd('}'))
+    }} elseif ($json -match '"result":{{"value":') {{
+        Write-Output ("JS_OK:" + ($json -split '"value":')[1].TrimEnd('}}'))
     }} else {{
         Write-Output "JS_EMPTY"
     }}
@@ -785,7 +770,7 @@ pub async fn open_player_window(url: String, title: String, resume: f64) -> Resu
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("获取程序路径失败: {}", e))?;
     let base_dir = exe_path.parent()
-        .ok_or_else(|| "无法获取程序目录".into())?;
+        .ok_or_else(|| String::from("无法获取程序目录"))?;
     
     // 优先找 src/player.html（开发目录）
     let dev_html = base_dir.join("src").join("player.html");
