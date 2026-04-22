@@ -760,24 +760,11 @@ function initApp(el) {
   }
 
   function openResumePlayer(name, pic, id, epName, epUrl, progress) {
+    if (!epUrl || epUrl === '#' || epUrl === 'undefined') return
+    // 先隐藏旧播放器浮层，再打开独立窗口
     const overlay = el.querySelector('#t-player-overlay')
-    const body = el.querySelector('#t-player-body')
-    el.querySelector('#t-player-title').textContent = name + (epName ? ' ' + epName : '')
-    el.querySelector('#t-ext-link').href = epUrl || '#'
-    body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b6b8a">正在加载...</div>'
-    overlay.style.display = 'flex'
-    if (!epUrl || epUrl === '#' || epUrl === 'undefined') {
-      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'
-      return
-    }
-    const isM3u8 = epUrl.includes('.m3u8')
-    const isMp4  = epUrl.includes('.mp4')
-    if (isM3u8 || isMp4) {
-      loadVideoPlayer(epUrl, isM3u8, progress, [])
-    } else {
-        var safeEpUrl = epUrl && /^https?:\/\//i.test(epUrl) ? epUrl : '';
-        body.innerHTML = '<div class="tvbox-iframe-wrap"><iframe src="' + safeEpUrl + '" allowfullscreen allow="autoplay; fullscreen" style="width:100%;height:100%;border:none"></iframe></div>'
-    }
+    if (overlay) overlay.style.display = 'none'
+    openPlayerVod(name, epUrl, id, 'vod_history', epName, pic, [epUrl], progress, [])
   }
 
   function renderCatBar() {
