@@ -854,6 +854,47 @@ fn urlencoding_encode(s: &str) -> String {
     r
 }
 
+/// 打开龙虾办公室独立窗口
+#[tauri::command]
+pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tauri::WebviewWindowBuilder;
+    use tauri::WebviewUrl;
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let window_label = format!("lobster_office_{}", ts);
+
+    // lobster.html 路径：exe 同级 src/lobster-office.html
+    let exe_path = std::env::current_exe()
+        .map_err(|e| format!("获取程序路径失败: {}", e))?;
+    let base_dir = exe_path.parent()
+        .ok_or_else(|| String::from("无法获取程序目录"))?;
+
+    let html_path = base_dir.join("src").join("lobster-office.html");
+    if !html_path.exists() {
+        return Err("龙虾办公室页面不存在，请确认 src/lobster-office.html 文件存在".into());
+    }
+
+    WebviewWindowBuilder::new(
+        &app,
+        &window_label,
+        WebviewUrl::App(html_path.to_string_lossy().replace('\\', "/").into()),
+    )
+    .title("🦞 龙虾办公室")
+    .inner_size(1024.0, 640.0)
+    .min_inner_size(800.0, 520.0)
+    .resizable(true)
+    .decorations(true)
+    .center()
+    .build()
+    .map_err(|e| format!("创建龙虾办公室窗口失败: {}", e))?;
+
+    Ok("ok".into())
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {

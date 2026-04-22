@@ -433,6 +433,34 @@ async function boot() {
   registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
+// ── 龙虾办公室状态同步 ─────────────────────────────────
+// 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
+window.updateLobsterState = function(state, message) {
+  try {
+    localStorage.setItem('lobsterState', JSON.stringify({
+      state: state,
+      message: message || '',
+      ts: Date.now()
+    }))
+  } catch (e) {}
+}
+
+// 监听路由变化，认为一次路由变化 = 一次工作周期开始
+window.addEventListener('hashchange', () => {
+  const route = location.hash.replace('#', '') || location.pathname
+  if (route && route !== '/') {
+    window.updateLobsterState('writing', '导航到 ' + route)
+  }
+})
+
+// AI 消息发送时通知龙虾（通过自定义事件）
+window.addEventListener('lobster-work-start', e => {
+  window.updateLobsterState(e.detail?.state || 'writing', e.detail?.message || '工作中')
+})
+window.addEventListener('lobster-work-end', () => {
+  window.updateLobsterState('idle', '待命中')
+})
+  registerRoute('/lobster-office', () => import('./pages/lobster-office.js'))
   registerRoute('/coming-soon', () => import('./pages/coming-soon.js'))
   registerRoute('/security', () => import('./pages/security.js'))
   registerRoute('/about', () => import('./pages/about.js'))

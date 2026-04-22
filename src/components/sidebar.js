@@ -83,6 +83,7 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/miaogu-verify', label: '喵咕验证', icon: 'shield' },
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
+      { route: '/lobster-office', label: '龙虾办公室', icon: 'lobster' },
       { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
     ]
   },
@@ -168,6 +169,7 @@ const ICONS = {
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
   rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>',
     movie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
+    lobster: '<svg viewBox="0 0 24 24" fill="none" stroke="#e94560" stroke-width="2"><ellipse cx="12" cy="14" rx="7" ry="5"/><ellipse cx="12" cy="9" rx="4" ry="3"/><circle cx="10" cy="8" r="1" fill="#e94560"/><circle cx="14" cy="8" r="1" fill="#e94560"/><path d="M5 14 Q3 12 4 10" stroke-linecap="round"/><path d="M19 14 Q21 12 20 10" stroke-linecap="round"/><ellipse cx="6" cy="13" rx="2" ry="1.5" fill="#e94560" stroke="#c1122f"/><ellipse cx="18" cy="13" rx="2" ry="1.5" fill="#e94560" stroke="#c1122f"/><path d="M9 5 Q8 3 9 2"/><path d="M15 5 Q16 3 15 2"/></svg>',
 }
 
 let _delegated = false
