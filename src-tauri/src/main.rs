@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    TuLuOpenClaw_lib::run()
+    tu_lu_open_claw_lib::run()
 }

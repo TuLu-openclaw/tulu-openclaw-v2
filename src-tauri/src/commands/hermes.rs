@@ -10,7 +10,7 @@ use std::process::Stdio;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use tokio::process::Command;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
 
 const HERMES_DEFAULT_PORT: u16 = 8642;
 

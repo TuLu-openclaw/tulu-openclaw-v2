@@ -60,6 +60,7 @@ pub fn get_windows_proxy() -> Option<String> {
 
 /// 构建使用 Windows 系统代理的 reqwest Client
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 pub fn build_proxy_client() -> Option<reqwest::Client> {
     use std::time::Duration;
 

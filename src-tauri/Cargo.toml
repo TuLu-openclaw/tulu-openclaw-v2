@@ -9,7 +9,7 @@ homepage = "https://github.com/qingchencloud/TuLuOpenClaw"
 license = "AGPL-3.0"
 
 [lib]
-name = "TuLuOpenClaw_lib"
+name = "tu_lu_open_claw_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

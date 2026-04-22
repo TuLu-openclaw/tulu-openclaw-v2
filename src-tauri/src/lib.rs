@@ -7,7 +7,7 @@ mod windows_proxy;
 
 use commands::{
     agent, assistant, config, device, extensions, hermes, logs, memory, messaging, pairing, proxy,
-    service, skillhub, skills, tvbox, update,
+    service, skills, tvbox, update,
 };
 
 pub fn run() {
