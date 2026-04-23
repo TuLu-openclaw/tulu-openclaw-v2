@@ -348,6 +348,7 @@ export const api = {
   uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
   installGateway: () => invoke('install_gateway'),
   uninstallGateway: () => invoke('uninstall_gateway'),
+  openLobsterOffice: () => invoke('open_lobster_office'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
   setNpmRegistry: (registry) => { invalidate('get_npm_registry'); return invoke('set_npm_registry', { registry }) },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),

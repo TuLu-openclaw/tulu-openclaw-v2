@@ -136,7 +136,7 @@ export default function render(el) {
     btn.disabled = true
     btn.textContent = '正在打开...'
     try {
-      await api('open_lobster_office')
+      await api.openLobsterOffice()
       // 等待窗口打开后建立通信
       setTimeout(() => {
         _lobsterWin = window.open('/lobster-office.html', 'lobster', 'width=1024,height=640,menubar=no,toolbar=no')
