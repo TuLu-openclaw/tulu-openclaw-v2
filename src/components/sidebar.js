@@ -311,15 +311,27 @@ export function renderSidebar(el) {
       if (navItem) {
         const route = navItem.dataset.route
         const dataAction = navItem.dataset.action
-        // data-action 按钮由专门的处理器处理
-        if (dataAction) return
-        if (route.startsWith('/hermes') && getActiveEngineId() !== 'hermes') {
-          switchEngine('hermes').then(() => {
-            navigate(route)
+        if (dataAction === 'deploy-hermes') {
+          _closeEngineDropdown()
+          if (getActiveEngineId() !== 'hermes') {
+            switchEngine('hermes').then(() => {
+              toast('正在切换到 Hermes Engine…', 'info')
+              navigate('/hermes/setup')
+              renderSidebar(el)
+            })
+          } else {
+            navigate('/hermes/setup')
             renderSidebar(el)
-          })
-        } else {
-          navigate(route)
+          }
+        } else if (route) {
+          if (route.startsWith('/hermes') && getActiveEngineId() !== 'hermes') {
+            switchEngine('hermes').then(() => {
+              navigate(route)
+              renderSidebar(el)
+            })
+          } else {
+            navigate(route)
+          }
         }
         _closeMobileSidebar()
         return
