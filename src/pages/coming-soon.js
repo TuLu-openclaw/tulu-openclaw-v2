@@ -273,6 +273,18 @@ function _showBrowserView(container) {
   }
 
   async function startLoad() {
+    // 如果 iframe 已经有有效内容（srcdoc 非空且非加载中状态），直接显示，跳过重复加载
+    const existingSrc = iframe.srcdoc
+    if (existingSrc && existingSrc.length > 100 && !existingSrc.includes('<div class="t-gb-load"')) {
+      loadingEl.classList.add('hidden')
+      iframe.style.display = 'block'
+      blockedEl.classList.remove('show')
+      setStatus('\u2705 已加载', 'ok')
+      return
+    }
+
+    // 清除旧内容，强制重新加载
+    iframe.srcdoc = ''
     loadFired = false
     loadingEl.classList.remove('hidden')
     iframe.style.display = 'block'
@@ -290,10 +302,6 @@ function _showBrowserView(container) {
         iframe.srcdoc = res.html
         loadingEl.classList.add('hidden')
         setStatus('\u2705 已加载', 'ok')
-
-        iframe.addEventListener('load', () => {
-          // srcdoc load 完成，不做额外检查
-        }, { once: true })
       } else {
         showBlocked('代理请求失败：' + (res.error || '未知错误'))
       }

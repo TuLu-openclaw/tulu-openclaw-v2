@@ -385,8 +385,8 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   vid.addEventListener('play',function(){playBtn.innerHTML='&#9208;';playBtn.classList.add('active')})
   vid.addEventListener('pause',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active')})
   vid.addEventListener('ended',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active');reportEnded()})
-  function reportProgress(ct,dur){if(window.opener&&!window.opener.closed)window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')}
-  function reportEnded(){if(window.opener&&!window.opener.closed)window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')}
+  function reportProgress(ct,dur){if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')}}
+  function reportEnded(){if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')}}
   shortcutsBtn.addEventListener('click',function(e){e.stopPropagation();shortcuts.classList.toggle('open')})
   shortcuts.addEventListener('click',function(e){e.stopPropagation()})
   pipBtn.addEventListener('click',function(){try{if(document.pictureInPictureElement)document.exitPictureInPicture();else if(vid.requestPictureInPicture)vid.requestPictureInPicture()}catch(e){}})
@@ -412,7 +412,10 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     try { vid.pause() } catch(e) {}
     try {
       var ct = vid.currentTime || 0, dur = vid.duration || 0
-      if (window.opener && !window.opener.closed) {
+      if (window.__TAURI__&&window.__TAURI__.event) {
+        if (dur > 0) window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})
+        window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx}).catch(function(){})
+      } else if (window.opener && !window.opener.closed) {
         if (dur > 0) window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
         window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')
       }
@@ -423,7 +426,10 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     try { vid.pause() } catch(e) {}
     try {
       var ct = vid.currentTime || 0, dur = vid.duration || 0
-      if (window.opener && !window.opener.closed && dur > 0) {
+      if (window.__TAURI__&&window.__TAURI__.event) {
+        if (dur > 0) window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})
+        window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx}).catch(function(){})
+      } else if (window.opener && !window.opener.closed && dur > 0) {
         window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
         window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')
       }

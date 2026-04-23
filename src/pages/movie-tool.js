@@ -320,9 +320,20 @@ function updatePlayProgress(id, source, progress, epName) {
 }
 function clearPlayHistory() { savePlayHistory([]) }
 
-// ── 监听独立播放器窗口的消息 ─────────────────────────────
-window.addEventListener('message', (e) => {
-  const d = e.data
+// ── 监听独立播放器窗口的消息（Tauri event + postMessage fallback） ──
+let _playerEventUnlisten = null
+async function setupPlayerEventListener() {
+  if (_playerEventUnlisten) return
+  try {
+    const { listen } = await import('@tauri-apps/api/event').catch(() => ({}))
+    if (listen) {
+      _playerEventUnlisten = await listen('player-event', (e) => {
+        handlePlayerMessage(e.payload)
+      })
+    }
+  } catch(e) {}
+}
+function handlePlayerMessage(d) {
   if (!d || d.type !== 'playerProgress' && d.type !== 'playerEnded') return
   const { id, source, epName } = d.playbackCtx || {}
   if (!id || !source) return
@@ -332,7 +343,15 @@ window.addEventListener('message', (e) => {
   } else if (d.type === 'playerEnded') {
     updatePlayProgress(id, source, 999, epName)
   }
+}
+// postMessage fallback（保留给 web 模式或其他不适用 Tauri event 的场景）
+window.addEventListener('message', (e) => {
+  const d = e.data
+  if (!d || d.type !== 'playerProgress' && d.type !== 'playerEnded') return
+  handlePlayerMessage(d)
 })
+// 初始化 Tauri event listener
+setupPlayerEventListener()
 
 function exportFavorites() {
   const data = getPlayHistory()
