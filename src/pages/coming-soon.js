@@ -273,9 +273,13 @@ function _showBrowserView(container) {
   }
 
   async function startLoad() {
-    // 如果 iframe 已经有有效内容（srcdoc 非空且非加载中状态），直接显示，跳过重复加载
-    const existingSrc = iframe.srcdoc
-    if (existingSrc && existingSrc.length > 100 && !existingSrc.includes('<div class="t-gb-load"')) {
+    // 每次 startLoad 都重新查询 iframe（DOM 可能动态变化）
+    const iframe = wrap.querySelector('#t-gb-iframe')
+    if (!iframe) return
+
+    // 如果 iframe 已有有效内容（srcdoc 非空且非加载中），直接显示，跳过重复请求
+    const existingSrc = iframe.srcdoc || ''
+    if (existingSrc.length > 50 && !existingSrc.includes('t-gb-load')) {
       loadingEl.classList.add('hidden')
       iframe.style.display = 'block'
       blockedEl.classList.remove('show')
@@ -283,7 +287,7 @@ function _showBrowserView(container) {
       return
     }
 
-    // 清除旧内容，强制重新加载
+    // 强制重新加载：先清空再请求，避免旧内容残留
     iframe.srcdoc = ''
     loadFired = false
     loadingEl.classList.remove('hidden')
@@ -291,16 +295,18 @@ function _showBrowserView(container) {
     blockedEl.classList.remove('show')
     setStatus('\u1F504 加载中...', 'loading')
     clearTimeout(loadTimer)
-    loadTimer = setTimeout(() => { if (!loadFired) showBlocked() }, LOAD_TIMEOUT)
+    loadTimer = setTimeout(() => {
+      if (!loadFired) showBlocked('代理请求超时（' + (LOAD_TIMEOUT / 1000) + '秒）')
+    }, LOAD_TIMEOUT)
 
     try {
       const res = await invoke('proxy_url', { url: TARGET_URL })
       loadFired = true
       clearTimeout(loadTimer)
+      loadingEl.classList.add('hidden')
 
       if (res.ok && res.html) {
         iframe.srcdoc = res.html
-        loadingEl.classList.add('hidden')
         setStatus('\u2705 已加载', 'ok')
       } else {
         showBlocked('代理请求失败：' + (res.error || '未知错误'))
@@ -308,6 +314,7 @@ function _showBrowserView(container) {
     } catch (err) {
       loadFired = true
       clearTimeout(loadTimer)
+      loadingEl.classList.add('hidden')
       showBlocked('代理请求异常：' + String(err))
     }
   }

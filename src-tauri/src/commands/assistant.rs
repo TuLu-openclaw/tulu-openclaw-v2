@@ -6,7 +6,7 @@ use base64::{engine::general_purpose, Engine as _};
 #[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
 fn audit_log(action: &str, detail: &str) {
@@ -826,8 +826,8 @@ pub async fn open_player_window(
         .as_millis();
     let window_label = format!("player_{}", ts);
 
-    // 用 Tauri WebviewWindowBuilder 创建真正的内嵌窗口
-    WebviewWindowBuilder::new(
+    // 创建播放器窗口
+    let win = WebviewWindowBuilder::new(
         &app,
         &window_label,
         WebviewUrl::App(player_url.into()),
@@ -840,6 +840,34 @@ pub async fn open_player_window(
     .center()
     .build()
     .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+
+    let win_label = win.label().to_string();
+
+    // 拦截窗口关闭：先阻止，通知前端清理，再关闭
+    let app_for_event = app.clone();
+    let win_label_emit = win.label().to_string();
+    win.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            // 发关闭事件给播放器窗口，player.html 收到后清理视频再自己 close
+            use tauri::Emitter;
+            let _ = app_for_event.emit_to(
+                &format!("{}://*", &win_label_emit),
+                "player-close-event",
+                serde_json::json!({}),
+            );
+            // 前端会在 cleanup 后自己调用 window.close()，这里给 3 秒超时兜底
+            let app_clone = app_for_event.clone();
+            let label_clone = win_label_emit.clone();
+            std::thread::spawn(move || {
+                use tauri::Manager;
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                if let Some(w) = app_clone.webview_windows().get(&label_clone) {
+                    let _ = w.close();
+                }
+            });
+        }
+    });
 
     Ok("ok".into())
 }

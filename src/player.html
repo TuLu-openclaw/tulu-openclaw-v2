@@ -435,6 +435,36 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       }
     } catch(e) {}
   })
+  // ── 监听 Rust 窗口关闭拦截事件 ──────────────────────────────
+  function doCleanup() {
+    try { vid.pause() } catch(e) {}
+    try { if(hls){ hls.destroy(); hls=null } } catch(e) {}
+    try {
+      var ct = vid.currentTime || 0, dur = vid.duration || 0
+      if (window.__TAURI__&&window.__TAURI__.event) {
+        if (dur > 0) window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})
+        window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx}).catch(function(){})
+        window.__TAURI__.event.emit('player-cleanup-ack',{}).catch(function(){})
+      } else if (window.opener && !window.opener.closed) {
+        if (dur > 0) window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
+        window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')
+      }
+    } catch(e) {}
+  }
+
+  // 监听 Rust 发来的关闭确认请求
+  if (window.__TAURI__&&window.__TAURI__.event) {
+    window.__TAURI__.event.listen('player-close-event', function() {
+      doCleanup();
+      window.close();
+    }).catch(function(){})
+  }
+
+  function cleanupAndClose() {
+    doCleanup()
+    if (!window.__TAURI__) window.close()
+  }
+  window.addEventListener('beforeunload',function(){ doCleanup() })
   vid.addEventListener('dblclick',function(){try{if(document.fullscreenElement)document.exitFullscreen();else vid.requestFullscreen().catch(function(){})}catch(e){}})
   document.addEventListener('keydown',function(e){
     if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return
