@@ -54,6 +54,7 @@ jobs:
       - name: Build Tauri app
         run: |
           choco install mingw -y --no-progress --ignore-checksums
+          npm run build
           npm run tauri build
         shell: powershell
 
@@ -107,6 +108,7 @@ jobs:
           RUSTFLAGS: "-C codegen-units=1"
         run: |
           choco install mingw -y --no-progress --ignore-checksums
+          npm run build
           npm run tauri build -- --target aarch64-pc-windows-msvc
         shell: powershell
 
@@ -161,7 +163,9 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
           RUSTFLAGS: "-C codegen-units=1"
-        run: npm run tauri build -- --target aarch64-apple-darwin
+        run: |
+          npm run build
+          npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Find DMG
         id: find_dmg
@@ -212,7 +216,9 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
           RUSTFLAGS: "-C codegen-units=1"
-        run: npm run tauri build -- --target x86_64-apple-darwin
+        run: |
+          npm run build
+          npm run tauri build -- --target x86_64-apple-darwin
 
       - name: Find DMG
         id: find_dmg
@@ -271,7 +277,9 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
           RUSTFLAGS: "-C codegen-units=1"
-        run: npm run tauri build
+        run: |
+          npm run build
+          npm run tauri build
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4

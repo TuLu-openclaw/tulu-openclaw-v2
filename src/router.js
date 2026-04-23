@@ -105,12 +105,16 @@ async function loadRoute() {
   if (thisLoad !== _loadId) return
 
   // 插入页面内容
-  _contentEl.innerHTML = ''
+  // 场景1：renderFn 返回字符串 → 替换内容
+  // 场景2：renderFn 返回 HTMLElement → 清空后追加
+  // 场景3：renderFn 返回 undefined → 模块直接写了 innerHTML，不动 DOM
   if (typeof page === 'string') {
     _contentEl.innerHTML = page
   } else if (page instanceof HTMLElement) {
+    _contentEl.innerHTML = ''
     _contentEl.appendChild(page)
   }
+  // page 为 undefined 时，renderFn 已经直接写入了 innerHTML，勿动
 
   // 保存页面清理函数
   _currentCleanup = mod.cleanup || null
