@@ -84,6 +84,7 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
       { route: '/lobster-office', label: '龙虾办公室', icon: 'lobster' },
+      { route: '/coming-soon', label: '全球内置', icon: 'lock' },
       { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
     ]
   },
