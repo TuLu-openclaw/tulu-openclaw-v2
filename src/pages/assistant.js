@@ -1996,7 +1996,8 @@ function showAskUserCard({ question, type, options, placeholder }) {
 
 // 危险工具确认弹窗
 async function confirmToolCall(tc, critical = false) {
-  const name = tc.function.name
+  const name = tc?.function?.name
+  if (!name) return false
   let args
   try { args = JSON.parse(tc.function.arguments) } catch { args = {} }
 

@@ -12,6 +12,7 @@ use std::os::windows::process::CommandExt;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::Duration;
+use tauri::Emitter;
 
 const HERMES_DEFAULT_PORT: u16 = 8642;
 
@@ -188,9 +189,13 @@ pub async fn check_python() -> Result<PythonInfo, String> {
 /// 安装 Hermes Agent
 #[tauri::command]
 pub async fn install_hermes(
+    app: tauri::AppHandle,
     method: String,
     extras: Vec<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
+    let _ = app.emit("hermes-install-log", "🚀 开始安装 Hermes Agent...");
+    let _ = app.emit("hermes-install-progress", 10u32);
+
     match method.as_str() {
         "uv-tool" => {
             let mut cmd = Command::new("uv");
@@ -245,13 +250,37 @@ pub async fn install_hermes(
                 } else {
                     format!("安装失败:\n{}", err_str.trim())
                 };
+                let _ = app.emit("hermes-install-log", &msg);
+                let _ = app.emit("hermes-install-done", serde_json::json!({ "success": false, "error": &msg }));
                 return Err(msg);
             }
-            if !out_str.trim().is_empty() { println!("[hermes] install stdout: {}", out_str.trim()); }
-            if !err_str.trim().is_empty() { println!("[hermes] install stderr: {}", err_str.trim()); }
-            Ok(())
+            let _ = app.emit("hermes-install-progress", 80u32);
+            if !out_str.trim().is_empty() {
+                let _ = app.emit("hermes-install-log", format!("📦 stdout: {}", out_str.trim()));
+            }
+            if !err_str.trim().is_empty() {
+                let _ = app.emit("hermes-install-log", format!("📜 stderr: {}", err_str.trim()));
+            }
+            let _ = app.emit("hermes-install-log", "✅ 安装命令执行完成，正在验证...");
+            let _ = app.emit("hermes-install-progress", 90u32);
+            // 验证 hermes-agent 可用（使用 std::sync::Command 更安全）
+            let ver_msg = match std::process::Command::new("hermes-agent").arg("--version").output() {
+                Ok(out) => {
+                    let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if ver.is_empty() { String::from_utf8_lossy(&out.stderr).trim().to_string() } else { ver }
+                }
+                Err(e) => format!("验证失败: {}", e),
+            };
+            let _ = app.emit("hermes-install-log", format!("✅ Hermes Agent 已就绪: {}", ver_msg));
+            let _ = app.emit("hermes-install-progress", 100u32);
+            let _ = app.emit("hermes-install-done", serde_json::json!({ "success": true, "version": ver_msg }));
+            Ok(ver_msg)
         }
-        _ => Err(format!("不支持的安装方式: {}", method)),
+        _ => {
+            let msg = format!("不支持的安装方式: {}", method);
+            let _ = app.emit("hermes-install-log", &msg);
+            Err(msg)
+        }
     }
 }
 
