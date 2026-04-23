@@ -3,7 +3,6 @@
  */
 const routes = {}
 const _moduleCache = {}
-let _contentEl = null
 let _loadId = 0
 let _currentCleanup = null
 let _initialized = false
@@ -22,8 +21,7 @@ export function navigate(path) {
   window.location.hash = path
 }
 
-export function initRouter(contentEl) {
-  _contentEl = contentEl
+export function initRouter() {
   if (!_initialized) {
     window.addEventListener('hashchange', () => loadRoute())
     _initialized = true
@@ -31,10 +29,16 @@ export function initRouter(contentEl) {
   loadRoute()
 }
 
+function getContentEl() {
+  return document.getElementById('content')
+}
+
 async function loadRoute() {
+  const _contentEl = getContentEl()
   const hash = window.location.hash.slice(1) || _defaultRoute
   const routePath = hash.split('?')[0]
   const loader = routes[routePath]
+
   // 路由未注册时（引擎刚切换、新路由尚未注册），显示 loading 而不是留空
   if (!loader) {
     if (_contentEl) {
@@ -68,15 +72,11 @@ async function loadRoute() {
   // 已缓存的模块：跳过 spinner，直接渲染
   let mod = _moduleCache[routePath]
   if (!mod) {
-    _contentEl.innerHTML = ''
-    // 仅首次加载显示 spinner
-    const spinnerEl = document.createElement('div')
-    spinnerEl.className = 'page-loader'
-    spinnerEl.innerHTML = `
-      <div class="page-loader-spinner"></div>
-      <div class="page-loader-text">加载中...</div>
-    `
-    _contentEl.appendChild(spinnerEl)
+    _contentEl.innerHTML = `
+      <div class="page-loader">
+        <div class="page-loader-spinner"></div>
+        <div class="page-loader-text">加载中...</div>
+      </div>`
 
     try {
       mod = await retryLoad(loader, 3, 500)
@@ -86,8 +86,6 @@ async function loadRoute() {
       return
     }
     _moduleCache[routePath] = mod
-  } else {
-    _contentEl.innerHTML = ''
   }
 
   // 如果加载期间路由又变了，丢弃本次结果

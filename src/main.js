@@ -473,7 +473,7 @@ window.addEventListener('lobster-work-end', () => {
   registerRoute('/settings', () => import('./pages/settings.js'))
 
   renderSidebar(sidebar)
-  initRouter(content)
+  initRouter()
 
   // 移动端顶栏（汉堡菜单 + 标题）
   const mainCol = document.getElementById('main-col')
