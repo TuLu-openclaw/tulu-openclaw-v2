@@ -6,6 +6,7 @@ use base64::{engine::general_purpose, Engine as _};
 #[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
+use tauri::Manager;
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
 fn audit_log(action: &str, detail: &str) {
@@ -869,8 +870,7 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
 
     // lobster-office.html 路径：打包后位于 resources 目录
     // 用 app.path().resource_path() 获取打包后的资源根目录
-    let resources_path = app.path().resource_path()
-        .map_err(|e| format!("获取资源路径失败: {}", e))?;
+    let resources_path = app.path().resource_dir().map_err(|e| format!("获取资源路径失败: {}", e))?;
     let html_path = resources_path.join("lobster-office.html");
     if !html_path.exists() {
         return Err("龙虾办公室页面不存在，请重新安装程序".into());
