@@ -867,15 +867,13 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
         .as_millis();
     let window_label = format!("lobster_office_{}", ts);
 
-    // lobster.html 路径：exe 同级 src/lobster-office.html
-    let exe_path = std::env::current_exe()
-        .map_err(|e| format!("获取程序路径失败: {}", e))?;
-    let base_dir = exe_path.parent()
-        .ok_or_else(|| String::from("无法获取程序目录"))?;
-
-    let html_path = base_dir.join("src").join("lobster-office.html");
+    // lobster-office.html 路径：打包后位于 resources 目录
+    // 用 app.path().resource_path() 获取打包后的资源根目录
+    let resources_path = app.path().resource_path()
+        .map_err(|e| format!("获取资源路径失败: {}", e))?;
+    let html_path = resources_path.join("lobster-office.html");
     if !html_path.exists() {
-        return Err("龙虾办公室页面不存在，请确认 src/lobster-office.html 文件存在".into());
+        return Err("龙虾办公室页面不存在，请重新安装程序".into());
     }
 
     WebviewWindowBuilder::new(
