@@ -282,30 +282,25 @@ function _showBrowserView(container) {
     loadTimer = setTimeout(() => { if (!loadFired) showBlocked() }, LOAD_TIMEOUT)
 
     try {
-      // 前端直接 fetch（跨平台兼容，不走 Rust invoke 避免 WebView2 网络限制）
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), LOAD_TIMEOUT)
-      let res
-      try {
-        res = await fetch(TARGET_URL, { signal: controller.signal })
-      } finally {
-        clearTimeout(timeout)
-      }
+      const res = await invoke('proxy_url', { url: TARGET_URL })
       loadFired = true
       clearTimeout(loadTimer)
 
-      if (res.ok) {
-        const html = await res.text()
-        iframe.srcdoc = html
+      if (res.ok && res.html) {
+        iframe.srcdoc = res.html
         loadingEl.classList.add('hidden')
         setStatus('\u2705 已加载', 'ok')
+
+        iframe.addEventListener('load', () => {
+          // srcdoc load 完成，不做额外检查
+        }, { once: true })
       } else {
-        showBlocked('页面加载失败：HTTP ' + res.status)
+        showBlocked('代理请求失败：' + (res.error || '未知错误'))
       }
     } catch (err) {
       loadFired = true
       clearTimeout(loadTimer)
-      showBlocked('加载异常：' + String(err))
+      showBlocked('代理请求异常：' + String(err))
     }
   }
 

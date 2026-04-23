@@ -513,7 +513,7 @@ export const api = {
   // === Hermes Agent ===
   checkHermes: () => cachedInvoke('check_hermes', {}, 10000),
   checkPython: () => cachedInvoke('check_python', {}, 10000),
-  installHermes: (method) => invoke('hermes_auto_install', { method }),
+  installHermes: (method) => invoke('install_hermes', { method }),
   hermesGatewayAction: (action) => invoke('hermes_gateway_action', { action }),
   hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url }),
   hermesReadConfig: () => cachedInvoke('hermes_read_config', {}, 5000),
