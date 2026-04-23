@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::Duration;
 
@@ -202,10 +203,52 @@ pub async fn install_hermes(
                 cmd.creation_flags(0x08000000);
             }
             cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-            let status = cmd.status().await.map_err(|e| e.to_string())?;
+            let mut child = cmd.spawn().map_err(|e| format!("启动 uv 失败: {}", e))?;
+            let mut out_stream = child.stdout.take();
+            let mut err_stream = child.stderr.take();
+            let mut out_buf = Vec::new();
+            let mut err_buf = Vec::new();
+            let status = async {
+                loop {
+                    let mut done = true;
+                    if let Some(ref mut s) = out_stream {
+                        let mut b = [0u8; 2048];
+                        match s.read(&mut b).await {
+                            Ok(0) => {}
+                            Ok(n) => { out_buf.extend_from_slice(&b[..n]); done = false; }
+                            Err(_) => {}
+                        }
+                    }
+                    if let Some(ref mut s) = err_stream {
+                        let mut b = [0u8; 2048];
+                        match s.read(&mut b).await {
+                            Ok(0) => {}
+                            Ok(n) => { err_buf.extend_from_slice(&b[..n]); done = false; }
+                            Err(_) => {}
+                        }
+                    }
+                    if done { break }
+                    if out_buf.len() > 5_000_000 || err_buf.len() > 5_000_000 { break }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+                child.wait().await
+            }.await.map_err(|e| format!("等待 uv 完成失败: {}", e))?;
+            let out_str = String::from_utf8_lossy(&out_buf);
+            let err_str = String::from_utf8_lossy(&err_buf);
             if !status.success() {
-                return Err("安装失败".to_string());
+                let msg = if err_str.trim().is_empty() {
+                    if out_str.trim().is_empty() {
+                        "安装失败（uv 返回非零退出码）".to_string()
+                    } else {
+                        format!("安装失败:\n{}", out_str.trim())
+                    }
+                } else {
+                    format!("安装失败:\n{}", err_str.trim())
+                };
+                return Err(msg);
             }
+            if !out_str.trim().is_empty() { println!("[hermes] install stdout: {}", out_str.trim()); }
+            if !err_str.trim().is_empty() { println!("[hermes] install stderr: {}", err_str.trim()); }
             Ok(())
         }
         _ => Err(format!("不支持的安装方式: {}", method)),

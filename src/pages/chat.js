@@ -2517,8 +2517,9 @@ function collectToolsFromMessage(message, tools) {
   const toolCalls = message.tool_calls || message.toolCalls || message.tools
   if (Array.isArray(toolCalls)) {
     toolCalls.forEach(call => {
+      if (!call) return
       const fn = call.function || null
-      const name = call.name || call.tool || call.tool_name || fn?.name
+      const name = call?.name || call?.tool || call?.tool_name || fn?.name
       const input = call.input || call.args || call.parameters || call.arguments || fn?.arguments || null
       const callId = call.id || call.tool_call_id
       upsertTool(tools, {
@@ -2534,10 +2535,11 @@ function collectToolsFromMessage(message, tools) {
   const toolResults = message.tool_results || message.toolResults
   if (Array.isArray(toolResults)) {
     toolResults.forEach(res => {
+      if (!res) return
       const resId = res.id || res.tool_call_id
       upsertTool(tools, {
         id: resId,
-        name: res.name || res.tool || res.tool_name || 'tool',
+        name: res?.name || res?.tool || res?.tool_name || 'tool',
         input: res.input || res.args || null,
         output: res.output || res.result || res.content || null,
         status: res.status || 'ok',

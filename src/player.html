@@ -407,7 +407,28 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       link.click()
     }catch(e){}
   })
-  closeBtn.addEventListener('click',function(){try{if(window.close)window.close()}catch(e){}})
+  closeBtn.addEventListener('click',function(){try{cleanupAndClose()}catch(e){window.close()}})
+  function cleanupAndClose() {
+    try { vid.pause() } catch(e) {}
+    try {
+      var ct = vid.currentTime || 0, dur = vid.duration || 0
+      if (window.opener && !window.opener.closed) {
+        if (dur > 0) window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
+        window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')
+      }
+    } catch(e) {}
+    window.close()
+  }
+  window.addEventListener('beforeunload',function(){
+    try { vid.pause() } catch(e) {}
+    try {
+      var ct = vid.currentTime || 0, dur = vid.duration || 0
+      if (window.opener && !window.opener.closed && dur > 0) {
+        window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
+        window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')
+      }
+    } catch(e) {}
+  })
   vid.addEventListener('dblclick',function(){try{if(document.fullscreenElement)document.exitFullscreen();else vid.requestFullscreen().catch(function(){})}catch(e){}})
   document.addEventListener('keydown',function(e){
     if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return
@@ -425,7 +446,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       case's':case'S':speedMenu.classList.toggle('open');shortcuts.classList.remove('open');break
       case'?':shortcuts.classList.toggle('open');break
       case'x':case'X':try{var c=document.createElement('canvas');c.width=vid.videoWidth;c.height=vid.videoHeight;c.getContext('2d').drawImage(vid,0,0);var link=document.createElement('a');link.download=title+'_'+fmtTime(vid.currentTime).replace(/:/g,'-')+'.png';link.href=c.toDataURL('image/png');link.click()}catch(e){};break
-      case'Escape':try{if(document.fullscreenElement)document.exitFullscreen();else if(shortcuts.classList.contains('open'))shortcuts.classList.remove('open');else window.close()}catch(e){};break
+      case'Escape':try{if(document.fullscreenElement)document.exitFullscreen();else if(shortcuts.classList.contains('open'))shortcuts.classList.remove('open');else cleanupAndClose()}catch(e){};break
     }
   })
   if(url)playUrl(url,title,pic)
