@@ -66,6 +66,18 @@ function loadSessions() {
 function saveSessions(sessions) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
 }
+// --- Draft persistence (per-session draft text) ---
+function loadDraft() {
+  if (!activeId) return
+  const draft = sessionStorage.getItem('hermes_draft_' + activeId)
+  const input = document.querySelector('#hm-chat-input')
+  if (input && draft) { input.value = draft }
+}
+function saveDraft() {
+  if (!activeId) return
+  const input = document.querySelector('#hm-chat-input')
+  if (input) { sessionStorage.setItem('hermes_draft_' + activeId, input.value) }
+}
 function sessionTitle(s) {
   if (s.title) return s.title
   const first = s.messages.find(m => m.role === 'user')
@@ -445,6 +457,7 @@ export function render() {
           return
         }
         activeId = item.dataset.sid
+        saveDraft()
         loadDraft()
         draw()
       })
@@ -777,6 +790,7 @@ export function render() {
     pendingText = ''
     activeTools = []
     showSlash = false
+    sessionStorage.removeItem('hermes_draft_' + activeId)
     draw()
 
     try {

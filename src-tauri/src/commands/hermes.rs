@@ -2261,6 +2261,7 @@ pub async fn hermes_set_gateway_url(url: Option<String>) -> Result<String, Strin
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     let _ = app.emit("hermes-install-log", "📦 升级 Hermes Agent...");
 
@@ -2307,6 +2308,7 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn uninstall_hermes(clean_config: bool) -> Result<String, String> {
     let uv_path = uv_bin_path();
     let uv = if uv_path.exists() {
@@ -2351,6 +2353,7 @@ pub async fn uninstall_hermes(clean_config: bool) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_api_proxy(
     method: String,
     path: String,
@@ -2693,6 +2696,7 @@ pub async fn hermes_agent_run(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_sessions_list(
     source: Option<String>,
     limit: Option<usize>,
@@ -2740,6 +2744,7 @@ pub async fn hermes_sessions_list(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_session_detail(session_id: String) -> Result<Value, String> {
     let output = run_silent("hermes", &["sessions", "export", "-"])
         .map_err(|e| format!("Failed to read sessions: {e}"))?;
@@ -2788,18 +2793,21 @@ pub async fn hermes_session_detail(session_id: String) -> Result<Value, String> 
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_session_delete(session_id: String) -> Result<String, String> {
     run_silent("hermes", &["sessions", "delete", &session_id, "--yes"])?;
     Ok("ok".into())
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_session_rename(session_id: String, title: String) -> Result<String, String> {
     run_silent("hermes", &["sessions", "rename", &session_id, &title])?;
     Ok("ok".into())
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_logs_list() -> Result<Value, String> {
     let logs_dir = hermes_home().join("logs");
     if !logs_dir.exists() {
@@ -2845,6 +2853,7 @@ pub async fn hermes_logs_list() -> Result<Value, String> {
 }
 
 /// Simple timestamp formatter (no chrono crate dependency)
+#[allow(dead_code)]
 fn chrono_simple(epoch_secs: i64) -> String {
     // Use system time formatting via std
     let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch_secs as u64);
@@ -2853,6 +2862,7 @@ fn chrono_simple(epoch_secs: i64) -> String {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_logs_read(
     name: String,
     lines: Option<usize>,
@@ -2917,12 +2927,14 @@ pub async fn hermes_logs_read(
     Ok(Value::Array(entries))
 }
 
+#[allow(dead_code)]
 struct ParsedLogLine {
     timestamp: Option<String>,
     level: Option<String>,
     message: Option<String>,
 }
 
+#[allow(dead_code)]
 fn parse_log_line(line: &str) -> ParsedLogLine {
     // Pattern: "YYYY-MM-DD HH:MM:SS LEVEL rest..." or "HH:MM:SS LEVEL rest..."
     let parts: Vec<&str> = line.splitn(4, char::is_whitespace).collect();
@@ -2966,6 +2978,7 @@ fn parse_log_line(line: &str) -> ParsedLogLine {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_skills_list() -> Result<Value, String> {
     let skills_dir = hermes_home().join("skills");
     if !skills_dir.exists() {
@@ -3047,6 +3060,7 @@ pub async fn hermes_skills_list() -> Result<Value, String> {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
     let skills_dir = hermes_home().join("skills");
     let resolved = PathBuf::from(&file_path);
@@ -3063,6 +3077,7 @@ pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_memory_read(r#type: Option<String>) -> Result<String, String> {
     let kind = r#type.as_deref().unwrap_or("memory");
     let file_name = if kind == "user" {
@@ -3078,6 +3093,7 @@ pub async fn hermes_memory_read(r#type: Option<String>) -> Result<String, String
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_memory_write(
     r#type: Option<String>,
     content: String,

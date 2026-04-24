@@ -6,7 +6,7 @@ use base64::{engine::general_purpose, Engine as _};
 #[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use tauri::{Manager, Emitter};
+use tauri::Manager;
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
 fn audit_log(action: &str, detail: &str) {
@@ -752,23 +752,24 @@ try {{
         Ok(json_str.to_string())
     } else if out.starts_with("JS_EMPTY") {
         Ok("[]".to_string())
-    } else if out.starts_with("JS_ERROR:") {
-        Err(format!("fetch_page_js 错误: {}", &out[9..].trim()))
+    } else if let Some(stripped) = out.strip_prefix("JS_ERROR:") {
+        Err(format!("fetch_page_js 错误: {}", stripped.trim()))
     } else {
         Err(format!("fetch_page_js 未返回有效结果: {}", out))
     }
 }
 
 /// 打开独立播放器窗口（Tauri 内嵌窗口，不影响主界面）
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn open_player_window(
     app: tauri::AppHandle,
     url: String,
     title: String,
     resume: f64,
-    allEps: String,
-    allUrls: String,
-    playbackCtx: String,
+    all_eps: String,
+    all_urls: String,
+    playback_ctx: String,
     pic: String,
 ) -> Result<String, String> {
     use tauri::WebviewWindowBuilder;
@@ -796,14 +797,14 @@ pub async fn open_player_window(
     // 构建 player.html URL 参数
     let encoded_url = urlencoding_encode(&url);
     let encoded_title = urlencoding_encode(&title);
-    let encoded_alleps = urlencoding_encode(&allEps);
-    let encoded_allurls = urlencoding_encode(&allUrls);
-    let encoded_ctx = urlencoding_encode(&playbackCtx);
+    let encoded_alleps = urlencoding_encode(&all_eps);
+    let encoded_allurls = urlencoding_encode(&all_urls);
+    let encoded_ctx = urlencoding_encode(&playback_ctx);
     let encoded_pic = urlencoding_encode(&pic);
 
     let player_url = if html_path.exists() {
         format!(
-            "file:///{}/player.html?url={}&title={}&resume={}&allEps={}&allUrls={}&playbackCtx={}&pic={}",
+            "file:///{}/player.html?url={}&title={}&resume={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
             html_path.to_string_lossy().replace('\\', "/"),
             encoded_url,
             encoded_title,
@@ -841,7 +842,7 @@ pub async fn open_player_window(
     .build()
     .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
 
-    let win_label = win.label().to_string();
+    let _win_label = win.label().to_string();
 
     // 拦截窗口关闭：先阻止，通知前端清理，再关闭
     let app_for_event = app.clone();
@@ -852,7 +853,7 @@ pub async fn open_player_window(
             // 发关闭事件给播放器窗口，player.html 收到后清理视频再自己 close
             use tauri::Emitter;
             let _ = app_for_event.emit_to(
-                &format!("{}://*", &win_label_emit),
+                format!("{}://*", win_label_emit),
                 "player-close-event",
                 serde_json::json!({}),
             );
