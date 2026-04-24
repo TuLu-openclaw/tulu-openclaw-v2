@@ -179,7 +179,7 @@ export function render() {
       streamEl.className = 'hm-stream-area'
       msgsEl.appendChild(streamEl)
     }
-    const toolsHtml = activeTools.map(t => renderToolCard(t, false)).join('')
+    const toolsHtml = (activeTools || []).map(t => renderToolCard(t, false)).join('')
     const textHtml = pendingText
       ? `<div class="hermes-chat-msg assistant"><div class="hermes-chat-bubble assistant">${mdToHtml(pendingText)}</div></div>`
       : (activeTools.length === 0 ? `<div class="hermes-chat-msg assistant"><div class="hermes-chat-bubble assistant"><span class="hermes-chat-typing">${t('engine.chatThinking')}</span></div></div>` : '')
@@ -245,9 +245,11 @@ export function render() {
   }
 
   function renderMessage(m) {
+    if (!m) return ''
     const isUser = m.role === 'user'
     // 工具摘要行（存储在 messages 中的已完成工具记录）
     if (m.role === 'tool-summary') {
+      if (!Array.isArray(m.tools)) return ''
       return `<div class="hm-tool-summary">${m.tools.map(t => renderToolCard(t, true)).join('')}</div>`
     }
     return `<div class="hermes-chat-msg ${isUser ? 'user' : 'assistant'}">
@@ -423,8 +425,12 @@ export function render() {
         return Object.keys(copy).length ? copy : null
       }
       if (evtType === 'tool.started') {
-        const inputData = extractData(evt, ['input', 'args', 'arguments', 'parameters', 'params', 'data'])
-        activeTools.push({ name: toolName, status: 'active', detail: preview, input: inputData, output: null, error: null, _raw: rawSnapshot(['event', 'tool', 'tool_name', 'name']) })
+        if (!toolName || toolName === 'tool') {
+          // 无效工具名，跳过（防止渲染崩溃）
+          console.warn('[Hermes] tool.started with invalid name:', evt)
+        } else {
+          activeTools.push({ name: toolName, status: 'active', detail: preview, input: inputData, output: null, error: null, _raw: rawSnapshot(['event', 'tool', 'tool_name', 'name']) })
+        }
       } else if (evtType === 'tool.completed') {
         const t = activeTools.find(t => t.name === toolName && t.status === 'active')
         if (t) {
@@ -455,11 +461,14 @@ export function render() {
       const output = e.payload?.output || pendingText || '(empty)'
       // 存储工具摘要（含输入输出详情）
       if (activeTools.length > 0) {
-        cur.messages.push({ role: 'tool-summary', tools: activeTools.map(t => ({
-          name: t.name, status: t.status, detail: t.detail,
-          input: t.input, output: t.output, error: t.error,
-          _raw: t._raw, _rawCompleted: t._rawCompleted
-        })) })
+        const validTools = activeTools.filter(t => t && t.name)
+        if (validTools.length > 0) {
+          cur.messages.push({ role: 'tool-summary', tools: validTools.map(t => ({
+            name: t.name, status: t.status, detail: t.detail,
+            input: t.input, output: t.output, error: t.error,
+            _raw: t._raw, _rawCompleted: t._rawCompleted
+          })) })
+        }
       }
       cur.messages.push({ role: 'assistant', content: output })
       streaming = false
