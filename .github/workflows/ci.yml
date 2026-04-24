@@ -164,7 +164,7 @@ jobs:
 
       - name: 启动 Tauri dev 服务器并运行 E2E
         run: |
-          npx concurrently -k -p "[{name}]" -n "DEV,PLAYWRIGHT" -c "yellow,blue" \
+          npx concurrently --success first --kill-others -p "[{name}]" -n "DEV,PLAYWRIGHT" -c "yellow,blue" \
             "npm run dev" \
             "npx playwright test --reporter=list"
         timeout-minutes: 20
