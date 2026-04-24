@@ -580,10 +580,11 @@ export function render() {
     })
 
     // Send
-    el.querySelector('#hm-chat-send-btn')?.addEventListener('click', sendMessage)
+    el.querySelector('#hm-chat-send-btn')?.addEventListener('click', () => { console.log('[Hermes] send btn click'); sendMessage() })
     const input = el.querySelector('#hm-chat-input')
     if (input) {
       input.addEventListener('keydown', (e) => {
+        console.log('[Hermes] keydown:', e.key, 'value len:', input.value.length)
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
         if (e.key === 'Escape') { showSlash = false; draw() }
       })
@@ -733,10 +734,12 @@ export function render() {
   async function sendMessage() {
     const input = el.querySelector('#hm-chat-input')
     const text = input?.value?.trim()
-    if (!text || streaming) return
+    console.log('[Hermes] sendMessage called, text:', text ? `"${text.slice(0,20)}"` : 'EMPTY', 'streaming:', streaming, 'activeId:', activeId, 'gwOnline:', gwOnline)
+    if (!text || streaming) { console.log('[Hermes] sendMessage early return'); return }
 
     const cur = active()
-    if (!cur) return
+    console.log('[Hermes] cur (active session):', cur ? cur.id + ' msgs:' + cur.messages.length : 'NULL')
+    if (!cur) { console.log('[Hermes] no active session'); return }
 
     // 本地命令处理（不走 Gateway）
     if (text === '/clear') {
@@ -818,6 +821,7 @@ export function render() {
       // run 完成后事件监听会处理结果
     } catch (e) {
       const msg = String(e.message || e).replace(/^Error:\s*/, '')
+      console.error('[Hermes] hermesAgentRun error:', msg)
       cur.messages.push({ role: 'assistant', content: `⚠️ ${t('engine.chatError', { error: msg })}` })
       streaming = false
       pendingText = ''
