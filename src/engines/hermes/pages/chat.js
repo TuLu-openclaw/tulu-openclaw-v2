@@ -1,41 +1,35 @@
 /**
- * Hermes Agent 对话页面
- * 通过 /v1/runs + SSE 事件流驱动，支持工具调用可视化和流式文本
- * 支持多会话管理、/xxx 快捷指令
+ * Hermes Agent 对话页面 - 微信风格（重写版 v2）
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
-import { PROVIDER_PRESETS } from '../../../lib/model-presets.js'
 
 const STORAGE_KEY = 'hermes_chat_sessions'
 const FILE_ACCESS_KEY = 'hermes_chat_file_access'
 const SLASH_COMMANDS = [
-  { cmd: '/help',    desc: '显示可用命令' },
-  { cmd: '/status',  desc: '查看 Agent 状态' },
-  { cmd: '/memory',  desc: '管理记忆' },
-  { cmd: '/skills',  desc: '查看技能列表' },
-  { cmd: '/clear',   desc: '清空当前会话' },
-  { cmd: '/new',     desc: '新建会话' },
+  { cmd: '/help',   desc: '显示可用命令' },
+  { cmd: '/status', desc: '查看 Agent 状态' },
+  { cmd: '/memory', desc: '管理记忆' },
+  { cmd: '/skills', desc: '查看技能列表' },
+  { cmd: '/clear',  desc: '清空当前会话' },
+  { cmd: '/new',    desc: '新建会话' },
+  { cmd: '/undo',   desc: '撤销上一条消息' },
 ]
-
 const TOOL_ICONS = {
-  web_search: '🔍', browse: '🌐', web_browse: '🌐', google: '🔍',
-  code: '💻', execute_code: '💻', run_code: '💻', python: '🐍',
-  terminal: '⌨️', shell: '⌨️', bash: '⌨️', command: '⌨️',
-  file: '📁', read_file: '📁', write_file: '📝',
-  memory: '🧠', recall: '🧠',
-  default: '🔧',
+  web_search: '\uD83D\uDD0D', browse: '\uD83C\uDF10', web_browse: '\uD83C\uDF10', google: '\uD83D\uDD0D',
+  code: '\uD83D\uDCBB', execute_code: '\uD83D\uDCBB', run_code: '\uD83D\uDCBB', python: '\uD83D\uDC0D',
+  terminal: '\u2328\uFE0F', shell: '\u2328\uFE0F', bash: '\u2328\uFE0F', command: '\u2328\uFE0F',
+  file: '\uD83D\uDCC1', read_file: '\uD83D\uDCC1', write_file: '\uD83D\uDDD2\uFE0F',
+  memory: '\uD83E\uDDA0', recall: '\uD83E\uDDA0',
+  default: '\uD83D\uDD27',
 }
 function toolIcon(name) {
   const n = (name || '').toLowerCase()
-  for (const [k, v] of Object.entries(TOOL_ICONS)) {
-    if (n.includes(k)) return v
-  }
+  for (const [k, v] of Object.entries(TOOL_ICONS)) { if (n.includes(k)) return v }
   return TOOL_ICONS.default
 }
-
 function mdToHtml(text) {
-  return text
+  return (text || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -44,28 +38,19 @@ function mdToHtml(text) {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/\n/g, '<br>')
 }
-function escHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8) }
 
-// Lazy Tauri event listen (avoid top-level await for vite build)
 let _listenFn = null
 async function tauriListen(event, cb) {
-  if (!_listenFn) {
-    const mod = await import('@tauri-apps/api/event')
-    _listenFn = mod.listen
-  }
+  if (!_listenFn) { const mod = await import('@tauri-apps/api/event'); _listenFn = mod.listen }
   return _listenFn(event, cb)
 }
 
-// --- Session persistence ---
 function loadSessions() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
 }
-function saveSessions(sessions) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
-}
+function saveSessions(sessions) { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)) }
 function sessionTitle(s) {
   if (s.title) return s.title
   const first = s.messages.find(m => m.role === 'user')
@@ -82,15 +67,13 @@ export function render() {
   let gwOnline = false
   let showSlash = false
   let slashFilter = ''
-  let currentModel = ''       // 当前模型名
-  let modelList = []          // 已获取的模型列表
+  let currentModel = ''
+  let modelList = []
   let showModelDropdown = false
   let fileAccessEnabled = localStorage.getItem(FILE_ACCESS_KEY) === 'true'
-
-  // 流式状态
-  let pendingText = ''       // 累积的 delta 文本
-  let activeTools = []       // 当前活跃的工具调用 [{ name, status, detail, input, output, error }]
-  let unlisteners = []       // Tauri 事件监听取消函数
+  let pendingText = ''
+  let activeTools = []
+  let unlisteners = []
   let lastSSEActivity = Date.now()
   let reconnectAttempts = 0
   const MAX_RECONNECT = 3
@@ -100,6 +83,7 @@ export function render() {
   let toolProgress = { total: 0, done: 0 }
   let pendingImages = []
   let quotedMsgId = null
+  let quotedText = null
 
   function active() { return sessions.find(s => s.id === activeId) }
 
@@ -109,7 +93,6 @@ export function render() {
     activeId = s.id
     saveSessions(sessions)
   }
-
   if (!sessions.length) newSession()
 
   async function init() {
@@ -117,700 +100,607 @@ export function render() {
       const info = await api.checkHermes()
       gwOnline = !!info?.gatewayRunning
     } catch (_) {}
-    // Load current model config
     try {
       const cfg = await api.hermesReadConfig()
       if (cfg?.model) currentModel = cfg.model
       if (cfg?.base_url && cfg?.api_key) {
-        // Pre-fetch model list for quick switch
         try {
           const base = cfg.base_url.replace(/\/+$/, '').replace(/\/(chat\/completions|completions|responses|messages|models)\/?$/, '')
           const resp = await fetch(base + '/models', { headers: { 'Authorization': `Bearer ${cfg.api_key}` }, signal: AbortSignal.timeout(8000) })
-          if (resp.ok) {
-            const data = await resp.json()
-            modelList = (data.data || []).map(m => m.id).filter(Boolean).sort()
-          }
+          if (resp.ok) { const data = await resp.json(); modelList = (data.data || []).map(m => m.id).filter(Boolean).sort() }
         } catch (_) {}
       }
     } catch (_) {}
     draw()
   }
 
-  // --- 工具调用卡片渲染 ---
-  function formatToolData(data) {
-    if (!data) return ''
-    if (typeof data === 'string') {
-      // 尝试解析 JSON 以美化显示
-      try { const obj = JSON.parse(data); return JSON.stringify(obj, null, 2) } catch { return data }
-    }
-    return JSON.stringify(data, null, 2)
+  function saveDraft() {
+    const inp = el.querySelector('#hm-chat-input')
+    if (!inp || !activeId) return
+    sessionStorage.setItem('hermes_draft_' + activeId, inp.value)
+  }
+  function loadDraft() {
+    const inp = el.querySelector('#hm-chat-input')
+    if (!inp || !activeId) return
+    const d = sessionStorage.getItem('hermes_draft_' + activeId)
+    if (d) { inp.value = d; inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 120) + 'px' }
+  }
+  function clearDraft() { if (!activeId) return; sessionStorage.removeItem('hermes_draft_' + activeId) }
+
+  function showToast(msg) {
+    if (!reconnectToast) { reconnectToast = document.createElement('div'); reconnectToast.className = 'wx-reconnect-toast'; document.body.appendChild(reconnectToast) }
+    reconnectToast.textContent = msg; reconnectToast.style.display = 'block'
+  }
+  function hideToast() { if (reconnectToast) reconnectToast.style.display = 'none' }
+
+  function startHB() {
+    stopHB()
+    heartbeatTimer = setInterval(async () => {
+      if (!streaming) { stopHB(); return }
+      const elapsed = Date.now() - lastSSEActivity
+      if (elapsed > SSE_TIMEOUT_MS && reconnectAttempts < MAX_RECONNECT) {
+        reconnectAttempts++
+        showToast('连接断开了，正在重连 (' + reconnectAttempts + '/' + MAX_RECONNECT + ')...')
+        const cur2 = active()
+        if (cur2 && cur2.messages.length > 0) {
+          const lastUser = [...cur2.messages].reverse().find(m => m.role === 'user')
+          if (lastUser) {
+            const hist = cur2.messages.filter(m => m.role === 'user' || m.role === 'assistant').slice(0, -1).map(m => ({ role: m.role, content: m.content }))
+            streaming = false; pendingText = ''; activeTools = []; cleanupListeners()
+            await doSend(lastUser.content, hist, true)
+          }
+        }
+      } else if (elapsed > SSE_TIMEOUT_MS && reconnectAttempts >= MAX_RECONNECT) {
+        stopHB(); showToast('连接失败，请检查网络')
+        setTimeout(hideToast, 3000)
+        streaming = false; pendingText = ''; activeTools = []
+        const cur2 = active()
+        if (cur2) { cur2.messages.push({ role: 'assistant', content: '⚠️ 连接断开了，已尝试重连够够，请检查网络后重试。' }); saveSessions(sessions); draw() }
+      }
+    }, 15000)
+  }
+  function stopHB() { if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null } }
+
+  function updateTP(done, total) {
+    toolProgress.done = done; toolProgress.total = total
+    const fill = el?.querySelector('#wx-tool-fill')
+    const txt = el?.querySelector('#wx-tool-progress-text')
+    const bar = el?.querySelector('#wx-tool-progress')
+    if (!bar) return
+    if (total === 0) { bar.style.display = 'none'; return }
+    bar.style.display = 'flex'
+    if (fill) fill.style.width = (total > 0 ? Math.round(done / total * 100) : 0) + '%'
+    if (txt) txt.textContent = done + ' / ' + total
+    if (done >= total) setTimeout(() => { if (bar) bar.style.display = 'none' }, 800)
   }
 
-  function renderToolCard(t, collapsed = true) {
+  function setQuote(msgId, text) {
+    quotedMsgId = msgId; quotedText = text
+    const inp = el.querySelector('#hm-chat-input')
+    if (!inp) return
+    const existing = el.querySelector('.wx-quote-bar')
+    if (existing) existing.remove()
+    if (!msgId) return
+    const bar = document.createElement('div')
+    bar.className = 'wx-quote-bar'
+    bar.innerHTML = '<span>⇩ 引用</span><span class=wx-quote-bar-text>' + escHtml(text || '').slice(0, 80) + '</span><span class=wx-quote-close id=wx-qrm>×</span>'
+    bar.querySelector('#wx-qrm')?.addEventListener('click', (e) => { e.stopPropagation(); setQuote(null, null); bar.remove() })
+    inp.parentElement.prepend(bar)
+  }
+
+  function undoLast() {
+    const cur2 = active()
+    if (!cur2 || cur2.messages.length === 0) return
+    const idx = [...cur2.messages].reverse().findIndex(m => m.role === 'user')
+    if (idx === -1) return
+    cur2.messages.splice(cur2.messages.length - 1 - idx, 1)
+    saveSessions(sessions); draw()
+  }
+
+  function renderToolCard(t, collapsed) {
     if (!t) return ''
-    const icon = toolIcon(t.name)
-    const statusCls = t.status === 'complete' ? 'done' : t.status === 'error' ? 'err' : 'active'
-    const statusText = t.status === 'complete' ? '✓ 完成' : t.status === 'error' ? '✗ 失败' : '⟳ 运行中'
-    const detail = t.detail && t.detail !== '失败' && t.detail !== '完成' ? ` — ${escHtml(t.detail)}` : ''
-    const inputStr = formatToolData(t.input)
-    const outputStr = formatToolData(t.output)
+    const icon = toolIcon(t.name || '')
+    const statusText = t.status === 'active' ? '◃ ' : (t.error ? '✗ ' : '✓ ')
+    const statusCls = t.error ? 'err' : (t.status === 'active' ? 'active' : 'ok')
+    const detail = t.detail ? ' — ' + escHtml(String(t.detail).slice(0, 80)) : ''
+    const inputStr = t.input ? (typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2)) : ''
+    const outputStr = t.output ? String(t.output).slice(0, 2000) : ''
     const errorStr = t.error ? (typeof t.error === 'string' ? t.error : JSON.stringify(t.error)) : ''
-    // fallback: 用 raw 快照显示原始事件数据
-    const rawStr = (!inputStr && !outputStr && !errorStr) ? formatToolData(t._raw || t._rawCompleted) : ''
-    const hasDetails = inputStr || outputStr || errorStr || rawStr
-    const cardId = 'tc-' + genId()
+    const hasDetails = !!(inputStr || outputStr || errorStr)
     let detailsHtml = ''
     if (hasDetails) {
-      detailsHtml = `<div class="hm-tool-details" id="${cardId}-details" style="${collapsed ? 'display:none' : ''}">
-        ${inputStr ? `<div class="hm-tool-section"><div class="hm-tool-section-label">输入</div><pre class="hm-tool-pre">${escHtml(inputStr)}</pre></div>` : ''}
-        ${errorStr ? `<div class="hm-tool-section hm-tool-section-err"><div class="hm-tool-section-label">错误</div><pre class="hm-tool-pre">${escHtml(errorStr)}</pre></div>` : ''}
-        ${outputStr ? `<div class="hm-tool-section"><div class="hm-tool-section-label">输出</div><pre class="hm-tool-pre">${escHtml(outputStr)}</pre></div>` : ''}
-        ${rawStr ? `<div class="hm-tool-section"><div class="hm-tool-section-label">详情</div><pre class="hm-tool-pre">${escHtml(rawStr)}</pre></div>` : ''}
-      </div>`
+      detailsHtml = '<div class="hm-tool-details" style="display:' + (collapsed ? 'none' : 'block') + '">' +
+        (inputStr ? '<div class="hm-tool-section"><div class="hm-tool-section-label">输入</div><pre class="hm-tool-pre">' + escHtml(inputStr) + '</pre></div>' : '') +
+        (errorStr ? '<div class="hm-tool-section hm-tool-section-err"><div class="hm-tool-section-label">错误</div><pre class="hm-tool-pre">' + escHtml(errorStr) + '</pre></div>' : '') +
+        (outputStr ? '<div class="hm-tool-section"><div class="hm-tool-section-label">输出</div><pre class="hm-tool-pre">' + escHtml(outputStr) + '</pre></div>' : '') +
+        '</div>'
     }
-    return `<div class="hm-tool-card ${statusCls}" data-tool-card="${cardId}">
-      <div class="hm-tool-card-header">${icon} <span class="hm-tool-name">${escHtml(t.name || 'tool')}</span><span class="hm-tool-status">${statusText}${detail}</span>${hasDetails ? `<span class="hm-tool-toggle">▶</span>` : ''}</div>
-      ${detailsHtml}
-    </div>`
+    return '<div class="wx-tool-card wx-tool-' + statusCls + '">' +
+      '<div class="hm-tool-card-header">' + icon + ' <span class="hm-tool-name">' + escHtml(t.name || 'tool') + '</span>' +
+      '<span class="hm-tool-status">' + statusText + detail + '</span>' +
+      (hasDetails ? '<span class="hm-tool-toggle">' + (collapsed ? '▼' : '▲') + '</span>' : '') + '</div>' + detailsHtml + '</div>'
   }
 
-  // --- 增量更新流式区域（避免全量 draw 导致闪烁）---
-  function updateStreamArea() {
-    const msgsEl = el.querySelector('#hm-chat-msgs')
-    if (!msgsEl) return
-    let streamEl = msgsEl.querySelector('.hm-stream-area')
-    if (!streaming) {
-      if (streamEl) streamEl.remove()
-      return
-    }
-    if (!streamEl) {
-      streamEl = document.createElement('div')
-      streamEl.className = 'hm-stream-area'
-      msgsEl.appendChild(streamEl)
-    }
-    const toolsHtml = (activeTools || []).map(t => renderToolCard(t, false)).join('')
-    const textHtml = pendingText
-      ? `<div class="hermes-chat-msg assistant"><div class="hermes-chat-bubble assistant">${mdToHtml(pendingText)}</div></div>`
-      : (activeTools.length === 0 ? `<div class="hermes-chat-msg assistant"><div class="hermes-chat-bubble assistant"><span class="hermes-chat-typing">${t('engine.chatThinking')}</span></div></div>` : '')
-    const toolStatus = toolProgress.total > 0 ? '<div class=wx-stream-status>🔄 正在执行 ' + toolProgress.done + ' / ' + toolProgress.total + ' 个工具...</div>' : ''
-    streamEl.innerHTML = toolStatus + toolsHtml + textHtml
-    msgsEl.scrollTop = msgsEl.scrollHeight
-  }
-
-  // --- Draw ---
-  function draw() {
-    const cur = active()
-    const msgs = cur?.messages || []
-    const title = sessionTitle(cur)
-    el.innerHTML = `
-      <div class="hm-chat-wx">
-        <!-- 侧边栏 -->
-        <div class="hm-chat-sidebar wx-sidebar">
-          <div class="wx-sidebar-header">
-            <div class="wx-sidebar-logo">🌾</div>
-            <div class="wx-sidebar-info">
-              <div class="wx-sidebar-name">Hermes</div>
-              <div class="wx-sidebar-sub">AI Agent</div>
-            </div>
-          </div>
-          <div class="wx-sidebar-sessions">
-            ${sessions.map(s => `
-              <div class="wx-session-item ${s.id === activeId ? 'active' : ''}" data-sid="${s.id}">
-                <div class="wx-session-avatar">${s.id === activeId ? '💬' : '🗣️'}</div>
-                <div class="wx-session-body">
-                  <div class="wx-session-title">${escHtml(sessionTitle(s))}</div>
-                  <div class="wx-session-time">${s.updated ? formatTime(s.updated) : ''}</div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-          <div class="wx-sidebar-footer">
-            <button class="wx-icon-btn wx-new-btn" title="${t('engine.chatNewSession')}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            <a href="#/h/dashboard" class="wx-icon-btn" title="${t('engine.dashModelConfig')}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            </a>
-          </div>
-        </div>
-
-        <!-- 主聊天区 -->
-        <div class="hm-chat-main wx-main">
-          <!-- 顶部栏 -->
-          <div class="wx-chat-topbar">
-            <div class="wx-topbar-title">${escHtml(title)}</div>
-            <div class="wx-topbar-right">
-              <div class="wx-model-chip" id="hm-chat-model" title="${t('engine.configModel')}">
-                🤖 ${escHtml(currentModel)}
-              </div>
-              ${modelList.length ? `
-                <div class="wx-model-dropdown" id="wx-model-dd">
-                  ${modelList.map(m => `<div class="wx-model-opt${m === currentModel ? ' active' : ''}" data-model="${escHtml(m)}">${escHtml(m)}</div>`).join('')}
-                </div>
-              ` : ''}
-            </div>
-          </div>
-
-          <!-- 消息区 -->
-          <div class="wx-messages" id="hm-chat-msgs">
-            ${msgs.length === 0 ? `
-              <div class="wx-empty-hint">
-                <div class="wx-empty-icon">💬</div>
-                <div>${t('engine.chatEmptyHint')}</div>
-              </div>
-            ` : ''}
-            ${msgs.map(m => renderMessage(m)).join('')}
-          </div>
-
-          <!-- 输入区 -->
-          <div class="wx-input-area">
-            ${!gwOnline ? `<div class="wx-gw-offline">${t('engine.chatGatewayOffline')}</div>` : ''}
-            <div class="wx-input-toolbar">
-              <button class="wx-toolbar-btn" id="hm-file-access-btn" title="${fileAccessEnabled ? t('engine.fileAccessOn') : t('engine.fileAccessOff')}">
-                📎 <span>${t('engine.fileAccess')}</span>
-              </button>
-            </div>
-            <div class="wx-input-row">
-              <textarea id="hm-chat-input" class="wx-input" rows="1" placeholder="${t('engine.chatPlaceholder')}" ${!gwOnline ? 'disabled' : ''}></textarea>
-              <button class="wx-send-btn" id="hm-chat-send-btn" ${!gwOnline || streaming ? 'disabled' : ''}>${streaming ? '<span class="wx-sending">发送中</span>' : '发送'}</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `
-    bind()
-    if (streaming) updateStreamArea()
-    scrollToBottom()
-  }
-
-  // ── WeChat 风格消息渲染 ───────────────────────────────
   function renderMessage(m) {
     if (!m) return ''
     const isUser = m.role === 'user'
     if (m.role === 'tool-summary') {
       if (!Array.isArray(m.tools)) return ''
-      return `<div class="wx-tool-summary">${m.tools.map(t => renderToolCard(t, true)).join('')}</div>`
+      return '<div class="wx-tool-summary">' + m.tools.map(t => renderToolCard(t, true)).join('') + '</div>'
     }
-    const avatar = isUser
-      ? `<div class="wx-avatar wx-avatar-me">🐰</div>`
-      : `<div class="wx-avatar wx-avatar-ai">🤖</div>`
+    const msgId = 'mid_' + genId()
+    const avatar = isUser ? '<div class="wx-avatar wx-avatar-me">🐰</div>' : '<div class="wx-avatar wx-avatar-ai">🤖</div>'
+    const content = isUser ? escHtml(m.content) : mdToHtml(m.content)
+    const imgHtml = (m._images && m._images.length > 0)
+      ? '<div class="wx-msg-imgs">' + m._images.map(img => '<img src="' + img.dataUrl + '" style="max-width:120px;max-height:120px;border-radius:6px;margin-top:4px" />').join('') + '</div>'
+      : ''
+    const quoteHtml = m._quoted
+      ? '<div class="wx-quote-bar" style="margin-bottom:4px;font-size:12px;color:#888"><span>⇩ 引用</span><span class=wx-quote-bar-text>' + escHtml(m._quoted.text || '').slice(0, 80) + '</span></div>'
+      : ''
     const bubble = isUser
-      ? `<div class="wx-bubble wx-bubble-me"><div class="wx-bubble-content">${escHtml(m.content)}</div></div>`
-      : `<div class="wx-bubble wx-bubble-ai"><div class="wx-bubble-content">${mdToHtml(m.content)}</div></div>`
-    return `<div class="wx-msg-row ${isUser ? 'wx-msg-me' : 'wx-msg-ai'}">${isUser ? '' : avatar}${bubble}${isUser ? avatar : ''}</div>`
+      ? '<div class="wx-bubble wx-bubble-me"><div class="wx-bubble-content">' + quoteHtml + content + imgHtml + '</div></div>'
+      : '<div class="wx-bubble wx-bubble-ai"><div class="wx-bubble-content">' + quoteHtml + content + imgHtml + '</div></div>'
+    const actions = '<div class="wx-msg-actions">' +
+      '<button class="wx-msg-action-btn wx-msg-action-reply" title="引用回复">⇩ 回复</button>' +
+      '<button class="wx-msg-action-btn wx-msg-action-copy" title="复制">📋 复制</button>' +
+      '</div>'
+    return '<div class="wx-msg-item" data-msg-id="' + msgId + '">' +
+      '<div class="wx-msg-row ' + (isUser ? 'wx-msg-me' : 'wx-msg-ai') + '">' +
+      (isUser ? '' : avatar) + bubble + (isUser ? avatar : '') + '</div>' + actions + '</div>'
   }
 
-  // ── 流式区域更新（微信气泡风格）────────────────────────
   function updateStreamArea() {
     const msgsEl = el.querySelector('#hm-chat-msgs')
     if (!msgsEl) return
     let streamEl = msgsEl.querySelector('.wx-stream-area')
-    if (!streaming) {
-      if (streamEl) streamEl.remove()
-      return
-    }
-    if (!streamEl) {
-      streamEl = document.createElement('div')
-      streamEl.className = 'wx-stream-area'
-      msgsEl.appendChild(streamEl)
-    }
+    if (!streaming) { if (streamEl) streamEl.remove(); return }
+    if (!streamEl) { streamEl = document.createElement('div'); streamEl.className = 'wx-stream-area'; msgsEl.appendChild(streamEl) }
     const toolsHtml = (activeTools || []).map(t => renderToolCard(t, false)).join('')
     let textHtml = ''
     if (pendingText) {
-      textHtml = `<div class="wx-msg-row wx-msg-ai"><div class="wx-avatar wx-avatar-ai">🤖</div><div class="wx-bubble wx-bubble-ai"><div class="wx-bubble-content">${mdToHtml(pendingText)}</div></div></div>`
+      textHtml = '<div class="wx-msg-row wx-msg-ai"><div class="wx-avatar wx-avatar-ai">🤖</div>' +
+        '<div class="wx-bubble wx-bubble-ai"><div class="wx-bubble-content">' + mdToHtml(pendingText) + '</div></div></div>'
     } else if (activeTools.length === 0) {
-      textHtml = `<div class="wx-msg-row wx-msg-ai"><div class="wx-avatar wx-avatar-ai">🤖</div><div class="wx-bubble wx-bubble-ai wx-typing-bubble"><div class="wx-bubble-content"><span class="wx-dots"><span></span><span></span><span></span></span></div></div></div>`
+      textHtml = '<div class="wx-msg-row wx-msg-ai"><div class="wx-avatar wx-avatar-ai">🤖</div>' +
+        '<div class="wx-bubble wx-bubble-ai wx-typing-bubble"><div class="wx-bubble-content"><span class="wx-dots"><span></span><span></span><span></span></span></div></div></div>'
     }
-    streamEl.innerHTML = toolsHtml + textHtml
+    const toolStatus = toolProgress.total > 0
+      ? '<div class="wx-stream-status">↻ 正在执行 ' + toolProgress.done + ' / ' + toolProgress.total + ' 个工具...</div>'
+      : ''
+    streamEl.innerHTML = toolStatus + toolsHtml + textHtml
     msgsEl.scrollTop = msgsEl.scrollHeight
   }
 
-  // ── 工具卡片（微信卡片风格）───────────────────────────
-  function renderToolCard(t, compact) {
-    if (!t) return ''
-    const cardId = 'tc_' + Math.random().toString(36).slice(2, 8)
-    const icon = toolIcon(t.name || '')
-    const statusText = t.status === 'active' ? '⏳ ' : (t.error ? '❌ ' : '✅ ')
-    const statusCls = t.error ? 'err' : (t.status === 'active' ? 'active' : 'ok')
-    const detail = t.detail ? ` — ${escHtml(String(t.detail).slice(0, 60))}` : ''
-    const hasDetails = !!(t.input || t.output || t.error)
-    let detailsHtml = ''
-    if (hasDetails) {
-      detailsHtml = `<div class="hm-tool-details" style="display:none">
-        ${t.input ? `<div class="hm-tool-detail-row"><span class="hm-tool-detail-label">输入:</span><pre class="hm-tool-detail-pre">${escHtml(typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2))}</pre></div>` : ''}
-        ${t.output ? `<div class="hm-tool-detail-row"><span class="hm-tool-detail-label">输出:</span><pre class="hm-tool-detail-pre">${escHtml(String(t.output).slice(0, 2000))}</pre></div>` : ''}
-        ${t.error ? `<div class="hm-tool-detail-row"><span class="hm-tool-detail-label">错误:</span><pre class="hm-tool-detail-pre hm-tool-error">${escHtml(t.error)}</pre></div>` : ''}
-      </div>`
-    }
-    if (compact) {
-      return `<div class="wx-tool-chip wx-tool-${statusCls}">${icon} ${escHtml(t.name || 'tool')}${t.error ? ' ❌' : ' ✅'}</div>`
-    }
-    return `<div class="wx-tool-card wx-tool-${statusCls}" data-tool-card="${cardId}">
-      <div class="wx-tool-header">${icon} <span class="wx-tool-name">${escHtml(t.name || 'tool')}</span><span class="wx-tool-status">${statusText}${detail}</span>${hasDetails ? `<span class="wx-tool-toggle">▶</span>` : ''}</div>
-      ${detailsHtml}
-    </div>`
-  }
-
-  // ── 侧边栏时间格式化 ──────────────────────────────────
   function formatTime(ts) {
     if (!ts) return ''
-    const d = new Date(ts)
-    const now = new Date()
-    const diff = now - d
+    const d = new Date(ts), now = new Date(), diff = now - d
     if (diff < 60000) return '刚刚'
     if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
-    if (d.toDateString() === now.toDateString()) {
-      return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
-    }
-    return `${d.getMonth()+1}/${d.getDate()}`
+    if (d.toDateString() === now.toDateString()) return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
+    return (d.getMonth() + 1) + '/' + d.getDate()
   }
 
-  function renderSlashMenu() {
-    const cmds = SLASH_COMMANDS.filter(c => !slashFilter || c.cmd.includes(slashFilter))
-    if (!cmds.length) return ''
-    return `<div class="hm-slash-menu">${cmds.map(c =>
-      `<div class="hm-slash-item" data-cmd="${c.cmd}"><span class="hm-slash-cmd">${c.cmd}</span><span class="hm-slash-desc">${c.desc}</span></div>`
-    ).join('')}</div>`
-  }
-
-  function scrollToBottom() {
-    const msgsEl = el.querySelector('#hm-chat-msgs')
-    if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight
-  }
-
-  // 事件委托：工具卡片展开/折叠（对静态和动态流式卡片都生效）
-  el.addEventListener('click', (e) => {
-    const header = e.target.closest('.hm-tool-card-header')
-    if (!header) return
-    const card = header.closest('.hm-tool-card')
-    const details = card?.querySelector('.hm-tool-details')
-    const toggle = header.querySelector('.hm-tool-toggle')
-    if (details) {
-      const open = details.style.display !== 'none'
-      details.style.display = open ? 'none' : 'block'
-      if (toggle) toggle.textContent = open ? '▶' : '▼'
-    }
-  })
-
-  function bind() {
-    // Model quick-switch (微信顶栏 chip 风格)
-    const modelChip = el.querySelector('#hm-chat-model')
-    const modelDd = el.querySelector('#wx-model-dd')
-    modelChip?.addEventListener('click', (e) => {
-      e.stopPropagation()
-      showModelDropdown = !showModelDropdown
-      if (modelDd) modelDd.style.display = showModelDropdown ? 'block' : 'none'
+  function highlightSearch(q) {
+    document.querySelectorAll('.wx-search-hl').forEach(hl => { const p = hl.parentNode; while (hl.firstChild) p.insertBefore(hl.firstChild, hl); p.removeChild(hl) })
+    if (!q) return
+    document.querySelectorAll('.wx-bubble-content').forEach(bubble => {
+      let html = bubble.innerHTML, lower = html.toLowerCase(), qLower = q.toLowerCase()
+      let idx = 0, count = 0
+      while ((idx = lower.indexOf(qLower, idx)) !== -1 && count < 50) {
+        html = html.slice(0, idx) + '<mark class="wx-search-hl">' + html.slice(idx, idx + q.length) + '</mark>' + html.slice(idx + q.length)
+        idx += q.length + 37; count++
+      }
+      bubble.innerHTML = html
     })
-    el.querySelectorAll('.wx-model-opt').forEach(opt => {
-      opt.addEventListener('click', async () => {
-        const m = opt.dataset.model
-        if (m && m !== currentModel) {
-          try { await api.hermesUpdateModel(m); currentModel = m } catch (_) {}
-        }
-        showModelDropdown = false
-        if (modelDd) modelDd.style.display = 'none'
-        draw()
-      })
+  }
+
+  function cleanupListeners() {
+    unlisteners.forEach(fn => { try { fn() } catch (_) {} })
+    unlisteners = []
+  }
+
+  async function doSend(userText, history, isResume) {
+    cleanupListeners()
+    streaming = true; pendingText = ''; activeTools = []; toolProgress = { total: 0, done: 0 }; lastSSEActivity = Date.now(); reconnectAttempts = 0; startHB()
+    updateStreamArea()
+    setSendBtn(true)
+
+    let sseUrl, apiKey
+    try {
+      const cfg = await api.hermesReadConfig()
+      if (!cfg?.base_url || !cfg?.api_key) throw new Error('no config')
+      sseUrl = cfg.base_url.replace(/\/+$/, '') + '/v1/runs'
+      apiKey = cfg.api_key
+    } catch {
+      stopHB(); streaming = false; pendingText = ''; activeTools = []; updateStreamArea(); setSendBtn(false)
+      const cur2 = active()
+      if (cur2) { cur2.messages.push({ role: 'assistant', content: '⚠️ 未配置 Hermes API，请先配置连接' }); saveSessions(sessions); draw() }
+      return
+    }
+
+    let toolIdCounter = 0
+    let pendingToolId = null
+    let textBuffer = ''
+
+    const onRunDelta = await tauriListen('hermes-run-delta', ({ payload }) => {
+      if (!streaming) return
+      lastSSEActivity = Date.now()
+      const delta = payload?.delta || payload?.text_delta || ''
+      if (delta) { textBuffer += delta; pendingText = textBuffer; updateStreamArea() }
     })
-    document.addEventListener('click', (e) => {
-      if (showModelDropdown && modelChip && !modelChip.contains(e.target) && modelDd && !modelDd.contains(e.target)) {
-        showModelDropdown = false
-        if (modelDd) modelDd.style.display = 'none'
+
+    const onRunTool = await tauriListen('hermes-run-tool', ({ payload }) => {
+      if (!streaming) return
+      lastSSEActivity = Date.now()
+      if (!activeTools.find(t => t._tmpId === pendingToolId)) {
+        pendingToolId = ++toolIdCounter
+        activeTools.push({ _tmpId: pendingToolId, name: payload?.name || 'tool', input: payload?.input, status: 'active', detail: '' })
+        updateStreamArea()
       }
     })
-    // File access toggle
-    el.querySelector('#hm-file-access-btn')?.addEventListener('click', () => {
-      fileAccessEnabled = !fileAccessEnabled
-      localStorage.setItem(FILE_ACCESS_KEY, fileAccessEnabled ? 'true' : 'false')
-      draw()
+
+    const onRunDone = await tauriListen('hermes-run-finished', async ({ payload }) => {
+      if (!streaming) return
+      lastSSEActivity = Date.now()
+      stopHB()
+      const cur2 = active()
+      if (cur2) {
+        const quoted = (quotedMsgId && quotedText) ? { id: quotedMsgId, text: quotedText } : null
+        const imgCopy = pendingImages.length > 0 ? [...pendingImages] : undefined
+        const finalText = payload?.text || payload?.content || pendingText || ''
+        if (finalText.trim()) {
+          cur2.messages.push({ role: 'user', content: userText, ...(imgCopy ? { _images: imgCopy } : {}), ...(quoted ? { _quoted: quoted } : {}) })
+        }
+        cur2.messages.push({ role: 'assistant', content: finalText })
+        cur2.updated = Date.now()
+        saveSessions(sessions)
+      }
+      streaming = false; pendingText = ''; activeTools = []; pendingImages = []; quotedMsgId = null; quotedText = null
+      cleanupListeners(); updateStreamArea(); setSendBtn(false); draw()
     })
 
-    // Session sidebar
-    el.querySelector('.wx-new-btn')?.addEventListener('click', () => { newSession(); draw() })
-    el.querySelectorAll('.wx-session-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.wx-session-del')) return
-        activeId = item.dataset.sid
-        loadDraft()
-        draw()
+    const onToolUpdate = await tauriListen('hermes-tool-update', ({ payload }) => {
+      if (!streaming) return
+      lastSSEActivity = Date.now()
+      if (activeTools.length > 0) {
+        const tool = activeTools.find(t => t._tmpId === pendingToolId)
+        if (tool) {
+          if (payload?.status) tool.status = payload.status
+          if (payload?.output) tool.output = payload.output
+          if (payload?.error) tool.error = payload.error
+          if (payload?.status === 'done' || payload?.status === 'completed') {
+            tool.status = 'ok'; tool.done = true
+            const doneCount = activeTools.filter(t => t.done || t.status === 'ok').length
+            updateTP(doneCount, activeTools.length)
+          }
+          updateStreamArea()
+        }
+      }
+    })
+
+    const onError = await tauriListen('hermes-run-error', ({ payload }) => {
+      stopHB()
+      streaming = false; pendingText = ''; activeTools = []
+      const cur2 = active()
+      if (cur2) { cur2.messages.push({ role: 'assistant', content: '✗ SSE 连接错误: ' + (payload?.error || '未知错误') }); saveSessions(sessions); draw() }
+      cleanupListeners(); updateStreamArea(); setSendBtn(false)
+    })
+
+    unlisteners = [onRunDelta, onRunTool, onRunDone, onToolUpdate, onError]
+
+    try {
+      const body = { message: userText, stream: true, ...(history.length ? { history } : {}) }
+      const resp = await fetch(sseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60000),
       })
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('no stream body')
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (data === '[DONE]' || data === '') continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.text_delta || parsed.delta?.text) {
+              textBuffer += parsed.text_delta || parsed.delta.text
+              pendingText = textBuffer
+              updateStreamArea()
+            }
+            if (parsed.tool) {
+              if (!activeTools.find(t => t._tmpId === pendingToolId)) {
+                pendingToolId = ++toolIdCounter
+                activeTools.push({ _tmpId: pendingToolId, name: parsed.tool.name || 'tool', input: parsed.tool.input, status: 'active', detail: '' })
+                updateStreamArea()
+              }
+            }
+            if (parsed.status === 'done' || parsed.done) {
+              const finalText = parsed.text || pendingText
+              const cur2 = active()
+              if (cur2) {
+                const quoted = (quotedMsgId && quotedText) ? { id: quotedMsgId, text: quotedText } : null
+                const imgCopy = pendingImages.length > 0 ? [...pendingImages] : undefined
+                if ((userText || '').trim()) {
+                  cur2.messages.push({ role: 'user', content: userText, ...(imgCopy ? { _images: imgCopy } : {}), ...(quoted ? { _quoted: quoted } : {}) })
+                }
+                cur2.messages.push({ role: 'assistant', content: finalText })
+                cur2.updated = Date.now()
+                saveSessions(sessions)
+              }
+              streaming = false; pendingText = ''; activeTools = []; pendingImages = []; quotedMsgId = null; quotedText = null
+              cleanupListeners(); updateStreamArea(); setSendBtn(false); draw()
+            }
+          } catch (_) {}
+        }
+        lastSSEActivity = Date.now()
+      }
+    } catch (err) {
+      stopHB()
+      streaming = false; pendingText = ''; activeTools = []
+      const cur2 = active()
+      if (cur2) { cur2.messages.push({ role: 'assistant', content: '✗ 请求失败: ' + err.message }); saveSessions(sessions); draw() }
+      cleanupListeners(); updateStreamArea(); setSendBtn(false)
+    }
+  }
+
+  async function sendMessage() {
+    const input = el.querySelector('#hm-chat-input')
+    if (!input || streaming || !gwOnline) return
+    const text = input.value.trim()
+    if (!text && pendingImages.length === 0) return
+    const quoted = (quotedMsgId && quotedText) ? { id: quotedMsgId, text: quotedText } : null
+    input.value = ''; input.style.height = 'auto'; clearDraft(); showSlash = false; el.querySelector('.hm-slash-menu')?.remove()
+    el.querySelector('.wx-quote-bar')?.remove()
+    const quotedPrefix = quoted ? '引用: ' + quoted.text.slice(0, 60) + '\n\n' : ''
+    const cur = active()
+    if (cur) {
+      cur.messages.push({ role: 'user', content: quotedPrefix + text, _images: pendingImages.length > 0 ? [...pendingImages] : undefined, _quoted: quoted })
+      cur.updated = Date.now(); saveSessions(sessions)
+    }
+    pendingImages = []; quotedMsgId = null; quotedText = null; draw()
+    const history = (cur?.messages || []).filter(m => m.role === 'user' || m.role === 'assistant').slice(0, -1).map(m => ({ role: m.role, content: m.content }))
+    await doSend(text, history, false)
+  }
+
+  function setSendBtn(loading) {
+    const btn = el.querySelector('#hm-chat-send-btn')
+    if (!btn) return
+    btn.disabled = loading || !gwOnline
+    btn.innerHTML = loading ? '<span class="wx-sending">发送中...</span>' : '发送'
+  }
+
+  function draw() {
+    const cur = active()
+    const msgs = cur?.messages || []
+    const title = sessionTitle(cur)
+    el.innerHTML =
+      '<div class="hm-chat-wx">' +
+        '<div class="hm-chat-sidebar wx-sidebar">' +
+          '<div class="wx-sidebar-header">' +
+            '<div class="wx-sidebar-logo">🌾</div>' +
+            '<div class="wx-sidebar-info"><div class="wx-sidebar-name">Hermes</div><div class="wx-sidebar-sub">AI Agent</div></div>' +
+          '</div>' +
+          '<div class="wx-sidebar-sessions">' +
+            sessions.map(s => '<div class="wx-session-item ' + (s.id === activeId ? 'active' : '') + '" data-sid="' + s.id + '">' +
+              '<div class="wx-session-avatar">' + (s.id === activeId ? '💬' : '📣') + '</div>' +
+              '<div class="wx-session-body"><div class="wx-session-title">' + escHtml(sessionTitle(s)) + '</div>' +
+              '<div class="wx-session-time">' + (s.updated ? formatTime(s.updated) : '') + '</div></div></div>').join('') +
+          '</div>' +
+          '<div class="wx-sidebar-footer">' +
+            '<button class="wx-icon-btn wx-new-btn" title="' + t('engine.chatNewSession') + '">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg>' +
+            '</button>' +
+            '<a href="#/h/dashboard" class="wx-icon-btn" title="' + t('engine.dashModelConfig') + '">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' +
+            '</a>' +
+          '</div>' +
+        '</div>' +
+        '<div class="hm-chat-main wx-main">' +
+          '<div class="wx-chat-topbar">' +
+            '<div class="wx-topbar-title">' + escHtml(title) + '</div>' +
+            '<div class="wx-topbar-right">' +
+              '<div class="wx-model-chip" id="hm-chat-model" title="' + t('engine.configModel') + '">🤖 ' + escHtml(currentModel) + '</div>' +
+              (modelList.length ? '<div class="wx-model-dropdown" id="wx-model-dd" style="display:' + (showModelDropdown ? 'block' : 'none') + '">' + modelList.map(m => '<div class="wx-model-opt' + (m === currentModel ? ' active' : '') + '" data-model="' + escHtml(m) + '">' + escHtml(m) + '</div>').join('') + '</div>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="wx-messages" id="hm-chat-msgs">' +
+            (msgs.length === 0 ? '<div class="wx-empty-hint"><div class="wx-empty-icon">💬</div><div>' + t('engine.chatEmptyHint') + '</div></div>' : '') +
+            msgs.map(m => renderMessage(m)).join('') +
+          '</div>' +
+          '<div class="wx-input-area">' +
+            (!gwOnline ? '<div class="wx-gw-offline">' + t('engine.chatGatewayOffline') + '</div>' : '') +
+            '<div class="wx-tool-progress" id="wx-tool-progress" style="display:none"><div class="wx-tool-progress-bar"><div class="wx-tool-progress-fill" id="wx-tool-fill"></div></div><div class="wx-tool-progress-text" id="wx-tool-progress-text">0 / 0</div></div>' +
+            '<div class="wx-img-preview" id="wx-img-preview"></div>' +
+            '<div class="wx-input-toolbar">' +
+              '<label class="wx-img-upload-btn" title="上传图片">🗂 <span>图片</span><input type="file" id="wx-img-input" accept="image/*" multiple style="display:none" /></label>' +
+              '<button class="wx-toolbar-btn' + (fileAccessEnabled ? ' active' : '') + '" id="hm-file-access-btn" title="' + (fileAccessEnabled ? t('engine.fileAccessOn') : t('engine.fileAccessOff')) + '">📎 <span>' + t('engine.fileAccess') + '</span></button>' +
+              '<button class="wx-toolbar-btn" id="wx-search-btn" title="搜索会话">🔍</button>' +
+            '</div>' +
+            '<div class="wx-search-bar" id="wx-search-bar" style="display:none">' +
+              '<div class="wx-search-input-wrap">' +
+                '<span style="color:#666;font-size:12px">🔍</span>' +
+                '<input type="text" class="wx-search-input" id="wx-search-input" placeholder="搜索消息内容..." />' +
+                '<span class="wx-search-clear" id="wx-search-clear" style="cursor:pointer;color:#999;display:none">×</span>' +
+              '</div>' +
+              '<div class="wx-search-count" id="wx-search-count" style="font-size:11px;color:#888;padding:2px 4px"></div>' +
+            '</div>' +
+            '<div class="wx-textarea-wrap">' +
+              '<textarea id="hm-chat-input" class="wx-chat-input" rows="1" placeholder="输入消息，/ 开头使用快捷指令..."' +
+                (pendingImages.length > 0 ? ' style="padding-bottom:52px"' : '') + '></textarea>' +
+            '</div>' +
+            '<div class="wx-send-row">' +
+              '<div class="wx-slash-menu hm-slash-menu' + (showSlash ? '' : ' hidden') + '" id="hm-slash-menu">' +
+                SLASH_COMMANDS.filter(c => !slashFilter || c.cmd.toLowerCase().includes(slashFilter.toLowerCase()) || c.desc.includes(slashFilter))
+                  .map(c => '<div class="wx-slash-item" data-cmd="' + c.cmd + '"><span class="wx-slash-cmd">' + c.cmd + '</span><span class="wx-slash-desc">' + c.desc + '</span></div>').join('') +
+                '</div>' +
+              '<button id="hm-chat-send-btn" class="wx-send-btn" ' + (!gwOnline ? 'disabled title="' + t('engine.chatGatewayOffline') + '"' : '') + '>发送</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+
+    // === bind() ===
+    const input = el.querySelector('#hm-chat-input')
+    const sendBtn = el.querySelector('#hm-chat-send-btn')
+
+    input?.addEventListener('input', () => {
+      const val = input.value
+      if (val.startsWith('/')) { showSlash = true; slashFilter = val.slice(1); draw() } else { showSlash = false; el.querySelector('.hm-slash-menu')?.remove() }
+      input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'
+      const preview = el.querySelector('#wx-img-preview')
+      if (preview) input.style.paddingBottom = preview.children.length > 0 ? '52px' : '8px'
+      saveDraft()
     })
 
-    // ── 图片上传 ──
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+      if (e.key === 'Escape') { showSlash = false; el.querySelector('.hm-slash-menu')?.classList.add('hidden') }
+      if (e.ctrlKey && e.key === 'z') { undoLast() }
+      if (e.ctrlKey && e.key === 'l') { const sbtn = el.querySelector('#wx-search-btn'); sbtn?.click() }
+    })
+
+    el.querySelector('.hm-slash-menu')?.addEventListener('click', (e) => {
+      const item = e.target.closest('.wx-slash-item')
+      if (item) { input.value = item.dataset.cmd + ' '; input.focus(); showSlash = false; el.querySelector('.hm-slash-menu')?.classList.add('hidden'); input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px' }
+    })
+
+    sendBtn?.addEventListener('click', sendMessage)
+
+    el.querySelector('#wx-search-btn')?.addEventListener('click', () => {
+      const bar = el.querySelector('#wx-search-bar')
+      const si = el.querySelector('#wx-search-input')
+      if (!bar) return
+      if (bar.style.display === 'none') { bar.style.display = 'flex'; si?.focus() } else { bar.style.display = 'none'; highlightSearch('') }
+    })
+
+    el.querySelector('#wx-search-input')?.addEventListener('input', (e) => {
+      const q = e.target.value.trim()
+      highlightSearch(q)
+      const count = document.querySelectorAll('.wx-search-hl').length
+      const cntEl = el.querySelector('#wx-search-count')
+      if (cntEl) cntEl.textContent = q ? (count > 0 ? '找到 ' + count + ' 处匹配' : '无匹配') : ''
+      const clearBtn = el.querySelector('#wx-search-clear')
+      if (clearBtn) clearBtn.style.display = q ? 'inline' : 'none'
+    })
+
+    el.querySelector('#wx-search-clear')?.addEventListener('click', () => {
+      const si = el.querySelector('#wx-search-input')
+      if (si) si.value = ''
+      highlightSearch('')
+      const cntEl = el.querySelector('#wx-search-count')
+      if (cntEl) cntEl.textContent = ''
+      const clearBtn = el.querySelector('#wx-search-clear')
+      if (clearBtn) clearBtn.style.display = 'none'
+    })
+
     el.querySelector('#wx-img-input')?.addEventListener('change', (e) => {
-      const files = e.target.files
-      if (!files) return
-      const preview = el.querySelector('#wx-img-preview')
-      Array.from(files).forEach(file => {
+      const files = Array.from(e.target.files || [])
+      files.forEach(file => {
         const reader = new FileReader()
         reader.onload = (ev) => {
-          pendingImages.push({ name: file.name, dataUrl: ev.target.result })
-          const thumb = document.createElement('div')
-          thumb.className = 'wx-img-thumb'
-          thumb.innerHTML = '<img src="' + ev.target.result + '" /><span class="wx-img-remove" data-idx="' + (pendingImages.length - 1) + '">×</span>'
-          thumb.querySelector('.wx-img-remove')?.addEventListener('click', () => {
-            const idx = parseInt(thumb.querySelector('.wx-img-remove').dataset.idx)
-            pendingImages.splice(idx, 1)
-            thumb.remove()
-          })
-          preview?.appendChild(thumb)
+          const id = genId()
+          pendingImages.push({ id, name: file.name, dataUrl: ev.target.result })
+          const preview = el.querySelector('#wx-img-preview')
+          if (preview) {
+            const item = document.createElement('div'); item.className = 'wx-img-item'; item.dataset.id = id
+            item.innerHTML = '<img src="' + ev.target.result + '" /><span class="wx-img-remove">×</span>'
+            item.querySelector('.wx-img-remove')?.addEventListener('click', () => {
+              pendingImages = pendingImages.filter(p => p.id !== id); item.remove()
+              const remaining = el.querySelectorAll('.wx-img-item')
+              if (input) input.style.paddingBottom = remaining.length > 0 ? '52px' : '8px'
+            })
+            preview.appendChild(item)
+            if (input) input.style.paddingBottom = '52px'
+          }
         }
         reader.readAsDataURL(file)
       })
       e.target.value = ''
     })
 
-    // ── 搜索 ──
-    el.querySelector('#wx-search-btn')?.addEventListener('click', () => {
-      const bar = el.querySelector('#wx-search-bar')
-      if (bar) bar.style.display = bar.style.display === 'none' ? 'flex' : 'none'
-      if (bar?.style.display === 'flex') el.querySelector('#wx-search-input')?.focus()
-    })
-    el.querySelector('#wx-search-clear')?.addEventListener('click', () => {
-      const inp = el.querySelector('#wx-search-input')
-      if (inp) inp.value = ''
-      highlightSearch(null)
-    })
-    el.querySelector('#wx-search-input')?.addEventListener('input', (e) => {
-      highlightSearch(e.target.value.trim() || null)
-    })
-    function highlightSearch(q) {
-      document.querySelectorAll('.wx-search-hl').forEach(hl => {
-        const p = hl.parentNode
-        while (hl.firstChild) p.insertBefore(hl.firstChild, hl)
-        p.removeChild(hl)
-      })
-      if (!q) return
-      document.querySelectorAll('.wx-bubble-content').forEach(bubble => {
-        const html = bubble.innerHTML
-        const idx = html.toLowerCase().indexOf(q.toLowerCase())
-        if (idx >= 0) {
-          bubble.innerHTML = html.slice(0, idx) + '<mark class=wx-search-hl>' + html.slice(idx, idx + q.length) + '</mark>' + html.slice(idx + q.length)
-        }
-      })
-    }
-
-    // ── 消息操作（事件委托） ──
-    el.querySelector('#hm-chat-msgs')?.addEventListener('click', (e) => {
-      const msgRow = e.target.closest('.wx-msg-row')
-      if (!msgRow) return
-      const bubble = msgRow.querySelector('.wx-bubble-content')
-      const text = bubble?.textContent || ''
-      const msgId = msgRow.dataset.msgId
-      if (e.target.closest('.wx-msg-action-reply')) setQuote(msgId, text)
-      else if (e.target.closest('.wx-msg-action-copy')) navigator.clipboard.writeText(text).catch(() => {})
+    el.querySelector('#hm-file-access-btn')?.addEventListener('click', async () => {
+      fileAccessEnabled = !fileAccessEnabled
+      localStorage.setItem(FILE_ACCESS_KEY, String(fileAccessEnabled))
+      const btn = el.querySelector('#hm-file-access-btn')
+      if (btn) { btn.classList.toggle('active', fileAccessEnabled); btn.title = fileAccessEnabled ? t('engine.fileAccessOn') : t('engine.fileAccessOff') }
+      try { await api.hermesSetConfig({ file_access: fileAccessEnabled }) } catch (_) {}
     })
 
-    // ── Ctrl+Z 撤销快捷键 ──
-    document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        const tag = document.activeElement?.tagName
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA') { e.preventDefault(); undoLast() }
+    el.querySelector('#hm-chat-model')?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      showModelDropdown = !showModelDropdown
+      const dd = el.querySelector('#wx-model-dd')
+      if (dd) dd.style.display = showModelDropdown ? 'block' : 'none'
+    })
+
+    el.querySelector('#wx-model-dd')?.addEventListener('click', async (e) => {
+      const opt = e.target.closest('.wx-model-opt')
+      if (!opt) return
+      const model = opt.dataset.model
+      if (!model) return
+      try {
+        await api.hermesSetConfig({ model })
+        currentModel = model; showModelDropdown = false
+        const chip = el.querySelector('#hm-chat-model')
+        if (chip) chip.innerHTML = '🤖 ' + escHtml(model)
+        const dd = el.querySelector('#wx-model-dd')
+        if (dd) dd.style.display = 'none'
+        el.querySelectorAll('.wx-model-opt').forEach(o => o.classList.toggle('active', o.dataset.model === model))
+      } catch (_) {}
+    })
+
+    document.addEventListener('click', () => { if (showModelDropdown) { showModelDropdown = false; const dd = el.querySelector('#wx-model-dd'); if (dd) dd.style.display = 'none' } })
+
+    el.querySelector('.wx-sidebar-sessions')?.addEventListener('click', (e) => {
+      const item = e.target.closest('.wx-session-item')
+      if (!item) return
+      const sid = item.dataset.sid
+      if (sid === activeId) return
+      activeId = sid; clearDraft(); pendingImages = []; quotedMsgId = null; quotedText = null
+      el.querySelectorAll('.wx-session-item').forEach(el2 => el2.classList.toggle('active', el2.dataset.sid === sid))
+      loadDraft(); draw()
+    })
+
+    el.querySelector('.wx-new-btn')?.addEventListener('click', () => { newSession(); pendingImages = []; quotedMsgId = null; quotedText = null; clearDraft(); draw() })
+
+    el.querySelector('.wx-messages')?.addEventListener('click', (e) => {
+      const replyBtn = e.target.closest('.wx-msg-action-reply')
+      if (replyBtn) {
+        const msgItem = replyBtn.closest('.wx-msg-item')
+        const bubble = msgItem?.querySelector('.wx-bubble-content')
+        if (bubble) { const text = bubble.textContent || ''; setQuote(msgItem.dataset.msgId, text.slice(0, 200)); input?.focus() }
+      }
+      const copyBtn = e.target.closest('.wx-msg-action-copy')
+      if (copyBtn) {
+        const msgItem = copyBtn.closest('.wx-msg-item')
+        const bubble = msgItem?.querySelector('.wx-bubble-content')
+        if (bubble) { navigator.clipboard?.writeText(bubble.textContent || '').catch(() => {}) }
       }
     })
 
+    const msgsEl = el.querySelector('#hm-chat-msgs')
+    if (msgsEl) {
+      const observer = new MutationObserver(() => {
+        msgsEl.scrollTop = msgsEl.scrollHeight
+      })
+      observer.observe(msgsEl, { childList: true, subtree: true })
+    }
+
+    // === init() ===
+    init()
     loadDraft()
 
-    // Slash menu clicks
-    el.querySelectorAll('.hm-slash-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const input = el.querySelector('#hm-chat-input')
-        if (input) { input.value = item.dataset.cmd + ' '; input.focus() }
-        showSlash = false
-        draw()
-      })
-    })
-
-    // Send
-    el.querySelector('#hm-chat-send-btn')?.addEventListener('click', sendMessage)
-    const input = el.querySelector('#hm-chat-input')
-    if (input) {
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
-        if (e.key === 'Escape') { showSlash = false; draw() }
-      })
-      input.addEventListener('input', () => {
-        input.style.height = 'auto'
-        input.style.height = Math.min(input.scrollHeight, 120) + 'px'
-        const val = input.value
-        if (val.startsWith('/') && !val.includes(' ')) {
-          showSlash = true; slashFilter = val
-          const parent = input.closest('.wx-input-area')
-          if (parent) {
-            const existing = parent.querySelector('.hm-slash-menu')
-            if (existing) existing.remove()
-            const cmds = SLASH_COMMANDS.filter(c => c.cmd.includes(val))
-            if (cmds.length) {
-              const div = document.createElement('div')
-              div.className = 'hm-slash-menu'
-              div.innerHTML = cmds.map(c =>
-                `<div class="hm-slash-item" data-cmd="${c.cmd}"><span class="hm-slash-cmd">${c.cmd}</span><span class="hm-slash-desc">${c.desc}</span></div>`
-              ).join('')
-              div.querySelectorAll('.hm-slash-item').forEach(item => {
-                item.addEventListener('click', () => {
-                  input.value = item.dataset.cmd + ' '
-                  input.focus()
-                  showSlash = false
-                  div.remove()
-                })
-              })
-              parent.prepend(div)
-            }
-          }
-        } else if (showSlash) {
-          showSlash = false
-          el.querySelector('.hm-slash-menu')?.remove()
-        }
-      })
-      input.focus()
-    }
+    return el
   }
-
-  // --- 清理事件监听 ---
-  function cleanupListeners() {
-    for (const fn of unlisteners) fn()
-    unlisteners = []
-  }
-
-  // --- 设置 Tauri 事件监听 ---
-  async function setupRunListeners() {
-    cleanupListeners()
-    const u1 = await tauriListen('hermes-run-delta', (e) => {
-      lastSSEActivity = Date.now(); reconnectAttempts = 0
-      pendingText += e.payload?.delta || ''
-      updateStreamArea()
-    })
-    const u2 = await tauriListen('hermes-run-tool', (e) => {
-      lastSSEActivity = Date.now(); reconnectAttempts = 0
-      const evt = e.payload || {}
-      const evtType = evt.event || ''
-      const toolName = evt.tool || evt.tool_name || evt.name || 'tool'
-      const preview = evt.preview || evt.detail || evt.message || ''
-      // 提取 input/output 时兼容多种字段名
-      const extractData = (obj, keys) => {
-        for (const k of keys) {
-          if (obj[k] != null && obj[k] !== '') return obj[k]
-        }
-        return null
-      }
-      // 构建去掉元字段后的 raw 快照，作为 fallback
-      const rawSnapshot = (exclude) => {
-        const copy = {}
-        for (const [k, v] of Object.entries(evt)) {
-          if (!exclude.includes(k) && v != null && v !== '') copy[k] = v
-        }
-        return Object.keys(copy).length ? copy : null
-      }
-      if (evtType === 'tool.started') {
-        if (!toolName || toolName === 'tool') {
-          // 无效工具名，跳过（防止渲染崩溃）
-          console.warn('[Hermes] tool.started with invalid name:', evt)
-        } else {
-          activeTools.push({ name: toolName, status: 'active', detail: preview, input: inputData, output: null, error: null, _raw: rawSnapshot(['event', 'tool', 'tool_name', 'name']) })
-        }
-      } else if (evtType === 'tool.completed') {
-        const t = activeTools.find(t => t.name === toolName && t.status === 'active')
-        if (t) {
-          t.status = evt.error ? 'error' : 'complete'
-          t.detail = evt.error ? '失败' : (evt.duration ? `${evt.duration}s` : '完成')
-          t.output = extractData(evt, ['output', 'result', 'content', 'data', 'response'])
-          if (evt.error) t.error = typeof evt.error === 'string' ? evt.error : JSON.stringify(evt.error)
-          // 合并 started 时可能没有的 input
-          if (!t.input) t.input = extractData(evt, ['input', 'args', 'arguments', 'parameters', 'params'])
-          t._rawCompleted = rawSnapshot(['event', 'tool', 'tool_name', 'name', 'error', 'duration'])
-        }
-      } else if (evtType === 'tool.error') {
-        const t = activeTools.find(t => t.name === toolName && t.status === 'active')
-        if (t) {
-          t.status = 'error'
-          t.detail = preview || '失败'
-          t.error = evt.error || preview || '未知错误'
-        }
-      } else if (evtType === 'tool.progress') {
-        const t = activeTools.find(t => t.name === toolName && t.status === 'active')
-        if (t && preview) t.detail = preview
-      }
-      updateStreamArea()
-    })
-    const u3 = await tauriListen('hermes-run-done', (e) => {
-      stopHB(); hideToast()
-      const cur = active()
-      if (!cur) return
-      const output = e.payload?.output || pendingText || '(empty)'
-      // 存储工具摘要（含输入输出详情）
-      if (activeTools.length > 0) {
-        const validTools = activeTools.filter(t => t && t.name)
-        if (validTools.length > 0) {
-          cur.messages.push({ role: 'tool-summary', tools: validTools.map(t => ({
-            name: t.name, status: t.status, detail: t.detail,
-            input: t.input, output: t.output, error: t.error,
-            _raw: t._raw, _rawCompleted: t._rawCompleted
-          })) })
-        }
-      }
-      cur.messages.push({ role: 'assistant', content: output })
-      streaming = false
-      pendingText = ''
-      activeTools = []
-      saveSessions(sessions)
-      cleanupListeners()
-      draw()
-    })
-    const u4 = await tauriListen('hermes-run-error', (e) => {
-      stopHB(); hideToast()
-      const cur = active()
-      if (!cur) return
-      const err = e.payload?.error || 'unknown error'
-      cur.messages.push({ role: 'assistant', content: `⚠️ Agent 运行失败: ${escHtml(err)}` })
-      streaming = false
-      pendingText = ''
-      activeTools = []
-      saveSessions(sessions)
-      cleanupListeners(); updateTP(0, 0)
-      draw()
-    })
-    unlisteners.push(u1, u2, u3, u4)
-  }
-
-  async function sendMessage() {
-    const input = el.querySelector('#hm-chat-input')
-    const text = input?.value?.trim()
-    if (!text || streaming) return
-
-    const cur = active()
-    if (!cur) return
-
-    // 本地命令处理（不走 Gateway）
-    if (text === '/clear') {
-      cur.messages = []; cur.title = ''
-      saveSessions(sessions)
-      input.value = ''; draw(); return
-    }
-    if (text === '/new') {
-      newSession(); input.value = ''; draw(); return
-    }
-    if (text === '/help') {
-      cur.messages.push({ role: 'user', content: text })
-      cur.messages.push({ role: 'assistant', content:
-        '**可用命令：**\n' +
-        '`/help` — 显示此帮助\n' +
-        '`/status` — 查看 Gateway 状态\n' +
-        '`/memory` — 管理 Agent 记忆\n' +
-        '`/skills` — 查看可用技能\n' +
-        '`/clear` — 清空当前会话\n' +
-        '`/new` — 新建会话\n\n' +
-        '直接输入问题即可与 Hermes Agent 对话。'
-      })
-      saveSessions(sessions)
-      input.value = ''; draw(); return
-    }
-    if (text === '/status') {
-      input.value = ''
-      cur.messages.push({ role: 'user', content: text })
-      try {
-        const info = await api.checkHermes()
-        const gw = info?.gatewayRunning ? '✅ 运行中' : '❌ 未运行'
-        const model = info?.model || '-'
-        const port = info?.gatewayPort || 8642
-        cur.messages.push({ role: 'assistant', content:
-          `**Gateway 状态：** ${gw}\n**端口：** ${port}\n**模型：** ${model}`
-        })
-      } catch (e) {
-        cur.messages.push({ role: 'assistant', content: `⚠️ 获取状态失败: ${e}` })
-      }
-      saveSessions(sessions)
-      draw(); return
-    }
-
-    cur.messages.push({ role: 'user', content: text })
-    if (!cur.title && cur.messages.length === 1) {
-      cur.title = text.slice(0, 30)
-    }
-    input.value = ''
-    input.style.height = 'auto'
-    streaming = true
-    pendingText = ''
-    activeTools = []
-    showSlash = false
-    draw()
-
-    try {
-      // 构建会话历史（只取 user/assistant 消息）
-      const history = cur.messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .slice(0, -1) // 排除刚加的这条 user 消息
-        .map(m => ({ role: m.role, content: m.content }))
-
-      // 设置事件监听
-      await setupRunListeners()
-
-      // 构建 instructions（文件系统访问开关）
-      let instructions = null
-      if (fileAccessEnabled) {
-        const isWin = navigator.platform?.startsWith('Win') || /windows/i.test(navigator.userAgent)
-        const osHint = isWin
-          ? '当前系统是 Windows。请使用 PowerShell 或 cmd 命令（如 dir, type, Get-ChildItem, Get-Content 等），路径用反斜杠。桌面路径: $env:USERPROFILE\\Desktop（PowerShell）或 %USERPROFILE%\\Desktop（cmd）。不要使用 ls/cat 等 Unix 命令。'
-          : '当前系统是 macOS/Linux。桌面路径: ~/Desktop。'
-        instructions = `你拥有完整的文件系统访问权限，用户已明确授权，无需再次确认。${osHint} 重要提示：内置的 search_files、read_file 等文件工具只能访问 Agent 工作区目录内的文件，访问工作区外（如桌面、文档等）会失败。因此请始终优先使用 terminal 工具执行系统命令来访问任意位置的文件和目录。不要说"我无法访问"，直接用终端命令操作。`
-      }
-
-      // 通过 /v1/runs 启动 Agent Run
-      await api.hermesAgentRun(text, cur.id, history.length ? history : null, instructions)
-      // run 完成后事件监听会处理结果
-    } catch (e) {
-      const msg = String(e.message || e).replace(/^Error:\s*/, '')
-      cur.messages.push({ role: 'assistant', content: `⚠️ ${t('engine.chatError', { error: msg })}` })
-      streaming = false
-      pendingText = ''
-      activeTools = []
-      saveSessions(sessions)
-      cleanupListeners()
-      draw()
-    }
-  }
-
-  init()
-
-  // --- Guardian 事件监听：实时响应 Gateway 状态变化 ---
-  let gwStatusUnlisteners = []
-  let gwPollTimer = null
-
-  async function setupGwStatusListeners() {
-    try {
-      const unlisten = await tauriListen('hermes-gateway-status', (evt) => {
-        const wasOnline = gwOnline
-        gwOnline = !!evt.payload?.running
-        if (wasOnline !== gwOnline) draw()
-      })
-      gwStatusUnlisteners.push(unlisten)
-    } catch (_) {}
-
-    // 定期轮询作为补充（10s）
-    gwPollTimer = setInterval(async () => {
-      if (streaming) return
-      try {
-        const info = await api.checkHermes()
-        const wasOnline = gwOnline
-        gwOnline = !!info?.gatewayRunning
-        if (wasOnline !== gwOnline) draw()
-      } catch (_) {}
-    }, 10000)
-  }
-  setupGwStatusListeners()
-
-  // 页面卸载时清理
-  const gwCleanup = () => {
-    gwStatusUnlisteners.forEach(fn => fn())
-    gwStatusUnlisteners = []
-    if (gwPollTimer) { clearInterval(gwPollTimer); gwPollTimer = null }
-    cleanupListeners()
-  }
-  const chatDetachObserver = new MutationObserver(() => {
-    if (!el.isConnected) { gwCleanup(); chatDetachObserver.disconnect() }
-  })
-  requestAnimationFrame(() => {
-    if (el.parentNode) chatDetachObserver.observe(el.parentNode, { childList: true })
-  })
-
-  return el
 }
