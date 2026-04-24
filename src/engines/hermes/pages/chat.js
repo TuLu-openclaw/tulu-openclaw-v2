@@ -386,7 +386,17 @@ export function render() {
       cleanupListeners(); updateStreamArea(); setSendBtn(false)
     })
 
-    unlisteners = [onRunDelta, onRunTool, onRunDone, onToolUpdate, onError]
+const onTokenUsage = await tauriListen('hermes-token-usage', ({ payload }) => {
+      if (!payload) return
+      const statsEl = el.querySelector('#wx-token-stats')
+      if (statsEl) {
+        const inp = payload.input_tokens || 0, out = payload.output_tokens || 0, cost = payload.cost_usd || 0
+        statsEl.innerHTML = '<span class="wx-token-badge">💰</span> 输入 ~' + inp + ' tokens / 输出 ~' + out + ' tokens / 约 ' + cost.toFixed(6) + ' USD'
+        statsEl.style.display = 'block'
+        setTimeout(() => { if (statsEl) statsEl.style.display = 'none' }, 12000)
+      }
+    })
+    unlisteners = [onRunDelta, onRunTool, onRunDone, onToolUpdate, onError, onTokenUsage]
 
     try {
       const body = { message: userText, stream: true, ...(history.length ? { history } : {}) }
@@ -520,6 +530,7 @@ export function render() {
           '</div>' +
           '<div class="wx-input-area">' +
             (!gwOnline ? '<div class="wx-gw-offline">' + t('engine.chatGatewayOffline') + '</div>' : '') +
+            '<div class="wx-token-stats" id="wx-token-stats" style="display:none;font-size:11px;color:#888;padding:2px 8px;text-align:right"></div>' +
             '<div class="wx-tool-progress" id="wx-tool-progress" style="display:none"><div class="wx-tool-progress-bar"><div class="wx-tool-progress-fill" id="wx-tool-fill"></div></div><div class="wx-tool-progress-text" id="wx-tool-progress-text">0 / 0</div></div>' +
             '<div class="wx-img-preview" id="wx-img-preview"></div>' +
             '<div class="wx-input-toolbar">' +

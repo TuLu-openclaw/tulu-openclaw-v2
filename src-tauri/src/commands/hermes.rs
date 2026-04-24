@@ -2577,11 +2577,23 @@ pub async fn hermes_agent_run(
             }
             let data = trimmed[6..].trim();
             if data == "[DONE]" {
+                let input_tokens = input.chars().count() / 4;
+                let output_tokens = final_output.chars().count() / 4;
+                let cost_usd = (output_tokens as f64) * 0.001 / 1000.0;
                 let _ = app.emit(
                     "hermes-run-done",
                     serde_json::json!({
                         "run_id": &run_id,
                         "output": &final_output,
+                    }),
+                );
+                let _ = app.emit(
+                    "hermes-token-usage",
+                    serde_json::json!({
+                        "run_id": &run_id,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "cost_usd": cost_usd,
                     }),
                 );
                 return Ok(run_id);
@@ -2612,11 +2624,24 @@ pub async fn hermes_agent_run(
                         if let Some(output) = evt["output"].as_str() {
                             final_output = output.to_string();
                         }
+                        // Estimate tokens: ~4 chars per token for input, actual output chars/4
+                        let input_tokens = input.chars().count() / 4;
+                        let output_tokens = final_output.chars().count() / 4;
+                        let cost_usd = (output_tokens as f64) * 0.001 / 1000.0;
                         let _ = app.emit(
                             "hermes-run-done",
                             serde_json::json!({
                                 "run_id": &run_id,
                                 "output": &final_output,
+                            }),
+                        );
+                        let _ = app.emit(
+                            "hermes-token-usage",
+                            serde_json::json!({
+                                "run_id": &run_id,
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                                "cost_usd": cost_usd,
                             }),
                         );
                         return Ok(run_id);
@@ -2641,11 +2666,23 @@ pub async fn hermes_agent_run(
         }
     }
 
+    let input_tokens = input.chars().count() / 4;
+    let output_tokens = final_output.chars().count() / 4;
+    let cost_usd = (output_tokens as f64) * 0.001 / 1000.0;
     let _ = app.emit(
         "hermes-run-done",
         serde_json::json!({
             "run_id": &run_id,
             "output": &final_output,
+        }),
+    );
+    let _ = app.emit(
+        "hermes-token-usage",
+        serde_json::json!({
+            "run_id": &run_id,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost_usd,
         }),
     );
     Ok(run_id)

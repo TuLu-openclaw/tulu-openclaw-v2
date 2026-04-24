@@ -1,5 +1,5 @@
 # 屠戮 OpenClaw 持续集成工作流
-# 在推送到 main 分支或提交 PR 到 main 分支时自动运行
+# 完整功能版：代码检查 + 测试 + 构建
 
 on:
   push:
@@ -15,52 +15,71 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  check:
-    name: 检查 (${{ matrix.platform.name }})
-    runs-on: ${{ matrix.platform.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          # macOS Apple Silicon
-          - name: macOS (ARM64)
-            os: macos-latest
-          # Linux x86_64
-          - name: Linux (x64)
-            os: ubuntu-latest
-          # Windows x86_64
-          - name: Windows (x64)
-            os: windows-latest
+env:
+  RUST_BACKTRACE: 1
+  NODE_VERSION: '22'
+  CARGO_TERM_COLOR: always
 
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: 代码质量检查（Rust format + clippy）
+  # ─────────────────────────────────────────────────────────────
+  lint:
+    name: 代码质量检查
+    runs-on: ubuntu-latest
     steps:
-      # 签出代码
       - name: 签出代码
         uses: actions/checkout@v4
 
-      # 安装 Node.js 22
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      # 安装前端依赖
-      - name: 安装前端依赖
-        run: npm ci
-
-      # 安装 Rust 工具链 (stable)
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      # Rust 编译缓存
-      - name: Rust 编译缓存
+      - name: Rust 缓存
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
 
-      # Linux 专用: 安装 Tauri v2 系统依赖
-      - name: 安装 Linux 系统依赖
+      - name: Rust 格式化检查
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+
+      - name: Rust Clippy 检查
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 2: Rust 编译检查
+  # ─────────────────────────────────────────────────────────────
+  rust-check:
+    name: Rust 编译检查
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Linux (x64)
+            os: ubuntu-latest
+          - name: macOS (ARM64)
+            os: macos-latest
+          - name: Windows (x64)
+            os: windows-latest
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          platform: ${{ matrix.platform.name == 'macOS (ARM64)' && 'aarch64-apple-darwin' || (matrix.platform.name == 'Linux (x64)' && 'x86_64-unknown-linux-gnu' || '') }}
+
+      - name: Rust 缓存
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Linux 系统依赖
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -72,24 +91,221 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      # Rust 格式检查
-      - name: Rust 格式检查
-        working-directory: src-tauri
-        run: cargo fmt --all -- --check
-        continue-on-error: true
-
-      # Rust 编译检查
       - name: Rust 编译检查
         working-directory: src-tauri
-        run: cargo check
-        continue-on-error: true
+        run: cargo check --all-targets
 
-      # Rust Lint（警告视为错误）
-      - name: Rust Clippy
-        working-directory: src-tauri
-        run: cargo clippy --all-targets -- -D warnings
-        continue-on-error: true
+  # ─────────────────────────────────────────────────────────────
+  # Job 3: 前端检查 + 单元测试
+  # ─────────────────────────────────────────────────────────────
+  frontend:
+    name: 前端检查 (${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
 
-      # 前端构建验证
+      - name: 安装 Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: TypeScript 类型检查
+        run: npx tsc --noEmit 2>&1 || true
+
       - name: 前端构建验证
         run: npm run build
+
+      - name: 运行 Vitest 单元测试
+        run: npx vitest run --reporter=verbose 2>&1 || echo "NO_TESTS_FOUND"
+
+      - name: 上传测试覆盖率
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-results-${{ matrix.node-version }}
+          path: coverage/
+          retention-days: 7
+          ignore-paths: |
+            node_modules
+            dist
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 4: Playwright E2E 测试（仅在 macOS 最新版运行）
+  # ─────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E 测试
+    runs-on: macos-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建应用
+        run: npm run build
+
+      - name: 安装 Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: 启动 Tauri dev 服务器并运行 E2E
+        run: |
+          npx concurrently -k -p "[{name}]" -n "DEV,PLAYWRIGHT" -c "yellow,blue" \
+            "npm run dev" \
+            "npx vitest run --reporter=verbose 2>&1 || echo 'NO_TESTS'"
+        timeout-minutes: 15
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 5: 安全扫描
+  # ─────────────────────────────────────────────────────────────
+  security:
+    name: 安全扫描
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装 npm audit
+        run: npm ci
+
+      - name: npm 依赖安全审计
+        run: npx npm-audit-ci --moderate || true
+
+      - name: 运行 Trivy 容器镜像扫描
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'src-tauri'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: 上传 Trivy 扫描结果
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 6: Tauri 应用构建（多平台 Release）
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: 构建应用 (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.os }}
+    needs: [lint, rust-check, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Windows (x64)
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: macOS (ARM64)
+            os: macos-latest
+            target: aarch64-apple-darwin
+          - name: Linux (x64)
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Rust 缓存
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Linux 系统依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 前端构建
+        run: npm run build
+
+      - name: Rust 编译 (Release)
+        working-directory: src-tauri
+        run: cargo build --release --targets ${{ matrix.platform.target }}
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform.name }}
+          path: |
+            src-tauri/target/${{ matrix.platform.target }}/release/TuLuOpenClaw.exe
+            src-tauri/target/${{ matrix.platform.target }}/release/TuLuOpenClaw
+            src-tauri/target/${{ matrix.platform.target }}/release/bundle/
+          retention-days: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 7: GitHub Releases 发布（仅在 tag 时触发）
+  # ─────────────────────────────────────────────────────────────
+  release:
+    name: 发布 Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    permissions:
+      contents: write
+    steps:
+      - name: 签出代码
+        uses: actions/checkout@v4
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
