@@ -46,7 +46,9 @@ pub fn get_windows_proxy() -> Option<String> {
         }
         // fallback 到第一个非空段
         if let Some(first) = proxy_server.split(';').next() {
-            let hostport = first.trim().trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
+            let hostport = first
+                .trim()
+                .trim_start_matches(|c: char| !c.is_ascii_alphanumeric());
             if !hostport.is_empty() {
                 return Some(format!("http://{}", hostport));
             }

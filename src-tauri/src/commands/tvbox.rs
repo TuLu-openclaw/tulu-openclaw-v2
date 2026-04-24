@@ -1,9 +1,9 @@
+use once_cell::sync::Lazy;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
 use tauri::command;
-use once_cell::sync::Lazy;
 
 static COOKIE_STORE: Lazy<RwLock<HashMap<String, String>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -44,10 +44,7 @@ pub async fn tvbox_req(
         reqwest::header::USER_AGENT,
         HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
     );
-    header_map.insert(
-        reqwest::header::ACCEPT,
-        HeaderValue::from_static("*/*"),
-    );
+    header_map.insert(reqwest::header::ACCEPT, HeaderValue::from_static("*/*"));
 
     if let Some(hdrs) = headers {
         for (k, v) in hdrs {
@@ -61,10 +58,16 @@ pub async fn tvbox_req(
     }
 
     let resp = if method.to_uppercase() == "POST" {
-        client.post(&url).headers(header_map).body(body.unwrap_or_default()).send().await
+        client
+            .post(&url)
+            .headers(header_map)
+            .body(body.unwrap_or_default())
+            .send()
+            .await
     } else {
         client.get(&url).headers(header_map).send().await
-    }.map_err(|e| e.to_string())?;
+    }
+    .map_err(|e| e.to_string())?;
 
     let status = resp.status().as_u16();
     let mut resp_headers = HashMap::new();
@@ -74,7 +77,8 @@ pub async fn tvbox_req(
         }
     }
 
-    let cookie = resp.headers()
+    let cookie = resp
+        .headers()
         .get("set-cookie")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
@@ -121,7 +125,10 @@ pub fn tvbox_base64_decode(input: String) -> CryptoResult {
             code: 0,
             content: String::from_utf8_lossy(&bytes).to_string(),
         },
-        Err(_) => CryptoResult { code: 1, content: String::new() },
+        Err(_) => CryptoResult {
+            code: 1,
+            content: String::new(),
+        },
     }
 }
 
@@ -185,19 +192,22 @@ pub fn tvbox_cookie_get(domain: String) -> Result<String, String> {
 pub fn tvbox_md5(input: String) -> CryptoResult {
     let digest = md5::compute(input.as_bytes());
     let hex: String = format!("{:x}", digest);
-    CryptoResult { code: 0, content: hex }
+    CryptoResult {
+        code: 0,
+        content: hex,
+    }
 }
 
 /// URL 解析（用于解析中间地址为最终播放地址）
 #[command]
-pub async fn tvbox_parse(
-    url: String,
-    api: Option<String>,
-) -> Result<CryptoResult, String> {
+pub async fn tvbox_parse(url: String, api: Option<String>) -> Result<CryptoResult, String> {
     // 如果没有解析 API，直接返回原地址
     let api = api.unwrap_or_default();
     if api.is_empty() {
-        return Ok(CryptoResult { code: 0, content: url });
+        return Ok(CryptoResult {
+            code: 0,
+            content: url,
+        });
     }
 
     let client = reqwest::Client::builder()
@@ -211,8 +221,14 @@ pub async fn tvbox_parse(
 
     let resp = client
         .get(&parse_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .header("Referer", format!("{}/", url.split('/').nth(2).unwrap_or("")))
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
+        .header(
+            "Referer",
+            format!("{}/", url.split('/').nth(2).unwrap_or("")),
+        )
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -231,5 +247,8 @@ pub async fn tvbox_parse(
         body.trim().to_string()
     };
 
-    Ok(CryptoResult { code: 0, content: final_url })
+    Ok(CryptoResult {
+        code: 0,
+        content: final_url,
+    })
 }

@@ -277,7 +277,7 @@ pub async fn assistant_list_processes(filter: Option<String>) -> Result<String, 
         output = tokio::process::Command::new("powershell")
             .args(["-NoProfile", "-Command",
                 "Get-Process | Select-Object Id, ProcessName, CPU, WorkingSet64 | Sort-Object ProcessName | Format-Table -AutoSize | Out-String -Width 200"])
-            
+
             .output()
             .await;
     }
@@ -346,7 +346,7 @@ async fn get_port_process(port: u16) -> String {
         output = tokio::process::Command::new("powershell")
             .args(["-NoProfile", "-Command",
                 &format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | Select-Object OwningProcess | ForEach-Object {{ (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName }}", port)])
-            
+
             .output()
             .await;
     }
@@ -598,7 +598,9 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         r"C:\Windows\System32\msedge.exe",
     ];
-    let msedge_exe = msedge_paths.iter().find(|p| std::path::Path::new(p).exists());
+    let msedge_exe = msedge_paths
+        .iter()
+        .find(|p| std::path::Path::new(p).exists());
     let browser_exe = msedge_exe.copied().unwrap_or("");
 
     // 用 CDP 的提取脚本
@@ -772,17 +774,17 @@ pub async fn open_player_window(
     playback_ctx: String,
     pic: String,
 ) -> Result<String, String> {
-    use tauri::WebviewWindowBuilder;
     use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
 
     if url.is_empty() {
         return Err("视频URL不能为空".into());
     }
 
     // 获取 exe 所在目录，找 player.html
-    let exe_path = std::env::current_exe()
-        .map_err(|e| format!("获取程序路径失败: {}", e))?;
-    let base_dir = exe_path.parent()
+    let exe_path = std::env::current_exe().map_err(|e| format!("获取程序路径失败: {}", e))?;
+    let base_dir = exe_path
+        .parent()
         .ok_or_else(|| String::from("无法获取程序目录"))?;
 
     let dev_html = base_dir.join("src").join("player.html");
@@ -790,8 +792,11 @@ pub async fn open_player_window(
         dev_html
     } else {
         let root_html = base_dir.join("player.html");
-        if root_html.exists() { root_html }
-        else { base_dir.join("player.html") }
+        if root_html.exists() {
+            root_html
+        } else {
+            base_dir.join("player.html")
+        }
     };
 
     // 构建 player.html URL 参数
@@ -828,19 +833,15 @@ pub async fn open_player_window(
     let window_label = format!("player_{}", ts);
 
     // 创建播放器窗口
-    let win = WebviewWindowBuilder::new(
-        &app,
-        &window_label,
-        WebviewUrl::App(player_url.into()),
-    )
-    .title(&title)
-    .inner_size(960.0, 600.0)
-    .min_inner_size(640.0, 400.0)
-    .resizable(true)
-    .decorations(true)
-    .center()
-    .build()
-    .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+    let win = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(player_url.into()))
+        .title(&title)
+        .inner_size(960.0, 600.0)
+        .min_inner_size(640.0, 400.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
 
     let _win_label = win.label().to_string();
 
@@ -877,8 +878,15 @@ fn urlencoding_encode(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => r.push(b as char),
-            _ => for c in format!("{:02X}", b).chars() { r.push('%'); r.push(c); }
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                r.push(b as char)
+            }
+            _ => {
+                for c in format!("{:02X}", b).chars() {
+                    r.push('%');
+                    r.push(c);
+                }
+            }
         }
     }
     r
@@ -888,8 +896,8 @@ fn urlencoding_encode(s: &str) -> String {
 #[tauri::command]
 pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
-    use tauri::WebviewWindowBuilder;
     use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
 
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -899,7 +907,10 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
 
     // lobster-office.html 路径：打包后位于 resources 目录
     // 用 app.path().resource_path() 获取打包后的资源根目录
-    let resources_path = app.path().resource_dir().map_err(|e| format!("获取资源路径失败: {}", e))?;
+    let resources_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("获取资源路径失败: {}", e))?;
     // 尝试多种可能的位置，增强兼容性
     let primary_path = resources_path.join("lobster-office.html");
     let html_path = if primary_path.exists() {
@@ -925,7 +936,10 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
         }
     };
     if !html_path.exists() {
-        return Err(format!("龙虾办公室页面不存在，请重新安装程序（已查找: {}）", html_path.display()));
+        return Err(format!(
+            "龙虾办公室页面不存在，请重新安装程序（已查找: {}）",
+            html_path.display()
+        ));
     }
 
     WebviewWindowBuilder::new(

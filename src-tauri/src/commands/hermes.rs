@@ -1913,7 +1913,8 @@ pub async fn hermes_gateway_action(
                     Err(e) => {
                         // fallback: hermes gateway start
                         let mut fallback = tokio::process::Command::new("hermes");
-                        fallback.args(["gateway", "start"])
+                        fallback
+                            .args(["gateway", "start"])
                             .env("PATH", &enhanced)
                             .env("PYTHONUTF8", "1")
                             .env("PYTHONIOENCODING", "utf-8");
@@ -2223,8 +2224,8 @@ pub async fn hermes_set_gateway_url(url: Option<String>) -> Result<String, Strin
     let config_path_clone = config_path.clone();
 
     let mut config = if config_path_clone.exists() {
-        let content =
-            std::fs::read_to_string(&config_path_clone).map_err(|e| format!("读取配置失败: {e}"))?;
+        let content = std::fs::read_to_string(&config_path_clone)
+            .map_err(|e| format!("读取配置失败: {e}"))?;
         serde_json::from_str::<Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
     } else {
         serde_json::json!({})

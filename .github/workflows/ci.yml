@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.85.0
         with:
           components: rustfmt, clippy
 
@@ -74,12 +74,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.85.0
 
-      - name: Rust 缓存
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
+      - name: Rust 版本
+        run: rustc --version && cargo --version
 
       - name: Linux 系统依赖
         if: runner.os == 'Linux'
@@ -244,7 +242,7 @@ jobs:
           cache: npm
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.platform.target }}
 
