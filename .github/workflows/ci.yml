@@ -1,5 +1,4 @@
-# 屠戮 OpenClaw 持续集成工作流
-# 完整功能版：代码检查 + 测试 + 构建
+# 屠戮 OpenClaw 持续集成工作�?# 完整功能版：代码检�?+ 测试 + 构建
 
 on:
   push:
@@ -22,19 +21,16 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────
-  # Job 1: 代码质量检查（Rust format + clippy）
-  # ─────────────────────────────────────────────────────────────
+  # Job 1: 代码质量检查（Rust format + clippy�?  # ─────────────────────────────────────────────────────────────
   lint:
-    name: 代码质量检查
-    runs-on: ubuntu-latest
+    name: 代码质量检�?    runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: 签出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
+      - name: 安装 Rust 工具�?        uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt, clippy
 
@@ -47,20 +43,16 @@ jobs:
           workspaces: src-tauri -> target
           cache-on-failure: true
 
-      - name: Rust 格式化检查
-        working-directory: src-tauri
+      - name: Rust 格式化检�?        working-directory: src-tauri
         run: cargo fmt --all -- --check
 
-      - name: Rust Clippy 检查
-        working-directory: src-tauri
+      - name: Rust Clippy 检�?        working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings 2>&1 | head -50
 
   # ─────────────────────────────────────────────────────────────
-  # Job 2: Rust 编译检查
-  # ─────────────────────────────────────────────────────────────
+  # Job 2: Rust 编译检�?  # ─────────────────────────────────────────────────────────────
   rust-check:
-    name: Rust 编译检查
-    runs-on: ubuntu-latest
+    name: Rust 编译检�?    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -75,8 +67,7 @@ jobs:
       - name: 签出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
+      - name: 安装 Rust 工具�?        uses: dtolnay/rust-toolchain@1.94.0
 
       - name: Rust 版本
         run: rustc --version && cargo --version
@@ -93,15 +84,14 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: Rust 编译检查
-        working-directory: src-tauri
+      - name: Rust 编译检�?        working-directory: src-tauri
         run: cargo check --all-targets 2>&1 | tee rust-check.log; echo "EXIT:$?"
 
   # ─────────────────────────────────────────────────────────────
-  # Job 3: 前端检查 + 单元测试
+  # Job 3: 前端检�?+ 单元测试
   # ─────────────────────────────────────────────────────────────
   frontend:
-    name: 前端检查 (${{ matrix.node-version }})
+    name: 前端检�?(${{ matrix.node-version }})
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -120,10 +110,9 @@ jobs:
           cache: npm
 
       - name: 安装依赖
-        run: npm ci
+        run: npm install
 
-      - name: TypeScript 类型检查
-        run: npx tsc --noEmit 2>&1 || true
+      - name: TypeScript 类型检�?        run: npx tsc --noEmit 2>&1 || true
 
       - name: 前端构建验证
         run: npm run build
@@ -131,16 +120,12 @@ jobs:
       - name: 运行单元测试
         run: node --test tests/*.test.js 2>&1 || echo "NO_TESTS"
 
-      - name: 上传测试覆盖率
-        if: always()
+      - name: 上传测试覆盖�?        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: vitest-results-${{ matrix.node-version }}
           path: coverage/
           retention-days: 7
-          ignore-paths: |
-            node_modules
-            dist
 
   # ─────────────────────────────────────────────────────────────
   # Job 4: Playwright E2E 测试
@@ -162,7 +147,7 @@ jobs:
           cache: npm
 
       - name: 安装依赖
-        run: npm ci
+        run: npm install
 
       - name: 安装 Playwright
         run: npx playwright install --with-deps chromium
@@ -195,7 +180,7 @@ jobs:
           cache: npm
 
       - name: 安装 npm audit
-        run: npm ci
+        run: npm install
 
       - name: npm 依赖安全审计
         run: npx npm-audit-ci --moderate || true
@@ -216,8 +201,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
   # ─────────────────────────────────────────────────────────────
-  # Job 6: Tauri 应用构建（多平台 Release）
-  # ─────────────────────────────────────────────────────────────
+  # Job 6: Tauri 应用构建（多平台 Release�?  # ─────────────────────────────────────────────────────────────
   build:
     name: 构建应用 (${{ matrix.platform.name }})
     runs-on: ${{ matrix.platform.os }}
@@ -248,8 +232,7 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
+      - name: 安装 Rust 工具�?        uses: dtolnay/rust-toolchain@1.94.0
         with:
           targets: ${{ matrix.platform.target }}
 
@@ -271,7 +254,7 @@ jobs:
             libayatana-appindicator3-dev
 
       - name: 安装前端依赖
-        run: npm ci
+        run: npm install
 
       - name: 前端构建
         run: npm run build
@@ -291,7 +274,7 @@ jobs:
           retention-days: 5
 
   # ─────────────────────────────────────────────────────────────
-  # Job 7: GitHub Releases 发布（仅在 tag 时触发）
+  # Job 7: GitHub Releases 发布（仅�?tag 时触发）
   # ─────────────────────────────────────────────────────────────
   release:
     name: 发布 Release
@@ -304,8 +287,7 @@ jobs:
       - name: 签出代码
         uses: actions/checkout@v4
 
-      - name: 下载所有构建产物
-        uses: actions/download-artifact@v4
+      - name: 下载所有构建产�?        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
