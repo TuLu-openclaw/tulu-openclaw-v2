@@ -2022,19 +2022,20 @@ async function confirmToolCall(tc, critical = false) {
 
 // 将 OpenAI 格式工具定义转为 Anthropic 格式
 function convertToolsForAnthropic(tools) {
+  if (!Array.isArray(tools)) return []
   return tools.map(t => ({
-    name: t.function.name,
-    description: t.function.description || '',
-    input_schema: t.function.parameters || { type: 'object', properties: {} },
+    name: t?.function?.name || t?.name || 'unknown',
+    description: t?.function?.description || '',
+    input_schema: t?.function?.parameters || { type: 'object', properties: {} },
   }))
 }
 
 // 将 OpenAI 格式工具定义转为 Gemini 格式
 function convertToolsForGemini(tools) {
-  return [{ functionDeclarations: tools.map(t => ({
-    name: t.function.name,
-    description: t.function.description || '',
-    parameters: t.function.parameters || { type: 'object', properties: {} },
+  return [{ functionDeclarations: (tools || []).map(t => ({
+    name: t?.function?.name || t?.name || 'unknown',
+    description: t?.function?.description || '',
+    parameters: t?.function?.parameters || { type: 'object', properties: {} },
   }))}]
 }
 
@@ -2289,8 +2290,9 @@ function renderSessionList() {
 }
 
 function renderToolBlocks(toolHistory) {
-  if (!toolHistory || toolHistory.length === 0) return ''
+  if (!toolHistory || !Array.isArray(toolHistory) || toolHistory.length === 0) return ''
   return toolHistory.map(tc => {
+    if (!tc || !tc.name) return ''
     // ask_user 工具不显示在工具块中（它有自己的交互卡片）
     if (tc.name === 'ask_user') return ''
 
