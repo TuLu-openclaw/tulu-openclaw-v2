@@ -7,7 +7,7 @@
 import { registerRoute, setDefaultRoute } from '../../router.js'
 import { api } from '../../lib/tauri-api.js'
 import './hermes.css'
-import './wx-chat.css'
+import './pages/chat-v3.css'
 
 // ==================== 引擎元数据 ====================
 export const engineMeta = {
