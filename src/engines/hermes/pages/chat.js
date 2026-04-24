@@ -191,49 +191,78 @@ export function render() {
   function draw() {
     const cur = active()
     const msgs = cur?.messages || []
+    const title = sessionTitle(cur)
     el.innerHTML = `
-      <div class="hm-chat-layout">
-        <div class="hm-chat-sidebar">
-          <div class="hm-chat-sidebar-header">
-            <span>${t('engine.hermesChatTitle')}</span>
-            <button class="hm-new-btn" title="${t('engine.chatNewSession')}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </button>
+      <div class="hm-chat-wx">
+        <!-- 侧边栏 -->
+        <div class="hm-chat-sidebar wx-sidebar">
+          <div class="wx-sidebar-header">
+            <div class="wx-sidebar-logo">🌾</div>
+            <div class="wx-sidebar-info">
+              <div class="wx-sidebar-name">Hermes</div>
+              <div class="wx-sidebar-sub">AI Agent</div>
+            </div>
           </div>
-          <div class="hm-chat-session-list">
+          <div class="wx-sidebar-sessions">
             ${sessions.map(s => `
-              <div class="hm-session-item ${s.id === activeId ? 'active' : ''}" data-sid="${s.id}">
-                <span class="hm-session-title">${escHtml(sessionTitle(s))}</span>
-                <button class="hm-session-del" data-del="${s.id}" title="${t('common.delete')}">&times;</button>
+              <div class="wx-session-item ${s.id === activeId ? 'active' : ''}" data-sid="${s.id}">
+                <div class="wx-session-avatar">${s.id === activeId ? '💬' : '🗣️'}</div>
+                <div class="wx-session-body">
+                  <div class="wx-session-title">${escHtml(sessionTitle(s))}</div>
+                  <div class="wx-session-time">${s.updated ? formatTime(s.updated) : ''}</div>
+                </div>
               </div>
             `).join('')}
           </div>
-        </div>
-        <div class="hm-chat-main">
-          <div class="hm-chat-model-bar">
-            <span class="hm-model-label">${t('engine.configModel')}:</span>
-            <div style="position:relative;flex:1;max-width:240px">
-              <input type="text" id="hm-chat-model" class="hm-model-input" value="${escHtml(currentModel)}" placeholder="QC-B01" readonly>
-              ${showModelDropdown && modelList.length ? `<div id="hm-chat-model-dd" class="hm-model-dropdown">${modelList.map(m => `<div class="hm-chat-model-opt${m === currentModel ? ' active' : ''}" data-model="${escHtml(m)}">${escHtml(m)}</div>`).join('')}</div>` : ''}
-            </div>
-            <button class="hm-file-access-toggle ${fileAccessEnabled ? 'active' : ''}" id="hm-file-access-btn" title="${fileAccessEnabled ? t('engine.fileAccessOn') : t('engine.fileAccessOff')}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              <span>${t('engine.fileAccess')}</span>
+          <div class="wx-sidebar-footer">
+            <button class="wx-icon-btn wx-new-btn" title="${t('engine.chatNewSession')}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 5v14M5 12h14"/></svg>
             </button>
-            <a href="#/h/dashboard" class="hm-model-link">${t('engine.dashModelConfig')} →</a>
+            <a href="#/h/dashboard" class="wx-icon-btn" title="${t('engine.dashModelConfig')}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </a>
           </div>
-          <div class="hermes-chat-messages" id="hm-chat-msgs">
-            ${msgs.length === 0 ? `<div class="hermes-chat-empty">${t('engine.chatEmptyHint')}</div>` : ''}
+        </div>
+
+        <!-- 主聊天区 -->
+        <div class="hm-chat-main wx-main">
+          <!-- 顶部栏 -->
+          <div class="wx-chat-topbar">
+            <div class="wx-topbar-title">${escHtml(title)}</div>
+            <div class="wx-topbar-right">
+              <div class="wx-model-chip" id="hm-chat-model" title="${t('engine.configModel')}">
+                🤖 ${escHtml(currentModel)}
+              </div>
+              ${modelList.length ? `
+                <div class="wx-model-dropdown" id="wx-model-dd">
+                  ${modelList.map(m => `<div class="wx-model-opt${m === currentModel ? ' active' : ''}" data-model="${escHtml(m)}">${escHtml(m)}</div>`).join('')}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- 消息区 -->
+          <div class="wx-messages" id="hm-chat-msgs">
+            ${msgs.length === 0 ? `
+              <div class="wx-empty-hint">
+                <div class="wx-empty-icon">💬</div>
+                <div>${t('engine.chatEmptyHint')}</div>
+              </div>
+            ` : ''}
             ${msgs.map(m => renderMessage(m)).join('')}
           </div>
-          <div class="hermes-chat-input-area">
-            ${!gwOnline ? `<div class="hm-gw-offline">${t('engine.chatGatewayOffline')}</div>` : ''}
-            <div style="position:relative">
-              ${showSlash ? renderSlashMenu() : ''}
-              <div class="hm-chat-input-wrap">
-                <textarea id="hm-chat-input" rows="1" placeholder="${t('engine.chatPlaceholder')}" ${!gwOnline ? 'disabled' : ''}></textarea>
-                <button class="btn btn-primary hm-chat-send" ${!gwOnline || streaming ? 'disabled' : ''}>${streaming ? '...' : t('engine.chatSend')}</button>
-              </div>
+
+          <!-- 输入区 -->
+          <div class="wx-input-area">
+            ${!gwOnline ? `<div class="wx-gw-offline">${t('engine.chatGatewayOffline')}</div>` : ''}
+            <div class="wx-input-toolbar">
+              <button class="wx-toolbar-btn" id="hm-file-access-btn" title="${fileAccessEnabled ? t('engine.fileAccessOn') : t('engine.fileAccessOff')}">
+                📎 <span>${t('engine.fileAccess')}</span>
+              </button>
+            </div>
+            <div class="wx-input-row">
+              <textarea id="hm-chat-input" class="wx-input" rows="1" placeholder="${t('engine.chatPlaceholder')}" ${!gwOnline ? 'disabled' : ''}></textarea>
+              <button class="wx-send-btn" id="hm-chat-send-btn" ${!gwOnline || streaming ? 'disabled' : ''}>${streaming ? '<span class="wx-sending">发送中</span>' : '发送'}</button>
             </div>
           </div>
         </div>
@@ -244,17 +273,86 @@ export function render() {
     scrollToBottom()
   }
 
+  // ── WeChat 风格消息渲染 ───────────────────────────────
   function renderMessage(m) {
     if (!m) return ''
     const isUser = m.role === 'user'
-    // 工具摘要行（存储在 messages 中的已完成工具记录）
     if (m.role === 'tool-summary') {
       if (!Array.isArray(m.tools)) return ''
-      return `<div class="hm-tool-summary">${m.tools.map(t => renderToolCard(t, true)).join('')}</div>`
+      return `<div class="wx-tool-summary">${m.tools.map(t => renderToolCard(t, true)).join('')}</div>`
     }
-    return `<div class="hermes-chat-msg ${isUser ? 'user' : 'assistant'}">
-      <div class="hermes-chat-bubble ${isUser ? 'user' : 'assistant'}">${isUser ? escHtml(m.content) : mdToHtml(m.content)}</div>
+    const avatar = isUser
+      ? `<div class="wx-avatar wx-avatar-me">🐰</div>`
+      : `<div class="wx-avatar wx-avatar-ai">🤖</div>`
+    const bubble = isUser
+      ? `<div class="wx-bubble wx-bubble-me"><div class="wx-bubble-content">${escHtml(m.content)}</div></div>`
+      : `<div class="wx-bubble wx-bubble-ai"><div class="wx-bubble-content">${mdToHtml(m.content)}</div></div>`
+    return `<div class="wx-msg-row ${isUser ? 'wx-msg-me' : 'wx-msg-ai'}">${isUser ? '' : avatar}${bubble}${isUser ? avatar : ''}</div>`
+  }
+
+  // ── 流式区域更新（微信气泡风格）────────────────────────
+  function updateStreamArea() {
+    const msgsEl = el.querySelector('#hm-chat-msgs')
+    if (!msgsEl) return
+    let streamEl = msgsEl.querySelector('.wx-stream-area')
+    if (!streaming) {
+      if (streamEl) streamEl.remove()
+      return
+    }
+    if (!streamEl) {
+      streamEl = document.createElement('div')
+      streamEl.className = 'wx-stream-area'
+      msgsEl.appendChild(streamEl)
+    }
+    const toolsHtml = (activeTools || []).map(t => renderToolCard(t, false)).join('')
+    let textHtml = ''
+    if (pendingText) {
+      textHtml = `<div class="wx-msg-row wx-msg-ai"><div class="wx-avatar wx-avatar-ai">🤖</div><div class="wx-bubble wx-bubble-ai"><div class="wx-bubble-content">${mdToHtml(pendingText)}</div></div></div>`
+    } else if (activeTools.length === 0) {
+      textHtml = `<div class="wx-msg-row wx-msg-ai"><div class="wx-avatar wx-avatar-ai">🤖</div><div class="wx-bubble wx-bubble-ai wx-typing-bubble"><div class="wx-bubble-content"><span class="wx-dots"><span></span><span></span><span></span></span></div></div></div>`
+    }
+    streamEl.innerHTML = toolsHtml + textHtml
+    msgsEl.scrollTop = msgsEl.scrollHeight
+  }
+
+  // ── 工具卡片（微信卡片风格）───────────────────────────
+  function renderToolCard(t, compact) {
+    if (!t) return ''
+    const cardId = 'tc_' + Math.random().toString(36).slice(2, 8)
+    const icon = toolIcon(t.name || '')
+    const statusText = t.status === 'active' ? '⏳ ' : (t.error ? '❌ ' : '✅ ')
+    const statusCls = t.error ? 'err' : (t.status === 'active' ? 'active' : 'ok')
+    const detail = t.detail ? ` — ${escHtml(String(t.detail).slice(0, 60))}` : ''
+    const hasDetails = !!(t.input || t.output || t.error)
+    let detailsHtml = ''
+    if (hasDetails) {
+      detailsHtml = `<div class="hm-tool-details" style="display:none">
+        ${t.input ? `<div class="hm-tool-detail-row"><span class="hm-tool-detail-label">输入:</span><pre class="hm-tool-detail-pre">${escHtml(typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2))}</pre></div>` : ''}
+        ${t.output ? `<div class="hm-tool-detail-row"><span class="hm-tool-detail-label">输出:</span><pre class="hm-tool-detail-pre">${escHtml(String(t.output).slice(0, 2000))}</pre></div>` : ''}
+        ${t.error ? `<div class="hm-tool-detail-row"><span class="hm-tool-detail-label">错误:</span><pre class="hm-tool-detail-pre hm-tool-error">${escHtml(t.error)}</pre></div>` : ''}
+      </div>`
+    }
+    if (compact) {
+      return `<div class="wx-tool-chip wx-tool-${statusCls}">${icon} ${escHtml(t.name || 'tool')}${t.error ? ' ❌' : ' ✅'}</div>`
+    }
+    return `<div class="wx-tool-card wx-tool-${statusCls}" data-tool-card="${cardId}">
+      <div class="wx-tool-header">${icon} <span class="wx-tool-name">${escHtml(t.name || 'tool')}</span><span class="wx-tool-status">${statusText}${detail}</span>${hasDetails ? `<span class="wx-tool-toggle">▶</span>` : ''}</div>
+      ${detailsHtml}
     </div>`
+  }
+
+  // ── 侧边栏时间格式化 ──────────────────────────────────
+  function formatTime(ts) {
+    if (!ts) return ''
+    const d = new Date(ts)
+    const now = new Date()
+    const diff = now - d
+    if (diff < 60000) return '刚刚'
+    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
+    if (d.toDateString() === now.toDateString()) {
+      return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
+    }
+    return `${d.getMonth()+1}/${d.getDate()}`
   }
 
   function renderSlashMenu() {
@@ -285,25 +383,29 @@ export function render() {
   })
 
   function bind() {
-    // Model quick-switch
-    el.querySelector('#hm-chat-model')?.addEventListener('click', () => {
-      if (modelList.length) { showModelDropdown = !showModelDropdown; draw() }
+    // Model quick-switch (微信顶栏 chip 风格)
+    const modelChip = el.querySelector('#hm-chat-model')
+    const modelDd = el.querySelector('#wx-model-dd')
+    modelChip?.addEventListener('click', (e) => {
+      e.stopPropagation()
+      showModelDropdown = !showModelDropdown
+      if (modelDd) modelDd.style.display = showModelDropdown ? 'block' : 'none'
     })
-    el.querySelectorAll('.hm-chat-model-opt').forEach(opt => {
+    el.querySelectorAll('.wx-model-opt').forEach(opt => {
       opt.addEventListener('click', async () => {
         const m = opt.dataset.model
         if (m && m !== currentModel) {
-          try {
-            await api.hermesUpdateModel(m)
-            currentModel = m
-          } catch (_) {}
+          try { await api.hermesUpdateModel(m); currentModel = m } catch (_) {}
         }
-        showModelDropdown = false; draw()
+        showModelDropdown = false
+        if (modelDd) modelDd.style.display = 'none'
+        draw()
       })
     })
     document.addEventListener('click', (e) => {
-      if (showModelDropdown && !e.target.closest('#hm-chat-model') && !e.target.closest('#hm-chat-model-dd')) {
-        showModelDropdown = false; draw()
+      if (showModelDropdown && modelChip && !modelChip.contains(e.target) && modelDd && !modelDd.contains(e.target)) {
+        showModelDropdown = false
+        if (modelDd) modelDd.style.display = 'none'
       }
     })
     // File access toggle
@@ -314,24 +416,10 @@ export function render() {
     })
 
     // Session sidebar
-    el.querySelector('.hm-new-btn')?.addEventListener('click', () => { newSession(); draw() })
-    el.querySelectorAll('.hm-session-item').forEach(item => {
+    el.querySelector('.wx-new-btn')?.addEventListener('click', () => { newSession(); draw() })
+    el.querySelectorAll('.wx-session-item').forEach(item => {
       item.addEventListener('click', (e) => {
-        if (e.target.closest('.hm-session-del')) return
         activeId = item.dataset.sid
-        draw()
-      })
-    })
-    el.querySelectorAll('.hm-session-del').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const sid = btn.dataset.del
-        sessions = sessions.filter(s => s.id !== sid)
-        if (activeId === sid) {
-          if (!sessions.length) newSession()
-          activeId = sessions[0].id
-        }
-        saveSessions(sessions)
         draw()
       })
     })
@@ -347,7 +435,7 @@ export function render() {
     })
 
     // Send
-    el.querySelector('.hm-chat-send')?.addEventListener('click', sendMessage)
+    el.querySelector('#hm-chat-send-btn')?.addEventListener('click', sendMessage)
     const input = el.querySelector('#hm-chat-input')
     if (input) {
       input.addEventListener('keydown', (e) => {
@@ -360,7 +448,7 @@ export function render() {
         const val = input.value
         if (val.startsWith('/') && !val.includes(' ')) {
           showSlash = true; slashFilter = val
-          const parent = input.closest('.hermes-chat-input-area')?.querySelector('[style*="position:relative"]')
+          const parent = input.closest('.wx-input-area')
           if (parent) {
             const existing = parent.querySelector('.hm-slash-menu')
             if (existing) existing.remove()
