@@ -218,9 +218,10 @@ export function render() {
               <div class="wx-session-item ${s.id === activeId ? 'active' : ''}" data-sid="${s.id}">
                 <div class="wx-session-avatar">${s.id === activeId ? '💬' : '🗣️'}</div>
                 <div class="wx-session-body">
-                  <div class="wx-session-title">${escHtml(sessionTitle(s))}</div>
+                  <div class="wx-session-title" data-idx="${s.id}">${escHtml(sessionTitle(s))}</div>
                   <div class="wx-session-time">${s.updated ? formatTime(s.updated) : ''}</div>
                 </div>
+                <button class="wx-session-del" data-del="${s.id}" title="删除会话">X</button>
               </div>
             `).join('')}
           </div>
@@ -252,7 +253,6 @@ export function render() {
           </div>
 
           <!-- 消息区 -->
-          <div id="wx-token-stats" style="display:none;font-size:11px;color:#888;padding:2px 8px;text-align:right"></div>
           <div class="wx-messages" id="hm-chat-msgs">
             ${msgs.length === 0 ? `
               <div class="wx-empty-hint">
@@ -270,7 +270,10 @@ export function render() {
               <button class="wx-toolbar-btn" id="hm-file-access-btn" title="${fileAccessEnabled ? t('engine.fileAccessOn') : t('engine.fileAccessOff')}">
                 📎 <span>${t('engine.fileAccess')}</span>
               </button>
+              <button class="wx-toolbar-btn" id="wx-img-upload-btn" title="上传图片">IMG</button>
+              <input type="file" id="wx-img-input" accept="image/*" multiple style="display:none" />
             </div>
+            <div id="wx-img-preview" style="padding:4px 8px;gap:4px;display:flex;flex-wrap:wrap;"></div>
             <div class="wx-input-row">
               <textarea id="hm-chat-input" class="wx-input" rows="1" placeholder="${t('engine.chatPlaceholder')}" ${!gwOnline ? 'disabled' : ''}></textarea>
               <button class="wx-send-btn" id="hm-chat-send-btn" ${!gwOnline || streaming ? 'disabled' : ''}>${streaming ? '<span class="wx-sending">发送中</span>' : '发送'}</button>
@@ -430,10 +433,51 @@ export function render() {
     el.querySelector('.wx-new-btn')?.addEventListener('click', () => { newSession(); draw() })
     el.querySelectorAll('.wx-session-item').forEach(item => {
       item.addEventListener('click', (e) => {
-        if (e.target.closest('.wx-session-del')) return
+        const delBtn = e.target.closest('.wx-session-del')
+        if (delBtn) {
+          e.stopPropagation()
+          const sid = delBtn.dataset.del
+          if (!sid || !confirm('删除该会话？')) return
+          sessions = sessions.filter(s => s.id !== sid)
+          if (activeId === sid) { activeId = sessions[0]?.id || null }
+          saveSessions(sessions)
+          draw()
+          return
+        }
         activeId = item.dataset.sid
         loadDraft()
         draw()
+      })
+
+      // Double-click to rename
+      item.querySelector('.wx-session-title')?.addEventListener('dblclick', (e) => {
+        e.stopPropagation()
+        const titleEl = e.currentTarget
+        titleEl.contentEditable = true
+        titleEl.focus()
+        const range = document.createRange()
+        range.selectNodeContents(titleEl)
+        const sel = window.getSelection()
+        sel.removeAllRanges()
+        sel.addRange(range)
+        const finish = () => {
+          const sid = item.dataset.sid
+          const newTitle = titleEl.textContent.trim()
+          const sess = sessions.find(s => s.id === sid)
+          if (sess && newTitle) { sess.title = newTitle; saveSessions(sessions) }
+          titleEl.contentEditable = false
+          titleEl.removeEventListener('blur', finish)
+          titleEl.removeEventListener('keydown', onKey)
+        }
+        const onKey = (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); titleEl.blur() }
+          if (ev.key === 'Escape') {
+            titleEl.textContent = sessionTitle(sessions.find(s => s.id === item.dataset.sid))
+            titleEl.blur()
+          }
+        }
+        titleEl.addEventListener('blur', finish)
+        titleEl.addEventListener('keydown', onKey)
       })
     })
 
@@ -671,8 +715,6 @@ export function render() {
       draw()
     })
     unlisteners.push(u1, u2, u3, u4)
-    const onTokenUsage = await tauriListen('hermes-token-usage', ({ payload }) => { if (!payload) return; const statsEl = el.querySelector('#wx-token-stats'); if (statsEl) { const inp = payload.input_tokens || 0, out = payload.output_tokens || 0, cost = payload.cost_usd || 0; statsEl.innerHTML = '<span class="wx-token-badge">💰</span> 输入 ~' + inp + ' tokens / 输出 ~' + out + ' tokens / 约 ' + cost.toFixed(6) + ' USD'; statsEl.style.display = 'block'; setTimeout(() => { if (statsEl) statsEl.style.display = 'none' }, 12000) } });
-    unlisteners.push(onTokenUsage)
   }
 
   async function sendMessage() {
