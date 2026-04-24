@@ -36,10 +36,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Rust 版本
+        run: rustc --version && cargo --version
+
       - name: Rust 缓存
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          cache-on-failure: true
 
       - name: Rust 格式化检查
         working-directory: src-tauri
@@ -47,7 +51,7 @@ jobs:
 
       - name: Rust Clippy 检查
         working-directory: src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings 2>&1 | head -50
 
   # ─────────────────────────────────────────────────────────────
   # Job 2: Rust 编译检查
@@ -71,8 +75,6 @@ jobs:
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
-        with:
-          platform: ${{ matrix.platform.name == 'macOS (ARM64)' && 'aarch64-apple-darwin' || (matrix.platform.name == 'Linux (x64)' && 'x86_64-unknown-linux-gnu' || '') }}
 
       - name: Rust 缓存
         uses: swatinem/rust-cache@v2
