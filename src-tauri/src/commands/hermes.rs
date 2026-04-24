@@ -220,6 +220,9 @@ async fn do_restart_gateway() -> Result<(), String> {
     cmd.args(["gateway", "run"])
         .current_dir(&home)
         .env("PATH", &enhanced)
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
         .stdin(std::process::Stdio::null())
         .stdout(log_file)
         .stderr(log_err);
@@ -1771,6 +1774,9 @@ pub async fn hermes_gateway_action(
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
+                    .env("PYTHONUTF8", "1")
+                    .env("PYTHONIOENCODING", "utf-8")
+                    .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
                     .stdin(std::process::Stdio::null())
                     .stdout(log_file)
                     .stderr(log_err)
@@ -1856,6 +1862,8 @@ pub async fn hermes_gateway_action(
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
+                    .env("PYTHONUTF8", "1")
+                    .env("PYTHONIOENCODING", "utf-8")
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
@@ -1905,7 +1913,12 @@ pub async fn hermes_gateway_action(
                     Err(e) => {
                         // fallback: hermes gateway start
                         let mut fallback = tokio::process::Command::new("hermes");
-                        fallback.args(["gateway", "start"]).env("PATH", &enhanced);
+                        fallback.args(["gateway", "start"])
+                            .env("PATH", &enhanced)
+                            .env("PYTHONUTF8", "1")
+                            .env("PYTHONIOENCODING", "utf-8");
+                        #[cfg(target_os = "windows")]
+                        fallback.creation_flags(CREATE_NO_WINDOW);
                         let out = fallback
                             .output()
                             .await
@@ -1938,7 +1951,10 @@ pub async fn hermes_gateway_action(
 
             // 2. 尝试 hermes gateway stop（作为补充）
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "stop"]).env("PATH", &enhanced);
+            cmd.args(["gateway", "stop"])
+                .env("PATH", &enhanced)
+                .env("PYTHONUTF8", "1")
+                .env("PYTHONIOENCODING", "utf-8");
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let stop_result = cmd.output().await;
@@ -1981,7 +1997,10 @@ pub async fn hermes_gateway_action(
         }
         "status" => {
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "status"]).env("PATH", &enhanced);
+            cmd.args(["gateway", "status"])
+                .env("PATH", &enhanced)
+                .env("PYTHONUTF8", "1")
+                .env("PYTHONIOENCODING", "utf-8");
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("查询失败: {e}"))?;
@@ -1990,7 +2009,10 @@ pub async fn hermes_gateway_action(
         }
         "install" => {
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "install"]).env("PATH", &enhanced);
+            cmd.args(["gateway", "install"])
+                .env("PATH", &enhanced)
+                .env("PYTHONUTF8", "1")
+                .env("PYTHONIOENCODING", "utf-8");
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("安装失败: {e}"))?;
@@ -2002,7 +2024,10 @@ pub async fn hermes_gateway_action(
         }
         "uninstall" => {
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "uninstall"]).env("PATH", &enhanced);
+            cmd.args(["gateway", "uninstall"])
+                .env("PATH", &enhanced)
+                .env("PYTHONUTF8", "1")
+                .env("PYTHONIOENCODING", "utf-8");
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("卸载失败: {e}"))?;
