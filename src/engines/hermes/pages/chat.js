@@ -138,6 +138,7 @@ export function render() {
   }
 
   function renderToolCard(t, collapsed = true) {
+    if (!t) return ''
     const icon = toolIcon(t.name)
     const statusCls = t.status === 'complete' ? 'done' : t.status === 'error' ? 'err' : 'active'
     const statusText = t.status === 'complete' ? '✓ 完成' : t.status === 'error' ? '✗ 失败' : '⟳ 运行中'
@@ -159,7 +160,7 @@ export function render() {
       </div>`
     }
     return `<div class="hm-tool-card ${statusCls}" data-tool-card="${cardId}">
-      <div class="hm-tool-card-header">${icon} <span class="hm-tool-name">${escHtml(t.name)}</span><span class="hm-tool-status">${statusText}${detail}</span>${hasDetails ? `<span class="hm-tool-toggle">▶</span>` : ''}</div>
+      <div class="hm-tool-card-header">${icon} <span class="hm-tool-name">${escHtml(t.name || 'tool')}</span><span class="hm-tool-status">${statusText}${detail}</span>${hasDetails ? `<span class="hm-tool-toggle">▶</span>` : ''}</div>
       ${detailsHtml}
     </div>`
   }
