@@ -91,6 +91,15 @@ export function render() {
   let pendingText = ''       // 累积的 delta 文本
   let activeTools = []       // 当前活跃的工具调用 [{ name, status, detail, input, output, error }]
   let unlisteners = []       // Tauri 事件监听取消函数
+  let lastSSEActivity = Date.now()
+  let reconnectAttempts = 0
+  const MAX_RECONNECT = 3
+  const SSE_TIMEOUT_MS = 30000
+  let heartbeatTimer = null
+  let reconnectToast = null
+  let toolProgress = { total: 0, done: 0 }
+  let pendingImages = []
+  let quotedMsgId = null
 
   function active() { return sessions.find(s => s.id === activeId) }
 
@@ -183,7 +192,8 @@ export function render() {
     const textHtml = pendingText
       ? `<div class="hermes-chat-msg assistant"><div class="hermes-chat-bubble assistant">${mdToHtml(pendingText)}</div></div>`
       : (activeTools.length === 0 ? `<div class="hermes-chat-msg assistant"><div class="hermes-chat-bubble assistant"><span class="hermes-chat-typing">${t('engine.chatThinking')}</span></div></div>` : '')
-    streamEl.innerHTML = toolsHtml + textHtml
+    const toolStatus = toolProgress.total > 0 ? '<div class=wx-stream-status>🔄 正在执行 ' + toolProgress.done + ' / ' + toolProgress.total + ' 个工具...</div>' : ''
+    streamEl.innerHTML = toolStatus + toolsHtml + textHtml
     msgsEl.scrollTop = msgsEl.scrollHeight
   }
 
@@ -419,10 +429,87 @@ export function render() {
     el.querySelector('.wx-new-btn')?.addEventListener('click', () => { newSession(); draw() })
     el.querySelectorAll('.wx-session-item').forEach(item => {
       item.addEventListener('click', (e) => {
+        if (e.target.closest('.wx-session-del')) return
         activeId = item.dataset.sid
+        loadDraft()
         draw()
       })
     })
+
+    // ── 图片上传 ──
+    el.querySelector('#wx-img-input')?.addEventListener('change', (e) => {
+      const files = e.target.files
+      if (!files) return
+      const preview = el.querySelector('#wx-img-preview')
+      Array.from(files).forEach(file => {
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          pendingImages.push({ name: file.name, dataUrl: ev.target.result })
+          const thumb = document.createElement('div')
+          thumb.className = 'wx-img-thumb'
+          thumb.innerHTML = '<img src="' + ev.target.result + '" /><span class="wx-img-remove" data-idx="' + (pendingImages.length - 1) + '">×</span>'
+          thumb.querySelector('.wx-img-remove')?.addEventListener('click', () => {
+            const idx = parseInt(thumb.querySelector('.wx-img-remove').dataset.idx)
+            pendingImages.splice(idx, 1)
+            thumb.remove()
+          })
+          preview?.appendChild(thumb)
+        }
+        reader.readAsDataURL(file)
+      })
+      e.target.value = ''
+    })
+
+    // ── 搜索 ──
+    el.querySelector('#wx-search-btn')?.addEventListener('click', () => {
+      const bar = el.querySelector('#wx-search-bar')
+      if (bar) bar.style.display = bar.style.display === 'none' ? 'flex' : 'none'
+      if (bar?.style.display === 'flex') el.querySelector('#wx-search-input')?.focus()
+    })
+    el.querySelector('#wx-search-clear')?.addEventListener('click', () => {
+      const inp = el.querySelector('#wx-search-input')
+      if (inp) inp.value = ''
+      highlightSearch(null)
+    })
+    el.querySelector('#wx-search-input')?.addEventListener('input', (e) => {
+      highlightSearch(e.target.value.trim() || null)
+    })
+    function highlightSearch(q) {
+      document.querySelectorAll('.wx-search-hl').forEach(hl => {
+        const p = hl.parentNode
+        while (hl.firstChild) p.insertBefore(hl.firstChild, hl)
+        p.removeChild(hl)
+      })
+      if (!q) return
+      document.querySelectorAll('.wx-bubble-content').forEach(bubble => {
+        const html = bubble.innerHTML
+        const idx = html.toLowerCase().indexOf(q.toLowerCase())
+        if (idx >= 0) {
+          bubble.innerHTML = html.slice(0, idx) + '<mark class=wx-search-hl>' + html.slice(idx, idx + q.length) + '</mark>' + html.slice(idx + q.length)
+        }
+      })
+    }
+
+    // ── 消息操作（事件委托） ──
+    el.querySelector('#hm-chat-msgs')?.addEventListener('click', (e) => {
+      const msgRow = e.target.closest('.wx-msg-row')
+      if (!msgRow) return
+      const bubble = msgRow.querySelector('.wx-bubble-content')
+      const text = bubble?.textContent || ''
+      const msgId = msgRow.dataset.msgId
+      if (e.target.closest('.wx-msg-action-reply')) setQuote(msgId, text)
+      else if (e.target.closest('.wx-msg-action-copy')) navigator.clipboard.writeText(text).catch(() => {})
+    })
+
+    // ── Ctrl+Z 撤销快捷键 ──
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        const tag = document.activeElement?.tagName
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') { e.preventDefault(); undoLast() }
+      }
+    })
+
+    loadDraft()
 
     // Slash menu clicks
     el.querySelectorAll('.hm-slash-item').forEach(item => {
@@ -489,10 +576,12 @@ export function render() {
   async function setupRunListeners() {
     cleanupListeners()
     const u1 = await tauriListen('hermes-run-delta', (e) => {
+      lastSSEActivity = Date.now(); reconnectAttempts = 0
       pendingText += e.payload?.delta || ''
       updateStreamArea()
     })
     const u2 = await tauriListen('hermes-run-tool', (e) => {
+      lastSSEActivity = Date.now(); reconnectAttempts = 0
       const evt = e.payload || {}
       const evtType = evt.event || ''
       const toolName = evt.tool || evt.tool_name || evt.name || 'tool'
@@ -544,6 +633,7 @@ export function render() {
       updateStreamArea()
     })
     const u3 = await tauriListen('hermes-run-done', (e) => {
+      stopHB(); hideToast()
       const cur = active()
       if (!cur) return
       const output = e.payload?.output || pendingText || '(empty)'
@@ -567,6 +657,7 @@ export function render() {
       draw()
     })
     const u4 = await tauriListen('hermes-run-error', (e) => {
+      stopHB(); hideToast()
       const cur = active()
       if (!cur) return
       const err = e.payload?.error || 'unknown error'
@@ -575,7 +666,7 @@ export function render() {
       pendingText = ''
       activeTools = []
       saveSessions(sessions)
-      cleanupListeners()
+      cleanupListeners(); updateTP(0, 0)
       draw()
     })
     unlisteners.push(u1, u2, u3, u4)
