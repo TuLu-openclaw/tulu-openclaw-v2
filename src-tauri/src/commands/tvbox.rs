@@ -1,5 +1,5 @@
+use md5::{Digest as Md5Digest, Md5};
 use once_cell::sync::Lazy;
-use md5::{Md5, Digest as Md5Digest};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

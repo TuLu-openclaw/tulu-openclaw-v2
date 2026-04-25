@@ -3013,14 +3013,23 @@ pub async fn hermes_skills_list() -> Result<Value, String> {
                         })
                         .map(|l| {
                             let s = l.trim();
-                            if s.len() > 200 { format!("{}...", &s[..200]) } else { s.to_string() }
+                            if s.len() > 200 {
+                                format!("{}...", &s[..200])
+                            } else {
+                                s.to_string()
+                            }
                         })
                         .unwrap_or_default();
                     let size = fpath.metadata().map(|m| m.len()).unwrap_or(0);
-                    let modified = fpath.metadata()
+                    let modified = fpath
+                        .metadata()
                         .and_then(|m| m.modified())
                         .ok()
-                        .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as f64)
+                        .map(|t| {
+                            t.duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs() as f64
+                        })
                         .unwrap_or(0.0);
                     result.push(serde_json::json!({
                         "file": fname,
@@ -3062,8 +3071,12 @@ pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
 pub async fn hermes_skill_delete(file_path: String) -> Result<String, String> {
     let skills_dir = hermes_home().join("skills");
     let resolved = PathBuf::from(&file_path);
-    let canonical = resolved.canonicalize().map_err(|e| format!("Path error: {}", e))?;
-    let canonical_dir = skills_dir.canonicalize().map_err(|e| format!("Path error: {}", e))?;
+    let canonical = resolved
+        .canonicalize()
+        .map_err(|e| format!("Path error: {}", e))?;
+    let canonical_dir = skills_dir
+        .canonicalize()
+        .map_err(|e| format!("Path error: {}", e))?;
     if !canonical.starts_with(&canonical_dir) {
         return Err("Access denied".into());
     }
@@ -3077,12 +3090,12 @@ pub async fn hermes_skill_delete(file_path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn hermes_skill_save(name: String, content: String) -> Result<String, String> {
     let skills_dir = hermes_home().join("skills");
-    std::fs::create_dir_all(&skills_dir).map_err(|e| format!("Failed to create skills dir: {}", e))?;
+    std::fs::create_dir_all(&skills_dir)
+        .map_err(|e| format!("Failed to create skills dir: {}", e))?;
     let file_path = skills_dir.join(&name);
     std::fs::write(&file_path, content).map_err(|e| format!("Failed to save skill: {}", e))?;
     Ok(format!("Saved skill: {}", name))
 }
-
 
 #[tauri::command]
 pub async fn hermes_write_config(key: String, value: String) -> Result<String, String> {
@@ -3114,7 +3127,11 @@ pub async fn hermes_write_config(key: String, value: String) -> Result<String, S
 }
 
 #[tauri::command]
-pub async fn hermes_cron_save(name: String, schedule: String, payload: String) -> Result<String, String> {
+pub async fn hermes_cron_save(
+    name: String,
+    schedule: String,
+    payload: String,
+) -> Result<String, String> {
     let home = hermes_home();
     let cron_dir = home.join("hooks").join("cron");
     std::fs::create_dir_all(&cron_dir).map_err(|e| e.to_string())?;
@@ -3132,7 +3149,10 @@ pub async fn hermes_cron_save(name: String, schedule: String, payload: String) -
 #[tauri::command]
 pub async fn hermes_cron_delete(name: String) -> Result<String, String> {
     let home = hermes_home();
-    let file = home.join("hooks").join("cron").join(format!("{}.json", name));
+    let file = home
+        .join("hooks")
+        .join("cron")
+        .join(format!("{}.json", name));
     if file.exists() {
         std::fs::remove_file(&file).map_err(|e| e.to_string())?;
         Ok(format!("Cron task {} deleted", name))
@@ -3159,7 +3179,10 @@ pub async fn hermes_cron_runs(name: String, _limit: Option<u32>) -> Result<Value
 #[tauri::command]
 pub async fn hermes_cron_next_run(name: String) -> Result<String, String> {
     let home = hermes_home();
-    let file = home.join("hooks").join("cron").join(format!("{}.json", name));
+    let file = home
+        .join("hooks")
+        .join("cron")
+        .join(format!("{}.json", name));
     if !file.exists() {
         return Err(format!("Cron task {} not found", name));
     }
