@@ -2,12 +2,11 @@ mod commands;
 mod models;
 mod tray;
 mod utils;
-#[cfg(target_os = "windows")]
 mod windows_proxy;
 
 use commands::{
-    agent, assistant, config, device, extensions, hermes, logs, memory, messaging, pairing, proxy,
-    service, skills, tvbox, update,
+    agent, assistant, config, device, extensions, hermes, logs, memory, messaging, pairing,
+    service, skillhub, skills, tvbox, update,
 };
 
 pub fn run() {
@@ -74,7 +73,6 @@ pub fn run() {
             config::read_mcp_config,
             config::write_mcp_config,
             config::get_version_info,
-            config::get_version_info_local,
             config::check_installation,
             config::init_openclaw_config,
             config::calibrate_openclaw_config,
@@ -171,34 +169,11 @@ pub fn run() {
             assistant::assistant_check_port,
             assistant::assistant_web_search,
             assistant::assistant_fetch_url,
-            #[cfg(target_os = "windows")]
-            assistant::fetch_page,
-            #[cfg(target_os = "windows")]
-            assistant::fetch_page_js,
-            #[cfg(target_os = "windows")]
-            assistant::open_player_window,
-            #[cfg(target_os = "windows")]
-            assistant::open_lobster_office,
-            #[cfg(target_os = "windows")]
-            assistant::vod_fetch,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,
             assistant::assistant_load_image,
             assistant::assistant_delete_image,
-            // Hermes Agent
-            hermes::check_hermes,
-            hermes::check_python,
-            hermes::install_hermes,
-            hermes::hermes_gateway_action,
-            hermes::hermes_set_gateway_url,
-            hermes::hermes_read_config,
-            hermes::configure_hermes,
-            hermes::hermes_fetch_models,
-            hermes::hermes_health_check,
-            hermes::hermes_agent_run,
-            hermes::hermes_update_model,
-            hermes::hermes_detect_environments,
             // 消息渠道管理
             messaging::read_platform_config,
             messaging::save_messaging_platform,
@@ -245,9 +220,42 @@ pub fn run() {
             tvbox::tvbox_store_keys,
             tvbox::tvbox_store_del,
             tvbox::tvbox_cookie_get,
-            tvbox::tvbox_parse,
-            // 全球内置代理
-            proxy::proxy_url,
+            // Hermes Agent
+            hermes::check_hermes,
+            hermes::check_python,
+            hermes::hermes_read_config,
+            hermes::hermes_write_config,
+            hermes::hermes_update_model,
+            hermes::hermes_agent_run,
+            hermes::hermes_gateway_action,
+            hermes::hermes_health_check,
+            hermes::hermes_detect_environments,
+            hermes::hermes_set_gateway_url,
+            hermes::hermes_fetch_models,
+            hermes::hermes_cron_save,
+            hermes::hermes_cron_delete,
+            hermes::hermes_cron_run,
+            hermes::hermes_cron_runs,
+            hermes::hermes_cron_next_run,
+            // Hermes Skills
+            hermes::hermes_skills_list,
+            hermes::hermes_skill_detail,
+            hermes::hermes_skill_delete,
+            hermes::hermes_skill_save,
+            // Hermes Sessions
+            hermes::hermes_sessions_list,
+            hermes::hermes_session_detail,
+            hermes::hermes_session_delete,
+            hermes::hermes_session_rename,
+            // Hermes Logs
+            hermes::hermes_logs_list,
+            hermes::hermes_logs_read,
+            // Hermes Memory
+            hermes::hermes_memory_read,
+            hermes::hermes_memory_write,
+            // Hermes Install & Config
+            hermes::install_hermes,
+            hermes::configure_hermes,
         ])
         .on_window_event(|window, event| {
             // 关闭窗口时最小化到托盘，不退出应用

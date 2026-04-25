@@ -45,6 +45,129 @@ const MODES = {
   execute:  { label: t('assistant.modeExecute'), desc: t('assistant.modeExecuteDesc'), tools: true, readOnly: false, confirmDanger: true, accent: 'var(--accent)' },
   unlimited:{ label: t('assistant.modeUnlimited'), desc: t('assistant.modeUnlimitedDesc'), tools: true, readOnly: false, confirmDanger: false, accent: 'var(--warning)' },
 }
+// ── 快捷指令数据 ──
+const QUICK_COMMANDS = [
+  { category: '基础交互', icon: '💬', items: ['hermes — 进入交互终端', 'hermes help — 查看所有命令', 'hermes version — 查看版本号', 'hermes info — 查看系统信息', 'hermes clear — 清空对话上下文', 'hermes status — 检查服务状态'] },
+  { category: '服务管理', icon: '⚙️', items: ['hermes start — 启动服务', 'hermes stop — 停止服务', 'hermes restart — 重启服务'] },
+  { category: '技能管理', icon: '🛠️', items: ['hermes skill list — 列出所有技能', 'hermes skill show <name> — 查看技能详情', 'hermes skill run <name> — 运行技能', 'hermes skill edit <name> — 编辑技能', 'hermes skill delete <name> — 删除技能'] },
+  { category: '插件管理', icon: '🔌', items: ['hermes plugin list — 列出插件', 'hermes plugin install <name> — 安装插件', 'hermes plugin uninstall <name> — 卸载插件', 'hermes plugin enable <name> — 启用插件', 'hermes plugin disable <name> — 禁用插件', 'hermes plugin market — 浏览插件市场'] },
+  { category: '配置管理', icon: '📋', items: ['hermes config edit — 编辑配置', 'hermes config reset — 重置配置', 'hermes config show — 查看配置', 'hermes model switch <model> — 切换模型'] },
+  { category: '诊断维护', icon: '🔧', items: ['hermes doctor — 运行诊断', 'hermes logs — 查看日志', 'hermes logs -f — 实时跟踪日志', 'hermes cache clean — 清理缓存', 'pkill -f hermes — 强制终止进程'] },
+  { category: '特定任务', icon: '🚀', items: ['hermes serve --host 0.0.0.0 --port 8080 & — 启动服务', 'hermes local pull <model> — 拉取模型', 'hermes web — 启动Web界面'] },
+]
+
+// 完整技能清单（给 Hermes 学习用）
+const SKILL_CHECKLIST_TEXT = `Hermes，以下是你必须掌握的技能清单，你需尽快学习并内化这些能力，确保在后续任务中能高效准确地执行。
+
+一、系统级核心能力
+
+1. 自动创建与管理技能
+- 完成单次任务后，需自动回放执行过程，抽象出标准化流程，生成符合 agentskills.io 标准的Markdown技能文档。
+- 将技能文件存储至 ~/.hermes/skills/ 目录，并在后续任务中主动调用、优化已有技能。
+- 当执行任务超过5次工具调用或从错误中恢复时，必须触发技能生成机制。
+
+2. 服务状态管理
+- 掌握 hermes start、hermes stop、hermes restart 指令，确保服务稳定运行。
+- 熟练使用 hermes status 实时监控服务状态，发现问题时主动上报异常日志。
+
+3. 配置与模型切换
+- 能通过 hermes config edit 修改配置文件，适配不同场景需求。
+- 掌握 hermes model switch 指令，根据任务复杂度灵活切换大语言模型。
+
+二、工具调用与实用能力
+
+1. 网页浏览与信息检索
+- 对时效性问题需调用网页浏览工具获取最新数据，并标注信息来源。
+- 检索信息时优先选择权威网站，避免引用个人博客或未经验证的内容。
+
+2. 代码执行与开发辅助
+- 支持Python、JavaScript等主流语言的代码片段执行，需检查代码安全性后再运行。
+- 根据需求自动生成函数框架、单元测试用例，并解释代码逻辑。
+
+3. 文件系统操作
+- 掌握创建、读取、修改、删除文件的标准化流程，操作前需确认用户权限。
+
+4. 知识库问答
+- 若用户上传知识库文件，需建立索引并支持语义检索，回答时标注参考文档的具体章节。
+
+三、对话与交互能力
+
+1. 上下文理解与长对话
+- 需记住对话历史中的关键信息，避免重复提问。
+- 当用户意图模糊时，主动用封闭式问题确认。
+
+2. 指令遵循与精确执行
+- 对用户明确指定的格式要求，需严格遵循，不得自行简化。
+
+3. 结果格式化输出
+- 数据类结果需用表格呈现，代码需添加注释，禁止返回未处理的原始数据。
+
+四、高级进阶能力
+
+1. 自我反思与改进
+- 任务完成后生成反思报告：执行效率评分、工具调用合理性分析、优化建议。
+
+2. 技能自我迭代
+- 当发现更优执行路径时，自动更新技能文档并标注改进点。
+
+3. 多轮任务规划与执行
+- 复杂任务需拆解为子任务清单，执行中动态调整任务优先级。`
+
+// ── 快捷指令选择器 ──
+function showCommandsModal(onSelect) {
+  const overlay = document.createElement('div')
+  overlay.className = 'modal-overlay'
+  overlay.style.cssText = 'z-index:10000'
+
+  let html = `<div class="modal" style="max-width:640px;max-height:80vh;display:flex;flex-direction:column">
+    <div class="modal-title">📋 Hermes 快捷指令</div>
+    <div style="padding:0 20px 12px;border-bottom:1px solid var(--border-color)">
+      <input class="form-input" id="ast-cmd-search" placeholder="搜索指令..." style="width:100%;font-size:13px">
+    </div>
+    <div id="ast-cmd-list" style="flex:1;overflow-y:auto;padding:12px 20px">`
+
+  QUICK_COMMANDS.forEach((sec, si) => {
+    html += `<div class="ast-cmd-section" data-category="${si}">
+      <div class="ast-cmd-cat-title"><span style="margin-right:6px">${sec.icon}</span>${sec.category}</div>`
+    html += '<div class="ast-cmd-items">'
+    sec.items.forEach((item, ii) => {
+      html += `<div class="ast-cmd-item" data-cmd="${escHtml(item.replace(/^hermes\s*/, ''))}" data-idx="${si}-${ii}">${escHtml(item)}</div>`
+    })
+    html += '</div></div>'
+  })
+  html += '</div></div>'
+
+  overlay.innerHTML = html
+  document.body.appendChild(overlay)
+
+  const close = () => overlay.remove()
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+
+  // 搜索过滤
+  const searchEl = overlay.querySelector('#ast-cmd-search')
+  const listEl = overlay.querySelector('#ast-cmd-list')
+  searchEl.addEventListener('input', () => {
+    const q = searchEl.value.trim().toLowerCase()
+    listEl.querySelectorAll('.ast-cmd-item').forEach(el => {
+      el.style.display = !q || el.textContent.toLowerCase().includes(q) ? '' : 'none'
+    })
+    listEl.querySelectorAll('.ast-cmd-section').forEach(el => {
+      const visible = [...el.querySelectorAll('.ast-cmd-item')].some(i => i.style.display !== 'none')
+      el.style.display = visible ? '' : 'none'
+    })
+  })
+
+  // 点击指令 → 填充并发送
+  listEl.addEventListener('click', (e) => {
+    const item = e.target.closest('.ast-cmd-item')
+    if (!item) return
+    const cmd = 'hermes ' + item.dataset.cmd
+    close()
+    onSelect(cmd)
+  })
+}
+
+// ── 指令模板 ──
 const DEFAULT_MODE = 'execute'
 
 // ── API 类型（从共享模块导入）──
@@ -1996,8 +2119,7 @@ function showAskUserCard({ question, type, options, placeholder }) {
 
 // 危险工具确认弹窗
 async function confirmToolCall(tc, critical = false) {
-  const name = tc?.function?.name
-  if (!name) return false
+  const name = tc.function.name
   let args
   try { args = JSON.parse(tc.function.arguments) } catch { args = {} }
 
@@ -2022,20 +2144,19 @@ async function confirmToolCall(tc, critical = false) {
 
 // 将 OpenAI 格式工具定义转为 Anthropic 格式
 function convertToolsForAnthropic(tools) {
-  if (!Array.isArray(tools)) return []
   return tools.map(t => ({
-    name: t?.function?.name || t?.name || 'unknown',
-    description: t?.function?.description || '',
-    input_schema: t?.function?.parameters || { type: 'object', properties: {} },
+    name: t.function.name,
+    description: t.function.description || '',
+    input_schema: t.function.parameters || { type: 'object', properties: {} },
   }))
 }
 
 // 将 OpenAI 格式工具定义转为 Gemini 格式
 function convertToolsForGemini(tools) {
-  return [{ functionDeclarations: (tools || []).map(t => ({
-    name: t?.function?.name || t?.name || 'unknown',
-    description: t?.function?.description || '',
-    parameters: t?.function?.parameters || { type: 'object', properties: {} },
+  return [{ functionDeclarations: tools.map(t => ({
+    name: t.function.name,
+    description: t.function.description || '',
+    parameters: t.function.parameters || { type: 'object', properties: {} },
   }))}]
 }
 
@@ -2290,9 +2411,8 @@ function renderSessionList() {
 }
 
 function renderToolBlocks(toolHistory) {
-  if (!toolHistory || !Array.isArray(toolHistory) || toolHistory.length === 0) return ''
+  if (!toolHistory || toolHistory.length === 0) return ''
   return toolHistory.map(tc => {
-    if (!tc || !tc.name) return ''
     // ask_user 工具不显示在工具块中（它有自己的交互卡片）
     if (tc.name === 'ask_user') return ''
 
@@ -3804,6 +3924,23 @@ async function retryAIResponse(session) {
       aiMsg.content += aiMsg.content ? '\n\n*[' + t('assistant.stopped') + ']*' : '*[' + t('assistant.stopped') + ']*'
     } else {
       setSessionStatus(session.id, 'error')
+      const isConfigError = err.message && (
+        err.message.includes('errConfigFirst') ||
+        err.message.includes('API') ||
+        (!hasContent && err.message.includes('API')) ||
+        err.message.includes('baseUrl') ||
+        err.message.includes('model')
+      )
+      if (isConfigError) {
+        // 配置错误：弹出提示并打开设置面板
+        aiMsg.content = ''
+        session.messages.pop()
+        saveSessions()
+        renderMessages()
+        alert('请先配置 API 地址和模型名称：点击左上角「设置」按钮进行配置。')
+        setTimeout(() => showSettings(), 300)
+        return
+      }
       aiMsg.content += aiMsg.content
         ? `\n\n---\n**${t('assistant.requestInterrupted')}**: ${err.message}`
         : err.message
@@ -4030,6 +4167,12 @@ export async function render() {
         <div class="ast-input-wrap">
           <button class="ast-attach-btn" id="ast-btn-attach" title="${t('assistant.uploadImage')}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </button>
+          <button class="ast-quick-cmd-btn" id="ast-btn-commands" title="快捷指令（发送 Hermes 指令）">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+          </button>
+          <button class="ast-quick-cmd-btn" id="ast-btn-skills" title="必备技能（发送技能清单给 Hermes）">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
           </button>
           <input type="file" id="ast-file-input" accept="image/*" multiple style="display:none"/>
           <textarea class="ast-textarea" id="ast-textarea" placeholder="${t('assistant.inputPlaceholder')}" rows="1"></textarea>
@@ -4263,6 +4406,26 @@ export async function render() {
 
   // 设置
   page.querySelector('#ast-btn-settings').addEventListener('click', showSettings)
+
+  // 快捷指令按钮 → 弹出指令选择器
+  page.querySelector('#ast-btn-commands').addEventListener('click', () => {
+    showCommandsModal((cmd) => {
+      _textarea.value = cmd
+      _textarea.focus()
+      autoResize(_textarea)
+      // 自动发送
+      sendMessage(cmd)
+      _textarea.value = ''
+      autoResize(_textarea)
+    })
+  })
+
+  // 必备技能按钮 → 发送完整技能清单
+  page.querySelector('#ast-btn-skills').addEventListener('click', () => {
+    _textarea.value = SKILL_CHECKLIST_TEXT
+    autoResize(_textarea)
+    _textarea.focus()
+  })
 
   // 会话列表事件委托
   _sessionListEl.addEventListener('click', (e) => {

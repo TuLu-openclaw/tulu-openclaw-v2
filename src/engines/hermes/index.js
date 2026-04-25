@@ -57,6 +57,8 @@ export async function boot() {
   console.log('[Hermes Engine] booted')
 }
 
+export const init = boot
+
 /** 清理引擎 */
 export function cleanup() {
   console.log('[Hermes Engine] cleaned up')

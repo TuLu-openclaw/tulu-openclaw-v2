@@ -395,6 +395,64 @@
   cursor: not-allowed;
 }
 
+/* 快捷指令按钮（输入区） */
+.ast-quick-cmd-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  margin-right: 4px;
+}
+
+.ast-quick-cmd-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* 指令选择器弹窗 */
+.ast-cmd-section {
+  margin-bottom: 12px;
+}
+
+.ast-cmd-cat-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ast-cmd-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ast-cmd-item {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.ast-cmd-item:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
 .ast-input-hint {
   font-size: 11px;
   color: var(--text-tertiary);

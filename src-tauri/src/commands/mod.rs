@@ -23,7 +23,6 @@ pub mod logs;
 pub mod memory;
 pub mod messaging;
 pub mod pairing;
-pub mod proxy;
 pub mod service;
 pub mod skillhub;
 pub mod skills;

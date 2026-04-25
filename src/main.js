@@ -16,33 +16,6 @@ import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
 // import { tryShowEngagement } from './components/engagement.js'
 import { initI18n, t } from './lib/i18n.js'
-import { initEngineManager, registerEngine } from './lib/engine-manager.js'
-import { engineMeta as hermesMeta, getRoutes as getHermesRoutes, getDefaultRoute as getHermesDefaultRoute, boot as hermesBoot, cleanup as hermesCleanup } from './engines/hermes/index.js'
-import { engineMeta as openclawMeta, getRoutes as getOpenclawRoutes, getDefaultRoute as getOpenclawDefaultRoute, boot as openclawBoot, cleanup as openclawCleanup } from './engines/openclaw/index.js'
-
-// 注册 OpenClaw 引擎
-registerEngine({
-  id: openclawMeta.id,
-  name: openclawMeta.name,
-  icon: openclawMeta.icon,
-  description: openclawMeta.description,
-  getRoutes: getOpenclawRoutes,
-  getDefaultRoute: getOpenclawDefaultRoute,
-  boot: openclawBoot,
-  cleanup: openclawCleanup,
-})
-
-// 注册 Hermes 引擎
-registerEngine({
-  id: hermesMeta.id,
-  name: hermesMeta.name,
-  icon: hermesMeta.icon,
-  description: hermesMeta.description,
-  getRoutes: getHermesRoutes,
-  getDefaultRoute: getHermesDefaultRoute,
-  boot: hermesBoot,
-  cleanup: hermesCleanup,
-})
 
 // 样式
 import './style/variables.css'
@@ -196,7 +169,6 @@ function showKamiFallbackModal() {
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
         <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">屠戮授权验证</div>
         <div style="font-size:12px;color:#666">请输入卡密以继续使用</div>
-        <div id="kami-fb-notice" style="margin-top:12px;padding:10px 12px;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px;color:#a5b4fc;line-height:1.6;display:none"></div>
       </div>
       <div style="margin-bottom:16px">
         <div style="color:#888;font-size:12px;margin-bottom:8px">卡密</div>
@@ -218,20 +190,11 @@ function showKamiFallbackModal() {
   document.body.appendChild(overlay)
 
   // 动态 import kami.js（独立于模块加载失败的环境）
-  import('./lib/kami.js').then(async ({ login, saveKami, markVerified, getNotice }) => {
+  import('./lib/kami.js').then(async ({ login, saveKami, markVerified }) => {
     const inputEl = document.getElementById('kami-fb-input')
     const rememberEl = document.getElementById('kami-fb-remember')
     const btnEl = document.getElementById('kami-fb-btn')
     const errorEl = document.getElementById('kami-fb-error')
-    const noticeEl = document.getElementById('kami-fb-notice')
-
-    // 异步拉取远程公告
-    getNotice().then(text => {
-      if (text && text.trim()) {
-        noticeEl.textContent = text
-        noticeEl.style.display = 'block'
-      }
-    }).catch(() => {})
 
     async function doVerify() {
       const kami = inputEl.value.trim()
@@ -411,13 +374,39 @@ window.__屠戮OpenClaw_show_login = async function() {
   location.reload()
 }
 
+// === 多引擎支持 ===
+import { registerEngine, activateEngine, onEngineChange, listEngines, getActiveEngine } from './lib/engine-manager.js'
+import { init as initHermesEngine } from './engines/hermes/index.js'
+import { init as initOpenClawEngine } from './engines/openclaw/index.js'
+
+// 注册双引擎
+const openclawEngine = {
+  id: 'openclaw',
+  name: 'OpenClaw',
+  icon: '⚡',
+  description: 'OpenClaw AI Agent 引擎',
+  getRoutes: () => import('./engines/openclaw/index.js').then(m => m.getRoutes()),
+  getDefaultRoute: () => '/dashboard',
+  boot: initOpenClawEngine,
+  cleanup: () => console.log('[OpenClaw Engine] cleaned'),
+}
+const hermesEngine = {
+  id: 'hermes',
+  name: 'Hermes',
+  icon: '🔮',
+  description: 'Hermes Agent 引擎',
+  getRoutes: () => import('./engines/hermes/index.js').then(m => m.getRoutes()),
+  getDefaultRoute: () => '/hermes/chat',
+  boot: initHermesEngine,
+  cleanup: () => console.log('[Hermes Engine] cleaned'),
+}
+registerEngine(openclawEngine)
+registerEngine(hermesEngine)
+
 const sidebar = document.getElementById('sidebar')
 const content = document.getElementById('content')
 
 async function boot() {
-  // 初始化引擎管理器（加载上次选中的引擎）
-  try { await initEngineManager() } catch (e) { console.warn('[boot] initEngineManager 失败:', e) }
-
   // 先注册所有路由，立即渲染 UI（不等后端检测）
   registerRoute('/dashboard', () => import('./pages/dashboard.js'))
   registerRoute('/chat', () => import('./pages/chat.js'))
@@ -433,34 +422,20 @@ async function boot() {
   registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
-// ── 龙虾办公室状态同步 ─────────────────────────────────
-// 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
-window.updateLobsterState = function(state, message) {
-  try {
-    localStorage.setItem('lobsterState', JSON.stringify({
-      state: state,
-      message: message || '',
-      ts: Date.now()
-    }))
-  } catch (e) {}
-}
-
-// 监听路由变化，认为一次路由变化 = 一次工作周期开始
-window.addEventListener('hashchange', () => {
-  const route = location.hash.replace('#', '') || location.pathname
-  if (route && route !== '/') {
-    window.updateLobsterState('writing', '导航到 ' + route)
-  }
-})
-
-// AI 消息发送时通知龙虾（通过自定义事件）
-window.addEventListener('lobster-work-start', e => {
-  window.updateLobsterState(e.detail?.state || 'writing', e.detail?.message || '工作中')
-})
-window.addEventListener('lobster-work-end', () => {
-  window.updateLobsterState('idle', '待命中')
-})
-  registerRoute('/lobster-office', () => import('./pages/lobster-office.js'))
+  registerRoute('/tvbox', async () => {
+    // 先加载 Hls.js
+    if (!window.Hls) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = './hls.min.js';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    const { } = await import('./pages/tvbox.js')
+    return { render: (el) => { el.innerHTML='<div id="tvbox-app"></div>'; window.__tvbox.init(); } }
+  })
   registerRoute('/coming-soon', () => import('./pages/coming-soon.js'))
   registerRoute('/security', () => import('./pages/security.js'))
   registerRoute('/about', () => import('./pages/about.js'))
@@ -473,7 +448,7 @@ window.addEventListener('lobster-work-end', () => {
   registerRoute('/settings', () => import('./pages/settings.js'))
 
   renderSidebar(sidebar)
-  initRouter()
+  initRouter(content)
 
   // 移动端顶栏（汉堡菜单 + 标题）
   const mainCol = document.getElementById('main-col')

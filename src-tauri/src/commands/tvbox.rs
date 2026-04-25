@@ -1,3 +1,4 @@
+use md5::{Digest as Md5Digest, Md5};
 use once_cell::sync::Lazy;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -190,7 +191,7 @@ pub fn tvbox_cookie_get(domain: String) -> Result<String, String> {
 /// MD5（真正的 MD5）
 #[command]
 pub fn tvbox_md5(input: String) -> CryptoResult {
-    let digest = md5::compute(input.as_bytes());
+    let digest = Md5::digest(input.as_bytes());
     let hex: String = format!("{:x}", digest);
     CryptoResult {
         code: 0,
