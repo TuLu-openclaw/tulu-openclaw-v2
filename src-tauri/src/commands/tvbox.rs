@@ -1,5 +1,4 @@
 use once_cell::sync::Lazy;
-use md5::{compute, Digest};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -191,7 +190,9 @@ pub fn tvbox_cookie_get(domain: String) -> Result<String, String> {
 /// MD5（真正的 MD5）
 #[command]
 pub fn tvbox_md5(input: String) -> CryptoResult {
-    let digest = compute(input.as_bytes());
+    let mut ctx = md5::Context::new();
+    ctx.consume(input.as_bytes());
+    let digest = ctx.compute();
     let hex: String = format!("{:x}", digest);
     CryptoResult {
         code: 0,
