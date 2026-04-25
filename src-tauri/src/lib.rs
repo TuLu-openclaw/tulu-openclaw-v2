@@ -2,6 +2,7 @@ mod commands;
 mod models;
 mod tray;
 mod utils;
+mod windows_proxy;
 
 use commands::{
     agent, assistant, config, device, extensions, hermes, logs, memory, messaging, pairing,
