@@ -9,6 +9,15 @@ import { toast } from './toast.js'
 import { version as APP_VERSION } from '../../package.json'
 import { t, getLang, setLang, getAvailableLangs } from '../lib/i18n.js'
 
+// 引擎管理器（多引擎切换）
+let _engineManager = null
+function getEngineManager() {
+  if (!_engineManager) {
+    _engineManager = { listEngines, getActiveEngine, switchEngine, onEngineChange }
+  }
+  return _engineManager
+}
+
 function NAV_ITEMS_FULL() { return [
   {
     section: t('sidebar.sectionMonitor'),
@@ -157,6 +166,10 @@ export function renderSidebar(el) {
       </button>
       <div class="instance-dropdown" id="instance-dropdown"></div>
     </div>` : ''}
+    <div class="engine-switcher" id="engine-switcher">
+      <div class="engine-switcher-label">引擎</div>
+      <div class="engine-buttons" id="engine-buttons"></div>
+    </div>
     <nav class="sidebar-nav">
   `
 
@@ -222,6 +235,35 @@ export function renderSidebar(el) {
   `
 
   el.innerHTML = html
+
+  // ── 渲染引擎切换器 ──
+  ;(async () => {
+    try {
+      const em = await import('../lib/engine-manager.js')
+      const engines = em.listEngines()
+      const active = em.getActiveEngine()
+      const container = el.querySelector('#engine-buttons')
+      if (container) {
+        container.innerHTML = engines.map(e => `
+          <button class="engine-btn ${e.id === active?.id ? 'active' : ''}" data-engine="${e.id}" title="${e.description}">
+            <span class="engine-btn-icon">${e.icon}</span>
+            <span class="engine-btn-name">${e.name}</span>
+          </button>
+        `).join('')
+        container.querySelectorAll('.engine-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.engine
+            if (em.getActiveEngine()?.id === id) return
+            await em.switchEngine(id)
+            // 重新渲染侧边栏
+            renderSidebar(el)
+          })
+        })
+      }
+    } catch (err) {
+      console.warn('[engine-switcher] 加载失败:', err)
+    }
+  })()
 
   // 应用折叠态（桌面端）
   _setDesktopSidebarCollapsed(collapsed)

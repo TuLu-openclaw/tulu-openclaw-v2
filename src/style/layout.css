@@ -784,3 +784,60 @@
     padding: var(--space-md) var(--space-md);
   }
 }
+
+/* ── 引擎切换器 ── */
+.engine-switcher {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-secondary);
+}
+.engine-switcher-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+.engine-buttons {
+  display: flex;
+  gap: 6px;
+}
+.engine-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.engine-btn:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-secondary);
+}
+.engine-btn.active {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+.engine-btn-icon {
+  font-size: 14px;
+}
+.engine-btn-name {
+  font-size: 12px;
+}
+#sidebar.sidebar-collapsed .engine-switcher-label,
+#sidebar.sidebar-collapsed .engine-btn-name {
+  display: none;
+}
+#sidebar.sidebar-collapsed .engine-btn {
+  justify-content: center;
+  padding: 6px;
+}

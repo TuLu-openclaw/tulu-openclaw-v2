@@ -26,6 +26,7 @@ pub mod service;
 pub mod skillhub;
 pub mod skills;
 pub mod tvbox;
+pub mod hermes;
 pub mod update;
 
 /// 默认 OpenClaw 配置目录（屠戮OpenClaw 自身配置始终在此）

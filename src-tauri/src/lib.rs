@@ -4,8 +4,8 @@ mod tray;
 mod utils;
 
 use commands::{
-    agent, assistant, config, device, extensions, logs, memory, messaging, pairing, service,
-    skillhub, skills, tvbox, update,
+    agent, assistant, config, device, extensions, hermes, logs, memory, messaging, pairing,
+    service, skillhub, skills, tvbox, update,
 };
 
 pub fn run() {
@@ -219,6 +219,42 @@ pub fn run() {
             tvbox::tvbox_store_keys,
             tvbox::tvbox_store_del,
             tvbox::tvbox_cookie_get,
+            // Hermes Agent
+            hermes::check_hermes,
+            hermes::check_python,
+            hermes::hermes_read_config,
+            hermes::hermes_write_config,
+            hermes::hermes_update_model,
+            hermes::hermes_agent_run,
+            hermes::hermes_gateway_action,
+            hermes::hermes_health_check,
+            hermes::hermes_detect_environments,
+            hermes::hermes_set_gateway_url,
+            hermes::hermes_fetch_models,
+            hermes::hermes_cron_save,
+            hermes::hermes_cron_delete,
+            hermes::hermes_cron_run,
+            hermes::hermes_cron_runs,
+            hermes::hermes_cron_next_run,
+            // Hermes Skills
+            hermes::hermes_skills_list,
+            hermes::hermes_skill_detail,
+            hermes::hermes_skill_delete,
+            hermes::hermes_skill_save,
+            // Hermes Sessions
+            hermes::hermes_sessions_list,
+            hermes::hermes_session_detail,
+            hermes::hermes_session_delete,
+            hermes::hermes_session_rename,
+            // Hermes Logs
+            hermes::hermes_logs_list,
+            hermes::hermes_logs_read,
+            // Hermes Memory
+            hermes::hermes_memory_read,
+            hermes::hermes_memory_write,
+            // Hermes Install & Config
+            hermes::install_hermes,
+            hermes::configure_hermes,
         ])
         .on_window_event(|window, event| {
             // 关闭窗口时最小化到托盘，不退出应用

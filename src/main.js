@@ -374,6 +374,35 @@ window.__屠戮OpenClaw_show_login = async function() {
   location.reload()
 }
 
+// === 多引擎支持 ===
+import { registerEngine, activateEngine, onEngineChange, listEngines, getActiveEngine } from './lib/engine-manager.js'
+import { init as initHermesEngine } from './engines/hermes/index.js'
+import { init as initOpenClawEngine } from './engines/openclaw/index.js'
+
+// 注册双引擎
+const openclawEngine = {
+  id: 'openclaw',
+  name: 'OpenClaw',
+  icon: '⚡',
+  description: 'OpenClaw AI Agent 引擎',
+  getRoutes: () => import('./engines/openclaw/index.js').then(m => m.getRoutes()),
+  getDefaultRoute: () => '/dashboard',
+  boot: initOpenClawEngine,
+  cleanup: () => console.log('[OpenClaw Engine] cleaned'),
+}
+const hermesEngine = {
+  id: 'hermes',
+  name: 'Hermes',
+  icon: '🔮',
+  description: 'Hermes Agent 引擎',
+  getRoutes: () => import('./engines/hermes/index.js').then(m => m.getRoutes()),
+  getDefaultRoute: () => '/hermes/chat',
+  boot: initHermesEngine,
+  cleanup: () => console.log('[Hermes Engine] cleaned'),
+}
+registerEngine(openclawEngine)
+registerEngine(hermesEngine)
+
 const sidebar = document.getElementById('sidebar')
 const content = document.getElementById('content')
 

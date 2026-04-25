@@ -398,3 +398,5 @@ window.__tvbox = {
   openBrowser: function() { openExternalBrowser(); },
   imgErr: function(el) { if (el) el.style.display = 'none'; },
 };
+
+// 不在这里调用 init()，由路由的 render 回调在 DOM 就绪后调用

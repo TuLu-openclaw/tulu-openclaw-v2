@@ -41,6 +41,8 @@ export default function render() {
   let page = 1
   let query = ''
   let tvCache = {}
+  // 缓存搜索结果（搜索返回完整详情数据，直接复用）
+  let searchCache = []
 
   const el = document.createElement('div')
   el.className = 'tvbox-page-root'
@@ -142,6 +144,7 @@ export default function render() {
   async function loadSearch() {
     const source = VOD_SOURCES[src]
     const json = await fetchJSON(`${source.api}?ac=detail&wd=${encodeURIComponent(query)}&pg=${page}`)
+    searchCache = json.list || []
     renderVodGrid(json.list || [], json.total || 0)
   }
 
@@ -154,29 +157,35 @@ export default function render() {
     }
     const totalPages = Math.max(1, Math.ceil(total / 20))
     let html = '<div class="tvbox-grid">'
-    html += list.map(item => `
-      <div class="tvbox-card" data-id="${item.vod_id}" data-name="${item.vod_name}">
-        <div class="tvbox-pic">
-          <img src="${item.vod_pic}" alt="${item.vod_name}"
-               onerror="this.style.display='none';this.parentElement.innerHTML='<span class=tvbox-placeholder>🎬</span>'" />
-          <span class="tvbox-tag">${item.type_name || '影视'}</span>
-          ${item.vod_score ? `<span class="tvbox-score">${item.vod_score}</span>` : ''}
-        </div>
-        <div class="tvbox-info">
-          <div class="tvbox-title">${item.vod_name}</div>
-          <div class="tvbox-sub">${item.vod_actor || '未知主演'}</div>
-        </div>
-      </div>
-    `).join('')
+    html += list.map(function(item) {
+      return '<div class="tvbox-card" data-id="' + String(item.vod_id) + '" data-name="' + String(item.vod_name || '').replace(/"/g, '&quot;') + '">' +
+        '<div class="tvbox-pic">' +
+        '<img src="' + String(item.vod_pic || '').replace(/"/g, '&quot;') + '" alt="' + String(item.vod_name || '').replace(/"/g, '&quot;') + '"' +
+        ' onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-placeholder>🎬</span>\'" />' +
+        '<span class="tvbox-tag">' + String(item.type_name || '影视').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>' +
+        (item.vod_score ? '<span class="tvbox-score">' + String(item.vod_score).replace(/</g, '&lt;') + '</span>' : '') +
+        '</div>' +
+        '<div class="tvbox-info">' +
+        '<div class="tvbox-title">' + String(item.vod_name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+        '<div class="tvbox-sub">' + String(item.vod_actor || '未知主演').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+        '</div></div>';
+    }).join('')
     html += '</div>'
     html += renderPagination(page, totalPages)
     content.innerHTML = html
-
-    content.querySelectorAll('.tvbox-card').forEach(card => {
-      card.addEventListener('click', () => openDetail(card.dataset.id, card.dataset.name))
+    var cards = content.querySelectorAll('.tvbox-card')
+    cards.forEach(function(card, idx) {
+      card._vodData = list[idx]
+      card.addEventListener('click', function() {
+        var id = card.dataset.id
+        var cached = searchCache.find(function(item) { return String(item.vod_id) === String(id); })
+        if (cached) { openDetailByItem(cached); return; }
+        if (card._vodData) { openDetailByItem(card._vodData); return; }
+        openDetail(id, card.dataset.name)
+      })
     })
-    content.querySelectorAll('.tvbox-page-btn[data-page]').forEach(btn => {
-      btn.addEventListener('click', () => { page = parseInt(btn.dataset.page); loadData() })
+    content.querySelectorAll('.tvbox-page-btn[data-page]').forEach(function(btn) {
+      btn.addEventListener('click', function() { page = parseInt(btn.dataset.page); loadData(); })
     })
   }
 
@@ -220,15 +229,40 @@ export default function render() {
     })
   }
 
+  // ── 直接用已有数据打开详情 ──
+  function openDetailByItem(item) {
+    showEpisodePicker(item)
+  }
+
   // ── 详情 / 选集 ──
   async function openDetail(id, name) {
-    const source = VOD_SOURCES[src]
-    let json
-    try { json = await fetchJSON(`${source.api}?ac=detail&ids=${id}`) }
-    catch { alert('获取详情失败'); return }
-    const item = json.list && json.list[0]
-    if (!item) { alert('未找到该影片'); return }
-    showEpisodePicker(item)
+    // 搜索结果已有完整数据（含 vod_play_url），直接复用
+    const cached = searchCache.find(function(item) { return String(item.vod_id) === String(id); });
+    if (cached && cached.vod_play_url) {
+      showEpisodePicker(cached);
+      return;
+    }
+    // 从列表点进来的尝试从当前渲染的 DOM 里找（部分数据已有）
+    var cardEl = document.querySelector('.tvbox-card[data-id="' + id + '"]');
+    if (cardEl && cardEl._vodData) {
+      showEpisodePicker(cardEl._vodData);
+      return;
+    }
+    // 兜底：请求详情（先试 ids=，再试 id=）
+    const source = VOD_SOURCES[src];
+    var json;
+    try {
+      var res1 = await fetchJSON(source.api + '?ac=detail&ids=' + id);
+      if (res1.list && res1.list[0]) json = res1;
+    } catch (_) {}
+    if (!json) {
+      try {
+        var res2 = await fetchJSON(source.api + '?ac=detail&id=' + id);
+        if (res2.list && res2.list[0]) json = res2;
+      } catch (_) {}
+    }
+    if (!json || !json.list || !json.list[0]) { alert('获取详情失败'); return; }
+    showEpisodePicker(json.list[0]);
   }
 
   function showEpisodePicker(item) {

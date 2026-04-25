@@ -332,6 +332,50 @@ export const api = {
   skillhubIndex: () => invoke('skillhub_index'),
   skillhubInstall: (slug) => invoke('skillhub_install', { slug }),
 
+  // Hermes Agent Skills（~/.hermes/skills/）
+  hermesSkillsList: () => invoke('hermes_skills_list'),
+  hermesSkillDetail: (path) => invoke('hermes_skill_detail', { path }),
+  hermesSkillDelete: (path) => invoke('hermes_skill_delete', { path }),
+  hermesSkillSave: (name, content) => invoke('hermes_skill_save', { name, content }),
+
+  // Hermes Agent 核心
+  checkPython: () => invoke('check_python'),
+  checkHermes: () => invoke('check_hermes'),
+  hermesReadConfig: () => invoke('hermes_read_config'),
+  hermesWriteConfig: (key, value) => invoke('hermes_write_config', { key, value }),
+  hermesUpdateModel: (model) => invoke('hermes_update_model', { model }),
+  hermesGatewayAction: (action) => invoke('hermes_gateway_action', { action }),
+  hermesHealthCheck: () => invoke('hermes_health_check'),
+  hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url }),
+  hermesAgentRun: (prompt, sessionId, history, instructions) => invoke('hermes_agent_run', { prompt, session_id: sessionId, history, instructions }),
+  hermesDetectEnvironments: () => invoke('hermes_detect_environments'),
+  hermesFetchModels: (baseUrl, apiKey, apiType) => invoke('hermes_fetch_models', { base_url: baseUrl, api_key: apiKey, api_type: apiType }),
+
+  // Hermes Sessions
+  hermesSessionsList: () => invoke('hermes_sessions_list'),
+  hermesSessionDetail: (sessionId) => invoke('hermes_session_detail', { session_id: sessionId }),
+  hermesSessionDelete: (sessionId) => invoke('hermes_session_delete', { session_id: sessionId }),
+  hermesSessionRename: (sessionId, title) => invoke('hermes_session_rename', { session_id: sessionId, title }),
+
+  // Hermes Logs
+  hermesLogsList: () => invoke('hermes_logs_list'),
+  hermesLogsRead: (file, lines, level) => invoke('hermes_logs_read', { name: file, lines, level }),
+
+  // Hermes Cron
+  hermesCronSave: (name, schedule, payload) => invoke('hermes_cron_save', { name, schedule, payload }),
+  hermesCronDelete: (name) => invoke('hermes_cron_delete', { name }),
+  hermesCronRun: (name) => invoke('hermes_cron_run', { name }),
+  hermesCronRuns: (name, limit) => invoke('hermes_cron_runs', { name, limit }),
+  hermesCronNextRun: (name) => invoke('hermes_cron_next_run', { name }),
+
+  // Hermes Memory
+  hermesMemoryRead: (type) => invoke('hermes_memory_read', { type }),
+  hermesMemoryWrite: (type, content) => invoke('hermes_memory_write', { type, content }),
+
+  // Hermes Install
+  installHermes: (method, extras) => invoke('install_hermes', { method, extras }),
+  configureHermes: (provider, apiKey, model, baseUrl) => invoke('configure_hermes', { provider, api_key: apiKey, model, base_url: baseUrl }),
+
   // 实例管理
   instanceList: () => cachedInvoke('instance_list', {}, 10000),
   instanceAdd: (instance) => { invalidate('instance_list'); return invoke('instance_add', instance) },
