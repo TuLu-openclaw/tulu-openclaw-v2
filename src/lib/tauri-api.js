@@ -9,146 +9,6 @@ export function isTauriRuntime() {
   return !!window.__TAURI_INTERNALS__ || !!window.__TAURI__ || window.location?.hostname === 'tauri.localhost'
 }
 
-// npm 包名映射
-const NPM_PACKAGES = {
-  official: 'openclaw',
-  chinese: '@qingchencloud/openclaw-zh',
-}
-
-// 解析版本号用于排序
-function parseVersion(v) {
-  const parts = v.replace(/^v/, '').split('-')[0].split('.')
-  return parts.map(p => parseInt(p, 10) || 0)
-}
-
-const NPM_REGISTRIES = {
-  official: 'https://registry.npmjs.org',
-  chinese: null, // filled from user config at runtime
-}
-
-// 尝试多个 registry，直到成功
-async function fetchWithFallback(path, timeout = 5000) {
-  let userRegistry = null
-  try {
-    userRegistry = await cachedInvoke('get_npm_registry', {}, 30000)
-  } catch {
-    userRegistry = null
-  }
-
-  const registries = []
-  if (NPM_REGISTRIES.official) registries.push(NPM_REGISTRIES.official)
-  if (userRegistry) registries.push(String(userRegistry).replace(/\/$/, ''))
-
-  const seen = new Set()
-  const unique = registries.filter(r => seen.has(r) ? false : seen.add(r))
-
-  for (const base of unique) {
-    let timer = null
-    try {
-      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
-      timer = controller ? setTimeout(() => controller.abort(), timeout) : null
-      const resp = await fetch(`${base}${path}`, controller ? { signal: controller.signal } : undefined)
-      if (timer) clearTimeout(timer)
-      if (resp.ok) return { ok: true, json: await resp.json(), registry: base }
-    } catch {
-      // try next
-    } finally {
-      if (timer) clearTimeout(timer)
-    }
-  }
-  return { ok: false, json: null, registry: null }
-}
-
-async function fetchNpmLatest(source) {
-  const pkg = NPM_PACKAGES[source] || source
-  const encoded = pkg.replace('/', '%2F').replace('@', '%40')
-  const result = await fetchWithFallback(`/${encoded}/latest`, 5000)
-  if (!result.ok) return null
-  return result.json?.version || null
-}
-
-async function fetchNpmAllVersions(source) {
-  const pkg = NPM_PACKAGES[source] || source
-  const encoded = pkg.replace('/', '%2F').replace('@', '%40')
-  const result = await fetchWithFallback(`/${encoded}`, 10000)
-  if (!result.ok) {
-    console.warn('[version] all registries failed for', pkg)
-    return null
-  }
-  const obj = (result.json && typeof result.json === 'object' && result.json.versions) ? result.json.versions : {}
-  if (Object.keys(obj).length === 0) return null
-  return Object.keys(obj).sort((a, b) => {
-    const pa = parseVersion(a); const pb = parseVersion(b)
-    return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]
-  })
-}
-
-// 获取版本信息：本地部分走 Rust，远程部分走 JS fetch（解决 Rust 网络限制）
-async function getVersionInfoViaJs() {
-  const localInfo = await invoke('get_version_info_local', {}).catch(() => null)
-  if (!localInfo) {
-    return {
-      current: null,
-      latest: null,
-      recommended: null,
-      update_available: false,
-      latest_update_available: false,
-      is_recommended: false,
-      ahead_of_recommended: false,
-      panel_version: '0.0.0',
-      source: 'unknown',
-      cli_path: null,
-      cli_source: null,
-      all_installations: [],
-    }
-  }
-
-  const source = localInfo.source || 'unknown'
-  const current = localInfo.current || null
-
-  const [latest, recommended] = await Promise.all([
-    source !== 'unknown' ? fetchNpmLatest(source).catch(() => null) : Promise.resolve(null),
-    Promise.resolve(localInfo.recommended || null),
-  ])
-
-  const update_available = recommended
-    ? recommended_is_newer(recommended, current || '0.0.0')
-    : false
-  const latest_update_available = latest && current
-    ? recommended_is_newer(latest, current)
-    : false
-  const is_recommended = current && recommended ? versions_match(current, recommended) : false
-  const ahead_of_recommended = current && recommended ? recommended_is_newer(current, recommended) : false
-
-  return {
-    current,
-    latest,
-    recommended,
-    update_available,
-    latest_update_available,
-    is_recommended,
-    ahead_of_recommended,
-    panel_version: localInfo.panel_version || '0.0.0',
-    source,
-    cli_path: localInfo.cli_path || null,
-    cli_source: localInfo.cli_source || null,
-    all_installations: localInfo.all_installations || [],
-  }
-}
-
-function recommended_is_newer(newVer, oldVer) {
-  const np = parseVersion(newVer), op = parseVersion(oldVer)
-  for (let i = 0; i < 3; i++) {
-    if (np[i] > op[i]) return true
-    if (np[i] < op[i]) return false
-  }
-  return false
-}
-
-function versions_match(a, b) {
-  return parseVersion(a)[0] === parseVersion(b)[0]
-}
-
 // 仅在 Node.js 后端实现的命令（Tauri Rust 不处理），强制走 webInvoke
 const WEB_ONLY_CMDS = new Set([
   'instance_list', 'instance_add', 'instance_remove', 'instance_set_active',
@@ -242,7 +102,7 @@ function invalidate(...cmds) {
 // 导出 invalidate 供外部使用
 export { invalidate }
 
-export async function invoke(cmd, args = {}) {
+async function invoke(cmd, args = {}) {
   const start = Date.now()
   const tauriInvoke = WEB_ONLY_CMDS.has(cmd) ? null : await getTauriInvoke()
   if (tauriInvoke) {
@@ -331,8 +191,8 @@ export const api = {
   claimGateway: () => { invalidate('get_services_status'); return invoke('claim_gateway') },
   guardianStatus: () => invoke('guardian_status'),
 
-  // 版本信息：本地部分走 Rust，远程（latest）走 JS fetch（绕过 Rust 网络限制）
-  getVersionInfo: () => getVersionInfoViaJs(),
+  // 配置（读缓存，写清缓存）
+  getVersionInfo: () => cachedInvoke('get_version_info', {}, 30000),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
   calibrateOpenclawConfig: (mode = 'inherit') => { invalidate('read_openclaw_config', 'check_installation', 'list_backups', 'get_services_status', 'get_status_summary'); return invoke('calibrate_openclaw_config', { mode }).then(r => { _debouncedReloadGateway(); return r }) },
@@ -343,12 +203,11 @@ export const api = {
   restartGateway: () => invoke('restart_gateway'),
   doctorCheck: () => invoke('doctor_check'),
   doctorFix: () => invoke('doctor_fix'),
-  listOpenclawVersions: async (source = 'chinese') => fetchNpmAllVersions(source),
+  listOpenclawVersions: (source = 'chinese') => invoke('list_openclaw_versions', { source }),
   upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => invoke('upgrade_openclaw', { source, version, method }),
   uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
   installGateway: () => invoke('install_gateway'),
   uninstallGateway: () => invoke('uninstall_gateway'),
-  openLobsterOffice: () => invoke('open_lobster_office'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
   setNpmRegistry: (registry) => { invalidate('get_npm_registry'); return invoke('set_npm_registry', { registry }) },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
@@ -473,6 +332,50 @@ export const api = {
   skillhubIndex: () => invoke('skillhub_index'),
   skillhubInstall: (slug) => invoke('skillhub_install', { slug }),
 
+  // Hermes Agent Skills（~/.hermes/skills/）
+  hermesSkillsList: () => invoke('hermes_skills_list'),
+  hermesSkillDetail: (path) => invoke('hermes_skill_detail', { path }),
+  hermesSkillDelete: (path) => invoke('hermes_skill_delete', { path }),
+  hermesSkillSave: (name, content) => invoke('hermes_skill_save', { name, content }),
+
+  // Hermes Agent 核心
+  checkPython: () => invoke('check_python'),
+  checkHermes: () => invoke('check_hermes'),
+  hermesReadConfig: () => invoke('hermes_read_config'),
+  hermesWriteConfig: (key, value) => invoke('hermes_write_config', { key, value }),
+  hermesUpdateModel: (model) => invoke('hermes_update_model', { model }),
+  hermesGatewayAction: (action) => invoke('hermes_gateway_action', { action }),
+  hermesHealthCheck: () => invoke('hermes_health_check'),
+  hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url }),
+  hermesAgentRun: (prompt, sessionId, history, instructions) => invoke('hermes_agent_run', { prompt, session_id: sessionId, history, instructions }),
+  hermesDetectEnvironments: () => invoke('hermes_detect_environments'),
+  hermesFetchModels: (baseUrl, apiKey, apiType) => invoke('hermes_fetch_models', { base_url: baseUrl, api_key: apiKey, api_type: apiType }),
+
+  // Hermes Sessions
+  hermesSessionsList: () => invoke('hermes_sessions_list'),
+  hermesSessionDetail: (sessionId) => invoke('hermes_session_detail', { session_id: sessionId }),
+  hermesSessionDelete: (sessionId) => invoke('hermes_session_delete', { session_id: sessionId }),
+  hermesSessionRename: (sessionId, title) => invoke('hermes_session_rename', { session_id: sessionId, title }),
+
+  // Hermes Logs
+  hermesLogsList: () => invoke('hermes_logs_list'),
+  hermesLogsRead: (file, lines, level) => invoke('hermes_logs_read', { name: file, lines, level }),
+
+  // Hermes Cron
+  hermesCronSave: (name, schedule, payload) => invoke('hermes_cron_save', { name, schedule, payload }),
+  hermesCronDelete: (name) => invoke('hermes_cron_delete', { name }),
+  hermesCronRun: (name) => invoke('hermes_cron_run', { name }),
+  hermesCronRuns: (name, limit) => invoke('hermes_cron_runs', { name, limit }),
+  hermesCronNextRun: (name) => invoke('hermes_cron_next_run', { name }),
+
+  // Hermes Memory
+  hermesMemoryRead: (type) => invoke('hermes_memory_read', { type }),
+  hermesMemoryWrite: (type, content) => invoke('hermes_memory_write', { type, content }),
+
+  // Hermes Install
+  installHermes: (method, extras) => invoke('install_hermes', { method, extras }),
+  configureHermes: (provider, apiKey, model, baseUrl) => invoke('configure_hermes', { provider, api_key: apiKey, model, base_url: baseUrl }),
+
   // 实例管理
   instanceList: () => cachedInvoke('instance_list', {}, 10000),
   instanceAdd: (instance) => { invalidate('instance_list'); return invoke('instance_add', instance) },
@@ -509,33 +412,4 @@ export const api = {
   saveImage: (id, data) => invoke('assistant_save_image', { id, data }),
   loadImage: (id) => invoke('assistant_load_image', { id }),
   deleteImage: (id) => invoke('assistant_delete_image', { id }),
-
-  // Hermes Agent 管理
-  checkHermes: () => cachedInvoke('check_hermes', {}, 30000),
-  checkPython: () => cachedInvoke('check_python', {}, 60000),
-  installHermes: (method = 'uv-tool', extras = []) => invoke('install_hermes', { method, extras }),
-  configureHermes: (provider, apiKey, model, baseUrl) => invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null }),
-  hermesGatewayAction: (action) => invoke('hermes_gateway_action', { action }),
-  hermesHealthCheck: () => invoke('hermes_health_check'),
-  hermesApiProxy: (method, path, body, headers) => invoke('hermes_api_proxy', { method, path, body: body || null, headers: headers || null }),
-  hermesAgentRun: (input, sessionId, conversationHistory, instructions) => invoke('hermes_agent_run', { input, sessionId: sessionId || null, conversationHistory: conversationHistory || null, instructions: instructions || null }),
-  hermesReadConfig: () => invoke('hermes_read_config'),
-  hermesFetchModels: (baseUrl, apiKey, apiType) => invoke('hermes_fetch_models', { baseUrl, apiKey, apiType: apiType || null }),
-  hermesUpdateModel: (model) => invoke('hermes_update_model', { model }),
-  hermesDetectEnvironments: () => invoke('hermes_detect_environments'),
-  hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url: url || null }),
-  updateHermes: () => invoke('update_hermes'),
-  uninstallHermes: (cleanConfig = false) => invoke('uninstall_hermes', { cleanConfig }),
-
-  // Hermes Sessions / Logs / Skills / Memory
-  hermesSessionsList: (source, limit) => invoke('hermes_sessions_list', { source: source || null, limit: limit || null }),
-  hermesSessionDetail: (sessionId) => invoke('hermes_session_detail', { sessionId }),
-  hermesSessionDelete: (sessionId) => invoke('hermes_session_delete', { sessionId }),
-  hermesSessionRename: (sessionId, title) => invoke('hermes_session_rename', { sessionId, title }),
-  hermesLogsList: () => invoke('hermes_logs_list'),
-  hermesLogsRead: (name, lines, level) => invoke('hermes_logs_read', { name, lines: lines || 200, level: level || null }),
-  hermesSkillsList: () => invoke('hermes_skills_list'),
-  hermesSkillDetail: (filePath) => invoke('hermes_skill_detail', { filePath }),
-  hermesMemoryRead: (type) => invoke('hermes_memory_read', { type: type || 'memory' }),
-  hermesMemoryWrite: (type, content) => invoke('hermes_memory_write', { type: type || 'memory', content }),
 }

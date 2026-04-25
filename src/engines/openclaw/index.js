@@ -53,6 +53,8 @@ export async function boot() {
   // 此处无需额外操作
 }
 
+export const init = boot
+
 /**
  * 清理 OpenClaw 引擎
  */

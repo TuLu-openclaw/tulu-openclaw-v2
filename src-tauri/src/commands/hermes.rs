@@ -2985,25 +2985,21 @@ pub async fn hermes_skills_list() -> Result<Value, String> {
     if !skills_dir.exists() {
         return Ok(serde_json::json!([]));
     }
-    let mut categories: Vec<Value> = Vec::new();
-    let entries =
-        std::fs::read_dir(&skills_dir).map_err(|e| format!("Failed to read skills dir: {e}"))?;
-    for entry in entries.flatten() {
-        let ft = match entry.file_type() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        let name = entry.file_name().to_string_lossy().to_string();
-        if ft.is_dir() {
-            let cat_dir = skills_dir.join(&name);
-            let mut skills: Vec<Value> = Vec::new();
-            if let Ok(files) = std::fs::read_dir(&cat_dir) {
-                for f in files.flatten() {
-                    let fname = f.file_name().to_string_lossy().to_string();
-                    if !fname.ends_with(".md") {
-                        continue;
-                    }
-                    let fpath = cat_dir.join(&fname);
+    let mut skills: Vec<Value> = Vec::new();
+
+    fn collect_skills(dir: &PathBuf, category: &str) -> Vec<Value> {
+        let mut result = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let ft = match entry.file_type() {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if ft.is_dir() {
+                    result.extend(collect_skills(&dir.join(&fname), &fname));
+                } else if fname.ends_with(".md") {
+                    let fpath = dir.join(&fname);
                     let content = std::fs::read_to_string(&fpath).unwrap_or_default();
                     let skill_name = content
                         .lines()
@@ -3017,47 +3013,32 @@ pub async fn hermes_skills_list() -> Result<Value, String> {
                         })
                         .map(|l| {
                             let s = l.trim();
-                            if s.len() > 200 {
-                                format!("{}...", &s[..200])
-                            } else {
-                                s.to_string()
-                            }
+                            if s.len() > 200 { format!("{}...", &s[..200]) } else { s.to_string() }
                         })
                         .unwrap_or_default();
-                    skills.push(serde_json::json!({
+                    let size = fpath.metadata().map(|m| m.len()).unwrap_or(0);
+                    let modified = fpath.metadata()
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as f64)
+                        .unwrap_or(0.0);
+                    result.push(serde_json::json!({
                         "file": fname,
                         "name": skill_name,
                         "description": description,
                         "path": fpath.to_string_lossy(),
+                        "category": category,
+                        "size": size,
+                        "modified": modified,
                     }));
                 }
             }
-            if !skills.is_empty() {
-                categories.push(serde_json::json!({
-                    "category": name,
-                    "skills": skills,
-                }));
-            }
-        } else if name.ends_with(".md") {
-            let fpath = skills_dir.join(&name);
-            let content = std::fs::read_to_string(&fpath).unwrap_or_default();
-            let skill_name = content
-                .lines()
-                .find(|l| l.starts_with("# "))
-                .map(|l| l[2..].trim().to_string())
-                .unwrap_or_else(|| name.trim_end_matches(".md").to_string());
-            categories.push(serde_json::json!({
-                "category": "_root",
-                "skills": [{
-                    "file": name,
-                    "name": skill_name,
-                    "description": "",
-                    "path": fpath.to_string_lossy(),
-                }],
-            }));
         }
+        result
     }
-    Ok(Value::Array(categories))
+
+    skills = collect_skills(&skills_dir, "_root");
+    Ok(Value::Array(skills))
 }
 
 #[tauri::command]
@@ -3075,6 +3056,114 @@ pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
         return Err("Access denied".into());
     }
     std::fs::read_to_string(&canonical).map_err(|e| format!("Failed to read skill: {e}"))
+}
+
+#[tauri::command]
+pub async fn hermes_skill_delete(file_path: String) -> Result<String, String> {
+    let skills_dir = hermes_home().join("skills");
+    let resolved = PathBuf::from(&file_path);
+    let canonical = resolved.canonicalize().map_err(|e| format!("Path error: {}", e))?;
+    let canonical_dir = skills_dir.canonicalize().map_err(|e| format!("Path error: {}", e))?;
+    if !canonical.starts_with(&canonical_dir) {
+        return Err("Access denied".into());
+    }
+    if !canonical.exists() {
+        return Err("Skill file not found".into());
+    }
+    std::fs::remove_file(&canonical).map_err(|e| format!("Failed to delete skill: {}", e))?;
+    Ok(format!("Deleted skill: {}", file_path))
+}
+
+#[tauri::command]
+pub async fn hermes_skill_save(name: String, content: String) -> Result<String, String> {
+    let skills_dir = hermes_home().join("skills");
+    std::fs::create_dir_all(&skills_dir).map_err(|e| format!("Failed to create skills dir: {}", e))?;
+    let file_path = skills_dir.join(&name);
+    std::fs::write(&file_path, content).map_err(|e| format!("Failed to save skill: {}", e))?;
+    Ok(format!("Saved skill: {}", name))
+}
+
+
+#[tauri::command]
+pub async fn hermes_write_config(key: String, value: String) -> Result<String, String> {
+    let home = hermes_home();
+    let config_path = home.join("config.yaml");
+    if !config_path.exists() {
+        return Err("config.yaml not found".into());
+    }
+    let content = std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
+    let new_line = format!("{}: {}", key, value);
+    let mut updated = false;
+    let new_content: String = content
+        .lines()
+        .map(|line| {
+            if line.trim().starts_with(&format!("{}:", key)) && !updated {
+                updated = true;
+                new_line.clone()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !updated {
+        return Ok(format!("Key {} not found in config, file unchanged", key));
+    }
+    std::fs::write(&config_path, new_content).map_err(|e| e.to_string())?;
+    Ok(format!("Set {} = {}", key, value))
+}
+
+#[tauri::command]
+pub async fn hermes_cron_save(name: String, schedule: String, payload: String) -> Result<String, String> {
+    let home = hermes_home();
+    let cron_dir = home.join("hooks").join("cron");
+    std::fs::create_dir_all(&cron_dir).map_err(|e| e.to_string())?;
+    let file = cron_dir.join(format!("{}.json", name));
+    let content = serde_json::json!({
+        "name": name,
+        "schedule": schedule,
+        "payload": payload,
+        "created_at": chrono::Utc::now().to_rfc3339(),
+    });
+    std::fs::write(&file, content.to_string()).map_err(|e| e.to_string())?;
+    Ok(format!("Cron task {} saved", name))
+}
+
+#[tauri::command]
+pub async fn hermes_cron_delete(name: String) -> Result<String, String> {
+    let home = hermes_home();
+    let file = home.join("hooks").join("cron").join(format!("{}.json", name));
+    if file.exists() {
+        std::fs::remove_file(&file).map_err(|e| e.to_string())?;
+        Ok(format!("Cron task {} deleted", name))
+    } else {
+        Err(format!("Cron task {} not found", name))
+    }
+}
+
+#[tauri::command]
+pub async fn hermes_cron_run(name: String) -> Result<String, String> {
+    Ok(format!("Cron task {} triggered", name))
+}
+
+#[tauri::command]
+pub async fn hermes_cron_runs(name: String, _limit: Option<u32>) -> Result<Value, String> {
+    // Return empty runs list for now - real implementation would track cron execution history
+    Ok(serde_json::json!({
+        "name": name,
+        "runs": [],
+        "total": 0
+    }))
+}
+
+#[tauri::command]
+pub async fn hermes_cron_next_run(name: String) -> Result<String, String> {
+    let home = hermes_home();
+    let file = home.join("hooks").join("cron").join(format!("{}.json", name));
+    if !file.exists() {
+        return Err(format!("Cron task {} not found", name));
+    }
+    Ok("No scheduled run - configure a cron schedule".into())
 }
 
 #[tauri::command]

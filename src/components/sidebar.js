@@ -8,45 +8,17 @@ import { api } from '../lib/tauri-api.js'
 import { toast } from './toast.js'
 import { version as APP_VERSION } from '../../package.json'
 import { t, getLang, setLang, getAvailableLangs } from '../lib/i18n.js'
-import { getActiveEngine, getActiveEngineId, listEngines, switchEngine } from '../lib/engine-manager.js'
 
-function _escSidebar(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
-
-// === 引擎切换器 ===
-function _renderEngineSwitcher() {
-  const engines = listEngines()
-  if (engines.length < 2) return ''
-  const active = getActiveEngine()
-  if (!active) return ''
-  return `<div class="engine-switcher" id="engine-switcher">
-    <button class="engine-current" id="btn-engine-toggle">
-      <span class="engine-icon">${active.icon || ''}</span>
-      <span class="engine-label">${_escSidebar(active.name)}</span>
-      <svg class="engine-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
-    <div class="engine-dropdown" id="engine-dropdown">
-      ${engines.map(e => `<div class="engine-option${e.id === active.id ? ' active' : ''}" data-engine="${e.id}">
-        <span class="engine-opt-icon">${e.icon || ''}</span>
-        <span class="engine-opt-name">${_escSidebar(e.name)}</span>
-        ${e.id === active.id ? '<span class="engine-active-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}
-      </div>`).join('')}
-    </div>
-  </div>`
+// 引擎管理器（多引擎切换）
+let _engineManager = null
+function getEngineManager() {
+  if (!_engineManager) {
+    _engineManager = { listEngines, getActiveEngine, switchEngine, onEngineChange }
+  }
+  return _engineManager
 }
 
-function _closeEngineDropdown() {
-  const dd = document.getElementById('engine-dropdown')
-  if (dd) dd.classList.remove('open')
-}
-
-function _toggleEngineDropdown() {
-  const dd = document.getElementById('engine-dropdown')
-  if (!dd) return
-  if (dd.classList.contains('open')) { dd.classList.remove('open'); return }
-  dd.classList.add('open')
-}
-
-const NAV_ITEMS_OPENCLAW = [
+function NAV_ITEMS_FULL() { return [
   {
     section: t('sidebar.sectionMonitor'),
     items: [
@@ -80,12 +52,11 @@ const NAV_ITEMS_OPENCLAW = [
     section: t('sidebar.sectionExtension'),
     items: [
       { route: '/skills', label: t('sidebar.skills'), icon: 'skills' },
-      { route: '/miaogu-verify', label: '喵咕验证', icon: 'shield' },
+      { route: '/miaogu-verify', label: '喵咕验证', icon: 'verify' },
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
-      { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
-      { route: '/lobster-office', label: '龙虾办公室', icon: 'lobster' },
-      { route: '/coming-soon', label: '全球内置', icon: 'lock' },
-      { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
+      { route: '/movie-tool', label: '影视大全', icon: 'movie' },
+      { route: '/tvbox', label: '影视仓', icon: 'movie' },
+      { route: '/coming-soon', label: '待开放使用', icon: 'lock' },
     ]
   },
   {
@@ -96,34 +67,7 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/about', label: t('sidebar.about'), icon: 'about' },
     ]
   }
-]
-
-const NAV_ITEMS_HERMES = [
-  {
-    section: '',
-    items: [
-      { route: '/hermes/chat', label: 'AI 对话', icon: 'chat' },
-      { route: '/hermes/dashboard', label: '控制台', icon: 'dashboard' },
-      { route: '/hermes/setup', label: '引擎设置', icon: 'setup' },
-      { route: '/hermes/skills', label: '技能中心', icon: 'skills' },
-      { route: '/hermes/channels', label: '对话渠道', icon: 'channels' },
-      { route: '/hermes/logs', label: '运行日志', icon: 'logs' },
-      { route: '/hermes/memory', label: '记忆管理', icon: 'memory' },
-      { route: '/hermes/config', label: '引擎配置', icon: 'settings' },
-    ]
-  },
-]
-
-function NAV_ITEMS_FULL() {
-  if (getActiveEngineId() === 'hermes') return NAV_ITEMS_HERMES
-  return NAV_ITEMS_OPENCLAW
-}
-
-/** 返回引擎对应的侧边栏导航项（供 engine-manager 等外部模块调用） */
-export function getNavItems() {
-  return NAV_ITEMS_FULL()
-}
-
+] }
 
 function NAV_ITEMS_SETUP() { return [
   {
@@ -164,13 +108,7 @@ const ICONS = {
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
   debug: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>',
   verify: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>',
-
-  tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>',
-  shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
-  rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>',
-    movie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
-    lobster: '<svg viewBox="0 0 24 24" fill="none" stroke="#e94560" stroke-width="2"><ellipse cx="12" cy="14" rx="7" ry="5"/><ellipse cx="12" cy="9" rx="4" ry="3"/><circle cx="10" cy="8" r="1" fill="#e94560"/><circle cx="14" cy="8" r="1" fill="#e94560"/><path d="M5 14 Q3 12 4 10" stroke-linecap="round"/><path d="M19 14 Q21 12 20 10" stroke-linecap="round"/><ellipse cx="6" cy="13" rx="2" ry="1.5" fill="#e94560" stroke="#c1122f"/><ellipse cx="18" cy="13" rx="2" ry="1.5" fill="#e94560" stroke="#c1122f"/><path d="M9 5 Q8 3 9 2"/><path d="M15 5 Q16 3 15 2"/></svg>',
+  movie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
 }
 
 let _delegated = false
@@ -220,7 +158,6 @@ export function renderSidebar(el) {
       <button class="sidebar-collapse-btn" id="btn-sidebar-collapse" title="${t('sidebar.collapse')}">${collapsed ? '»' : '«'}</button>
       <button class="sidebar-close-btn" id="btn-sidebar-close" title="${t('sidebar.closeMenu')}">&times;</button>
     </div>
-    ${_renderEngineSwitcher()}
     ${showSwitcher ? `<div class="instance-switcher" id="instance-switcher">
       <button class="instance-current" id="btn-instance-toggle">
         <span class="instance-dot ${isLocal ? 'local' : 'remote'}"></span>
@@ -229,6 +166,10 @@ export function renderSidebar(el) {
       </button>
       <div class="instance-dropdown" id="instance-dropdown"></div>
     </div>` : ''}
+    <div class="engine-switcher" id="engine-switcher">
+      <div class="engine-switcher-label">引擎</div>
+      <div class="engine-buttons" id="engine-buttons"></div>
+    </div>
     <nav class="sidebar-nav">
   `
 
@@ -240,9 +181,7 @@ export function renderSidebar(el) {
 
     for (const item of section.items) {
       const active = current === item.route ? ' active' : ''
-      const itemRoute = item.route || ''
-      const itemDataAction = item.dataAction ? `data-action="${item.dataAction}"` : `data-route="${itemRoute}"`
-      html += `<div class="nav-item${active}" ${itemDataAction}>
+      html += `<div class="nav-item${active}" data-route="${item.route}">
         ${ICONS[item.icon] || ''}
         <span>${item.label}</span>
       </div>`
@@ -297,6 +236,35 @@ export function renderSidebar(el) {
 
   el.innerHTML = html
 
+  // ── 渲染引擎切换器 ──
+  ;(async () => {
+    try {
+      const em = await import('../lib/engine-manager.js')
+      const engines = em.listEngines()
+      const active = em.getActiveEngine()
+      const container = el.querySelector('#engine-buttons')
+      if (container) {
+        container.innerHTML = engines.map(e => `
+          <button class="engine-btn ${e.id === active?.id ? 'active' : ''}" data-engine="${e.id}" title="${e.description}">
+            <span class="engine-btn-icon">${e.icon}</span>
+            <span class="engine-btn-name">${e.name}</span>
+          </button>
+        `).join('')
+        container.querySelectorAll('.engine-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const id = btn.dataset.engine
+            if (em.getActiveEngine()?.id === id) return
+            await em.switchEngine(id)
+            // 重新渲染侧边栏
+            renderSidebar(el)
+          })
+        })
+      }
+    } catch (err) {
+      console.warn('[engine-switcher] 加载失败:', err)
+    }
+  })()
+
   // 应用折叠态（桌面端）
   _setDesktopSidebarCollapsed(collapsed)
 
@@ -308,32 +276,9 @@ export function renderSidebar(el) {
     _delegated = true
     el.addEventListener('click', (e) => {
       // 导航点击
-      const navItem = e.target.closest('.nav-item[data-route], .nav-item[data-action]')
+      const navItem = e.target.closest('.nav-item[data-route]')
       if (navItem) {
-        const route = navItem.dataset.route
-        const dataAction = navItem.dataset.action
-        if (dataAction === 'deploy-hermes') {
-          _closeEngineDropdown()
-          if (getActiveEngineId() !== 'hermes') {
-            switchEngine('hermes').then(() => {
-              toast('正在切换到 Hermes Engine…', 'info')
-              navigate('/hermes/setup')
-              renderSidebar(el)
-            })
-          } else {
-            navigate('/hermes/setup')
-            renderSidebar(el)
-          }
-        } else if (route) {
-          if (route.startsWith('/hermes') && getActiveEngineId() !== 'hermes') {
-            switchEngine('hermes').then(() => {
-              navigate(route)
-              renderSidebar(el)
-            })
-          } else {
-            navigate(route)
-          }
-        }
+        navigate(navItem.dataset.route)
         _closeMobileSidebar()
         return
       }
@@ -368,7 +313,7 @@ export function renderSidebar(el) {
         if (code !== getLang()) {
           setLang(code)
           renderSidebar(el)
-          navigate(getActiveEngine().getDefaultRoute())
+          reloadCurrentRoute()
         } else {
           _closeLangDropdown()
         }
@@ -392,7 +337,7 @@ export function renderSidebar(el) {
             const desc = inst.type === 'local' ? t('instance.local') : inst.name
             toast(t('instance.switchedTo', { name: desc }), 'success')
             renderSidebar(el)
-            navigate(getActiveEngine().getDefaultRoute())
+            reloadCurrentRoute()
           })
         }
         return
@@ -411,54 +356,14 @@ export function renderSidebar(el) {
       if (!e.target.closest('.lang-switcher')) {
         _closeLangDropdown()
       }
-      if (!e.target.closest('.engine-switcher')) {
-        _closeEngineDropdown()
-      }
-      // 引擎切换器：打开/关闭下拉
-      const engineBtn = e.target.closest('#btn-engine-toggle')
-      if (engineBtn) {
-        _toggleEngineDropdown()
-        return
-      }
-      // data-action 处理（扩展按钮如"部署 Hermes"）
-      const dataAction = e.target.closest('[data-action]')?.dataset?.action
-      if (dataAction === 'deploy-hermes') {
-        _closeEngineDropdown()
-        if (getActiveEngineId() !== 'hermes') {
-          switchEngine('hermes').then(() => {
-            toast('正在切换到 Hermes Engine…', 'info')
-            navigate('/hermes/setup')
-            renderSidebar(el)
-          })
-        } else {
-          navigate('/hermes/setup')
-          renderSidebar(el)
-        }
-        _closeMobileSidebar()
-        return
-      }
-
-      // 引擎选项点击
-      const engineOpt = e.target.closest('.engine-option[data-engine]')
-      if (engineOpt) {
-        const eid = engineOpt.dataset.engine
-        _closeEngineDropdown()
-        if (eid !== getActiveEngineId()) {
-          engineOpt.style.opacity = '0.5'
-          switchEngine(eid).then(() => {
-            toast(t('engine.switchedTo', { name: getActiveEngine()?.name || eid }), 'success')
-            navigate(getActiveEngine().getDefaultRoute())
-            renderSidebar(el)
-          })
-        }
-        return
-      }
     })
 
     // 监听实例变化，刷新多实例标记后重新渲染
     onInstanceChange(() => { _checkMultiInstances(el); renderSidebar(el) })
   }
 }
+
+function _escSidebar(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 
 // === 移动端侧边栏 ===
 function _closeMobileSidebar() {
