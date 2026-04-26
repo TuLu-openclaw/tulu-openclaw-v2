@@ -771,9 +771,19 @@ fn hermes_gateway_port() -> u16 {
     // 尝试从 config.yaml 读取自定义端口
     let config_path = hermes_home().join("config.yaml");
     if let Ok(content) = std::fs::read_to_string(&config_path) {
-        // 简单解析 YAML 中的 api_server_port 或 port
         for line in content.lines() {
             let trimmed = line.trim();
+            // 支持两种格式：
+            //   api_server:
+            //     port: 18830
+            // 以及旧的 api_server_port: 18830
+            if let Some(rest) = trimmed.strip_prefix("port:") {
+                if let Ok(port) = rest.trim().parse::<u16>() {
+                    if port > 0 {
+                        return port;
+                    }
+                }
+            }
             if let Some(rest) = trimmed.strip_prefix("api_server_port:") {
                 if let Ok(port) = rest.trim().parse::<u16>() {
                     if port > 0 {
