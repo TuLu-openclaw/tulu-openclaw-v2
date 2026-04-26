@@ -3924,23 +3924,24 @@ function showSettings() {
     btn.textContent = t('assistant.testing')
     resultEl.innerHTML = '<span style="color:var(--text-tertiary)">' + t('assistant.testSending') + '</span>'
 
-    // #Compat-1: 统一走 Rust reqwest（规避 webview fetch 的 status 0 / CORS 问题）
-    // Web 模式走 dev-api 的 /__api/test_model_verbose，Tauri 模式走 invoke('test_model_verbose')
+    // 调用 Rust test_model 命令（使用 reqwest 规避 CORS，支持所有 API 类型）
     try {
-      const r = await api.testModelVerbose(baseUrl, apiKey, model, selApiType)
+      const r = await api.testModel(baseUrl, apiKey, model, selApiType)
+      // Rust 返回 string：成功则包含回复文本；警告（API 返回 4xx 但服务器可达）以 ⚠ 开头
+      const isWarning = r && r.startsWith('⚠')
       resultEl.innerHTML = buildTestResult({
-        success: !!r.success,
-        elapsed: r.elapsedMs || 0,
-        usedApi: r.usedApi || selApiType,
-        reqUrl: r.reqUrl || baseUrl,
-        reqBody: r.reqBody || {},
-        respStatus: r.status ?? 0,
-        respHeaders: r.respHeaders || null,
-        respBody: r.respBody || '',
-        respRawHex: r.respRawHex || '',
-        respByteCount: r.respByteCount || 0,
-        reply: r.reply || '',
-        error: r.error || null,
+        success: true,
+        elapsed: 0,
+        usedApi: selApiType,
+        reqUrl: baseUrl,
+        reqBody: {},
+        respStatus: 0,
+        respHeaders: null,
+        respBody: '',
+        respRawHex: '',
+        respByteCount: 0,
+        reply: r || '',
+        error: null,
       })
     } catch (err) {
       // Rust 命令本身失败（如 client 构造失败），或 Web 模式网络异常
