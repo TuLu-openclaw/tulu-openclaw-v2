@@ -55,6 +55,7 @@ import './style/agents.css'
 import './style/debug.css'
 import './style/assistant.css'
 import './style/ai-drawer.css'
+import './engines/hermes/style/hermes.css'
 
 // 初始化主题 + 国际化
 initTheme()

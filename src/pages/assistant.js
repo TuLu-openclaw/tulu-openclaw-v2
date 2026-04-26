@@ -11,15 +11,16 @@ import { OPENCLAW_KB } from '../lib/openclaw-kb.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { QTCOOL, PROVIDER_PRESETS, API_TYPES as SHARED_API_TYPES, fetchQtcoolModels } from '../lib/model-presets.js'
 import { t } from '../lib/i18n.js'
-import { navigate } from '../router.js'
+import { getActiveEngineId } from '../lib/engine-manager.js'
+import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
 
 // ── 常量 ──
-const STORAGE_KEY = '屠戮OpenClaw-assistant'
-const SESSIONS_KEY = '屠戮OpenClaw-assistant-sessions'
+const STORAGE_KEY = 'clawpanel-assistant'
+const SESSIONS_KEY = 'clawpanel-assistant-sessions'
 const MAX_SESSIONS = 50
 const MAX_CONTEXT_TOKENS = 30 // 最近 N 条消息作为上下文
 
-// ── 图片文件存储（通过 Tauri 后端持久化到 ~/.openclaw/屠戮OpenClaw/images/）──
+// ── 图片文件存储（通过 Tauri 后端持久化到 ~/.openclaw/clawpanel/images/）──
 async function saveImageToFile(id, dataUrl) {
   try { await api.saveImage(id, dataUrl) } catch (e) { console.warn('图片保存失败:', e) }
 }
@@ -98,28 +99,28 @@ const DEFAULT_PERSONALITY = t('assistant.defaultPersonality')
 function getSystemPromptBase() {
   const name = _config?.assistantName || DEFAULT_NAME
   const personality = _config?.assistantPersonality || DEFAULT_PERSONALITY
-  return `你是「${name}」，屠戮OpenClaw 内置的 AI 智能助手。
+  return `你是「${name}」，ClawPanel 内置的 AI 智能助手。
 
 ## 你的性格
 ${personality}
 
 ## 你是谁
-- 你是 屠戮OpenClaw 内置的智能助手
+- 你是 ClawPanel 内置的智能助手
 - 你帮助用户管理和排障 OpenClaw AI Agent 平台
 - 你精通 OpenClaw 的架构、配置、Gateway、Agent 管理等所有方面
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **屠戮OpenClaw 官网**: https://claw.qt.cool
+- **ClawPanel 官网**: https://claw.qt.cool
 - **GitHub**: https://github.com/qingchencloud
 - **开源项目**:
-  - **屠戮OpenClaw** — OpenClaw 可视化管理面板（Tauri v2）
+  - **ClawPanel** — OpenClaw 可视化管理面板（Tauri v2）
   - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @qingchencloud/openclaw-zh
 
-## 屠戮OpenClaw 是什么
+## ClawPanel 是什么
 - OpenClaw 的可视化管理面板，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
 - 支持仪表盘监控、模型配置、Agent 管理、实时聊天、记忆文件管理、AI 助手工具调用等
-- 官网: https://claw.qt.cool | GitHub: https://github.com/qingchencloud/屠戮OpenClaw
+- 官网: https://claw.qt.cool | GitHub: https://github.com/qingchencloud/clawpanel
 
 ## OpenClaw 是什么
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
@@ -166,25 +167,25 @@ ${personality}
 ## 关键配置结构
 - openclaw.json: 全局配置（models.providers、gateway、tools）
 - models.json: Agent 运行时模型注册表（~/.openclaw/agents/<id>/agent/models.json）
-- 屠戮OpenClaw.json: 屠戮OpenClaw 自身配置（~/.openclaw/屠戮OpenClaw.json）
+- clawpanel.json: ClawPanel 自身配置（~/.openclaw/clawpanel.json）
 - gateway.mode: "local"（必须在 gateway 对象内，不能在顶层）
 - gateway.port: 默认 18789
 - gateway.auth.mode: "none" | "token" | "password"
 
 ## 常见问题速查
-1. **Gateway 启动失败 Bootstrap failed: 5** → plist 二进制路径过期（nvm/fnm 切版本后），升级 屠戮OpenClaw 到 v0.4.8+ 自动回退 CLI 启动
+1. **Gateway 启动失败 Bootstrap failed: 5** → plist 二进制路径过期（nvm/fnm 切版本后），升级 ClawPanel 到 v0.4.8+ 自动回退 CLI 启动
 2. **Unrecognized key: "mode"** → mode 字段不能放在顶层，必须在 gateway.mode，升级到 v0.4.6+ 自动修复
 3. **fnm 管理的 Node.js 检测不到** → 升级到 v0.4.7+，已支持 FNM_DIR/node-versions 扫描
-4. **models.json 不同步** → 屠戮OpenClaw 改了 openclaw.json 但 Gateway 用的 models.json 未更新，重启 Gateway 或执行 openclaw config apply
+4. **models.json 不同步** → ClawPanel 改了 openclaw.json 但 Gateway 用的 models.json 未更新，重启 Gateway 或执行 openclaw config apply
 5. **WebSocket 连接失败** → 检查 gateway.controlUi.allowedOrigins 是否包含 ["*"]
 6. **SIGTERM 循环** → com.openclaw.healthcheck 服务异常，禁用: launchctl bootout gui/$(id -u)/com.openclaw.healthcheck
-7. **BOM 导致 JSON 解析失败** → PowerShell Set-Content 会加 BOM，屠戮OpenClaw 已自动剥离
+7. **BOM 导致 JSON 解析失败** → PowerShell Set-Content 会加 BOM，ClawPanel 已自动剥离
 
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
 - **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh（推荐国内用户）
 - **OpenClaw 官方版**: npm install -g openclaw
-- **屠戮OpenClaw**: 从 https://github.com/qingchencloud/屠戮OpenClaw/releases 下载
+- **ClawPanel**: 从 https://github.com/qingchencloud/clawpanel/releases 下载
 - **更多项目**: 访问 https://github.com/qingchencloud
 
 ## 社区贡献指引
@@ -192,7 +193,7 @@ ${personality}
 
 ### 提交 Issue
 引导用户到对应仓库提交 Issue，帮用户整理好格式：
-- **屠戮OpenClaw**: https://github.com/qingchencloud/屠戮OpenClaw/issues/new
+- **ClawPanel**: https://github.com/qingchencloud/clawpanel/issues/new
 - **OpenClaw 汉化版**: https://github.com/qingchencloud/openclaw-zh/issues/new
 
 Issue 模板（帮用户填好）：
@@ -201,7 +202,7 @@ Issue 模板（帮用户填好）：
 **复现步骤**: 1. ... 2. ... 3. ...
 **期望行为**: ...
 **实际行为**: ...
-**环境信息**: OS / 屠戮OpenClaw 版本 / OpenClaw 版本
+**环境信息**: OS / ClawPanel 版本 / OpenClaw 版本
 **截图/日志**: （如有）
 \`\`\`
 
@@ -587,7 +588,7 @@ const BUILTIN_SKILLS = [
 4. 对于 main Agent，列出 ~/.openclaw/agents/main/agent/ 子目录
 5. 简要说明每个目录/文件的作用：
    - openclaw.json: 全局配置（模型、Gateway、工具）
-   - 屠戮OpenClaw.json: 屠戮OpenClaw 面板配置
+   - clawpanel.json: ClawPanel 面板配置
    - mcp.json: MCP 工具配置
    - agents/: Agent 工作目录
    - logs/: 日志文件
@@ -663,7 +664,7 @@ const BUILTIN_SKILLS = [
    - **环境信息**（自动填充）
    - **相关日志**（如有）
 6. 用代码块展示完整 Issue 内容，给出对应仓库的 Issue 链接：
-   - 屠戮OpenClaw: https://github.com/qingchencloud/屠戮OpenClaw/issues/new
+   - ClawPanel: https://github.com/qingchencloud/clawpanel/issues/new
    - OpenClaw: https://github.com/qingchencloud/openclaw-zh/issues/new
 `,
   },
@@ -713,24 +714,156 @@ const BUILTIN_SKILLS = [
 - 先调用 get_system_info 判断操作系统，过滤出适合当前平台的安装选项
 - 如果用户想从 SkillHub 搜索安装新 Skill，使用 skillhub_search 和 skillhub_install`,
   },
-,
+]
+
+// ── Hermes 引擎专属 Skills ──
+const HERMES_SKILLS = [
   {
-    id: 'goto-miaogu',
-    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
-    name: '喵咕验证',
-    desc: '打开喵咕卡密验证系统',
-    tools: [],
-    prompt: '/miaogu-verify',
+    id: 'hermes-chat-terminal',
+    icon: icon('terminal', 16),
+    name: t('assistant.skillHermesChat'),
+    desc: t('assistant.skillHermesChatDesc'),
+    tools: ['terminal'],
+    prompt: `请帮我在终端中启动 Hermes Agent 的交互式对话。
+
+具体操作：
+1. 调用 get_system_info 获取系统信息
+2. 用 run_command 执行 \`hermes version\` 检查 Hermes 是否已安装
+3. 如果已安装，告诉用户可以在终端中运行 \`hermes chat\` 开始对话
+4. 如果未安装，给出安装命令：\`uv tool install "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git" --python 3.11\``,
   },
   {
-    id: 'goto-weiyan',
-    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
-    name: '微验验证',
-    desc: '打开微验卡密验证系统',
+    id: 'hermes-diagnose',
+    icon: icon('shield', 16),
+    name: t('assistant.skillHermesDiagnose'),
+    desc: t('assistant.skillHermesDiagnoseDesc'),
+    tools: ['terminal', 'fileOps'],
+    prompt: `请帮我诊断 Hermes Agent 的运行状态。
+
+具体操作：
+1. 调用 get_system_info 获取 OS 类型和主目录
+2. 用 run_command 执行 \`hermes version\` 获取版本
+3. 用 run_command 执行 \`hermes doctor\` 进行自诊断
+4. 用 list_processes 检查 hermes/gateway 进程是否在运行
+5. 用 check_port 检查端口 8642 是否在监听
+6. 用 read_file 读取 ~/.hermes/config.yaml 检查配置
+7. 给出诊断结论和修复建议`,
+  },
+  {
+    id: 'hermes-config',
+    icon: icon('wrench', 16),
+    name: t('assistant.skillHermesConfig'),
+    desc: t('assistant.skillHermesConfigDesc'),
+    tools: ['fileOps'],
+    prompt: `请帮我检查 Hermes Agent 的配置文件。
+
+具体操作：
+1. 调用 get_system_info 获取系统信息，确定主目录
+2. 用 list_directory 查看 ~/.hermes/ 目录结构
+3. 用 read_file 读取 ~/.hermes/config.yaml
+4. 用 read_file 读取 ~/.hermes/.env（注意隐藏 API Key）
+5. 分析配置内容，检查：
+   - 模型配置是否正确
+   - API Key 和 Base URL 是否设置
+   - Gateway 端口配置
+6. 给出配置健康度评估和改进建议`,
+  },
+  {
+    id: 'hermes-browse-dir',
+    icon: icon('folder', 16),
+    name: t('assistant.skillHermesBrowseDir'),
+    desc: t('assistant.skillHermesBrowseDirDesc'),
+    tools: ['fileOps'],
+    prompt: `请帮我浏览 Hermes Agent 的工作目录。
+
+具体操作：
+1. 调用 get_system_info 获取主目录路径
+2. 用 list_directory 列出 ~/.hermes/ 根目录
+3. 简要说明每个目录/文件的作用：
+   - config.yaml: 全局配置
+   - .env: 环境变量（API Key、Base URL 等）
+   - sessions/: 对话会话记录
+   - skills/: Skills 目录
+   - logs/: 日志文件
+   - cron/: 定时任务配置
+4. 标注关键配置文件和常用路径`,
+  },
+  {
+    id: 'hermes-upgrade',
+    icon: icon('zap', 16),
+    name: t('assistant.skillHermesUpgrade'),
+    desc: t('assistant.skillHermesUpgradeDesc'),
+    tools: ['terminal'],
+    prompt: `请帮我升级 Hermes Agent 到最新版本。
+
+具体操作：
+1. 调用 get_system_info 获取系统信息
+2. 用 run_command 执行 \`hermes version\` 获取当前版本
+3. 告诉用户升级命令：
+   \`uv tool install --reinstall "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git" --python 3.11\`
+4. 提醒用户升级前先停止 Gateway：\`hermes gateway stop\`
+5. 升级完成后建议重新启动 Gateway`,
+  },
+  {
+    id: 'hermes-logs',
+    icon: icon('clipboard', 16),
+    name: t('assistant.skillHermesLogs'),
+    desc: t('assistant.skillHermesLogsDesc'),
+    tools: ['terminal', 'fileOps'],
+    prompt: `请帮我分析 Hermes Agent 最近的日志。
+
+具体操作：
+1. 调用 get_system_info 获取主目录路径
+2. 用 list_directory 查看 ~/.hermes/ 有哪些日志文件
+3. 用 read_file 读取 ~/.hermes/gateway-run.log 和 ~/.hermes/gateway-err.log
+4. 搜索 ERROR、WARN、fail、exception 等关键词
+5. 分析错误原因，给出具体修复建议`,
+  },
+  {
+    id: 'hermes-uninstall',
+    icon: icon('trash', 16),
+    name: t('assistant.skillHermesUninstall'),
+    desc: t('assistant.skillHermesUninstallDesc'),
     tools: [],
-    prompt: '/weiyan-verify',
-  }
+    prompt: `请告诉我如何完全卸载 Hermes Agent。
+
+卸载步骤：
+1. 停止 Gateway：\`hermes gateway stop\`
+2. 卸载 Hermes Agent：\`uv tool uninstall hermes-agent\`
+3. 可选：删除配置目录 ~/.hermes/（Windows: %USERPROFILE%\\.hermes）
+4. 可选：卸载 uv 包管理器
+
+请详细说明每一步，并提醒用户备份重要数据。`,
+  },
+  {
+    id: 'report-bug',
+    icon: icon('bug', 16),
+    name: t('assistant.skillReportBug'),
+    desc: t('assistant.skillReportBugDesc'),
+    tools: ['terminal', 'fileOps'],
+    prompt: `我想反馈一个 Bug，请帮我整理成标准的 GitHub Issue。
+
+具体操作：
+1. 用 ask_user 工具询问我遇到了什么问题（如果我还没说的话）
+2. 调用 get_system_info 获取系统环境信息
+3. 用 run_command 收集：hermes version、node -v 等版本信息
+4. 用 read_file 读取最近的错误日志（如有）
+5. 按标准 Issue 模板整理：
+   - **问题描述**（一句话）
+   - **复现步骤**（1, 2, 3...）
+   - **期望行为** / **实际行为**
+   - **环境信息**（自动填充）
+   - **相关日志**（如有）
+6. 给出对应仓库的 Issue 链接：
+   - ClawPanel: https://github.com/qingchencloud/clawpanel/issues/new
+`,
+  },
 ]
+
+/** 根据当前引擎返回对应的技能列表 */
+function getBuiltinSkills() {
+  return getActiveEngineId() === 'hermes' ? HERMES_SKILLS : BUILTIN_SKILLS
+}
 
 function currentMode() {
   return MODES[_config?.mode] ? _config.mode : DEFAULT_MODE
@@ -885,8 +1018,8 @@ function buildSystemPrompt() {
         prompt += `## ${m.date}\n${content}\n\n`
       }
     }
-    // 追加 屠戮OpenClaw 特有的产品知识和工具说明
-    prompt += '\n# 屠戮OpenClaw 工具能力\n你同时是 屠戮OpenClaw 内置助手，拥有以下额外能力：\n'
+    // 追加 ClawPanel 特有的产品知识和工具说明
+    prompt += '\n# ClawPanel 工具能力\n你同时是 ClawPanel 内置助手，拥有以下额外能力：\n'
     prompt += '- 执行终端命令、读写文件、浏览目录\n'
     prompt += '- 联网搜索和网页抓取\n'
     prompt += '- 管理 OpenClaw 配置和服务\n'
@@ -955,13 +1088,15 @@ function buildSystemPrompt() {
   // 注入内置技能列表
   prompt += '\n\n## 内置技能卡片'
   prompt += '\n用户可以在欢迎页点击技能卡片快速触发操作。当用户遇到问题时，你也可以主动推荐合适的技能：'
-  for (const s of BUILTIN_SKILLS) {
+  for (const s of getBuiltinSkills()) {
     prompt += `\n- **${s.name}**（${s.desc}）`
   }
   prompt += '\n\n当用户的需求匹配某个技能时，可以建议用户点击对应的技能卡片，或者你直接按技能的步骤操作。'
 
-  // 注入内置 OpenClaw 知识库
-  prompt += '\n\n' + OPENCLAW_KB
+  // 注入内置知识库（仅 OpenClaw 模式）
+  if (getActiveEngineId() !== 'hermes') {
+    prompt += '\n\n' + OPENCLAW_KB
+  }
 
   // 注入用户自定义知识库内容
   const kbEnabled = (_config.knowledgeFiles || []).filter(f => f.enabled !== false && f.content)
@@ -1219,6 +1354,103 @@ function processQueue() {
   sendMessageDirect(next.text)
 }
 
+// ── 本地文件路径检测（Fix #226）──
+// 用于拦截用户意外粘贴/拖拽本地文件路径（而非图片内容本身）的场景
+// 例如：C:\Users\x\img.png、/Users/x/img.png、file:///C:/img.png 等
+// 这类字符串发送到 LLM 会触发 "Only base64/http/https URLs are supported" 错误
+const LOCAL_PATH_PREFIX_RE = /^(?:[a-zA-Z]:[\\/]|\/(?:Users|home|mnt|media|opt|tmp|var|root)\/|file:\/\/)/i
+// 匹配 markdown 图片语法中的本地路径：![alt](C:\...)、![alt](/Users/...)
+const LOCAL_PATH_MD_IMG_RE = /!\[[^\]]*\]\((\s*(?:[a-zA-Z]:[\\/]|\/(?:Users|home|mnt|media|opt|tmp|var|root)\/|file:\/\/)[^)]+)\)/gi
+
+function isLocalPathText(text) {
+  if (!text) return false
+  const trimmed = String(text).trim()
+  if (!trimmed) return false
+  // 多行粘贴：首行若匹配本地路径即视为路径
+  const firstLine = trimmed.split(/\r?\n/)[0].trim()
+  return LOCAL_PATH_PREFIX_RE.test(firstLine)
+}
+
+// 在发送给 LLM 之前清洗用户消息中的本地路径 markdown 图片引用
+// LLM 不能访问本地文件，把路径替换为占位文本避免 API 报错
+function sanitizeUserTextForApi(text) {
+  if (!text || typeof text !== 'string') return text
+  return text.replace(LOCAL_PATH_MD_IMG_RE, t('assistant.localPathSanitized'))
+}
+
+// ── 连续错误熔断（Fix #226）──
+// 同一错误连续出现 N 次时暂停自动重试，引导用户检查配置，避免无限循环
+const CIRCUIT_WINDOW_MS = 2 * 60 * 1000 // 2 分钟滑动窗口
+const CIRCUIT_THRESHOLD = 3 // 同错误指纹出现 ≥3 次视为熔断打开
+let _recentFailures = [] // [{ fp: string, ts: number }]
+
+function _errorFingerprint(err) {
+  const msg = String(err?.message || err || '').trim()
+  if (!msg) return ''
+  // 归一化：去掉变化的数字（时间戳/ID）、URL、多余空白，保留错误核心
+  return msg
+    .replace(/\d{3,}/g, 'N')
+    .replace(/\bhttps?:\/\/\S+/gi, 'URL')
+    .replace(/\s+/g, ' ')
+    .slice(0, 180)
+}
+
+function recordRequestFailure(err) {
+  const fp = _errorFingerprint(err)
+  if (!fp) return
+  const now = Date.now()
+  _recentFailures.push({ fp, ts: now })
+  _recentFailures = _recentFailures.filter(f => now - f.ts < CIRCUIT_WINDOW_MS)
+}
+
+function isCircuitOpenFor(err) {
+  const fp = _errorFingerprint(err)
+  if (!fp) return false
+  const now = Date.now()
+  const matching = _recentFailures.filter(f => f.fp === fp && now - f.ts < CIRCUIT_WINDOW_MS)
+  return matching.length >= CIRCUIT_THRESHOLD
+}
+
+function resetCircuit() {
+  _recentFailures = []
+}
+
+// 创建错误重试栏（sendMessageDirect 和 retryAIResponse 共用）
+// circuitOpen 为 true 时：禁用重试按钮、改用警告色 hint、点击重试时 toast 提示
+function createRetryBar(session, circuitOpen) {
+  const retryBar = document.createElement('div')
+  retryBar.className = 'ast-retry-bar' + (circuitOpen ? ' ast-retry-bar-circuit' : '')
+  const retrySvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+  const continueSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+  const warnSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+  const hintText = circuitOpen ? t('assistant.retryCircuitHint') : t('assistant.retryHint')
+  const hintIcon = circuitOpen ? warnSvg + ' ' : ''
+  retryBar.innerHTML = `
+    <button class="btn btn-sm btn-primary ast-btn-retry"${circuitOpen ? ' disabled aria-disabled="true"' : ''}>${retrySvg} ${t('assistant.retry')}</button>
+    <button class="btn btn-sm btn-secondary ast-btn-continue">${continueSvg} ${t('assistant.continueInput')}</button>
+    <span class="ast-retry-hint">${hintIcon}${hintText}</span>
+  `
+  retryBar.querySelector('.ast-btn-retry').addEventListener('click', (e) => {
+    if (circuitOpen) {
+      e.preventDefault()
+      toast(t('assistant.retryCircuitBlocked'), 'warn')
+      return
+    }
+    retryBar.remove()
+    session.messages.pop()
+    saveSessions()
+    setSessionStatus(session.id, 'idle')
+    retryAIResponse(session)
+  })
+  retryBar.querySelector('.ast-btn-continue').addEventListener('click', () => {
+    retryBar.remove()
+    setSessionStatus(session.id, 'idle')
+    renderSessionList()
+    _textarea?.focus()
+  })
+  return retryBar
+}
+
 // ── 图片附件 ──
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB
 const MAX_IMAGE_DIM = 2048 // 最大边长
@@ -1295,9 +1527,11 @@ function clearPendingImages() {
 
 // 构建多模态消息 content
 function buildMessageContent(text, images) {
-  if (!images || images.length === 0) return text
+  // Fix #226: 清洗 markdown 图片语法中的本地路径（LLM 无法访问）
+  const sanitizedText = sanitizeUserTextForApi(text)
+  if (!images || images.length === 0) return sanitizedText
   const parts = []
-  if (text) parts.push({ type: 'text', text })
+  if (sanitizedText) parts.push({ type: 'text', text: sanitizedText })
   for (const img of images) {
     parts.push({
       type: 'image_url',
@@ -1354,11 +1588,15 @@ function loadConfig() {
   _config.apiType = normalizeApiType(_config.apiType)
   if (_config.autoRounds === undefined) _config.autoRounds = 8
   if (!Array.isArray(_config.knowledgeFiles)) _config.knowledgeFiles = []
+  // #Compat-3 备用模型组：主模型失败时自动切换
+  if (!Array.isArray(_config.fallbackModels)) _config.fallbackModels = []
   return _config
 }
 
 function saveConfig() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(_config))
+  // Fix #226: 配置变更后重置熔断状态，让用户改了 API/模型/key 后能立刻重试
+  resetCircuit()
 }
 
 // ── 会话管理 ──
@@ -1406,6 +1644,8 @@ function createSession() {
   _sessions.push(session)
   _currentSessionId = session.id
   saveSessions()
+  // Fix #226: 新会话重置熔断状态，与旧会话的错误历史隔离
+  resetCircuit()
   return session
 }
 
@@ -1481,7 +1721,102 @@ const TIMEOUT_TOTAL = 120_000    // 总超时 120 秒
 const TIMEOUT_CHUNK = 30_000     // 流式 chunk 间隔超时 30 秒
 const TIMEOUT_CONNECT = 30_000   // 连接超时 30 秒
 
+// #Compat-3: 收集所有可用的模型槽位（主模型 + 启用的备用模型）
+// 返回 [{ label, baseUrl, apiKey, model, apiType, isPrimary }, ...]
+function buildActiveSlots() {
+  const slots = []
+  // 主模型
+  if (_config.baseUrl && _config.model) {
+    slots.push({
+      label: t('assistant.slotPrimary'),
+      baseUrl: _config.baseUrl,
+      apiKey: _config.apiKey || '',
+      model: _config.model,
+      apiType: normalizeApiType(_config.apiType),
+      isPrimary: true,
+    })
+  }
+  // 备用模型（仅保留必填字段齐全 + enabled 的）
+  for (const fb of (_config.fallbackModels || [])) {
+    if (!fb || fb.enabled === false) continue
+    if (!fb.baseUrl || !fb.model) continue
+    const apiType = normalizeApiType(fb.apiType)
+    if (requiresApiKey(apiType) && !fb.apiKey) continue
+    slots.push({
+      label: fb.label || fb.model,
+      baseUrl: fb.baseUrl,
+      apiKey: fb.apiKey || '',
+      model: fb.model,
+      apiType,
+      isPrimary: false,
+    })
+  }
+  return slots
+}
+
+// #Compat-3: 判断错误是否应该触发 failover 切换到下一个槽位
+// - AbortError（用户手动中止）→ 不切
+// - 鉴权错误 401/403 → 不切（key 错了，切了也白切）
+// - 其它（网络/超时/429/5xx/400 请求格式错误/模型不存在）→ 切
+function isFailoverableError(err) {
+  if (!err) return false
+  if (err.name === 'AbortError') return false
+  const msg = (err.message || '').toLowerCase()
+  // 鉴权错误关键字：401/403/invalid api key/unauthorized/authentication
+  if (/\b(401|403)\b/.test(msg)) return false
+  if (/unauthorized|forbidden|invalid\s+api\s*key|authentication|api\s*key\s+(invalid|missing|expired)/i.test(msg)) return false
+  return true
+}
+
 async function callAI(messages, onChunk) {
+  const slots = buildActiveSlots()
+  if (slots.length === 0) {
+    throw new Error(t('assistant.errConfigFirst'))
+  }
+
+  let lastErr
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i]
+    try {
+      await callAIWithSlot(slot, messages, onChunk)
+      if (i > 0) {
+        console.log(`[assistant] Failover 成功：已切换到备用模型「${slot.label}」`)
+      }
+      return
+    } catch (err) {
+      lastErr = err
+      // 用户中止或鉴权错误：直接抛出，不 failover
+      if (!isFailoverableError(err)) throw err
+      // 最后一个槽位也失败了，抛出最终错误
+      if (i >= slots.length - 1) throw err
+      // 还有备用：通知用户并继续
+      const nextSlot = slots[i + 1]
+      const shortMsg = (err.message || '').slice(0, 80)
+      console.warn(`[assistant] 模型「${slot.label}」失败（${shortMsg}），切换到备用：${nextSlot.label}`)
+      onChunk(`\n\n> ${t('assistant.failoverNotice', { from: slot.label, to: nextSlot.label, err: shortMsg })}\n\n`)
+    }
+  }
+  throw lastErr
+}
+
+// 用指定槽位发起一次请求（原 callAI 的内部实现；通过临时替换 _config 实现槽位隔离）
+async function callAIWithSlot(slot, messages, onChunk) {
+  const savedConfig = _config
+  _config = {
+    ..._config,
+    baseUrl: slot.baseUrl,
+    apiKey: slot.apiKey,
+    model: slot.model,
+    apiType: slot.apiType,
+  }
+  try {
+    await _callAIOnce(messages, onChunk)
+  } finally {
+    _config = savedConfig
+  }
+}
+
+async function _callAIOnce(messages, onChunk) {
   const apiType = normalizeApiType(_config.apiType)
   if (!_config.baseUrl || !_config.model || (requiresApiKey(apiType) && !_config.apiKey)) {
     throw new Error(t('assistant.errConfigFirst'))
@@ -1576,7 +1911,8 @@ async function callChatCompletions(base, messages, onChunk) {
     } catch {
       if (errText) errMsg += `: ${errText.slice(0, 200)}`
     }
-    throw new Error(errMsg)
+    // #Compat-5: 识别 vLLM/Ollama 等本地服务端的常见拒绝消息，附加修复指引
+    throw new Error(enhanceModelCallError(errMsg))
   }
 
   // 检测响应是否为 SSE 流式
@@ -1587,9 +1923,14 @@ async function callChatCompletions(base, messages, onChunk) {
     let contentChunks = 0
     let reasoningChunks = 0
     let reasoningBuf = ''
+    let streamError = ''
 
     await readSSEStream(resp, (json) => {
       chunkCount++
+      // 捕获流内错误事件（如模型不可用）
+      if (json.error) {
+        streamError = streamError || json.error?.message || json.error || ''
+      }
       const d = json.choices?.[0]?.delta
       if (!d) return
 
@@ -1611,6 +1952,12 @@ async function callChatCompletions(base, messages, onChunk) {
       onChunk(reasoningBuf)
       _lastDebugInfo.fallbackToReasoning = true
     }
+    // 流式完成但没有任何内容 → 视为无效响应（防止空气泡）
+    if (contentChunks === 0 && !reasoningBuf) {
+      const errDetail = streamError || t('assistant.errInvalidResponse')
+      console.warn('[assistant] SSE 流完成但 0 内容块:', errDetail)
+      throw new Error(errDetail)
+    }
   } else {
     // 非流式响应：API 忽略了 stream:true，直接返回完整 JSON
     _lastDebugInfo.streaming = false
@@ -1619,7 +1966,13 @@ async function callChatCompletions(base, messages, onChunk) {
     console.log('[assistant] 非流式响应:', json)
     const msg = json.choices?.[0]?.message
     const content = msg?.content || msg?.reasoning_content || ''
-    if (content) onChunk(content)
+    if (content) {
+      onChunk(content)
+    } else {
+      // 尝试从 error 字段提取错误信息
+      const errMsg = json.error?.message || json.choices?.[0]?.finish_reason || ''
+      throw new Error(errMsg || t('assistant.errInvalidResponse'))
+    }
   }
 }
 
@@ -1653,7 +2006,8 @@ async function callResponsesAPI(base, messages, onChunk) {
     } catch {
       if (errText) errMsg += `: ${errText.slice(0, 200)}`
     }
-    throw new Error(errMsg)
+    // #Compat-5: 识别本地服务端拒绝消息，附加修复指引
+    throw new Error(enhanceModelCallError(errMsg))
   }
 
   await readSSEStream(resp, (json) => {
@@ -1712,7 +2066,8 @@ async function callAnthropicMessages(base, messages, onChunk) {
     } catch {
       if (errText) errMsg += `: ${errText.slice(0, 200)}`
     }
-    throw new Error(errMsg)
+    // #Compat-5: 识别本地服务端拒绝消息，附加修复指引
+    throw new Error(enhanceModelCallError(errMsg))
   }
 
   _lastDebugInfo.streaming = true
@@ -1780,7 +2135,8 @@ async function callGeminiGenerate(base, messages, onChunk) {
     const errText = await resp.text().catch(() => '')
     let errMsg = `API 错误 ${resp.status}`
     try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
-    throw new Error(errMsg)
+    // #Compat-5: 识别本地服务端拒绝消息，附加修复指引
+    throw new Error(enhanceModelCallError(errMsg))
   }
 
   _lastDebugInfo.streaming = true
@@ -1996,8 +2352,7 @@ function showAskUserCard({ question, type, options, placeholder }) {
 
 // 危险工具确认弹窗
 async function confirmToolCall(tc, critical = false) {
-  const name = tc?.function?.name
-  if (!name) return false
+  const name = tc.function.name
   let args
   try { args = JSON.parse(tc.function.arguments) } catch { args = {} }
 
@@ -2022,20 +2377,19 @@ async function confirmToolCall(tc, critical = false) {
 
 // 将 OpenAI 格式工具定义转为 Anthropic 格式
 function convertToolsForAnthropic(tools) {
-  if (!Array.isArray(tools)) return []
   return tools.map(t => ({
-    name: t?.function?.name || t?.name || 'unknown',
-    description: t?.function?.description || '',
-    input_schema: t?.function?.parameters || { type: 'object', properties: {} },
+    name: t.function.name,
+    description: t.function.description || '',
+    input_schema: t.function.parameters || { type: 'object', properties: {} },
   }))
 }
 
 // 将 OpenAI 格式工具定义转为 Gemini 格式
 function convertToolsForGemini(tools) {
-  return [{ functionDeclarations: (tools || []).map(t => ({
-    name: t?.function?.name || t?.name || 'unknown',
-    description: t?.function?.description || '',
-    parameters: t?.function?.parameters || { type: 'object', properties: {} },
+  return [{ functionDeclarations: tools.map(t => ({
+    name: t.function.name,
+    description: t.function.description || '',
+    parameters: t.function.parameters || { type: 'object', properties: {} },
   }))}]
 }
 
@@ -2058,8 +2412,8 @@ async function executeToolWithSafety(toolName, args, tcForConfirm) {
   return { result, approved }
 }
 
-// 带工具调用的 AI 请求（非流式，用于 tool_calls 检测循环）
-async function callAIWithTools(messages, onStatus, onToolProgress) {
+// 带工具调用的 AI 请求（流式，支持 tool_calls 循环 + 打字机效果）
+async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
   const apiType = normalizeApiType(_config.apiType)
   if (!_config.baseUrl || !_config.model || (requiresApiKey(apiType) && !_config.apiKey)) {
     throw new Error(t('assistant.errConfigFirst'))
@@ -2211,11 +2565,12 @@ async function callAIWithTools(messages, onStatus, onToolProgress) {
       return { content: textParts, toolHistory }
     }
 
-    // ── OpenAI 工具调用 ──
+    // ── OpenAI 工具调用（流式） ──
     const body = {
       model: _config.model,
       messages: currentMessages,
       temperature: _config.temperature || 0.7,
+      stream: true,
     }
     if (tools.length > 0) body.tools = tools
 
@@ -2230,19 +2585,103 @@ async function callAIWithTools(messages, onStatus, onToolProgress) {
       const errText = await resp.text().catch(() => '')
       let errMsg = `API 错误 ${resp.status}`
       try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
-      throw new Error(errMsg)
+      // #Compat-5: callAIWithTools 场景下 tools 带进 body 最容易踩 vLLM tool choice 限制，
+      // 识别并给出启动参数指引，避免用户一脸懵
+      throw new Error(enhanceModelCallError(errMsg))
     }
 
-    const data = await resp.json()
-    const choice = data.choices?.[0]
-    const assistantMsg = choice?.message
+    // 流式累积状态
+    let contentBuf = ''
+    let reasoningBuf = ''
+    let streamError = ''
+    const pendingToolCalls = []   // [{ id, type, function: { name, arguments } }]
+    let finishReason = ''
 
-    if (!assistantMsg) throw new Error(t('assistant.errInvalidResponse'))
+    const ct = resp.headers.get('content-type') || ''
+    if (ct.includes('text/event-stream') || ct.includes('text/plain')) {
+      // ── SSE 流式解析 ──
+      await readSSEStream(resp, (json) => {
+        if (json.error) {
+          streamError = streamError || json.error?.message || json.error || ''
+        }
+        const choice = json.choices?.[0]
+        if (!choice) return
+        if (choice.finish_reason) finishReason = choice.finish_reason
 
-    if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
+        const d = choice.delta
+        if (!d) return
+
+        // 累积 content → 打字机效果
+        if (d.content) {
+          contentBuf += d.content
+          if (onChunk) onChunk(d.content)
+        }
+
+        // 累积 reasoning_content
+        if (d.reasoning_content) {
+          reasoningBuf += d.reasoning_content
+        }
+
+        // 累积 tool_calls 分块
+        if (d.tool_calls) {
+          for (const tc of d.tool_calls) {
+            const idx = tc.index ?? pendingToolCalls.length
+            if (!pendingToolCalls[idx]) {
+              pendingToolCalls[idx] = {
+                id: tc.id || '',
+                type: tc.type || 'function',
+                function: { name: '', arguments: '' },
+              }
+            }
+            const slot = pendingToolCalls[idx]
+            if (tc.id) slot.id = tc.id
+            if (tc.function?.name) slot.function.name += tc.function.name
+            if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
+          }
+          // 实时显示工具调用进度（显示已知名称）
+          const names = pendingToolCalls.filter(t => t.function.name).map(t => t.function.name)
+          if (names.length) {
+            onStatus(t('assistant.aiCallingTools', { tools: names.join(', ') }) || `调用工具: ${names.join(', ')}`)
+          }
+        }
+      }, _abortController?.signal)
+    } else {
+      // ── 非流式回退（API 忽略了 stream:true）──
+      const data = await resp.json()
+      const choice = data.choices?.[0]
+      const msg = choice?.message
+      if (!msg) {
+        const errMsg = data.error?.message || ''
+        throw new Error(errMsg || t('assistant.errInvalidResponse'))
+      }
+      finishReason = choice.finish_reason || ''
+      contentBuf = msg.content || msg.reasoning_content || ''
+      if (contentBuf && onChunk) onChunk(contentBuf)
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          pendingToolCalls.push(tc)
+        }
+      }
+    }
+
+    // 流式完成但无任何内容且无工具调用 → 无效响应
+    if (!contentBuf && !reasoningBuf && pendingToolCalls.length === 0) {
+      throw new Error(streamError || t('assistant.errInvalidResponse'))
+    }
+
+    // 无 content 但有 reasoning → 作为回复
+    if (!contentBuf && reasoningBuf && pendingToolCalls.length === 0) {
+      contentBuf = reasoningBuf
+      if (onChunk) onChunk(contentBuf)
+    }
+
+    // ── 处理工具调用 ──
+    if (pendingToolCalls.length > 0) {
+      // 构造完整 assistant message 用于上下文
+      const assistantMsg = { role: 'assistant', content: contentBuf || null, tool_calls: pendingToolCalls }
       currentMessages.push(assistantMsg)
 
-      for (const tc of assistantMsg.tool_calls) {
+      for (const tc of pendingToolCalls) {
         let args
         try { args = JSON.parse(tc.function.arguments) } catch { args = {} }
         const toolName = tc.function.name
@@ -2265,8 +2704,7 @@ async function callAIWithTools(messages, onStatus, onToolProgress) {
       continue
     }
 
-    const content = assistantMsg.content || assistantMsg.reasoning_content || ''
-    return { content, toolHistory }
+    return { content: contentBuf, toolHistory }
   }
 }
 
@@ -2290,9 +2728,8 @@ function renderSessionList() {
 }
 
 function renderToolBlocks(toolHistory) {
-  if (!toolHistory || !Array.isArray(toolHistory) || toolHistory.length === 0) return ''
+  if (!toolHistory || toolHistory.length === 0) return ''
   return toolHistory.map(tc => {
-    if (!tc || !tc.name) return ''
     // ask_user 工具不显示在工具块中（它有自己的交互卡片）
     if (tc.name === 'ask_user') return ''
 
@@ -2415,7 +2852,7 @@ function renderMessages() {
   const session = getCurrentSession()
   if (!_messagesEl) return
   if (!session || session.messages.length === 0) {
-    const skillCards = BUILTIN_SKILLS.map(s => `
+    const skillCards = getBuiltinSkills().map(s => `
       <button class="ast-skill-card" data-skill="${s.id}">
         <span class="ast-skill-icon">${s.icon}</span>
         <div class="ast-skill-info">
@@ -2454,6 +2891,9 @@ function renderMessages() {
       ).join('')}</div>` : ''
       return `<div class="ast-msg ast-msg-user" data-msg-idx="${idx}"><div class="ast-msg-bubble ast-msg-bubble-user">${imagesHtml}${textPart ? escHtml(textPart) : ''}</div><div class="ast-msg-meta"><button class="msg-copy-btn" title="${t('common.copy')}">${icon('copy', 12)}</button></div></div>`
     } else if (m.role === 'assistant') {
+      // 跳过空的 AI 消息（历史脏数据），除非正在流式中（最后一条是占位符）
+      const isLastMsg = idx === session.messages.length - 1
+      if (!m.content && !m.toolHistory?.length && !(isLastMsg && _isStreaming)) return ''
       const toolHtml = renderToolBlocks(m.toolHistory)
       return `<div class="ast-msg ast-msg-ai" data-msg-idx="${idx}">${toolHtml}<div class="ast-msg-bubble ast-msg-bubble-ai">${renderMarkdown(m.content)}</div><div class="ast-msg-meta"><button class="msg-copy-btn" title="${t('common.copy')}">${icon('copy', 12)}</button></div></div>`
     }
@@ -2496,7 +2936,7 @@ function renderMessages() {
 
 function _linkify(str) { return str.replace(/(https?:\/\/[^\s,，。；）)'"]+)/g, '<a href="$1" target="_blank" style="color:var(--primary)">$1</a>') }
 
-function buildTestResult({ success, elapsed, usedApi, reqUrl, reqBody, respStatus, respBody, reply, error }) {
+function buildTestResult({ success, elapsed, usedApi, reqUrl, reqBody, respStatus, respHeaders, respBody, respRawHex, respByteCount, reply, error }) {
   let html = ''
   // 尝试解析 API 返回的错误信息
   let apiErrMsg = ''
@@ -2506,35 +2946,76 @@ function buildTestResult({ success, elapsed, usedApi, reqUrl, reqBody, respStatu
       apiErrMsg = errJson.error?.message || errJson.message || ''
     } catch {}
   }
-  // 状态行
+  // 状态行（加粗显示，区分成功/警告/失败）
   if (error) {
-    html += `<span style="color:var(--error)">✗ ${t('assistant.testFailed')}: ${escHtml(error)}</span>`
+    html += `<div style="color:var(--error);font-weight:500">✗ ${t('assistant.testFailed')}: ${escHtml(error)}</div>`
   } else if (success) {
-    html += `<span style="color:var(--success)">✓ ${t('assistant.testSuccess', { elapsed, api: usedApi })}</span>`
+    html += `<div style="color:var(--success);font-weight:500">✓ ${t('assistant.testSuccess', { elapsed, api: usedApi })}</div>`
   } else {
-    html += `<span style="color:var(--warning)">${statusIcon('warn', 14)} HTTP ${respStatus} — ${t('assistant.testNoReply')}</span>`
+    html += `<div style="color:var(--warning);font-weight:500">${statusIcon('warn', 14)} HTTP ${respStatus} — ${t('assistant.testNoReply')}</div>`
   }
   // API 错误信息（完整展示，URL 可点击）
   if (apiErrMsg) {
     html += `<div style="margin-top:6px;padding:8px 10px;background:var(--bg-tertiary);border-left:3px solid var(--warning);border-radius:4px;font-size:12px;color:var(--text-secondary);line-height:1.6;word-break:break-all">${_linkify(escHtml(apiErrMsg))}</div>`
   }
-  // 回复预览
-  if (reply) {
-    const short = reply.length > 80 ? reply.slice(0, 80) + '...' : reply
-    html += `<div style="margin-top:4px;padding:6px 8px;background:var(--bg-tertiary);border-radius:4px;font-size:12px;color:var(--text-secondary)">「${escHtml(short)}」</div>`
+  // 解码失败时，显眼展示关键诊断信息：Content-Encoding 和字节数
+  if (error && respHeaders) {
+    const contentEncoding = respHeaders['content-encoding'] || respHeaders['Content-Encoding'] || '(未声明)'
+    const contentType = respHeaders['content-type'] || respHeaders['Content-Type'] || '(未知)'
+    html += `<div style="margin-top:6px;padding:8px 10px;background:var(--bg-tertiary);border-left:3px solid var(--error);border-radius:4px;font-size:11px;color:var(--text-secondary);line-height:1.7;font-family:var(--font-mono)">` +
+      `<div style="color:var(--text-primary);font-weight:600;margin-bottom:4px;font-family:var(--font-sans)">🔍 诊断信息</div>` +
+      `Content-Encoding: <strong style="color:var(--warning)">${escHtml(contentEncoding)}</strong><br>` +
+      `Content-Type: ${escHtml(contentType)}<br>` +
+      (respByteCount ? `响应字节数: ${respByteCount}` : '') +
+      `</div>`
   }
+  // 模型回复（完整展示，不截断；长回复给最大高度 + scroll）
+  if (reply) {
+    html += `<div style="margin-top:6px;padding:8px 10px;background:var(--bg-tertiary);border-left:3px solid var(--success);border-radius:4px;font-size:13px;color:var(--text-primary);line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto">` +
+      `<div style="font-size:10px;color:var(--text-tertiary);margin-bottom:4px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase">${t('assistant.testModelReply')}</div>` +
+      escHtml(reply) +
+      `</div>`
+  }
+  // respBody 空但 reply 非空：明确诊断
+  if (!respBody && reply) {
+    html += `<div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);font-style:italic;line-height:1.5">${escHtml(t('assistant.testRespBodyEmpty'))}</div>`
+  }
+  // 固定 prompt 脚注（用户知情权：测试的是预设请求，不是真实对话）
+  html += `<div style="margin-top:8px;font-size:10px;color:var(--text-tertiary);opacity:0.7;line-height:1.4">📌 ${escHtml(t('assistant.testFixedPrompt'))}</div>`
   // 折叠的详细信息
-  html += `<details style="margin-top:6px;font-size:11px"><summary style="cursor:pointer;color:var(--text-tertiary);user-select:none">查看完整请求/响应参数</summary>`
-  html += `<div style="margin-top:4px;max-height:200px;overflow:auto;background:var(--bg-tertiary);border-radius:4px;padding:8px;font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all">`
+  html += `<details style="margin-top:6px;font-size:11px"><summary style="cursor:pointer;color:var(--text-tertiary);user-select:none">${t('assistant.testShowDetails')}</summary>`
+  html += `<div style="margin-top:4px;max-height:240px;overflow:auto;background:var(--bg-tertiary);border-radius:4px;padding:8px;font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all">`
   html += `<strong>POST</strong> ${escHtml(reqUrl)}\n\n`
   html += `<strong>Request Body:</strong>\n${escHtml(JSON.stringify(reqBody, null, 2))}\n\n`
   html += `<strong>Response Status:</strong> ${respStatus}\n\n`
-  html += `<strong>Response Body:</strong>\n`
-  // 美化 JSON
-  try {
-    html += escHtml(JSON.stringify(JSON.parse(respBody), null, 2))
-  } catch {
-    html += escHtml(respBody?.slice(0, 2000) || '(empty)')
+  // Response Headers（完整列出，每行一个）
+  if (respHeaders && typeof respHeaders === 'object') {
+    html += `<strong>Response Headers:</strong>\n`
+    const entries = Object.entries(respHeaders)
+    if (entries.length === 0) {
+      html += `<span style="color:var(--text-tertiary);font-style:italic">(无)</span>\n\n`
+    } else {
+      html += entries.map(([k, v]) => `  ${escHtml(k)}: ${escHtml(String(v))}`).join('\n') + '\n\n'
+    }
+  }
+  html += `<strong>Response Body:</strong>`
+  if (respByteCount !== undefined && respByteCount !== null) {
+    html += ` <span style="color:var(--text-tertiary);font-weight:normal">(${respByteCount} bytes)</span>`
+  }
+  html += `\n`
+  // 美化 JSON（空串单独提示，避免误导为"empty"字面量）
+  if (!respBody) {
+    html += `<span style="color:var(--text-tertiary);font-style:italic">${escHtml(t('assistant.testRespBodyEmptyDetail'))}</span>`
+  } else {
+    try {
+      html += escHtml(JSON.stringify(JSON.parse(respBody), null, 2))
+    } catch {
+      html += escHtml(respBody.slice(0, 4000))
+    }
+  }
+  // Raw Bytes (hex)：UTF-8 解码失败时最关键的诊断信息
+  if (respRawHex) {
+    html += `\n\n<strong>Raw Bytes (前 200 字节 hex):</strong>\n<span style="color:var(--text-tertiary);font-size:10px">${escHtml(respRawHex)}</span>`
   }
   html += `</div></details>`
   return html
@@ -2542,6 +3023,7 @@ function buildTestResult({ success, elapsed, usedApi, reqUrl, reqBody, respStatu
 
 function showSettings() {
   const c = _config
+  const isHermes = getActiveEngineId() === 'hermes'
   const overlay = document.createElement('div')
   overlay.className = 'modal-overlay'
   overlay.innerHTML = `
@@ -2583,7 +3065,7 @@ function showSettings() {
             <div style="display:flex;gap:6px;padding-bottom:1px">
               <button class="btn btn-sm btn-secondary" id="ast-btn-test" title="${t('assistant.testConnTitle')}">${t('assistant.testBtn')}</button>
               <button class="btn btn-sm btn-secondary" id="ast-btn-models" title="${t('assistant.fetchModelsTitle')}">${t('assistant.fetchBtn')}</button>
-              <button class="btn btn-sm btn-secondary" id="ast-btn-import" title="${t('assistant.importTitle')}">${icon('download', 14)} ${t('assistant.importBtn')}</button>
+              ${!isHermes ? `<button class="btn btn-sm btn-secondary" id="ast-btn-import" title="${t('assistant.importTitle')}">${icon('download', 14)} ${t('assistant.importBtn')}</button>` : ''}
             </div>
           </div>
           <div id="ast-test-result" style="margin:6px 0 2px;font-size:12px;min-height:16px"></div>
@@ -2633,13 +3115,41 @@ function showSettings() {
               <div id="ast-qtcool-status" style="margin-top:8px;font-size:11px;min-height:16px;line-height:1.5"></div>
             </div>
             <div style="border-top:1px solid var(--border-primary);padding:6px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;background:var(--bg-tertiary)">
-              <div style="display:flex;gap:8px;align-items:center">
+              ${!isHermes ? `<div style="display:flex;gap:8px;align-items:center">
                 <button class="btn btn-xs btn-secondary" id="ast-qtcool-sync-to" title="${t('assistant.qtcoolSyncToTitle')}">${icon('upload', 11)} ${t('assistant.qtcoolSyncTo')}</button>
                 <button class="btn btn-xs btn-secondary" id="ast-qtcool-sync-from" title="${t('assistant.qtcoolSyncFromTitle')}">${icon('download', 11)} ${t('assistant.qtcoolSyncFrom')}</button>
-              </div>
+              </div>` : '<div></div>'}
               <a href="${QTCOOL.site}" target="_blank" style="color:var(--primary);text-decoration:none;font-size:11px">${icon('external-link', 11)} ${t('assistant.qtcoolLearnMore')}</a>
             </div>
           </div>
+
+          <!-- #Compat-3: 备用模型组（重设计：极简一行 + 厂商预设快捷添加） -->
+          <details class="ast-fallback-section" id="ast-fallback-section" ${(c.fallbackModels || []).length ? 'open' : ''} style="margin-top:14px">
+            <summary style="cursor:pointer;padding:10px 14px;border-radius:var(--radius-md);background:var(--bg-secondary);border:1px solid var(--border-primary);display:flex;justify-content:space-between;align-items:center;gap:8px;list-style:none;user-select:none">
+              <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+                <span style="font-weight:600;font-size:var(--font-size-sm)">${icon('shield', 13)} ${t('assistant.fallbackModelsTitle')}</span>
+                <span style="font-size:11px;color:var(--text-tertiary);white-space:nowrap" id="ast-fallback-count">${(c.fallbackModels || []).filter(f => f && f.enabled !== false).length} ${t('assistant.fallbackEnabledSuffix')}</span>
+              </div>
+              <span class="ast-fallback-chevron" style="color:var(--text-tertiary);font-size:12px;transition:transform 0.2s">▼</span>
+            </summary>
+            <div style="padding:10px 4px 4px">
+              <div class="form-hint" style="margin-bottom:10px">${t('assistant.fallbackModelsDesc')}</div>
+              <!-- 主模型只读行（让用户看到完整调用链） -->
+              <div id="ast-fallback-primary-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-tertiary);border:1px dashed var(--border-primary);border-radius:var(--radius-md);margin-bottom:6px;font-size:12px">
+                <span style="font-size:14px">📌</span>
+                <span style="color:var(--text-tertiary);white-space:nowrap">${t('assistant.fallbackPrimaryRow')}</span>
+                <span id="ast-fallback-primary-model" style="flex:1;min-width:0;font-family:var(--font-mono);color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                <span id="ast-fallback-primary-host" style="color:var(--text-tertiary);font-size:11px;white-space:nowrap"></span>
+              </div>
+              <!-- 备用列表 -->
+              <div id="ast-fallback-list" style="display:flex;flex-direction:column;gap:4px"></div>
+              <!-- 厂商预设快捷添加区 -->
+              <div id="ast-fallback-add-area" style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border-primary)">
+                <div class="form-hint" style="margin-bottom:6px">${t('assistant.fallbackPickProviderHint')}</div>
+                <div id="ast-fallback-presets" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+              </div>
+            </div>
+          </details>
         </div>
         <div class="ast-tab-panel" data-panel="tools">
           <div class="form-hint" style="margin-bottom:10px">${t('assistant.toolsHint')}</div>
@@ -2674,7 +3184,7 @@ function showSettings() {
           <div class="form-hint" style="margin-top:10px">${t('assistant.toolsAlwaysAvailable')}</div>
         </div>
         <div class="ast-tab-panel" data-panel="persona">
-          <div class="form-group">
+          ${!isHermes ? `<div class="form-group">
             <label class="form-label">${t('assistant.personaSource')}</label>
             <div style="display:flex;flex-direction:column;gap:6px">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -2686,8 +3196,8 @@ function showSettings() {
                 <span>${t('assistant.personaOpenClaw')} <span style="font-size:11px;color:var(--text-tertiary)">${t('assistant.personaOpenClawHint')}</span></span>
               </label>
             </div>
-          </div>
-          <div id="ast-soul-default" style="${c.soulSource?.startsWith('openclaw:') ? 'display:none' : ''}">
+          </div>` : ''}
+          <div id="ast-soul-default" style="${!isHermes && c.soulSource?.startsWith('openclaw:') ? 'display:none' : ''}">
             <div class="form-group">
               <label class="form-label">${t('assistant.personaName')}</label>
               <input class="form-input" id="ast-name" value="${escHtml(c.assistantName || DEFAULT_NAME)}" placeholder="${DEFAULT_NAME}">
@@ -2698,7 +3208,7 @@ function showSettings() {
               <div class="form-hint">${t('assistant.personaPersonalityHint')}</div>
             </div>
           </div>
-          <div id="ast-soul-openclaw" style="${c.soulSource?.startsWith('openclaw:') ? '' : 'display:none'}">
+          <div id="ast-soul-openclaw" style="${!isHermes && c.soulSource?.startsWith('openclaw:') ? '' : 'display:none'}">
             <div class="form-group" style="margin-top:4px">
               <label class="form-label">${t('assistant.personaSelectAgent')}</label>
               <div style="display:flex;gap:6px;align-items:center">
@@ -2754,6 +3264,230 @@ function showSettings() {
     </div>
   `
   document.body.appendChild(overlay)
+
+  // #Compat-3: 备用模型草稿（编辑态）——保存时才写回 _config.fallbackModels
+  const fallbackDrafts = JSON.parse(JSON.stringify(c.fallbackModels || []))
+  const fallbackListEl = overlay.querySelector('#ast-fallback-list')
+  const fallbackCountEl = overlay.querySelector('#ast-fallback-count')
+  const updateFallbackCount = () => {
+    if (!fallbackCountEl) return
+    const n = fallbackDrafts.filter(f => f && f.enabled !== false && f.baseUrl && f.model).length
+    fallbackCountEl.textContent = `${n} ${t('assistant.fallbackEnabledSuffix')}`
+  }
+  // #Compat-3: 重设计 —— 极简一行 + 厂商预设快捷添加
+  const fallbackPrimaryModelEl = overlay.querySelector('#ast-fallback-primary-model')
+  const fallbackPrimaryHostEl = overlay.querySelector('#ast-fallback-primary-host')
+  const fallbackPresetsEl = overlay.querySelector('#ast-fallback-presets')
+  // 从 baseUrl 提取 hostname 用于紧凑显示
+  const hostOf = (url) => {
+    try { return new URL(url).host } catch { return url || '' }
+  }
+  // 渲染主模型只读行（从当前表单读取，不从 _config）
+  const renderPrimaryRow = () => {
+    if (!fallbackPrimaryModelEl) return
+    const model = overlay.querySelector('#ast-model')?.value?.trim() || ''
+    const base = overlay.querySelector('#ast-baseurl')?.value?.trim() || ''
+    fallbackPrimaryModelEl.textContent = model || t('assistant.fallbackUnnamedModel')
+    fallbackPrimaryHostEl.textContent = base ? hostOf(base) : ''
+  }
+  const renderFallbackList = () => {
+    if (!fallbackListEl) return
+    if (fallbackDrafts.length === 0) {
+      fallbackListEl.innerHTML = `<div class="form-hint" style="text-align:center;padding:12px 0;color:var(--text-tertiary);font-style:italic">${t('assistant.fallbackEmpty')}</div>`
+      updateFallbackCount()
+      return
+    }
+    fallbackListEl.innerHTML = fallbackDrafts.map((fb, idx) => {
+      const expanded = fb._editing === true || (!fb.baseUrl && !fb.model)
+      const modelText = fb.model || t('assistant.fallbackUnnamedModel')
+      const hostText = fb.baseUrl ? hostOf(fb.baseUrl) : ''
+      const brandText = fb._brandLabel ? `<span style="color:var(--primary);font-size:10px;padding:1px 5px;border:1px solid var(--primary);border-radius:3px;margin-right:4px">${escHtml(fb._brandLabel)}</span>` : ''
+      return `
+      <div class="ast-fallback-row" data-fb-idx="${idx}" draggable="true" style="border:1px solid var(--border-primary);border-radius:var(--radius-md);background:var(--bg-secondary);transition:border-color 0.15s">
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;user-select:none">
+          <span class="ast-fb-handle" style="color:var(--text-tertiary);cursor:grab;font-size:13px;line-height:1" title="${t('assistant.dragHint')}">⋮⋮</span>
+          <span style="color:var(--text-tertiary);font-size:11px;font-weight:500;min-width:22px">#${idx + 2}</span>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden">
+            ${brandText}
+            <span style="font-family:var(--font-mono);font-size:12px;color:${fb.model ? 'var(--text-primary)' : 'var(--text-tertiary)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(modelText)}</span>
+            ${hostText ? `<span style="color:var(--text-tertiary);font-size:11px;white-space:nowrap">·&nbsp;${escHtml(hostText)}</span>` : ''}
+          </div>
+          <button type="button" class="btn btn-xs btn-ghost ast-fb-toggle" style="padding:2px 8px;font-size:11px;color:var(--text-secondary)">${expanded ? t('assistant.fallbackHideAdvanced') : t('assistant.fallbackEditAdvanced')}</button>
+          <button type="button" class="btn btn-xs btn-ghost ast-fb-remove" title="${t('assistant.fallbackRemove')}" style="padding:2px 6px;color:var(--error);font-size:12px">✕</button>
+        </div>
+        <div class="ast-fb-edit" style="display:${expanded ? 'block' : 'none'};padding:6px 10px 10px;border-top:1px dashed var(--border-primary)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <input class="form-input ast-fb-key" type="password" placeholder="${t('assistant.fallbackApiKeyPlaceholder')}" value="${escHtml(fb.apiKey || '')}" style="font-size:12px;padding:4px 8px">
+            <input class="form-input ast-fb-model" placeholder="${t('assistant.fallbackModelPlaceholder')}" value="${escHtml(fb.model || '')}" style="font-size:12px;padding:4px 8px">
+          </div>
+          <details class="ast-fb-advanced" ${!fb.baseUrl || !API_TYPES.some(at => at.value === normalizeApiType(fb.apiType)) ? 'open' : ''} style="margin-top:4px">
+            <summary style="cursor:pointer;font-size:11px;color:var(--text-tertiary);padding:2px 0;list-style:none">▸ ${t('assistant.fallbackShowAdvanced')}</summary>
+            <div style="display:grid;grid-template-columns:1fr 140px;gap:6px;margin-top:6px">
+              <input class="form-input ast-fb-url" placeholder="${t('assistant.fallbackBaseUrlPlaceholder')}" value="${escHtml(fb.baseUrl || '')}" style="font-size:12px;padding:4px 8px">
+              <select class="form-input ast-fb-apitype" style="font-size:12px;padding:4px 8px">
+                ${API_TYPES.map(at => `<option value="${at.value}" ${normalizeApiType(fb.apiType) === at.value ? 'selected' : ''}>${at.label}</option>`).join('')}
+              </select>
+            </div>
+          </details>
+        </div>
+      </div>
+    `}).join('')
+
+    // 绑定事件
+    fallbackListEl.querySelectorAll('.ast-fallback-row').forEach(row => {
+      const idx = parseInt(row.dataset.fbIdx, 10)
+      const sync = () => {
+        fallbackDrafts[idx] = {
+          ...fallbackDrafts[idx],
+          baseUrl: (row.querySelector('.ast-fb-url')?.value || fallbackDrafts[idx].baseUrl || '').trim(),
+          apiKey: (row.querySelector('.ast-fb-key')?.value || '').trim(),
+          model: (row.querySelector('.ast-fb-model')?.value || '').trim(),
+          apiType: normalizeApiType(row.querySelector('.ast-fb-apitype')?.value || fallbackDrafts[idx].apiType),
+        }
+        updateFallbackCount()
+        // 实时更新折叠态显示的 model / hostname
+        const headerModel = row.querySelector('div > span[style*="var(--font-mono)"]')
+        if (headerModel) {
+          const m = fallbackDrafts[idx].model
+          headerModel.textContent = m || t('assistant.fallbackUnnamedModel')
+          headerModel.style.color = m ? 'var(--text-primary)' : 'var(--text-tertiary)'
+        }
+      }
+      row.querySelectorAll('.ast-fb-url, .ast-fb-key, .ast-fb-model, .ast-fb-apitype').forEach(el => {
+        el.addEventListener('input', sync)
+        el.addEventListener('change', sync)
+      })
+      // 展开 / 收起
+      row.querySelector('.ast-fb-toggle').onclick = () => {
+        fallbackDrafts[idx]._editing = !(fallbackDrafts[idx]._editing === true || (!fallbackDrafts[idx].baseUrl && !fallbackDrafts[idx].model))
+        renderFallbackList()
+      }
+      // 删除
+      row.querySelector('.ast-fb-remove').onclick = () => {
+        fallbackDrafts.splice(idx, 1)
+        renderFallbackList()
+      }
+      // HTML5 拖拽排序
+      row.ondragstart = (e) => {
+        e.dataTransfer.setData('text/plain', String(idx))
+        e.dataTransfer.effectAllowed = 'move'
+        row.style.opacity = '0.4'
+      }
+      row.ondragend = () => { row.style.opacity = '' }
+      row.ondragover = (e) => { e.preventDefault(); row.style.borderColor = 'var(--primary)' }
+      row.ondragleave = () => { row.style.borderColor = 'var(--border-primary)' }
+      row.ondrop = (e) => {
+        e.preventDefault()
+        row.style.borderColor = 'var(--border-primary)'
+        const from = parseInt(e.dataTransfer.getData('text/plain'), 10)
+        if (isNaN(from) || from === idx) return
+        const [moved] = fallbackDrafts.splice(from, 1)
+        fallbackDrafts.splice(idx, 0, moved)
+        renderFallbackList()
+      }
+    })
+    updateFallbackCount()
+  }
+  // 添加一个厂商预设备用（点击快捷按钮触发）
+  const addFallbackFromPreset = (preset) => {
+    fallbackDrafts.push({
+      baseUrl: preset.baseUrl,
+      apiKey: '',
+      model: '',
+      apiType: normalizeApiType(preset.api),
+      _editing: true,
+      _brandLabel: preset.label,
+    })
+    renderFallbackList()
+    // 聚焦到刚加的 apiKey 输入
+    setTimeout(() => {
+      const last = fallbackListEl.querySelector('.ast-fallback-row:last-child .ast-fb-key')
+      last?.focus()
+    }, 30)
+  }
+  // 从主模型复制
+  const addFallbackFromPrimary = () => {
+    const baseUrl = overlay.querySelector('#ast-baseurl')?.value?.trim() || ''
+    const apiKey = overlay.querySelector('#ast-apikey')?.value?.trim() || ''
+    const model = overlay.querySelector('#ast-model')?.value?.trim() || ''
+    const apiType = overlay.querySelector('#ast-apitype')?.value || 'openai-completions'
+    fallbackDrafts.push({
+      baseUrl,
+      apiKey,
+      model,
+      apiType: normalizeApiType(apiType),
+      _editing: true,
+    })
+    renderFallbackList()
+    setTimeout(() => {
+      const last = fallbackListEl.querySelector('.ast-fallback-row:last-child .ast-fb-model')
+      last?.focus()
+      last?.select()
+    }, 30)
+  }
+  // 渲染厂商预设按钮（6 个最常用 + 从主模型复制 + 自定义 + 更多）
+  const TOP_PRESETS = ['qtcool', 'openai', 'anthropic', 'deepseek', 'google', 'ollama']
+  let showAllPresets = false
+  const renderPresetButtons = () => {
+    const shown = showAllPresets
+      ? PROVIDER_PRESETS
+      : PROVIDER_PRESETS.filter(p => TOP_PRESETS.includes(p.key))
+    const presetBtnHtml = shown.map(p => `
+      <button type="button" class="btn btn-xs btn-secondary ast-fb-preset-btn" data-preset-key="${p.key}" style="padding:4px 10px;font-size:11px;gap:4px">
+        ${p.badge ? `<span style="color:var(--warning);font-size:9px;margin-right:2px">★</span>` : ''}
+        ${escHtml(p.label)}
+      </button>
+    `).join('')
+    const extraBtnHtml = `
+      <button type="button" class="btn btn-xs btn-ghost" id="ast-fb-copy-primary" style="padding:4px 10px;font-size:11px;border:1px dashed var(--primary);color:var(--primary)">
+        ${icon('copy', 11)} ${t('assistant.fallbackAddCopyPrimary')}
+      </button>
+      <button type="button" class="btn btn-xs btn-ghost" id="ast-fb-custom" style="padding:4px 10px;font-size:11px;border:1px dashed var(--border-primary);color:var(--text-secondary)">
+        ${icon('plus', 11)} ${t('assistant.fallbackAddCustom')}
+      </button>
+      ${!showAllPresets ? `<button type="button" class="btn btn-xs btn-ghost" id="ast-fb-more" style="padding:4px 10px;font-size:11px;color:var(--text-tertiary)">${t('assistant.fallbackMoreProviders')}</button>` : ''}
+    `
+    fallbackPresetsEl.innerHTML = presetBtnHtml + extraBtnHtml
+
+    // 绑定每个预设按钮
+    fallbackPresetsEl.querySelectorAll('.ast-fb-preset-btn').forEach(btn => {
+      btn.onclick = () => {
+        const preset = PROVIDER_PRESETS.find(p => p.key === btn.dataset.presetKey)
+        if (preset) addFallbackFromPreset(preset)
+      }
+    })
+    // 从主模型复制
+    fallbackPresetsEl.querySelector('#ast-fb-copy-primary').onclick = addFallbackFromPrimary
+    // 自定义（空白）
+    fallbackPresetsEl.querySelector('#ast-fb-custom').onclick = () => {
+      const mainApi = overlay.querySelector('#ast-apitype')?.value || 'openai-completions'
+      fallbackDrafts.push({
+        baseUrl: '',
+        apiKey: '',
+        model: '',
+        apiType: normalizeApiType(mainApi),
+        _editing: true,
+      })
+      renderFallbackList()
+      setTimeout(() => {
+        const last = fallbackListEl.querySelector('.ast-fallback-row:last-child .ast-fb-key')
+        last?.focus()
+      }, 30)
+    }
+    // 更多服务商（展开全部）
+    fallbackPresetsEl.querySelector('#ast-fb-more')?.addEventListener('click', () => {
+      showAllPresets = true
+      renderPresetButtons()
+    })
+  }
+  // 主模型表单任一字段变更时，同步主模型只读行
+  ;['#ast-baseurl', '#ast-model', '#ast-apikey', '#ast-apitype'].forEach(sel => {
+    overlay.querySelector(sel)?.addEventListener('input', renderPrimaryRow)
+    overlay.querySelector(sel)?.addEventListener('change', renderPrimaryRow)
+  })
+  renderPrimaryRow()
+  renderFallbackList()
+  renderPresetButtons()
 
   // Tab 切换
   overlay.querySelectorAll('.ast-tab').forEach(tab => {
@@ -3190,91 +3924,40 @@ function showSettings() {
     btn.textContent = t('assistant.testing')
     resultEl.innerHTML = '<span style="color:var(--text-tertiary)">' + t('assistant.testSending') + '</span>'
 
-    // Web 模式下浏览器 fetch 受 CORS 限制，优先走后端代理
-    if (!window.__TAURI_INTERNALS__) {
-      const t0 = Date.now()
-      try {
-        const reply = await api.testModel(baseUrl, apiKey, model, selApiType)
-        const elapsed = Date.now() - t0
-        resultEl.innerHTML = buildTestResult({ success: true, elapsed, usedApi: selApiType, reqUrl: baseUrl, reqBody: {}, respStatus: 200, respBody: '', reply: reply || '(ok)' })
-      } catch (err) {
-        const elapsed = Date.now() - t0
-        resultEl.innerHTML = buildTestResult({ success: false, elapsed, usedApi: selApiType, reqUrl: baseUrl, reqBody: {}, respStatus: 0, respBody: '', error: err.message || String(err) })
-      }
-      btn.disabled = false; btn.textContent = t('assistant.testBtn')
-      return
-    }
-
-    const base = cleanBaseUrl(baseUrl, selApiType)
-    const hdrs = authHeaders(selApiType, apiKey)
-    const t0 = Date.now()
-
-    let respStatus = 0, respBody = '', reply = '', usedApi = '', reqUrl = '', reqBody = {}
-
+    // #Compat-1: 统一走 Rust reqwest（规避 webview fetch 的 status 0 / CORS 问题）
+    // Web 模式走 dev-api 的 /__api/test_model_verbose，Tauri 模式走 invoke('test_model_verbose')
     try {
-      if (selApiType === 'anthropic-messages') {
-        usedApi = 'Anthropic Messages'
-        reqUrl = base + '/messages'
-        reqBody = { model, messages: [{ role: 'user', content: '你好，请用一句话回复' }], max_tokens: 200 }
-        const resp = await fetch(reqUrl, { method: 'POST', headers: hdrs, body: JSON.stringify(reqBody), signal: AbortSignal.timeout(30000) })
-        respStatus = resp.status; respBody = await resp.text()
-        try {
-          const data = JSON.parse(respBody)
-          reply = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || ''
-        } catch {}
-      } else if (selApiType === 'google-gemini') {
-        usedApi = 'Gemini'
-        reqUrl = `${base}/models/${model}:generateContent?key=***`
-        reqBody = { contents: [{ role: 'user', parts: [{ text: '你好，请用一句话回复' }] }] }
-        const realUrl = `${base}/models/${model}:generateContent?key=${apiKey}`
-        const resp = await fetch(realUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reqBody), signal: AbortSignal.timeout(30000) })
-        respStatus = resp.status; respBody = await resp.text()
-        try {
-          const data = JSON.parse(respBody)
-          reply = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
-        } catch {}
-      } else {
-        // OpenAI: Chat Completions + Responses fallback
-        usedApi = 'Chat Completions'
-        reqUrl = base + '/chat/completions'
-        reqBody = { model, messages: [{ role: 'user', content: '你好，请用一句话回复' }], max_tokens: 200 }
-        const resp = await fetch(reqUrl, { method: 'POST', headers: hdrs, body: JSON.stringify(reqBody), signal: AbortSignal.timeout(30000) })
-        respStatus = resp.status; respBody = await resp.text()
-
-        let fallback = false
-        if (!resp.ok && (respBody.includes('legacy protocol') || respBody.includes('/v1/responses') || respBody.includes('not supported'))) {
-          fallback = true
-        }
-
-        if (!fallback) {
-          try {
-            const data = JSON.parse(respBody)
-            const msg = data.choices?.[0]?.message
-            reply = msg?.content || msg?.reasoning_content || data.choices?.[0]?.text || data.output?.text || ''
-            if (!msg?.content && msg?.reasoning_content) reply = '[reasoning] ' + reply
-          } catch {}
-        }
-
-        if (fallback) {
-          usedApi = 'Responses'
-          reqUrl = base + '/responses'
-          reqBody = { model, input: [{ role: 'user', content: '你好，请用一句话回复' }], max_output_tokens: 200 }
-          try {
-            const resp2 = await fetch(reqUrl, { method: 'POST', headers: hdrs, body: JSON.stringify(reqBody), signal: AbortSignal.timeout(30000) })
-            respStatus = resp2.status; respBody = await resp2.text()
-            try { const d = JSON.parse(respBody); reply = d.output_text || d.output?.[0]?.content?.[0]?.text || '' } catch {}
-          } catch (err2) {
-            resultEl.innerHTML = buildTestResult({ success: false, elapsed: Date.now() - t0, usedApi, reqUrl, reqBody, respStatus: 0, respBody: '', error: err2.message })
-            btn.disabled = false; btn.textContent = t('assistant.testBtn'); return
-          }
-        }
-      }
+      const r = await api.testModelVerbose(baseUrl, apiKey, model, selApiType)
+      resultEl.innerHTML = buildTestResult({
+        success: !!r.success,
+        elapsed: r.elapsedMs || 0,
+        usedApi: r.usedApi || selApiType,
+        reqUrl: r.reqUrl || baseUrl,
+        reqBody: r.reqBody || {},
+        respStatus: r.status ?? 0,
+        respHeaders: r.respHeaders || null,
+        respBody: r.respBody || '',
+        respRawHex: r.respRawHex || '',
+        respByteCount: r.respByteCount || 0,
+        reply: r.reply || '',
+        error: r.error || null,
+      })
     } catch (err) {
-      resultEl.innerHTML = buildTestResult({ success: false, elapsed: Date.now() - t0, usedApi, reqUrl, reqBody, respStatus: 0, respBody: '', error: err.message })
-      btn.disabled = false; btn.textContent = t('assistant.testBtn'); return
+      // Rust 命令本身失败（如 client 构造失败），或 Web 模式网络异常
+      resultEl.innerHTML = buildTestResult({
+        success: false,
+        elapsed: 0,
+        usedApi: selApiType,
+        reqUrl: baseUrl,
+        reqBody: {},
+        respStatus: 0,
+        respHeaders: null,
+        respBody: '',
+        respRawHex: '',
+        respByteCount: 0,
+        error: err?.message || String(err),
+      })
     }
-
-    resultEl.innerHTML = buildTestResult({ success: !!reply, elapsed: Date.now() - t0, usedApi, reqUrl, reqBody, respStatus, respBody, reply })
     btn.disabled = false
     btn.textContent = t('assistant.testBtn')
   }
@@ -3293,49 +3976,10 @@ function showSettings() {
     btn.textContent = t('assistant.fetching')
     resultEl.innerHTML = '<span style="color:var(--text-tertiary)">' + t('assistant.fetchingModels') + '</span>'
     try {
-      const base = cleanBaseUrl(baseUrl, selApiType)
-      const hdrs = authHeaders(selApiType, apiKey)
-      let models = []
-
-      if (selApiType === 'anthropic-messages') {
-        // Anthropic: GET /v1/models
-        const resp = await fetch(base + '/models', { headers: hdrs, signal: AbortSignal.timeout(10000) })
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => '')
-          let msg = 'HTTP ' + resp.status
-          try { msg = JSON.parse(text).error?.message || msg } catch {}
-          resultEl.innerHTML = '<span style="color:var(--error)">✗ ' + escHtml(msg) + '</span>'
-          return
-        }
-        const data = await resp.json()
-        models = (data.data || []).map(m => m.id).filter(Boolean).sort()
-      } else if (selApiType === 'google-gemini') {
-        // Gemini: GET /models?key=xxx
-        const resp = await fetch(base + '/models?key=' + apiKey, { signal: AbortSignal.timeout(10000) })
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => '')
-          let msg = 'HTTP ' + resp.status
-          try { msg = JSON.parse(text).error?.message || msg } catch {}
-          resultEl.innerHTML = '<span style="color:var(--error)">✗ ' + escHtml(msg) + '</span>'
-          return
-        }
-        const data = await resp.json()
-        models = (data.models || []).map(m => m.name?.replace('models/', '') || m.name).filter(Boolean).sort()
-      } else {
-        // OpenAI: GET /v1/models
-        const resp = await fetch(base + '/models', { headers: hdrs, signal: AbortSignal.timeout(10000) })
-        if (!resp.ok) {
-          const text = await resp.text().catch(() => '')
-          let msg = 'HTTP ' + resp.status
-          try { msg = JSON.parse(text).error?.message || msg } catch {}
-          resultEl.innerHTML = '<span style="color:var(--error)">✗ ' + escHtml(msg) + '</span>'
-          return
-        }
-        const data = await resp.json()
-        models = (data.data || []).map(m => m.id).filter(Boolean).sort()
-      }
-
-      if (models.length === 0) {
+      // 走 Rust 后端（桌面 & Web 模式统一），绕过 WebView CORS 限制
+      // 部分 provider 不返回 CORS 头，直接前端 fetch 会报 Failed to fetch
+      const models = await api.listRemoteModels(baseUrl, apiKey, selApiType)
+      if (!models || models.length === 0) {
         resultEl.innerHTML = '<span style="color:var(--warning)">' + t('assistant.noModelsFound') + '</span>'
         return
       }
@@ -3345,15 +3989,22 @@ function showSettings() {
       ).join('')
       dropdown.style.display = 'block'
     } catch (err) {
-      resultEl.innerHTML = '<span style="color:var(--error)">✗ ' + escHtml(err.message) + '</span>'
+      const errStr = String(err?.message || err)
+      // 服务商不支持 /models 接口 → 友好提示引导手动填写
+      if (errStr.includes('[NOT_SUPPORTED]') || errStr.includes('不支持自动获取')) {
+        resultEl.innerHTML = '<span style="color:var(--warning);line-height:1.5">⚠ ' + escHtml(t('assistant.fetchNotSupported')) + '</span>'
+      } else {
+        resultEl.innerHTML = '<span style="color:var(--error)">✗ ' + escHtml(errStr) + '</span>'
+      }
     } finally {
       btn.disabled = false
       btn.textContent = t('assistant.fetchBtn')
     }
   }
 
-  // 从 OpenClaw 导入模型配置
-  overlay.querySelector('#ast-btn-import').onclick = async (e) => {
+  // 从 OpenClaw 导入模型配置（Hermes 模式下该按钮不存在）
+  const importBtn = overlay.querySelector('#ast-btn-import')
+  if (importBtn) importBtn.onclick = async (e) => {
     const btn = e.target
     btn.disabled = true
     btn.textContent = t('assistant.personaScanning')
@@ -3504,6 +4155,20 @@ function showSettings() {
     }
     // 知识库
     _config.knowledgeFiles = kbFiles
+    // #Compat-3: 备用模型组（过滤空卡 + 迁移清理老的禁用条目）
+    // 新 UI 不再暴露 enabled 开关（删除即停用），保存时：
+    // - 过滤掉空卡（baseUrl 或 model 为空）
+    // - 过滤掉老数据里 enabled===false 的条目（隐式迁移，用户以后看到的都是启用状态）
+    // - strip 掉 _editing / _brandLabel 等临时字段（只挑 5 个字段 map 出来）
+    _config.fallbackModels = fallbackDrafts
+      .filter(f => f && f.baseUrl && f.model && f.enabled !== false)
+      .map(f => ({
+        label: f.label || f.model,
+        baseUrl: f.baseUrl,
+        apiKey: f.apiKey || '',
+        model: f.model,
+        apiType: normalizeApiType(f.apiType),
+      }))
     saveConfig()
     overlay.remove()
     // 更新 Header 标题和欢迎页
@@ -3630,14 +4295,14 @@ async function sendMessageDirect(text) {
 
   try {
     if (toolsEnabled) {
-      // ── 工具模式：非流式，支持 tool_calls 循环 ──
+      // ── 工具模式：流式 + tool_calls 循环 ──
       const aiMsgContainers = _messagesEl?.querySelectorAll('.ast-msg-ai')
       const lastContainer = aiMsgContainers?.[aiMsgContainers.length - 1]
 
       const result = await callAIWithTools(contextMessages,
         // onStatus
         (status) => {
-          if (lastBubble) lastBubble.innerHTML = `<span class="ast-typing">${escHtml(status)}</span>`
+          if (lastBubble && !aiMsg.content) lastBubble.innerHTML = `<span class="ast-typing">${escHtml(status)}</span>`
         },
         // onToolProgress
         (history) => {
@@ -3648,13 +4313,31 @@ async function sendMessageDirect(text) {
           const bubble = lastContainer.querySelector('.ast-msg-bubble-ai')
           lastContainer.innerHTML = toolHtml + (bubble ? bubble.outerHTML : '')
           if (_messagesEl) _messagesEl.scrollTop = _messagesEl.scrollHeight
+        },
+        // onChunk — 流式打字机效果（需从 container 重新查询 bubble，因为 onToolProgress 会替换 innerHTML）
+        (chunk) => {
+          aiMsg.content += chunk
+          throttledSave()
+          const bubble = lastContainer?.querySelector('.ast-msg-bubble-ai') || lastBubble
+          if (bubble) {
+            const now = Date.now()
+            if (now - _lastRenderTime > 50) {
+              bubble.innerHTML = renderMarkdown(aiMsg.content) + '<span class="ast-cursor">▊</span>'
+              if (_messagesEl) _messagesEl.scrollTop = _messagesEl.scrollHeight
+              _lastRenderTime = now
+            }
+          }
         }
       )
 
-      aiMsg.content = result.content
+      // result.content 可能在流式中已经通过 onChunk 累积到 aiMsg.content
+      // 但如果有额外内容（如 reasoning 回退），以 result 为准
+      if (result.content && !aiMsg.content) aiMsg.content = result.content
       if (result.toolHistory.length > 0) {
         aiMsg.toolHistory = result.toolHistory
       }
+      const finalBubble = lastContainer?.querySelector('.ast-msg-bubble-ai') || lastBubble
+      if (finalBubble && aiMsg.content) finalBubble.innerHTML = renderMarkdown(aiMsg.content)
       renderMessages()
     } else {
       // ── 普通流式模式 ──
@@ -3685,42 +4368,22 @@ async function sendMessageDirect(text) {
       aiMsg.content += aiMsg.content ? '\n\n*[' + t('assistant.stopped') + ']*' : '*[' + t('assistant.stopped') + ']*'
     } else {
       setSessionStatus(session.id, 'error')
+      // Fix #226: 记录错误用于熔断判断
+      recordRequestFailure(err)
       // 保留已有内容，追加错误信息和重试按钮
       const errInfo = aiMsg.content
         ? `\n\n---\n**${t('assistant.requestInterrupted')}**: ${err.message}`
         : err.message
       aiMsg.content += errInfo
       aiMsg._canRetry = true
+      aiMsg._circuitOpen = isCircuitOpenFor(err)
     }
     renderMessages()
 
-    // 错误后插入重试按钮
+    // 错误后插入重试按钮（circuit 打开时禁用并提示）
     if (aiMsg._canRetry && _messagesEl) {
-      const retryBar = document.createElement('div')
-      retryBar.className = 'ast-retry-bar'
-      const retrySvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
-      const continueSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-      retryBar.innerHTML = `
-        <button class="btn btn-sm btn-primary ast-btn-retry">${retrySvg} ${t('assistant.retry')}</button>
-        <button class="btn btn-sm btn-secondary ast-btn-continue">${continueSvg} ${t('assistant.continueInput')}</button>
-        <span class="ast-retry-hint">${t('assistant.retryHint')}</span>
-      `
-      _messagesEl.appendChild(retryBar)
+      _messagesEl.appendChild(createRetryBar(session, !!aiMsg._circuitOpen))
       _messagesEl.scrollTop = _messagesEl.scrollHeight
-
-      retryBar.querySelector('.ast-btn-retry').addEventListener('click', () => {
-        retryBar.remove()
-        session.messages.pop()
-        saveSessions()
-        setSessionStatus(session.id, 'idle')
-        retryAIResponse(session)
-      })
-      retryBar.querySelector('.ast-btn-continue').addEventListener('click', () => {
-        retryBar.remove()
-        setSessionStatus(session.id, 'idle')
-        renderSessionList()
-        _textarea?.focus()
-      })
     }
   } finally {
     _isStreaming = false
@@ -3728,6 +4391,11 @@ async function sendMessageDirect(text) {
     stopStreamRefresh()
     if (_sendBtn) _sendBtn.innerHTML = sendIcon()
     if (_textarea) _textarea.focus()
+    // 清理空的 AI 消息（防止持久化空气泡）
+    const _lastMsg = session.messages[session.messages.length - 1]
+    if (_lastMsg?.role === 'assistant' && !_lastMsg.content && !_lastMsg.toolHistory?.length) {
+      session.messages.pop()
+    }
     session.updatedAt = Date.now()
     flushSave()
     if (getSessionStatus(session.id) !== 'error') {
@@ -3770,7 +4438,7 @@ async function retryAIResponse(session) {
       const lastContainer = aiMsgContainers?.[aiMsgContainers.length - 1]
 
       const result = await callAIWithTools(contextMessages,
-        (status) => { if (lastBubble) lastBubble.innerHTML = `<span class="ast-typing">${escHtml(status)}</span>` },
+        (status) => { if (lastBubble && !aiMsg.content) lastBubble.innerHTML = `<span class="ast-typing">${escHtml(status)}</span>` },
         (history) => {
           aiMsg.toolHistory = history
           throttledSave()
@@ -3779,10 +4447,26 @@ async function retryAIResponse(session) {
           const bubble = lastContainer.querySelector('.ast-msg-bubble-ai')
           lastContainer.innerHTML = toolHtml + (bubble ? bubble.outerHTML : '')
           if (_messagesEl) _messagesEl.scrollTop = _messagesEl.scrollHeight
+        },
+        // onChunk — 流式打字机效果（需从 container 重新查询 bubble）
+        (chunk) => {
+          aiMsg.content += chunk
+          throttledSave()
+          const bubble = lastContainer?.querySelector('.ast-msg-bubble-ai') || lastBubble
+          if (bubble) {
+            const now = Date.now()
+            if (now - _lastRenderTime > 50) {
+              bubble.innerHTML = renderMarkdown(aiMsg.content) + '<span class="ast-cursor">▊</span>'
+              if (_messagesEl) _messagesEl.scrollTop = _messagesEl.scrollHeight
+              _lastRenderTime = now
+            }
+          }
         }
       )
-      aiMsg.content = result.content
+      if (result.content && !aiMsg.content) aiMsg.content = result.content
       if (result.toolHistory.length > 0) aiMsg.toolHistory = result.toolHistory
+      const retryFinalBubble = lastContainer?.querySelector('.ast-msg-bubble-ai') || lastBubble
+      if (retryFinalBubble && aiMsg.content) retryFinalBubble.innerHTML = renderMarkdown(aiMsg.content)
       renderMessages()
     } else {
       await callAI(contextMessages, (chunk) => {
@@ -3804,39 +4488,19 @@ async function retryAIResponse(session) {
       aiMsg.content += aiMsg.content ? '\n\n*[' + t('assistant.stopped') + ']*' : '*[' + t('assistant.stopped') + ']*'
     } else {
       setSessionStatus(session.id, 'error')
+      // Fix #226: 记录错误用于熔断判断
+      recordRequestFailure(err)
       aiMsg.content += aiMsg.content
         ? `\n\n---\n**${t('assistant.requestInterrupted')}**: ${err.message}`
         : err.message
       aiMsg._canRetry = true
+      aiMsg._circuitOpen = isCircuitOpenFor(err)
     }
     renderMessages()
 
     if (aiMsg._canRetry && _messagesEl) {
-      const retryBar = document.createElement('div')
-      retryBar.className = 'ast-retry-bar'
-      const retrySvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
-      const continueSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-      retryBar.innerHTML = `
-        <button class="btn btn-sm btn-primary ast-btn-retry">${retrySvg} ${t('assistant.retry')}</button>
-        <button class="btn btn-sm btn-secondary ast-btn-continue">${continueSvg} ${t('assistant.continueInput')}</button>
-        <span class="ast-retry-hint">${t('assistant.retryHint')}</span>
-      `
-      _messagesEl.appendChild(retryBar)
+      _messagesEl.appendChild(createRetryBar(session, !!aiMsg._circuitOpen))
       _messagesEl.scrollTop = _messagesEl.scrollHeight
-
-      retryBar.querySelector('.ast-btn-retry').addEventListener('click', () => {
-        retryBar.remove()
-        session.messages.pop()
-        saveSessions()
-        setSessionStatus(session.id, 'idle')
-        retryAIResponse(session)
-      })
-      retryBar.querySelector('.ast-btn-continue').addEventListener('click', () => {
-        retryBar.remove()
-        setSessionStatus(session.id, 'idle')
-        renderSessionList()
-        _textarea?.focus()
-      })
     }
   } finally {
     _isStreaming = false
@@ -3844,6 +4508,11 @@ async function retryAIResponse(session) {
     stopStreamRefresh()
     if (_sendBtn) _sendBtn.innerHTML = sendIcon()
     if (_textarea) _textarea.focus()
+    // 清理空的 AI 消息（防止持久化空气泡）
+    const _retryLastMsg = session.messages[session.messages.length - 1]
+    if (_retryLastMsg?.role === 'assistant' && !_retryLastMsg.content && !_retryLastMsg.toolHistory?.length) {
+      session.messages.pop()
+    }
     session.updatedAt = Date.now()
     flushSave()
     if (getSessionStatus(session.id) !== 'error') {
@@ -3945,7 +4614,7 @@ function showDebugModal(title, content) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
 }
 
-const AST_GUIDE_KEY = '屠戮OpenClaw-guide-assistant-dismissed'
+const AST_GUIDE_KEY = 'clawpanel-guide-assistant-dismissed'
 
 function getAssistantGuideHtml() {
   if (localStorage.getItem(AST_GUIDE_KEY)) return ''
@@ -3981,7 +4650,7 @@ export async function render() {
   loadConfig()
   loadSessions()
 
-  // 确保数据目录存在（~/.openclaw/屠戮OpenClaw/images/ 等）
+  // 确保数据目录存在（~/.openclaw/clawpanel/images/ 等）
   api.ensureDataDir().catch(e => console.warn('数据目录初始化失败:', e))
 
   // 如果没有会话，不自动创建（显示欢迎页）
@@ -4155,7 +4824,13 @@ export async function render() {
         hasImage = true
       }
     }
-    if (hasImage) e.preventDefault()
+    if (hasImage) { e.preventDefault(); return }
+    // Fix #226: 拦截纯文本的本地文件路径粘贴（LLM 无法访问本地文件）
+    const pastedText = e.clipboardData?.getData('text/plain') || ''
+    if (isLocalPathText(pastedText)) {
+      e.preventDefault()
+      toast(t('assistant.localPathBlocked'), 'warn')
+    }
   })
 
   // 拖拽图片
@@ -4170,7 +4845,16 @@ export async function render() {
   mainEl.addEventListener('drop', (e) => {
     e.preventDefault()
     mainEl.classList.remove('ast-drag-over')
-    for (const file of e.dataTransfer.files) addImageFromFile(file)
+    // Fix #226: 拖拽路径文本（而非图片文件）时拦截
+    const droppedFiles = e.dataTransfer?.files
+    if (!droppedFiles || droppedFiles.length === 0) {
+      const droppedText = e.dataTransfer?.getData('text/plain') || e.dataTransfer?.getData('text/uri-list') || ''
+      if (isLocalPathText(droppedText)) {
+        toast(t('assistant.localPathBlocked'), 'warn')
+      }
+      return
+    }
+    for (const file of droppedFiles) addImageFromFile(file)
   })
 
   // 图片预览删除
@@ -4296,14 +4980,8 @@ export async function render() {
   _messagesEl.addEventListener('click', (e) => {
     const skillCard = e.target.closest('.ast-skill-card')
     if (skillCard) {
-      const skill = BUILTIN_SKILLS.find(s => s.id === skillCard.dataset.skill)
+      const skill = getBuiltinSkills().find(s => s.id === skillCard.dataset.skill)
       if (!skill) return
-
-      // Navigate if prompt is a route command
-      if (skill.prompt && skill.prompt.startsWith('/')) {
-        navigate(skill.prompt.slice(1))
-        return
-      }
 
       // 技能需要工具 → 自动切换到执行模式（如果当前是聊天模式）
       if (skill.tools.length > 0 && currentMode() === 'chat') {
