@@ -36,9 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../dist/lobster-office.html"
-    ],
+    "resources": [],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",
