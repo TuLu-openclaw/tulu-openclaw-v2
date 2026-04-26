@@ -1116,7 +1116,7 @@ function buildSystemPrompt() {
 async function scanOpenClawAgents() {
   try {
     const sysInfo = await api.assistantSystemInfo()
-    const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home[:：]\s*(.+)/)?.[1]?.trim() || ''
+    const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home:\s*(.+)/)?.[1]?.trim() || ''
     if (!home) return []
     const agents = []
     // 默认主工作区始终存在于 ~/.openclaw/workspace
@@ -1148,7 +1148,7 @@ async function scanOpenClawAgents() {
 async function loadOpenClawSoul(agentId = 'default') {
   try {
     const sysInfo = await api.assistantSystemInfo()
-    const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home[:：]\s*(.+)/)?.[1]?.trim() || ''
+    const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home:\s*(.+)/)?.[1]?.trim() || ''
     if (!home) throw new Error(t('assistant.errHomeUnavailable'))
     // default/main 使用 ~/.openclaw/workspace，其他使用 agents/{id}/workspace
     let ws
@@ -4012,7 +4012,7 @@ function showSettings() {
 
     try {
       const sysInfo = await api.assistantSystemInfo()
-      const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home[:：]\s*(.+)/)?.[1]?.trim() || ''
+      const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home:\s*(.+)/)?.[1]?.trim() || ''
       if (!home) throw new Error('Cannot get home dir')
 
       const providers = []
