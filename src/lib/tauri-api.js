@@ -536,6 +536,8 @@ export const api = {
   hermesLogsRead: (name, lines, level) => invoke('hermes_logs_read', { name, lines: lines || 200, level: level || null }),
   hermesSkillsList: () => invoke('hermes_skills_list'),
   hermesSkillDetail: (filePath) => invoke('hermes_skill_detail', { filePath }),
+  hermesSkillSave: (name, content) => invoke('hermes_skill_save', { name, content }),
+  hermesSkillDelete: (name) => invoke('hermes_skill_delete', { name }),
   hermesMemoryRead: (type) => invoke('hermes_memory_read', { type: type || 'memory' }),
   hermesMemoryWrite: (type, content) => invoke('hermes_memory_write', { type: type || 'memory', content }),
 }

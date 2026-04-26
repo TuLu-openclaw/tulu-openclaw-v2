@@ -3079,6 +3079,29 @@ pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
 
 #[tauri::command]
 #[allow(dead_code)]
+pub async fn hermes_skill_save(name: String, content: String) -> Result<String, String> {
+    let skills_dir = hermes_home().join("skills");
+    std::fs::create_dir_all(&skills_dir).map_err(|e| format!("Failed to create skills dir: {e}"))?;
+    let safe_name = name.replace("/", "_").replace("\\", "_").replace("..", "_");
+    let file_path = skills_dir.join(format!("{}.md", safe_name));
+    std::fs::write(&file_path, &content).map_err(|e| format!("Failed to write skill: {e}"))?;
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+#[allow(dead_code)]
+pub async fn hermes_skill_delete(name: String) -> Result<String, String> {
+    let skills_dir = hermes_home().join("skills");
+    let safe_name = name.replace("/", "_").replace("\\", "_").replace("..", "_");
+    let file_path = skills_dir.join(format!("{}.md", safe_name));
+    if file_path.exists() {
+        std::fs::remove_file(&file_path).map_err(|e| format!("Failed to delete skill: {e}"))?;
+    }
+    Ok("ok".into())
+}
+
+#[tauri::command]
+#[allow(dead_code)]
 pub async fn hermes_memory_read(r#type: Option<String>) -> Result<String, String> {
     let kind = r#type.as_deref().unwrap_or("memory");
     let file_name = if kind == "user" {

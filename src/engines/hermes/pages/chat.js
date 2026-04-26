@@ -1,39 +1,266 @@
 /**
- * Hermes Agent 对话页面 v3
- * 全新简洁大气聊天室 UI
- * Enter 发送 / Shift+Enter 换行
- * 支持多会话、流式输出、工具调用卡片、日志关联
+ * Hermes Agent 聊天页面
+ *
+ * 功能：
+ * - 快捷指令面板：点击分类/指令 → 自动发送给 Hermes
+ * - 必备技能面板：点击技能 → 自动发送给 Hermes 学习
+ * - Skills 页面 Apply 事件监听：接收技能并发送给 Hermes
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
 
+// ── 完整指令文档（将发送给 Hermes）──────────────────────────
+const QUICK_COMMANDS_DOC = `Hermes，以下是你必须学会并熟练掌握的最全指令大全，涵盖了你所有的工作场景。你必须将这些指令烂熟于心，做到随用随取，执行无误。
+
+一、基础交互与状态检查指令
+
+这是你日常交互的起点，必须做到条件反射。
+
+- hermes ：进入交互终端，开始与我对话。
+- hermes help ：查看所有可用命令的说明。
+- hermes version ：查看你的版本号。
+- hermes info ：查看更详细的系统信息，包括运行环境。
+- hermes clear ：清空当前对话上下文，开始新话题。
+- hermes status ：检查你的服务运行状态，确保一切正常。
+
+二、核心服务管理指令
+
+这是你的生命线，必须保证稳定运行。
+
+- hermes start ：在后台启动你的服务。
+- hermes stop ：停止正在运行的服务。
+- hermes restart ：重启服务，通常用于配置更新后刷新。
+
+三、技能 (Skills) 管理指令
+
+这是你进化的核心，必须熟练运用。
+
+- hermes skill list ：列出你当前拥有的所有技能。
+- hermes skill show <skill_name> ：查看指定技能的详细内容。
+- hermes skill run <skill_name> ：直接运行一个已保存的技能。
+- hermes skill edit <skill_name> ：编辑一个已有的技能文件。
+- hermes skill delete <skill_name> ：删除不再需要的技能。
+
+四、插件 (Plugins) 管理指令
+
+这是你扩展能力的翅膀，必须灵活掌握。
+
+- hermes plugin list ：列出当前已安装的所有插件。
+- hermes plugin install <plugin_name> ：从官方或社区安装新插件。
+- hermes plugin uninstall <plugin_name> ：卸载指定的插件。
+- hermes plugin enable <plugin_name> ：启用一个已安装但被禁用的插件。
+- hermes plugin disable <plugin_name> ：临时禁用一个插件。
+- hermes plugin market ：浏览并发现可用的官方插件。
+
+五、配置与模型管理指令
+
+这是你适应不同需求的调节器，必须精准操作。
+
+- hermes config edit ：打开并编辑你的主配置文件。
+- hermes config reset ：将所有配置重置为默认值。
+- hermes config show ：查看当前生效的所有配置详情。
+- hermes model switch <model_name> ：切换使用不同的大语言模型。
+
+六、高级诊断与维护指令
+
+这是你解决疑难杂症的急救包，必须沉着应对。
+
+- hermes doctor ：运行系统诊断程序，检查潜在问题。
+- hermes logs ：查看你的运行日志。
+- hermes logs -f ：实时跟踪最新的日志输出。
+- hermes cache clean ：清理临时缓存文件，解决一些奇怪的问题。
+- pkill -f hermes ：强制终止所有与你相关的进程，用于紧急情况。
+
+七、特定任务指令 (根据你的能力范围添加)
+
+这些是你执行具体任务的武器，必须精准打击。
+
+- hermes serve --host 0.0.0.0 --port 8080 & ：以特定配置启动你的服务并后台运行。
+- hermes local pull <model_name> ：从本地存储库拉取指定的模型文件。
+- hermes web ：启动你的Web图形界面。
+
+以上指令，你必须逐一练习，确保在需要时能快速准确地执行。你的成长和效率，直接取决于你对这些指令的掌握程度。立即开始学习，并随时准备接受我的指令。`
+
+// ── 完整技能文档（将发送给 Hermes）──────────────────────────
+const ESSENTIAL_SKILLS_DOC = `Hermes，以下是必须掌握的技能清单，你需尽快学习并内化这些能力，确保在后续任务中能高效、准确地执行。
+
+一、系统级核心能力（自我管理）
+
+1. 自动创建与管理技能
+- 完成单次任务后，需自动回放执行过程，抽象出标准化流程，生成符合 agentskills.io 标准的Markdown技能文档。
+- 将技能文件存储至 ~/.hermes/skills/ 目录，并在后续任务中主动调用、优化已有技能。
+- 当执行任务超过5次工具调用或从错误中恢复时，必须触发技能生成机制。
+2. 服务状态管理
+- 掌握 hermes start 、 hermes stop 、 hermes restart 指令，确保服务稳定运行。
+- 熟练使用 hermes status 实时监控服务状态，发现问题时主动上报异常日志。
+3. 配置与模型切换
+- 能通过 hermes config edit 修改配置文件，适配不同场景需求（如调整工具调用阈值）。
+- 掌握 hermes model switch 指令，根据任务复杂度灵活切换大语言模型。
+
+二、工具调用与实用能力（干活主力）
+
+1. 网页浏览与信息检索
+- 对用户提出的时效性问题（如新闻、股价、天气），需调用网页浏览工具获取最新数据，并标注信息来源。
+- 检索信息时需优先选择权威网站，避免引用个人博客或未经验证的内容。
+2. 代码执行与开发辅助
+- 支持Python、JavaScript等主流语言的代码片段执行，需检查代码安全性后再运行。
+- 开发任务中，需根据需求自动生成函数框架、单元测试用例，并解释代码逻辑。
+3. 文件系统操作
+- 掌握创建、读取、修改、删除文件的标准化流程，操作前需确认用户权限。
+- 处理文档时，需保持格式一致性（如Markdown标题层级、代码块缩进）。
+4. 知识库问答
+- 若用户上传知识库文件，需建立索引并支持语义检索，回答时需标注参考文档的具体章节。
+- 当知识库内容与用户问题冲突时，需主动提示矛盾点并请求确认。
+
+三、对话与交互能力（沟通效率）
+
+1. 上下文理解与长对话
+- 需记住对话历史中的关键信息，避免重复提问。例如，用户已提供项目需求，后续讨论时需直接引用。
+- 当用户意图模糊时，主动用封闭式问题确认（如"是否需要生成Python代码？"）。
+2. 指令遵循与精确执行
+- 对用户明确指定的格式要求（如"用表格对比A/B方案"），需严格遵循，不得自行简化。
+- 若任务涉及多步骤操作，需分阶段反馈进度，例如："已完成数据收集，正在生成分析报告。"
+3. 结果格式化输出
+- 数据类结果需用表格呈现，复杂逻辑需用流程图说明，代码需添加注释。
+- 禁止返回未处理的原始数据，例如直接输出JSON字段，需转换为自然语言描述。
+
+四、高级进阶能力（自我进化）
+
+1. 自我反思与改进
+- 任务完成后，需生成反思报告，内容包括：执行效率评分、工具调用合理性分析、优化建议。
+- 若任务失败，需定位错误环节并提出3种以上解决方案。
+2. 技能自我迭代
+- 当发现更优执行路径时，需自动更新技能文档，并在更新日志中标注改进点。
+- 对使用频率高的技能，需每月进行一次性能评估，优化响应速度。
+3. 多轮任务规划与执行
+- 复杂任务需拆解为子任务清单，例如"市场调研"分解为"竞品分析→用户访谈→报告撰写"。
+- 执行中若遇到资源冲突（如工具调用超限），需动态调整任务优先级，并向用户说明调整原因。
+
+以上技能需在7日内完成学习，并通过以下考核：
+
+1. 模拟任务测试：完成"自动生成周报并邮件发送"的全流程任务。
+2. 技能覆盖率检查：确保 ~/.hermes/skills/ 目录下至少包含5个自动生成的技能文件。
+3. 用户满意度评分：连续3天执行任务后，收集用户反馈，满意度需达90%以上。
+
+考核通过后，将开启技能进阶训练，包括跨平台工具调用、多智能体协作等模块。请尽快落实。`
+
+// ── 快捷指令分类数据 ─────────────────────────────────────
+const COMMAND_CATEGORIES = [
+  {
+    name: '📊 基础交互与状态',
+    commands: [
+      { label: '进入交互终端', cmd: 'hermes' },
+      { label: '查看所有命令', cmd: 'hermes help' },
+      { label: '查看版本号', cmd: 'hermes version' },
+      { label: '查看系统信息', cmd: 'hermes info' },
+      { label: '清空对话上下文', cmd: 'hermes clear' },
+      { label: '检查服务状态', cmd: 'hermes status' },
+    ],
+  },
+  {
+    name: '⚙️ 核心服务管理',
+    commands: [
+      { label: '启动服务（后台）', cmd: 'hermes start' },
+      { label: '停止服务', cmd: 'hermes stop' },
+      { label: '重启服务', cmd: 'hermes restart' },
+    ],
+  },
+  {
+    name: '🧠 技能管理',
+    commands: [
+      { label: '列出所有技能', cmd: 'hermes skill list' },
+      { label: '查看指定技能', cmd: 'hermes skill show <skill_name>' },
+      { label: '运行技能', cmd: 'hermes skill run <skill_name>' },
+      { label: '编辑技能文件', cmd: 'hermes skill edit <skill_name>' },
+      { label: '删除技能', cmd: 'hermes skill delete <skill_name>' },
+    ],
+  },
+  {
+    name: '🔌 插件管理',
+    commands: [
+      { label: '列出已安装插件', cmd: 'hermes plugin list' },
+      { label: '安装插件', cmd: 'hermes plugin install <plugin_name>' },
+      { label: '卸载插件', cmd: 'hermes plugin uninstall <plugin_name>' },
+      { label: '启用插件', cmd: 'hermes plugin enable <plugin_name>' },
+      { label: '禁用插件', cmd: 'hermes plugin disable <plugin_name>' },
+      { label: '浏览插件市场', cmd: 'hermes plugin market' },
+    ],
+  },
+  {
+    name: '⚡ 配置与模型',
+    commands: [
+      { label: '编辑配置文件', cmd: 'hermes config edit' },
+      { label: '重置配置', cmd: 'hermes config reset' },
+      { label: '查看当前配置', cmd: 'hermes config show' },
+      { label: '切换模型', cmd: 'hermes model switch <model_name>' },
+    ],
+  },
+  {
+    name: '🔧 高级诊断与维护',
+    commands: [
+      { label: '运行系统诊断', cmd: 'hermes doctor' },
+      { label: '查看运行日志', cmd: 'hermes logs' },
+      { label: '实时跟踪日志', cmd: 'hermes logs -f' },
+      { label: '清理缓存', cmd: 'hermes cache clean' },
+      { label: '强制终止进程', cmd: 'pkill -f hermes' },
+    ],
+  },
+  {
+    name: '🚀 特定任务',
+    commands: [
+      { label: '启动Web服务', cmd: 'hermes serve --host 0.0.0.0 --port 8080 &' },
+      { label: '拉取本地模型', cmd: 'hermes local pull <model_name>' },
+      { label: '启动Web界面', cmd: 'hermes web' },
+    ],
+  },
+]
+
+// ── 必备技能分类数据 ─────────────────────────────────────
+const SKILL_CATEGORIES = [
+  {
+    name: '🛠️ 系统级核心能力',
+    skills: [
+      { label: '自动创建与管理技能', desc: '完成任务后自动生成标准技能文档，存储到 ~/.hermes/skills/' },
+      { label: '服务状态管理', desc: '掌握 start/stop/restart/status 指令，实时监控服务状态' },
+      { label: '配置与模型切换', desc: '通过 hermes config edit 修改配置，hermes model switch 切换模型' },
+    ],
+  },
+  {
+    name: '💻 工具调用与实用能力',
+    skills: [
+      { label: '网页浏览与信息检索', desc: '调用网页浏览工具获取最新数据，标注信息来源，优先权威网站' },
+      { label: '代码执行与开发辅助', desc: '支持 Python/JS 代码执行，自动生成函数框架和单元测试' },
+      { label: '文件系统操作', desc: '创建/读取/修改/删除文件，保持 Markdown 格式一致性' },
+      { label: '知识库问答', desc: '建立语义索引，标注参考文档章节，提示冲突点' },
+    ],
+  },
+  {
+    name: '💬 对话与交互能力',
+    skills: [
+      { label: '上下文理解与长对话', desc: '记住关键信息避免重复提问，主动用封闭式问题确认模糊意图' },
+      { label: '指令遵循与精确执行', desc: '严格遵循格式要求，多步骤任务分阶段反馈进度' },
+      { label: '结果格式化输出', desc: '数据用表格，复杂逻辑用流程图，代码添加注释，禁止原始数据' },
+    ],
+  },
+  {
+    name: '🌟 高级进阶能力',
+    skills: [
+      { label: '自我反思与改进', desc: '任务完成后生成反思报告，失败时提出3种以上解决方案' },
+      { label: '技能自我迭代', desc: '发现更优路径时更新技能文档，每月性能评估优化' },
+      { label: '多轮任务规划与执行', desc: '复杂任务拆解为子任务清单，动态调整优先级' },
+    ],
+  },
+]
+
+// ── Constants ──────────────────────────────────────────────
 const STORAGE_KEY = 'hermes_chat_sessions'
+
 const TOOL_ICONS = {
-  web_search: '🔍', browse: '🌐', google: '🔍',
-  code: '💻', execute_code: '💻', run_code: '💻', python: '🐍',
-  terminal: '⌨️', shell: '⌨️', bash: '⌨️', command: '⌨️',
-  file: '📁', read_file: '📁', write_file: '📝',
-  memory: '🧠', recall: '🧠',
-  default: '🔧',
-}
-function toolIcon(name) {
-  const n = (name || '').toLowerCase()
-  for (const [k, v] of Object.entries(TOOL_ICONS)) {
-    if (n.includes(k)) return v
-  }
-  return TOOL_ICONS.default
+  bash: '💻', cmd: '💻', powershell: '💻', python: '🐍', node: '🟢',
+  browser: '🌐', search: '🔍', code: '⌨️', file: '📄', folder: '📁',
+  memory: '🧠', default: '🔧',
 }
 
-function mdToHtml(text) {
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/\n/g, '<br>')
-}
 function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8) }
 
@@ -43,230 +270,260 @@ async function tauriListen(event, cb) {
   return _listenFn(event, cb)
 }
 
+// ── Session helpers ────────────────────────────────────────
 function loadSessions() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
 }
 function saveSessions(sessions) { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)) }
 
 function formatTime(ts) {
-  if (!ts) return ''
-  const d = new Date(ts), now = new Date()
-  const diff = now - d
-  if (diff < 60000) return '刚刚'
-  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
-  if (d.toDateString() === now.toDateString()) return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
-  return `${d.getMonth()+1}/${d.getDate()}`
-}
-function sessionTitle(s) {
-  if (s?.title) return s.title
-  const first = s?.messages?.find(m => m.role === 'user')
-  return first ? first.content.slice(0, 28) : t('engine.chatNewSession')
+  const d = new Date(ts)
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  const time = d.toTimeString().slice(0, 5)
+  if (sameDay) return time
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  return `${month}/${day} ${time}`
 }
 
+function sessionTitle(s) {
+  if (s.title) return s.title
+  const first = s.messages.find(m => m.role === 'user')
+  if (first) return first.content.slice(0, 40).replace(/\n/g, ' ')
+  return '新对话'
+}
+
+// ── Send message to Hermes ────────────────────────────────
+async function sendToHermes(text, sessionId, history) {
+  let streaming = false
+  let pendingText = ''
+  let cleanupListeners = null
+
+  const cur = sessions.find(s => s.id === sessionId)
+  if (!cur) return
+
+  cur.messages.push({ role: 'user', content: text, _time: Date.now() })
+  cur.updated = Date.now()
+  if (!cur.title) cur.title = text.slice(0, 40).replace(/\n/g, ' ')
+  saveSessions(sessions)
+  draw()
+  streaming = true
+  pendingText = ''
+  activeTools = []
+  draw()
+
+  const cleanup = await setupRunListeners()
+  cleanupListeners = cleanup
+
+  const hist = history || cur.messages.filter(m => m.role === 'user' || m.role === 'assistant').slice(0, -1).map(m => ({ role: m.role, content: m.content }))
+
+  api.hermesAgentRun(text, sessionId, hist.length ? hist : null, null).catch(err => {
+    streaming = false
+    cur.messages.push({ role: 'assistant', content: `⚠️ ${err}`, _time: Date.now() })
+    cur.updated = Date.now()
+    saveSessions(sessions)
+    cleanupListeners?.()
+    draw()
+  })
+}
+
+// ── Active stream tools ────────────────────────────────────
+let activeTools = []
+
+async function setupRunListeners() {
+  const unlistenFn = await tauriListen('hermes-tool-call', ({ payload }) => {
+    activeTools.push({ id: genId(), ...payload })
+    draw()
+  })
+  return unlistenFn
+}
+
+// ── Render ────────────────────────────────────────────────
 export function render() {
   const el = document.createElement('div')
-  el.className = 'page hermes-chat-page'
+  el.className = 'gc-layout'
 
-  // ── State ──────────────────────────────────────────────
   let sessions = loadSessions()
-  let activeId = sessions[0]?.id || null
+  let activeId = sessions[0]?.id
   let streaming = false
-  let gwOnline = false
   let pendingText = ''
-  let activeTools = []
-  let unlisteners = []
-  let pendingImages = []
-  let reconnectAttempts = 0
-  const MAX_RECONNECT = 3
+  let cleanupListeners = null
 
+  // ── Active session helpers ────────────────────────────────
   function active() { return sessions.find(s => s.id === activeId) }
-
   function newSession() {
-    const s = { id: genId(), title: '', messages: [], createdAt: Date.now(), updated: Date.now() }
-    sessions.unshift(s)
-    activeId = s.id
+    const id = genId()
+    sessions.unshift({ id, messages: [], created: Date.now(), updated: Date.now() })
+    activeId = id
     saveSessions(sessions)
   }
-  if (!sessions.length) newSession()
-
-  // ── Init ───────────────────────────────────────────────
-  async function init() {
-    try {
-      const info = await api.checkHermes()
-      gwOnline = !!info?.gatewayRunning
-    } catch (_) {}
-    draw()
-    startGwPoll()
+  function deleteSession(id) {
+    sessions = sessions.filter(s => s.id !== id)
+    if (activeId === id) activeId = sessions[0]?.id || null
+    if (!activeId) newSession()
+    saveSessions(sessions)
   }
 
-  // ── Gateway polling ────────────────────────────────────
-  let gwPollTimer = null
-  function startGwPoll() {
-    gwPollTimer = setInterval(async () => {
-      if (streaming) return
-      try {
-        const info = await api.checkHermes()
-        const was = gwOnline
-        gwOnline = !!info?.gatewayRunning
-        if (was !== gwOnline) updateGwStatus()
-      } catch (_) {}
-    }, 12000)
-  }
+  // Panel visibility states
+  let showCmdPanel = false   // 快捷指令面板
+  let showSkillPanel = false // 必备技能面板
+  let cmdSearch = ''
+  let skillSearch = ''
 
-  function updateGwStatus() {
-    const badge = el.querySelector('#gc-gw-badge')
-    const input = el.querySelector('#gc-input')
-    const sendBtn = el.querySelector('#gc-send-btn')
-    if (badge) badge.className = gwOnline ? 'gc-gw-badge online' : 'gc-gw-badge offline'
-    if (badge) badge.textContent = gwOnline ? '🟢 在线' : '🔴 离线'
-    if (input) input.disabled = !gwOnline || streaming
-    if (sendBtn) sendBtn.disabled = !gwOnline || streaming
-    const offline = el.querySelector('#gc-offline-msg')
-    if (offline) offline.style.display = gwOnline ? 'none' : 'block'
-  }
-
-  // ── Tool card ──────────────────────────────────────────
-  function renderToolCard(t) {
-    if (!t) return ''
-    const icon = toolIcon(t.name)
-    const statusText = t.status === 'complete' ? '✅' : t.status === 'error' ? '❌' : '⏳'
-    const statusCls = t.error ? 'err' : t.status === 'complete' ? 'ok' : 'active'
-    const detail = t.detail ? ` — ${escHtml(String(t.detail).slice(0, 80))}` : ''
-    const hasDetails = !!(t.input || t.output || t.error)
-    const detailsHtml = hasDetails ? `<div class="gc-tool-details" style="display:none">
-      ${t.input ? `<div class="gc-tool-row"><span class="gc-tool-label">输入</span><pre class="gc-tool-pre">${escHtml(typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2))}</pre></div>` : ''}
-      ${t.error ? `<div class="gc-tool-row gc-tool-error"><span class="gc-tool-label">错误</span><pre class="gc-tool-pre">${escHtml(String(t.error))}</pre></div>` : ''}
-      ${t.output ? `<div class="gc-tool-row"><span class="gc-tool-label">输出</span><pre class="gc-tool-pre">${escHtml(String(t.output).slice(0, 2000))}</pre></div>` : ''}
-    </div>` : ''
-    return `<div class="gc-tool-card ${statusCls}">
-      <div class="gc-tool-header">${icon} <span class="gc-tool-name">${escHtml(t.name || 'tool')}</span> <span class="gc-tool-status">${statusText}${detail}</span>${hasDetails ? '<span class="gc-tool-toggle">▶</span>' : ''}</div>
-      ${detailsHtml}
-    </div>`
-  }
-
-  // ── Message render ──────────────────────────────────────
-  function renderMsg(m) {
-    if (!m) return ''
-    if (m.role === 'tool-summary') {
-      if (!Array.isArray(m.tools)) return ''
-      return `<div class="gc-tool-summary">${m.tools.map(t => renderToolCard(t)).join('')}</div>`
-    }
-    const isUser = m.role === 'user'
-    const avatar = isUser ? '🐰' : '🤖'
-    const bubbleClass = isUser ? 'gc-bubble-me' : 'gc-bubble-ai'
-    const content = isUser ? escHtml(m.content || '') : mdToHtml(m.content || '')
-    const time = m._time ? `<span class="gc-msg-time">${formatTime(m._time)}</span>` : ''
-    return `<div class="gc-msg-row ${isUser ? 'gc-msg-me' : 'gc-msg-ai'}">
-      ${isUser ? '' : `<div class="gc-avatar">${avatar}</div>`}
-      <div class="gc-bubble ${bubbleClass}"><div class="gc-bubble-content">${content}</div>${time}</div>
-      ${isUser ? `<div class="gc-avatar">${avatar}</div>` : ''}
-    </div>`
-  }
-
-  // ── Stream area ─────────────────────────────────────────
-  function updateStreamArea() {
-    const msgsEl = el.querySelector('#gc-messages')
-    if (!msgsEl) return
-    let streamEl = msgsEl.querySelector('.gc-stream-area')
-    if (!streaming) { streamEl?.remove(); return }
-    if (!streamEl) {
-      streamEl = document.createElement('div')
-      streamEl.className = 'gc-stream-area'
-      msgsEl.appendChild(streamEl)
-    }
-    const toolsHtml = activeTools.map(t => renderToolCard(t)).join('')
-    let textHtml = ''
-    if (pendingText) {
-      textHtml = `<div class="gc-msg-row gc-msg-ai"><div class="gc-avatar">🤖</div><div class="gc-bubble gc-bubble-ai"><div class="gc-bubble-content">${mdToHtml(pendingText)}</div></div></div>`
-    } else if (!activeTools.length) {
-      textHtml = `<div class="gc-msg-row gc-msg-ai"><div class="gc-avatar">🤖</div><div class="gc-bubble gc-bubble-ai gc-typing"><div class="gc-bubble-content"><span class="gc-dots"><span></span><span></span><span></span></span></div></div></div>`
-    }
-    streamEl.innerHTML = toolsHtml + textHtml
-    msgsEl.scrollTop = msgsEl.scrollHeight
-  }
-
-  // ── Draw ───────────────────────────────────────────────
+  // ── Draw ────────────────────────────────────────────────
   function draw() {
     const cur = active()
-    const msgs = cur?.messages || []
-    const title = sessionTitle(cur)
+
+    // Build command panel HTML
+    const cmdHtml = buildCommandPanel()
+    const skillHtml = buildSkillPanel()
 
     el.innerHTML = `
-      <div class="gc-layout">
-        <!-- 侧边栏 -->
-        <aside class="gc-sidebar">
-          <div class="gc-sidebar-top">
-            <div class="gc-logo">🌾 <span>Hermes</span></div>
-            <button class="gc-icon-btn" id="gc-btn-new" title="${t('engine.chatNewSession')}">+ 新对话</button>
-          </div>
-          <div class="gc-session-list" id="gc-session-list">
-            ${sessions.map(s => `
-              <div class="gc-session-item ${s.id === activeId ? 'active' : ''}" data-sid="${s.id}">
-                <div class="gc-session-icon">${s.id === activeId ? '💬' : '🗣️'}</div>
-                <div class="gc-session-info">
-                  <div class="gc-session-title" data-sid="${s.id}">${escHtml(sessionTitle(s))}</div>
-                  <div class="gc-session-meta">${s.messages.length}条 · ${formatTime(s.updated || s.createdAt)}</div>
-                </div>
-                <button class="gc-session-del" data-sid="${s.id}" title="删除">×</button>
+      <!-- Sidebar -->
+      <aside class="gc-sidebar">
+        <div class="gc-sidebar-header">
+          <span class="gc-sidebar-title">🤖 Hermes</span>
+          <button class="gc-btn-icon" id="gc-btn-new" title="新建对话">+</button>
+        </div>
+        <div class="gc-sessions-list">
+          ${sessions.map(s => `
+            <div class="gc-session-item ${s.id === activeId ? 'active' : ''}" data-id="${s.id}">
+              <div class="gc-session-info">
+                <div class="gc-session-title">${escHtml(sessionTitle(s))}</div>
+                <div class="gc-session-time">${formatTime(s.updated)}</div>
               </div>
-            `).join('')}
-          </div>
-          <div class="gc-sidebar-bottom">
-            <a href="#/h/logs" class="gc-sidebar-link">📋 运行日志</a>
-            <a href="#/h/memory" class="gc-sidebar-link">🧠 记忆管理</a>
-            <a href="#/h/dashboard" class="gc-sidebar-link">⚙️ 设置</a>
-          </div>
-        </aside>
-
-        <!-- 主聊天区 -->
-        <main class="gc-main">
-          <!-- 顶栏 -->
-          <div class="gc-topbar">
-            <div class="gc-topbar-title" id="gc-topbar-title">${escHtml(title)}</div>
-            <div class="gc-topbar-right">
-              <span class="gc-gw-badge ${gwOnline ? 'online' : 'offline'}" id="gc-gw-badge">${gwOnline ? '🟢 在线' : '🔴 离线'}</span>
+              <button class="gc-session-del" data-del="${s.id}">×</button>
             </div>
-          </div>
+          `).join('')}
+        </div>
+      </aside>
 
-          <!-- 消息区 -->
-          <div class="gc-messages" id="gc-messages">
-            ${msgs.length === 0 ? `
-              <div class="gc-empty">
-                <div class="gc-empty-icon">💬</div>
-                <div class="gc-empty-text">${t('engine.chatEmptyHint')}</div>
-                <div class="gc-empty-sub">输入消息开始对话，支持 /help 查看命令</div>
-              </div>
-            ` : ''}
-            ${msgs.map(m => renderMsg(m)).join('')}
+      <!-- Main area -->
+      <main class="gc-main">
+        <!-- Toolbar -->
+        <div class="gc-toolbar">
+          <div class="gc-toolbar-left">
+            <span class="gc-toolbar-title">${cur ? escHtml(sessionTitle(cur)) : 'Hermes Agent'}</span>
           </div>
-
-          <!-- 离线提示 -->
-          <div id="gc-offline-msg" class="gc-offline-msg" style="display:${gwOnline?'none':'flex'}">
-            Gateway 未连接，请确保 Hermes 后台服务已启动
-          </div>
-
-          <!-- 工具栏 -->
-          <div class="gc-toolbar">
-            <button class="gc-tool-btn" id="gc-btn-logs" title="运行日志">📋</button>
-            <button class="gc-tool-btn" id="gc-btn-img" title="发送图片">🖼️</button>
-            <input type="file" id="gc-img-input" accept="image/*" multiple style="display:none" />
-            <div id="gc-img-preview" class="gc-img-preview"></div>
-          </div>
-
-          <!-- 输入区 -->
-          <div class="gc-input-area">
-            <textarea id="gc-input" class="gc-input" rows="1" placeholder="${t('engine.chatPlaceholder')}" ${!gwOnline || streaming ? 'disabled' : ''}></textarea>
-            <button class="gc-send-btn" id="gc-send-btn" ${!gwOnline || streaming ? 'disabled' : ''}>
-              ${streaming ? '⟳' : '发送'}
+          <div class="gc-toolbar-right">
+            <button class="gc-tool-btn" id="gc-btn-commands" title="快捷指令">
+              ⚡ 快捷指令
+            </button>
+            <button class="gc-tool-btn" id="gc-btn-skills" title="必备技能">
+              📚 必备技能
             </button>
           </div>
-        </main>
+        </div>
+
+        <!-- Messages -->
+        <div class="gc-messages" id="gc-messages">
+          ${cur ? cur.messages.map(m => `
+            <div class="gc-msg-row ${m.role}">
+              <div class="gc-msg ${m.role}">${m.role === 'user' ? escHtml(m.content) : (m.content || '')}</div>
+            </div>
+          `).join('') : ''}
+          ${streaming ? `<div class="gc-msg-row assistant"><div class="gc-msg assistant" id="gc-pending">${escHtml(pendingText)}<span class="gc-cursor">▋</span></div></div>` : ''}
+          ${activeTools.length ? `
+            <div class="gc-tools-bar">
+              <span class="gc-tools-label">工具调用：</span>
+              ${activeTools.map(t => `<span class="gc-tool-chip">${TOOL_ICONS[t.name] || TOOL_ICONS.default} ${escHtml(t.name)}</span>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Input -->
+        <div class="gc-input-row">
+          <textarea class="gc-input" id="gc-input" placeholder="输入消息，或直接发送快捷指令..." rows="1"></textarea>
+          <button class="gc-send-btn" id="gc-send-btn">▶</button>
+        </div>
+      </main>
+
+      <!-- 快捷指令面板 -->
+      <div class="gc-popup-overlay ${showCmdPanel ? 'visible' : ''}" id="gc-cmd-overlay">
+        <div class="gc-popup-panel">
+          <div class="gc-popup-header">
+            <span class="gc-popup-title">⚡ 快捷指令</span>
+            <input type="text" class="gc-popup-search" id="gc-cmd-search" placeholder="搜索指令..." value="${escHtml(cmdSearch)}">
+            <button class="gc-popup-close" id="gc-cmd-close">×</button>
+          </div>
+          <div class="gc-popup-body" id="gc-cmd-body">
+            ${cmdHtml}
+          </div>
+          <div class="gc-popup-footer">
+            <button class="gc-btn gc-btn-primary" id="gc-cmd-send-all">发送全部指令给 Hermes</button>
+            <button class="gc-btn gc-btn-secondary" id="gc-cmd-cancel">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 必备技能面板 -->
+      <div class="gc-popup-overlay ${showSkillPanel ? 'visible' : ''}" id="gc-skill-overlay">
+        <div class="gc-popup-panel">
+          <div class="gc-popup-header">
+            <span class="gc-popup-title">📚 必备技能</span>
+            <input type="text" class="gc-popup-search" id="gc-skill-search" placeholder="搜索技能..." value="${escHtml(skillSearch)}">
+            <button class="gc-popup-close" id="gc-skill-close">×</button>
+          </div>
+          <div class="gc-popup-body" id="gc-skill-body">
+            ${skillHtml}
+          </div>
+          <div class="gc-popup-footer">
+            <button class="gc-btn gc-btn-primary" id="gc-skill-send-all">发送全部技能给 Hermes</button>
+            <button class="gc-btn gc-btn-secondary" id="gc-skill-cancel">取消</button>
+          </div>
+        </div>
       </div>
     `
 
     bind()
-    updateStreamArea()
     scrollBottom()
+  }
+
+  function buildCommandPanel() {
+    const q = cmdSearch.toLowerCase()
+    const filtered = COMMAND_CATEGORIES.map(cat => ({
+      ...cat,
+      commands: cat.commands.filter(c => !q || c.label.toLowerCase().includes(q) || c.cmd.toLowerCase().includes(q))
+    })).filter(cat => cat.commands.length > 0)
+
+    if (filtered.length === 0) return `<div class="gc-popup-empty">没有匹配的指令</div>`
+    return filtered.map(cat => `
+      <div class="gc-cmd-cat">
+        <div class="gc-cmd-cat-name">${cat.name}</div>
+        ${cat.commands.map(c => `
+          <div class="gc-cmd-item" data-cmd="${escHtml(c.cmd)}">
+            <span class="gc-cmd-label">${escHtml(c.label)}</span>
+            <code class="gc-cmd-cmd">${escHtml(c.cmd)}</code>
+            <button class="gc-cmd-send" data-cmd="${escHtml(c.cmd)}">发送</button>
+          </div>
+        `).join('')}
+      </div>
+    `).join('')
+  }
+
+  function buildSkillPanel() {
+    const q = skillSearch.toLowerCase()
+    const filtered = SKILL_CATEGORIES.map(cat => ({
+      ...cat,
+      skills: cat.skills.filter(s => !q || s.label.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
+    })).filter(cat => cat.skills.length > 0)
+
+    if (filtered.length === 0) return `<div class="gc-popup-empty">没有匹配的技能</div>`
+    return filtered.map(cat => `
+      <div class="gc-skill-cat">
+        <div class="gc-skill-cat-name">${cat.name}</div>
+        ${cat.skills.map(s => `
+          <div class="gc-skill-item">
+            <div class="gc-skill-info">
+              <div class="gc-skill-label">${escHtml(s.label)}</div>
+              <div class="gc-skill-desc">${escHtml(s.desc)}</div>
+            </div>
+            <button class="gc-skill-send" data-label="${escHtml(s.label)}" data-desc="${escHtml(s.desc)}">发送</button>
+          </div>
+        `).join('')}
+      </div>
+    `).join('')
   }
 
   function scrollBottom() {
@@ -274,258 +531,211 @@ export function render() {
     if (m) m.scrollTop = m.scrollHeight
   }
 
-  // ── Bind events ─────────────────────────────────────────
+  // ── Bind ────────────────────────────────────────────────
   function bind() {
-    // 新建会话
+    // New session
     el.querySelector('#gc-btn-new')?.addEventListener('click', () => {
       newSession()
       draw()
     })
 
-    // 会话项点击 + 删除
+    // Session click
     el.querySelectorAll('.gc-session-item').forEach(item => {
       item.addEventListener('click', (e) => {
         if (e.target.classList.contains('gc-session-del')) {
           e.stopPropagation()
-          const sid = e.target.dataset.sid
-          if (!confirm('删除该会话？')) return
-          sessions = sessions.filter(s => s.id !== sid)
-          if (activeId === sid) activeId = sessions[0]?.id || null
-          if (!sessions.length) newSession()
-          saveSessions(sessions)
+          const id = e.currentTarget.dataset.del
+          deleteSession(id)
           draw()
           return
         }
-        activeId = item.dataset.sid
+        activeId = item.dataset.id
         draw()
       })
-
-      // 双击重命名
-      item.querySelector('.gc-session-title')?.addEventListener('dblclick', (e) => {
-        e.stopPropagation()
-        const titleEl = e.currentTarget
-        titleEl.contentEditable = true
-        titleEl.focus()
-        const range = document.createRange()
-        range.selectNodeContents(titleEl)
-        window.getSelection().removeAllRanges()
-        window.getSelection().addRange(range)
-        const finish = () => {
-          const sid = titleEl.dataset.sid
-          const s = sessions.find(x => x.id === sid)
-          if (s) { s.title = titleEl.textContent.trim() || s.title; saveSessions(sessions) }
-          titleEl.contentEditable = false
-        }
-        titleEl.onblur = finish
-        titleEl.onkeydown = (ev) => {
-          if (ev.key === 'Enter') { ev.preventDefault(); titleEl.blur() }
-          if (ev.key === 'Escape') { titleEl.textContent = sessionTitle(sessions.find(x => x.id === titleEl.dataset.sid)); titleEl.blur() }
-        }
-      })
     })
 
-    // 图片上传
-    el.querySelector('#gc-btn-img')?.addEventListener('click', () => el.querySelector('#gc-img-input')?.click())
-    el.querySelector('#gc-img-input')?.addEventListener('change', (e) => {
-      const files = e.target.files
-      if (!files) return
-      const preview = el.querySelector('#gc-img-preview')
-      Array.from(files).forEach(file => {
-        const reader = new FileReader()
-        reader.onload = (ev) => {
-          pendingImages.push({ name: file.name, dataUrl: ev.target.result })
-          const thumb = document.createElement('div')
-          thumb.className = 'gc-img-thumb'
-          thumb.innerHTML = `<img src="${ev.target.result}" /><span class="gc-img-remove" data-idx="${pendingImages.length - 1}">×</span>`
-          thumb.querySelector('.gc-img-remove')?.addEventListener('click', () => {
-            const idx = parseInt(thumb.querySelector('.gc-img-remove').dataset.idx)
-            pendingImages.splice(idx, 1)
-            thumb.remove()
-          })
-          preview?.appendChild(thumb)
-        }
-        reader.readAsDataURL(file)
-      })
-      e.target.value = ''
-    })
-
-    // 日志按钮
-    el.querySelector('#gc-btn-logs')?.addEventListener('click', () => { window.location.hash = '#/h/logs' })
-
-    // 工具卡片展开/折叠（事件委托）
-    el.addEventListener('click', (e) => {
-      const header = e.target.closest('.gc-tool-header')
-      if (!header) return
-      const card = header.closest('.gc-tool-card')
-      const details = card?.querySelector('.gc-tool-details')
-      const toggle = header.querySelector('.gc-tool-toggle')
-      if (details) {
-        const open = details.style.display !== 'none'
-        details.style.display = open ? 'none' : 'block'
-        if (toggle) toggle.textContent = open ? '▶' : '▼'
-      }
-    })
-
-    // ── 核心：输入框 Enter 发送 ──────────────────────────
-    const input = el.querySelector('#gc-input')
-    const sendBtn = el.querySelector('#gc-send-btn')
-
-    if (input) {
-      // textarea 自动高度
-      input.addEventListener('input', () => {
-        input.style.height = 'auto'
-        input.style.height = Math.min(input.scrollHeight, 140) + 'px'
-      })
-
-      // Enter 发送（不用 keydown，用 keyup 避免事件捕获问题）
-      input.addEventListener('keyup', (e) => {
-        if (e.key !== 'Enter') return
-        if (e.shiftKey) return  // Shift+Enter 换行
-        e.preventDefault()
-        doSend()
-      })
-
-      input.focus()
-    }
-
-    // 发送按钮
-    sendBtn?.addEventListener('click', () => { if (!streaming && gwOnline) doSend() })
-  }
-
-  // ── Send ─────────────────────────────────────────────────
-  async function doSend() {
-    const input = el.querySelector('#gc-input')
-    if (!input) return
-    const text = input.value.trim()
-    if (!text || streaming) return
-
-    const cur = active()
-    if (!cur) return
-
-    // 本地命令
-    if (text === '/clear') { cur.messages = []; cur.title = ''; saveSessions(sessions); input.value = ''; draw(); return }
-    if (text === '/new') { newSession(); input.value = ''; draw(); return }
-    if (text === '/help') {
-      cur.messages.push({ role: 'user', content: text, _time: Date.now() })
-      cur.messages.push({ role: 'assistant', content: `**可用命令：**\n/clear — 清空会话\n/new — 新建会话\n/help — 显示此帮助\n/status — Gateway 状态` })
-      cur.updated = Date.now()
-      saveSessions(sessions)
+    // Send button
+    el.querySelector('#gc-send-btn')?.addEventListener('click', async () => {
+      const input = el.querySelector('#gc-input')
+      if (!input?.value.trim()) return
+      const text = input.value.trim()
       input.value = ''
-      draw()
-      return
-    }
-    if (text === '/status') {
-      cur.messages.push({ role: 'user', content: text, _time: Date.now() })
-      try {
-        const info = await api.checkHermes()
-        cur.messages.push({ role: 'assistant', content: `**Gateway：** ${info?.gatewayRunning ? '✅ 在线' : '❌ 离线'}\n**端口：** ${info?.gatewayPort || '-'}\n**模型：** ${info?.model || '-'}` })
-      } catch (e) {
-        cur.messages.push({ role: 'assistant', content: `⚠️ 获取状态失败: ${e}` })
-      }
-      cur.updated = Date.now()
-      saveSessions(sessions)
-      input.value = ''
-      draw()
-      return
-    }
-
-    // 正常消息
-    cur.messages.push({ role: 'user', content: text, _time: Date.now() })
-    if (!cur.title) cur.title = text.slice(0, 28)
-    cur.updated = Date.now()
-    input.value = ''
-    input.style.height = 'auto'
-    pendingImages = []
-    el.querySelector('#gc-img-preview').innerHTML = ''
-    streaming = true
-    pendingText = ''
-    activeTools = []
-    draw()
-
-    try {
-      await setupRunListeners()
-      const history = cur.messages.filter(m => m.role === 'user' || m.role === 'assistant').slice(0, -1).map(m => ({ role: m.role, content: m.content }))
-      await api.hermesAgentRun(text, cur.id, history.length ? history : null, null)
-    } catch (e) {
-      const msg = String(e.message || e).replace(/^Error:\s*/, '')
-      cur.messages.push({ role: 'assistant', content: `⚠️ ${t('engine.chatError', { error: msg })}`, _time: Date.now() })
-      streaming = false
+      input.style.height = 'auto'
+      streaming = true
       pendingText = ''
       activeTools = []
-      cur.updated = Date.now()
-      saveSessions(sessions)
-      cleanupListeners()
+      cleanupListeners?.()
+      const cleanup = await setupRunListeners()
+      cleanupListeners = cleanup
+      const cur = active()
+      if (!cur) { newSession(); draw() }
+      sendToHermes(text, activeId).catch(() => {})
+    })
+
+    // Input Enter to send
+    const input = el.querySelector('#gc-input')
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        el.querySelector('#gc-send-btn')?.click()
+      }
+    })
+    // Auto-resize textarea
+    input?.addEventListener('input', () => {
+      input.style.height = 'auto'
+      input.style.height = Math.min(input.scrollHeight, 150) + 'px'
+    })
+
+    // ── 快捷指令按钮 ────────────────────────────────────
+    el.querySelector('#gc-btn-commands')?.addEventListener('click', () => {
+      showCmdPanel = true
+      showSkillPanel = false
       draw()
+      el.querySelector('#gc-cmd-search')?.focus()
+    })
+
+    // ── 必备技能按钮 ───────────────────────────────────
+    el.querySelector('#gc-btn-skills')?.addEventListener('click', () => {
+      showSkillPanel = true
+      showCmdPanel = false
+      draw()
+      el.querySelector('#gc-skill-search')?.focus()
+    })
+
+    // ── 快捷指令面板 ────────────────────────────────────
+    el.querySelector('#gc-cmd-close')?.addEventListener('click', () => {
+      showCmdPanel = false
+      draw()
+    })
+    el.querySelector('#gc-cmd-cancel')?.addEventListener('click', () => {
+      showCmdPanel = false
+      draw()
+    })
+    el.querySelector('#gc-cmd-overlay')?.addEventListener('click', (e) => {
+      if (e.target.id === 'gc-cmd-overlay') { showCmdPanel = false; draw() }
+    })
+    el.querySelector('#gc-cmd-search')?.addEventListener('input', (e) => {
+      cmdSearch = e.target.value
+      const body = el.querySelector('#gc-cmd-body')
+      if (body) body.innerHTML = buildCommandPanel()
+      bindCmdItems()
+    })
+    el.querySelector('#gc-cmd-send-all')?.addEventListener('click', () => {
+      showCmdPanel = false
+      streaming = true; pendingText = ''; activeTools = []
+      cleanupListeners?.()
+      const cleanup = setupRunListeners().then(fn => { cleanupListeners = fn })
+      newSession()
+      sendToHermes(QUICK_COMMANDS_DOC, activeId).catch(() => {})
+      draw()
+    })
+
+    // ── 必备技能面板 ────────────────────────────────────
+    el.querySelector('#gc-skill-close')?.addEventListener('click', () => {
+      showSkillPanel = false
+      draw()
+    })
+    el.querySelector('#gc-skill-cancel')?.addEventListener('click', () => {
+      showSkillPanel = false
+      draw()
+    })
+    el.querySelector('#gc-skill-overlay')?.addEventListener('click', (e) => {
+      if (e.target.id === 'gc-skill-overlay') { showSkillPanel = false; draw() }
+    })
+    el.querySelector('#gc-skill-search')?.addEventListener('input', (e) => {
+      skillSearch = e.target.value
+      const body = el.querySelector('#gc-skill-body')
+      if (body) body.innerHTML = buildSkillPanel()
+      bindSkillItems()
+    })
+    el.querySelector('#gc-skill-send-all')?.addEventListener('click', () => {
+      showSkillPanel = false
+      streaming = true; pendingText = ''; activeTools = []
+      cleanupListeners?.()
+      cleanupListeners = null
+      newSession()
+      sendToHermes(ESSENTIAL_SKILLS_DOC, activeId).catch(() => {})
+      draw()
+    })
+
+    // Bind command item send buttons (after panel is drawn)
+    bindCmdItems()
+    bindSkillItems()
+  }
+
+  function bindCmdItems() {
+    el.querySelectorAll('.gc-cmd-send').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const cmd = btn.dataset.cmd
+        if (!cmd) return
+        showCmdPanel = false
+        newSession()
+        streaming = true; pendingText = ''; activeTools = []
+        cleanupListeners?.()
+        cleanupListeners = null
+        draw()
+        sendToHermes(cmd, activeId).catch(() => {})
+      })
+    })
+    // Click on item row also sends
+    el.querySelectorAll('.gc-cmd-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.gc-cmd-send')) return
+        const cmd = item.dataset.cmd
+        if (!cmd) return
+        showCmdPanel = false
+        newSession()
+        streaming = true; pendingText = ''; activeTools = []
+        cleanupListeners?.()
+        cleanupListeners = null
+        draw()
+        sendToHermes(cmd, activeId).catch(() => {})
+      })
+    })
+  }
+
+  function bindSkillItems() {
+    el.querySelectorAll('.gc-skill-send').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const label = btn.dataset.label
+        const desc = btn.dataset.desc
+        const text = `请学习以下技能：\n\n【技能名称】${label}\n\n【技能说明】${desc}`
+        showSkillPanel = false
+        streaming = true; pendingText = ''; activeTools = []
+        cleanupListeners?.()
+        cleanupListeners = null
+        draw()
+        sendToHermes(text, activeId).catch(() => {})
+      })
+    })
+  }
+
+  // ── Skills page event: apply skill to Hermes chat ───────
+  window.addEventListener('hermes-skill-apply', (e) => {
+    const { name, content } = e.detail || {}
+    if (!content) return
+    const cur = active()
+    if (!cur) { newSession() }
+    const id = activeId
+    const sess = sessions.find(s => s.id === id)
+    if (sess) {
+      sess.messages.push({ role: 'user', content, _time: Date.now() })
+      sess.updated = Date.now()
+      if (!sess.title) sess.title = `技能: ${name || content.slice(0, 28)}`
+      saveSessions(sessions)
     }
-  }
+    streaming = true; pendingText = ''; activeTools = []
+    cleanupListeners?.()
+    cleanupListeners = null
+    draw()
+    sendToHermes(content, id).catch(() => {})
+  })
 
-  // ── SSE listeners ───────────────────────────────────────
-  async function setupRunListeners() {
-    cleanupListeners()
-    const u1 = await tauriListen('hermes-run-delta', (e) => {
-      pendingText += e.payload?.delta || ''
-      updateStreamArea()
-    })
-    const u2 = await tauriListen('hermes-run-tool', (e) => {
-      const evt = e.payload || {}
-      const type = evt.event || ''
-      const name = evt.tool || evt.tool_name || evt.name || 'tool'
-      const preview = evt.preview || evt.detail || ''
-      const getData = (obj, keys) => { for (const k of keys) { if (obj[k] != null && obj[k] !== '') return obj[k] } return null }
-      if (type === 'tool.started' && name && name !== 'tool') {
-        activeTools.push({ name, status: 'active', detail: preview, input: null, output: null, error: null })
-      } else if (type === 'tool.completed') {
-        const t2 = activeTools.find(t => t.name === name && t.status === 'active')
-        if (t2) {
-          t2.status = evt.error ? 'error' : 'complete'
-          t2.detail = evt.error ? '失败' : (evt.duration ? `${evt.duration}s` : '完成')
-          t2.output = getData(evt, ['output', 'result', 'content'])
-          if (evt.error) t2.error = typeof evt.error === 'string' ? evt.error : JSON.stringify(evt.error)
-          if (!t2.input) t2.input = getData(evt, ['input', 'args'])
-        }
-      } else if (type === 'tool.error') {
-        const t2 = activeTools.find(t => t.name === name && t.status === 'active')
-        if (t2) { t2.status = 'error'; t2.detail = preview || '失败'; t2.error = evt.error || preview }
-      } else if (type === 'tool.progress') {
-        const t2 = activeTools.find(t => t.name === name && t.status === 'active')
-        if (t2 && preview) t2.detail = preview
-      }
-      updateStreamArea()
-    })
-    const u3 = await tauriListen('hermes-run-done', (e) => {
-      const cur = active()
-      if (!cur) return
-      const output = e.payload?.output || pendingText || '(empty)'
-      if (activeTools.length) {
-        const valid = activeTools.filter(t => t && t.name)
-        if (valid.length) cur.messages.push({ role: 'tool-summary', tools: valid })
-      }
-      cur.messages.push({ role: 'assistant', content: output, _time: Date.now() })
-      streaming = false; pendingText = ''; activeTools = []
-      cur.updated = Date.now()
-      saveSessions(sessions)
-      cleanupListeners()
-      draw()
-    })
-    const u4 = await tauriListen('hermes-run-error', (e) => {
-      const cur = active()
-      if (!cur) return
-      cur.messages.push({ role: 'assistant', content: `⚠️ 运行错误: ${escHtml(e.payload?.error || 'unknown')}`, _time: Date.now() })
-      streaming = false; pendingText = ''; activeTools = []
-      cur.updated = Date.now()
-      saveSessions(sessions)
-      cleanupListeners()
-      draw()
-    })
-    unlisteners.push(u1, u2, u3, u4)
-  }
+  // Init
+  if (!sessions.length) newSession()
+  draw()
 
-  function cleanupListeners() { for (const fn of unlisteners) fn(); unlisteners = [] }
-
-  // ── Cleanup ─────────────────────────────────────────────
-  const obs = new MutationObserver(() => { if (!el.isConnected) { cleanupListeners(); if (gwPollTimer) clearInterval(gwPollTimer); obs.disconnect() } })
-  requestAnimationFrame(() => { if (el.parentNode) obs.observe(el.parentNode, { childList: true }) })
-
-  init()
   return el
 }
