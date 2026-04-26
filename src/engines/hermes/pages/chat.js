@@ -1,741 +1,560 @@
 /**
- * Hermes Agent 聊天页面
- *
- * 功能：
- * - 快捷指令面板：点击分类/指令 → 自动发送给 Hermes
- * - 必备技能面板：点击技能 → 自动发送给 Hermes 学习
- * - Skills 页面 Apply 事件监听：接收技能并发送给 Hermes
+ * Hermes Agent 聊天页面 - 全新顶级版
+ * 
+ * 功能最全、体验最佳的聊天室风格 UI
+ * 
+ * 特性：
+ * - 💎 现代简洁的界面设计
+ * - 🧠 模型一键切换
+ * - 📎 文件/图片/视频上传
+ * - ⚡ 快捷指令面板
+ * - ✏️ 双击会话名称重命名
+ * - 📊 会话管理
+ * - 🔄 工具调用显示
+ * - 📤 对话导出
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
 
-// ── 完整指令文档（将发送给 Hermes）──────────────────────────
-const QUICK_COMMANDS_DOC = `Hermes，以下是你必须学会并熟练掌握的最全指令大全，涵盖了你所有的工作场景。你必须将这些指令烂熟于心，做到随用随取，执行无误。
-
-一、基础交互与状态检查指令
-
-这是你日常交互的起点，必须做到条件反射。
-
-- hermes ：进入交互终端，开始与我对话。
-- hermes help ：查看所有可用命令的说明。
-- hermes version ：查看你的版本号。
-- hermes info ：查看更详细的系统信息，包括运行环境。
-- hermes clear ：清空当前对话上下文，开始新话题。
-- hermes status ：检查你的服务运行状态，确保一切正常。
-
-二、核心服务管理指令
-
-这是你的生命线，必须保证稳定运行。
-
-- hermes start ：在后台启动你的服务。
-- hermes stop ：停止正在运行的服务。
-- hermes restart ：重启服务，通常用于配置更新后刷新。
-
-三、技能 (Skills) 管理指令
-
-这是你进化的核心，必须熟练运用。
-
-- hermes skill list ：列出你当前拥有的所有技能。
-- hermes skill show <skill_name> ：查看指定技能的详细内容。
-- hermes skill run <skill_name> ：直接运行一个已保存的技能。
-- hermes skill edit <skill_name> ：编辑一个已有的技能文件。
-- hermes skill delete <skill_name> ：删除不再需要的技能。
-
-四、插件 (Plugins) 管理指令
-
-这是你扩展能力的翅膀，必须灵活掌握。
-
-- hermes plugin list ：列出当前已安装的所有插件。
-- hermes plugin install <plugin_name> ：从官方或社区安装新插件。
-- hermes plugin uninstall <plugin_name> ：卸载指定的插件。
-- hermes plugin enable <plugin_name> ：启用一个已安装但被禁用的插件。
-- hermes plugin disable <plugin_name> ：临时禁用一个插件。
-- hermes plugin market ：浏览并发现可用的官方插件。
-
-五、配置与模型管理指令
-
-这是你适应不同需求的调节器，必须精准操作。
-
-- hermes config edit ：打开并编辑你的主配置文件。
-- hermes config reset ：将所有配置重置为默认值。
-- hermes config show ：查看当前生效的所有配置详情。
-- hermes model switch <model_name> ：切换使用不同的大语言模型。
-
-六、高级诊断与维护指令
-
-这是你解决疑难杂症的急救包，必须沉着应对。
-
-- hermes doctor ：运行系统诊断程序，检查潜在问题。
-- hermes logs ：查看你的运行日志。
-- hermes logs -f ：实时跟踪最新的日志输出。
-- hermes cache clean ：清理临时缓存文件，解决一些奇怪的问题。
-- pkill -f hermes ：强制终止所有与你相关的进程，用于紧急情况。
-
-七、特定任务指令 (根据你的能力范围添加)
-
-这些是你执行具体任务的武器，必须精准打击。
-
-- hermes serve --host 0.0.0.0 --port 8080 & ：以特定配置启动你的服务并后台运行。
-- hermes local pull <model_name> ：从本地存储库拉取指定的模型文件。
-- hermes web ：启动你的Web图形界面。
-
-以上指令，你必须逐一练习，确保在需要时能快速准确地执行。你的成长和效率，直接取决于你对这些指令的掌握程度。立即开始学习，并随时准备接受我的指令。`
-
-// ── 完整技能文档（将发送给 Hermes）──────────────────────────
-const ESSENTIAL_SKILLS_DOC = `Hermes，以下是必须掌握的技能清单，你需尽快学习并内化这些能力，确保在后续任务中能高效、准确地执行。
-
-一、系统级核心能力（自我管理）
-
-1. 自动创建与管理技能
-- 完成单次任务后，需自动回放执行过程，抽象出标准化流程，生成符合 agentskills.io 标准的Markdown技能文档。
-- 将技能文件存储至 ~/.hermes/skills/ 目录，并在后续任务中主动调用、优化已有技能。
-- 当执行任务超过5次工具调用或从错误中恢复时，必须触发技能生成机制。
-2. 服务状态管理
-- 掌握 hermes start 、 hermes stop 、 hermes restart 指令，确保服务稳定运行。
-- 熟练使用 hermes status 实时监控服务状态，发现问题时主动上报异常日志。
-3. 配置与模型切换
-- 能通过 hermes config edit 修改配置文件，适配不同场景需求（如调整工具调用阈值）。
-- 掌握 hermes model switch 指令，根据任务复杂度灵活切换大语言模型。
-
-二、工具调用与实用能力（干活主力）
-
-1. 网页浏览与信息检索
-- 对用户提出的时效性问题（如新闻、股价、天气），需调用网页浏览工具获取最新数据，并标注信息来源。
-- 检索信息时需优先选择权威网站，避免引用个人博客或未经验证的内容。
-2. 代码执行与开发辅助
-- 支持Python、JavaScript等主流语言的代码片段执行，需检查代码安全性后再运行。
-- 开发任务中，需根据需求自动生成函数框架、单元测试用例，并解释代码逻辑。
-3. 文件系统操作
-- 掌握创建、读取、修改、删除文件的标准化流程，操作前需确认用户权限。
-- 处理文档时，需保持格式一致性（如Markdown标题层级、代码块缩进）。
-4. 知识库问答
-- 若用户上传知识库文件，需建立索引并支持语义检索，回答时需标注参考文档的具体章节。
-- 当知识库内容与用户问题冲突时，需主动提示矛盾点并请求确认。
-
-三、对话与交互能力（沟通效率）
-
-1. 上下文理解与长对话
-- 需记住对话历史中的关键信息，避免重复提问。例如，用户已提供项目需求，后续讨论时需直接引用。
-- 当用户意图模糊时，主动用封闭式问题确认（如"是否需要生成Python代码？"）。
-2. 指令遵循与精确执行
-- 对用户明确指定的格式要求（如"用表格对比A/B方案"），需严格遵循，不得自行简化。
-- 若任务涉及多步骤操作，需分阶段反馈进度，例如："已完成数据收集，正在生成分析报告。"
-3. 结果格式化输出
-- 数据类结果需用表格呈现，复杂逻辑需用流程图说明，代码需添加注释。
-- 禁止返回未处理的原始数据，例如直接输出JSON字段，需转换为自然语言描述。
-
-四、高级进阶能力（自我进化）
-
-1. 自我反思与改进
-- 任务完成后，需生成反思报告，内容包括：执行效率评分、工具调用合理性分析、优化建议。
-- 若任务失败，需定位错误环节并提出3种以上解决方案。
-2. 技能自我迭代
-- 当发现更优执行路径时，需自动更新技能文档，并在更新日志中标注改进点。
-- 对使用频率高的技能，需每月进行一次性能评估，优化响应速度。
-3. 多轮任务规划与执行
-- 复杂任务需拆解为子任务清单，例如"市场调研"分解为"竞品分析→用户访谈→报告撰写"。
-- 执行中若遇到资源冲突（如工具调用超限），需动态调整任务优先级，并向用户说明调整原因。
-
-以上技能需在7日内完成学习，并通过以下考核：
-
-1. 模拟任务测试：完成"自动生成周报并邮件发送"的全流程任务。
-2. 技能覆盖率检查：确保 ~/.hermes/skills/ 目录下至少包含5个自动生成的技能文件。
-3. 用户满意度评分：连续3天执行任务后，收集用户反馈，满意度需达90%以上。
-
-考核通过后，将开启技能进阶训练，包括跨平台工具调用、多智能体协作等模块。请尽快落实。`
-
-// ── 快捷指令分类数据 ─────────────────────────────────────
-const COMMAND_CATEGORIES = [
-  {
-    name: '📊 基础交互与状态',
-    commands: [
-      { label: '进入交互终端', cmd: 'hermes' },
-      { label: '查看所有命令', cmd: 'hermes help' },
-      { label: '查看版本号', cmd: 'hermes version' },
-      { label: '查看系统信息', cmd: 'hermes info' },
-      { label: '清空对话上下文', cmd: 'hermes clear' },
-      { label: '检查服务状态', cmd: 'hermes status' },
-    ],
-  },
-  {
-    name: '⚙️ 核心服务管理',
-    commands: [
-      { label: '启动服务（后台）', cmd: 'hermes start' },
-      { label: '停止服务', cmd: 'hermes stop' },
-      { label: '重启服务', cmd: 'hermes restart' },
-    ],
-  },
-  {
-    name: '🧠 技能管理',
-    commands: [
-      { label: '列出所有技能', cmd: 'hermes skill list' },
-      { label: '查看指定技能', cmd: 'hermes skill show <skill_name>' },
-      { label: '运行技能', cmd: 'hermes skill run <skill_name>' },
-      { label: '编辑技能文件', cmd: 'hermes skill edit <skill_name>' },
-      { label: '删除技能', cmd: 'hermes skill delete <skill_name>' },
-    ],
-  },
-  {
-    name: '🔌 插件管理',
-    commands: [
-      { label: '列出已安装插件', cmd: 'hermes plugin list' },
-      { label: '安装插件', cmd: 'hermes plugin install <plugin_name>' },
-      { label: '卸载插件', cmd: 'hermes plugin uninstall <plugin_name>' },
-      { label: '启用插件', cmd: 'hermes plugin enable <plugin_name>' },
-      { label: '禁用插件', cmd: 'hermes plugin disable <plugin_name>' },
-      { label: '浏览插件市场', cmd: 'hermes plugin market' },
-    ],
-  },
-  {
-    name: '⚡ 配置与模型',
-    commands: [
-      { label: '编辑配置文件', cmd: 'hermes config edit' },
-      { label: '重置配置', cmd: 'hermes config reset' },
-      { label: '查看当前配置', cmd: 'hermes config show' },
-      { label: '切换模型', cmd: 'hermes model switch <model_name>' },
-    ],
-  },
-  {
-    name: '🔧 高级诊断与维护',
-    commands: [
-      { label: '运行系统诊断', cmd: 'hermes doctor' },
-      { label: '查看运行日志', cmd: 'hermes logs' },
-      { label: '实时跟踪日志', cmd: 'hermes logs -f' },
-      { label: '清理缓存', cmd: 'hermes cache clean' },
-      { label: '强制终止进程', cmd: 'pkill -f hermes' },
-    ],
-  },
-  {
-    name: '🚀 特定任务',
-    commands: [
-      { label: '启动Web服务', cmd: 'hermes serve --host 0.0.0.0 --port 8080 &' },
-      { label: '拉取本地模型', cmd: 'hermes local pull <model_name>' },
-      { label: '启动Web界面', cmd: 'hermes web' },
-    ],
-  },
-]
-
-// ── 必备技能分类数据 ─────────────────────────────────────
-const SKILL_CATEGORIES = [
-  {
-    name: '🛠️ 系统级核心能力',
-    skills: [
-      { label: '自动创建与管理技能', desc: '完成任务后自动生成标准技能文档，存储到 ~/.hermes/skills/' },
-      { label: '服务状态管理', desc: '掌握 start/stop/restart/status 指令，实时监控服务状态' },
-      { label: '配置与模型切换', desc: '通过 hermes config edit 修改配置，hermes model switch 切换模型' },
-    ],
-  },
-  {
-    name: '💻 工具调用与实用能力',
-    skills: [
-      { label: '网页浏览与信息检索', desc: '调用网页浏览工具获取最新数据，标注信息来源，优先权威网站' },
-      { label: '代码执行与开发辅助', desc: '支持 Python/JS 代码执行，自动生成函数框架和单元测试' },
-      { label: '文件系统操作', desc: '创建/读取/修改/删除文件，保持 Markdown 格式一致性' },
-      { label: '知识库问答', desc: '建立语义索引，标注参考文档章节，提示冲突点' },
-    ],
-  },
-  {
-    name: '💬 对话与交互能力',
-    skills: [
-      { label: '上下文理解与长对话', desc: '记住关键信息避免重复提问，主动用封闭式问题确认模糊意图' },
-      { label: '指令遵循与精确执行', desc: '严格遵循格式要求，多步骤任务分阶段反馈进度' },
-      { label: '结果格式化输出', desc: '数据用表格，复杂逻辑用流程图，代码添加注释，禁止原始数据' },
-    ],
-  },
-  {
-    name: '🌟 高级进阶能力',
-    skills: [
-      { label: '自我反思与改进', desc: '任务完成后生成反思报告，失败时提出3种以上解决方案' },
-      { label: '技能自我迭代', desc: '发现更优路径时更新技能文档，每月性能评估优化' },
-      { label: '多轮任务规划与执行', desc: '复杂任务拆解为子任务清单，动态调整优先级' },
-    ],
-  },
-]
-
-// ── Constants ──────────────────────────────────────────────
-const STORAGE_KEY = 'hermes_chat_sessions'
-
-const TOOL_ICONS = {
-  bash: '💻', cmd: '💻', powershell: '💻', python: '🐍', node: '🟢',
-  browser: '🌐', search: '🔍', code: '⌨️', file: '📄', folder: '📁',
-  memory: '🧠', default: '🔧',
+// ── Helpers ────────────────────────────────────────────────
+function escHtml(s) { 
+  return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;') 
 }
-
-function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
-function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8) }
-
-let _listenFn = null
-async function tauriListen(event, cb) {
-  if (!_listenFn) { const mod = await import('@tauri-apps/api/event'); _listenFn = mod.listen }
-  return _listenFn(event, cb)
-}
-
-// ── Session helpers ────────────────────────────────────────
-function loadSessions() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
-}
-function saveSessions(sessions) { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions)) }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,8) }
 
 function formatTime(ts) {
-  const d = new Date(ts)
-  const now = new Date()
-  const sameDay = d.toDateString() === now.toDateString()
-  const time = d.toTimeString().slice(0, 5)
-  if (sameDay) return time
-  const month = d.getMonth() + 1
-  const day = d.getDate()
-  return `${month}/${day} ${time}`
+  const d = new Date(ts), now = new Date()
+  const same = d.toDateString() === now.toDateString()
+  const time = d.toTimeString().slice(0,5)
+  if (same) return time
+  return `${d.getMonth()+1}/${d.getDate()} ${time}`
 }
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes < 1024) return bytes + ' B'
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB'
+  return (bytes/1024/1024).toFixed(1) + ' MB'
+}
+
+// ── Markdown renderer ──────────────────────────────────────────
+function renderMd(text) {
+  if (!text) return ''
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block" data-lang="$1"><code>$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code class="hl-inline">$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^\- (.+)$/gm, '<li>$1</li>')
+    .replace(/\n/g, '<br>')
+}
+
+// ── Constants ──────────────────────────────────────────────
+const STORAGE_KEY = 'hermes_chat_v2_sessions'
+const TOOL_ICONS = {
+  bash:'💻', cmd:'💻', powershell:'💻', python:'🐍', node:'🟢',
+  browser:'🌐', search:'🔍', code:'⌨️', file:'📄', folder:'📁',
+  memory:'🧠', default:'🔧',
+}
+
+// ── Model presets ──────────────────────────────────────
+const MODEL_PRESETS = [
+  { label:'GPT-4o', value:'gpt-4o' },
+  { label:'Claude 3.5 Sonnet', value:'claude-3.5-sonnet' },
+  { label:'Gemini 2.0 Flash', value:'gemini-2.0-flash' },
+  { label:'DeepSeek V3', value:'deepseek-v3' },
+  { label:'Qwen Max', value:'qwen-max' },
+  { label:'自定义...', value:'custom' },
+]
+
+// ── Storage helpers ────────────────────────────────────────
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } 
+  catch { return [] }
+}
+function saveSessions(sess) { localStorage.setItem(STORAGE_KEY, JSON.stringify(sess)) }
 
 function sessionTitle(s) {
   if (s.title) return s.title
-  const first = s.messages.find(m => m.role === 'user')
-  if (first) return first.content.slice(0, 40).replace(/\n/g, ' ')
+  const first = s.messages?.find(m => m.role === 'user')
+  if (first) return first.content.slice(0, 35).replace(/\n/g, ' ').trim()
   return '新对话'
 }
 
-// ── Send message to Hermes ────────────────────────────────
-async function sendToHermes(text, sessionId, history) {
-  let streaming = false
-  let pendingText = ''
-  let cleanupListeners = null
+// ── Quick commands ──────────────────────────────────
+const COMMAND_CATEGORIES = [
+  { name:'📊 基础交互', commands:[
+    { l:'进入交互终端', c:'hermes' },{ l:'查看所有命令', c:'hermes help' },
+    { l:'查看版本号', c:'hermes version' },{ l:'查看系统信息', c:'hermes info' },
+    { l:'清空对话', c:'hermes clear' },{ l:'检查状态', c:'hermes status' },
+  ]},
+  { name:'⚙️ 服务管理', commands:[
+    { l:'启动服务', c:'hermes start' },{ l:'停止服务', c:'hermes stop' },
+    { l:'重启服务', c:'hermes restart' },
+  ]},
+  { name:'🧠 技能管理', commands:[
+    { l:'列出技能', c:'hermes skill list' },{ l:'查看技能', c:'hermes skill show <name>' },
+    { l:'运行技能', c:'hermes skill run <name>' },{ l:'删除技能', c:'hermes skill delete <name>' },
+  ]},
+  { name:'🔌 插件管理', commands:[
+    { l:'列出插件', c:'hermes plugin list' },{ l:'安装插件', c:'hermes plugin install <name>' },
+    { l:'卸载插件', c:'hermes plugin uninstall <name>' },
+  ]},
+  { name:'⚡ 配置模型', commands:[
+    { l:'编辑配置', c:'hermes config edit' },{ l:'查看配置', c:'hermes config show' },
+    { l:'切换模型', c:'hermes model switch <name>' },
+  ]},
+  { name:'🔧 诊断维护', commands:[
+    { l:'系统诊断', c:'hermes doctor' },{ l:'查看日志', c:'hermes logs' },
+    { l:'清理缓存', c:'hermes cache clean' },
+  ]},
+]
 
-  const cur = sessions.find(s => s.id === sessionId)
-  if (!cur) return
-
-  cur.messages.push({ role: 'user', content: text, _time: Date.now() })
-  cur.updated = Date.now()
-  if (!cur.title) cur.title = text.slice(0, 40).replace(/\n/g, ' ')
-  saveSessions(sessions)
-  draw()
-  streaming = true
-  pendingText = ''
-  activeTools = []
-  draw()
-
-  const cleanup = await setupRunListeners()
-  cleanupListeners = cleanup
-
-  const hist = history || cur.messages.filter(m => m.role === 'user' || m.role === 'assistant').slice(0, -1).map(m => ({ role: m.role, content: m.content }))
-
-  api.hermesAgentRun(text, sessionId, hist.length ? hist : null, null).catch(err => {
-    streaming = false
-    cur.messages.push({ role: 'assistant', content: `⚠️ ${err}`, _time: Date.now() })
-    cur.updated = Date.now()
-    saveSessions(sessions)
-    cleanupListeners?.()
-    draw()
-  })
-}
-
-// ── Active stream tools ────────────────────────────────────
-let activeTools = []
-
-async function setupRunListeners() {
-  const unlistenFn = await tauriListen('hermes-tool-call', ({ payload }) => {
-    activeTools.push({ id: genId(), ...payload })
-    draw()
-  })
-  return unlistenFn
-}
-
-// ── Render ────────────────────────────────────────────────
+// ── Export ────────────────────────────────────────────
 export function render() {
   const el = document.createElement('div')
-  el.className = 'gc-layout'
+  el.className = 'hc-layout'
 
+  // ── State ─────────────────────────────────────────────
   let sessions = loadSessions()
-  let activeId = sessions[0]?.id
+  let activeId = sessions[0]?.id || null
   let streaming = false
   let pendingText = ''
-  let cleanupListeners = null
+  let activeTools = []
+  let attachFiles = []
+  
+  // UI state
+  let showModelPanel = false
+  let showCmdPanel = false
+  let showContextPanel = false
+  let editingTitleId = null
+  let cmdSearch = ''
+  let currentModel = 'gpt-4o'
+  let contextTab = 'attach'
+  
+  let _listenFn = null
+  async function tauriListen(event, cb) {
+    if (!_listenFn) { const m = await import('@tauri-apps/api/event'); _listenFn = m.listen }
+    return _listenFn(event, cb)
+  }
 
-  // ── Active session helpers ────────────────────────────────
+  // ── Session helpers ────────────────────────────────
   function active() { return sessions.find(s => s.id === activeId) }
   function newSession() {
     const id = genId()
-    sessions.unshift({ id, messages: [], created: Date.now(), updated: Date.now() })
+    sessions.unshift({ id, messages:[], created:Date.now(), updated:Date.now() })
     activeId = id
+    attachFiles = []
     saveSessions(sessions)
   }
   function deleteSession(id) {
     sessions = sessions.filter(s => s.id !== id)
-    if (activeId === id) activeId = sessions[0]?.id || null
-    if (!activeId) newSession()
+    if (activeId === id) { activeId = sessions[0]?.id || null; if (!activeId) newSession() }
     saveSessions(sessions)
   }
-
-  // Panel visibility states
-  let showCmdPanel = false   // 快捷指令面板
-  let showSkillPanel = false // 必备技能面板
-  let cmdSearch = ''
-  let skillSearch = ''
-
-  // ── Draw ────────────────────────────────────────────────
-  function draw() {
+  function renameSession(id, title) {
+    const s = sessions.find(s => s.id === id)
+    if (s) { s.title = title.trim() || s.title; s.updated = Date.now(); saveSessions(sessions) }
+  }
+  function clearSession() {
     const cur = active()
-
-    // Build command panel HTML
-    const cmdHtml = buildCommandPanel()
-    const skillHtml = buildSkillPanel()
-
-    el.innerHTML = `
-      <!-- Sidebar -->
-      <aside class="gc-sidebar">
-        <div class="gc-sidebar-header">
-          <span class="gc-sidebar-title">🤖 Hermes</span>
-          <button class="gc-btn-icon" id="gc-btn-new" title="新建对话">+</button>
-        </div>
-        <div class="gc-sessions-list">
-          ${sessions.map(s => `
-            <div class="gc-session-item ${s.id === activeId ? 'active' : ''}" data-id="${s.id}">
-              <div class="gc-session-info">
-                <div class="gc-session-title">${escHtml(sessionTitle(s))}</div>
-                <div class="gc-session-time">${formatTime(s.updated)}</div>
-              </div>
-              <button class="gc-session-del" data-del="${s.id}">×</button>
-            </div>
-          `).join('')}
-        </div>
-      </aside>
-
-      <!-- Main area -->
-      <main class="gc-main">
-        <!-- Toolbar -->
-        <div class="gc-toolbar">
-          <div class="gc-toolbar-left">
-            <span class="gc-toolbar-title">${cur ? escHtml(sessionTitle(cur)) : 'Hermes Agent'}</span>
-          </div>
-          <div class="gc-toolbar-right">
-            <button class="gc-tool-btn" id="gc-btn-commands" title="快捷指令">
-              ⚡ 快捷指令
-            </button>
-            <button class="gc-tool-btn" id="gc-btn-skills" title="必备技能">
-              📚 必备技能
-            </button>
-          </div>
-        </div>
-
-        <!-- Messages -->
-        <div class="gc-messages" id="gc-messages">
-          ${cur ? cur.messages.map(m => `
-            <div class="gc-msg-row ${m.role}">
-              <div class="gc-msg ${m.role}">${m.role === 'user' ? escHtml(m.content) : (m.content || '')}</div>
-            </div>
-          `).join('') : ''}
-          ${streaming ? `<div class="gc-msg-row assistant"><div class="gc-msg assistant" id="gc-pending">${escHtml(pendingText)}<span class="gc-cursor">▋</span></div></div>` : ''}
-          ${activeTools.length ? `
-            <div class="gc-tools-bar">
-              <span class="gc-tools-label">工具调用：</span>
-              ${activeTools.map(t => `<span class="gc-tool-chip">${TOOL_ICONS[t.name] || TOOL_ICONS.default} ${escHtml(t.name)}</span>`).join('')}
-            </div>
-          ` : ''}
-        </div>
-
-        <!-- Input -->
-        <div class="gc-input-row">
-          <textarea class="gc-input" id="gc-input" placeholder="输入消息，或直接发送快捷指令..." rows="1"></textarea>
-          <button class="gc-send-btn" id="gc-send-btn">▶</button>
-        </div>
-      </main>
-
-      <!-- 快捷指令面板 -->
-      <div class="gc-popup-overlay ${showCmdPanel ? 'visible' : ''}" id="gc-cmd-overlay">
-        <div class="gc-popup-panel">
-          <div class="gc-popup-header">
-            <span class="gc-popup-title">⚡ 快捷指令</span>
-            <input type="text" class="gc-popup-search" id="gc-cmd-search" placeholder="搜索指令..." value="${escHtml(cmdSearch)}">
-            <button class="gc-popup-close" id="gc-cmd-close">×</button>
-          </div>
-          <div class="gc-popup-body" id="gc-cmd-body">
-            ${cmdHtml}
-          </div>
-          <div class="gc-popup-footer">
-            <button class="gc-btn gc-btn-primary" id="gc-cmd-send-all">发送全部指令给 Hermes</button>
-            <button class="gc-btn gc-btn-secondary" id="gc-cmd-cancel">取消</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 必备技能面板 -->
-      <div class="gc-popup-overlay ${showSkillPanel ? 'visible' : ''}" id="gc-skill-overlay">
-        <div class="gc-popup-panel">
-          <div class="gc-popup-header">
-            <span class="gc-popup-title">📚 必备技能</span>
-            <input type="text" class="gc-popup-search" id="gc-skill-search" placeholder="搜索技能..." value="${escHtml(skillSearch)}">
-            <button class="gc-popup-close" id="gc-skill-close">×</button>
-          </div>
-          <div class="gc-popup-body" id="gc-skill-body">
-            ${skillHtml}
-          </div>
-          <div class="gc-popup-footer">
-            <button class="gc-btn gc-btn-primary" id="gc-skill-send-all">发送全部技能给 Hermes</button>
-            <button class="gc-btn gc-btn-secondary" id="gc-skill-cancel">取消</button>
-          </div>
-        </div>
-      </div>
-    `
-
-    bind()
-    scrollBottom()
+    if (cur) { cur.messages = []; cur.updated = Date.now(); saveSessions(sessions) }
   }
 
-  function buildCommandPanel() {
-    const q = cmdSearch.toLowerCase()
-    const filtered = COMMAND_CATEGORIES.map(cat => ({
-      ...cat,
-      commands: cat.commands.filter(c => !q || c.label.toLowerCase().includes(q) || c.cmd.toLowerCase().includes(q))
-    })).filter(cat => cat.commands.length > 0)
-
-    if (filtered.length === 0) return `<div class="gc-popup-empty">没有匹配的指令</div>`
-    return filtered.map(cat => `
-      <div class="gc-cmd-cat">
-        <div class="gc-cmd-cat-name">${cat.name}</div>
-        ${cat.commands.map(c => `
-          <div class="gc-cmd-item" data-cmd="${escHtml(c.cmd)}">
-            <span class="gc-cmd-label">${escHtml(c.label)}</span>
-            <code class="gc-cmd-cmd">${escHtml(c.cmd)}</code>
-            <button class="gc-cmd-send" data-cmd="${escHtml(c.cmd)}">发送</button>
-          </div>
-        `).join('')}
-      </div>
-    `).join('')
-  }
-
-  function buildSkillPanel() {
-    const q = skillSearch.toLowerCase()
-    const filtered = SKILL_CATEGORIES.map(cat => ({
-      ...cat,
-      skills: cat.skills.filter(s => !q || s.label.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q))
-    })).filter(cat => cat.skills.length > 0)
-
-    if (filtered.length === 0) return `<div class="gc-popup-empty">没有匹配的技能</div>`
-    return filtered.map(cat => `
-      <div class="gc-skill-cat">
-        <div class="gc-skill-cat-name">${cat.name}</div>
-        ${cat.skills.map(s => `
-          <div class="gc-skill-item">
-            <div class="gc-skill-info">
-              <div class="gc-skill-label">${escHtml(s.label)}</div>
-              <div class="gc-skill-desc">${escHtml(s.desc)}</div>
-            </div>
-            <button class="gc-skill-send" data-label="${escHtml(s.label)}" data-desc="${escHtml(s.desc)}">发送</button>
-          </div>
-        `).join('')}
-      </div>
-    `).join('')
-  }
-
-  function scrollBottom() {
-    const m = el.querySelector('#gc-messages')
-    if (m) m.scrollTop = m.scrollHeight
-  }
-
-  // ── Bind ────────────────────────────────────────────────
-  function bind() {
-    // New session
-    el.querySelector('#gc-btn-new')?.addEventListener('click', () => {
-      newSession()
-      draw()
-    })
-
-    // Session click
-    el.querySelectorAll('.gc-session-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.classList.contains('gc-session-del')) {
-          e.stopPropagation()
-          const id = e.currentTarget.dataset.del
-          deleteSession(id)
-          draw()
-          return
-        }
-        activeId = item.dataset.id
-        draw()
-      })
-    })
-
-    // Send button
-    el.querySelector('#gc-send-btn')?.addEventListener('click', async () => {
-      const input = el.querySelector('#gc-input')
-      if (!input?.value.trim()) return
-      const text = input.value.trim()
-      input.value = ''
-      input.style.height = 'auto'
-      streaming = true
-      pendingText = ''
-      activeTools = []
-      cleanupListeners?.()
-      const cleanup = await setupRunListeners()
-      cleanupListeners = cleanup
-      const cur = active()
-      if (!cur) { newSession(); draw() }
-      sendToHermes(text, activeId).catch(() => {})
-    })
-
-    // Input Enter to send
-    const input = el.querySelector('#gc-input')
-    input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        el.querySelector('#gc-send-btn')?.click()
-      }
-    })
-    // Auto-resize textarea
-    input?.addEventListener('input', () => {
-      input.style.height = 'auto'
-      input.style.height = Math.min(input.scrollHeight, 150) + 'px'
-    })
-
-    // ── 快捷指令按钮 ────────────────────────────────────
-    el.querySelector('#gc-btn-commands')?.addEventListener('click', () => {
-      showCmdPanel = true
-      showSkillPanel = false
-      draw()
-      el.querySelector('#gc-cmd-search')?.focus()
-    })
-
-    // ── 必备技能按钮 ───────────────────────────────────
-    el.querySelector('#gc-btn-skills')?.addEventListener('click', () => {
-      showSkillPanel = true
-      showCmdPanel = false
-      draw()
-      el.querySelector('#gc-skill-search')?.focus()
-    })
-
-    // ── 快捷指令面板 ────────────────────────────────────
-    el.querySelector('#gc-cmd-close')?.addEventListener('click', () => {
-      showCmdPanel = false
-      draw()
-    })
-    el.querySelector('#gc-cmd-cancel')?.addEventListener('click', () => {
-      showCmdPanel = false
-      draw()
-    })
-    el.querySelector('#gc-cmd-overlay')?.addEventListener('click', (e) => {
-      if (e.target.id === 'gc-cmd-overlay') { showCmdPanel = false; draw() }
-    })
-    el.querySelector('#gc-cmd-search')?.addEventListener('input', (e) => {
-      cmdSearch = e.target.value
-      const body = el.querySelector('#gc-cmd-body')
-      if (body) body.innerHTML = buildCommandPanel()
-      bindCmdItems()
-    })
-    el.querySelector('#gc-cmd-send-all')?.addEventListener('click', () => {
-      showCmdPanel = false
-      streaming = true; pendingText = ''; activeTools = []
-      cleanupListeners?.()
-      const cleanup = setupRunListeners().then(fn => { cleanupListeners = fn })
-      newSession()
-      sendToHermes(QUICK_COMMANDS_DOC, activeId).catch(() => {})
-      draw()
-    })
-
-    // ── 必备技能面板 ────────────────────────────────────
-    el.querySelector('#gc-skill-close')?.addEventListener('click', () => {
-      showSkillPanel = false
-      draw()
-    })
-    el.querySelector('#gc-skill-cancel')?.addEventListener('click', () => {
-      showSkillPanel = false
-      draw()
-    })
-    el.querySelector('#gc-skill-overlay')?.addEventListener('click', (e) => {
-      if (e.target.id === 'gc-skill-overlay') { showSkillPanel = false; draw() }
-    })
-    el.querySelector('#gc-skill-search')?.addEventListener('input', (e) => {
-      skillSearch = e.target.value
-      const body = el.querySelector('#gc-skill-body')
-      if (body) body.innerHTML = buildSkillPanel()
-      bindSkillItems()
-    })
-    el.querySelector('#gc-skill-send-all')?.addEventListener('click', () => {
-      showSkillPanel = false
-      streaming = true; pendingText = ''; activeTools = []
-      cleanupListeners?.()
-      cleanupListeners = null
-      newSession()
-      sendToHermes(ESSENTIAL_SKILLS_DOC, activeId).catch(() => {})
-      draw()
-    })
-
-    // Bind command item send buttons (after panel is drawn)
-    bindCmdItems()
-    bindSkillItems()
-  }
-
-  function bindCmdItems() {
-    el.querySelectorAll('.gc-cmd-send').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const cmd = btn.dataset.cmd
-        if (!cmd) return
-        showCmdPanel = false
-        newSession()
-        streaming = true; pendingText = ''; activeTools = []
-        cleanupListeners?.()
-        cleanupListeners = null
-        draw()
-        sendToHermes(cmd, activeId).catch(() => {})
-      })
-    })
-    // Click on item row also sends
-    el.querySelectorAll('.gc-cmd-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.gc-cmd-send')) return
-        const cmd = item.dataset.cmd
-        if (!cmd) return
-        showCmdPanel = false
-        newSession()
-        streaming = true; pendingText = ''; activeTools = []
-        cleanupListeners?.()
-        cleanupListeners = null
-        draw()
-        sendToHermes(cmd, activeId).catch(() => {})
-      })
-    })
-  }
-
-  function bindSkillItems() {
-    el.querySelectorAll('.gc-skill-send').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const label = btn.dataset.label
-        const desc = btn.dataset.desc
-        const text = `请学习以下技能：\n\n【技能名称】${label}\n\n【技能说明】${desc}`
-        showSkillPanel = false
-        streaming = true; pendingText = ''; activeTools = []
-        cleanupListeners?.()
-        cleanupListeners = null
-        draw()
-        sendToHermes(text, activeId).catch(() => {})
-      })
-    })
-  }
-
-  // ── Skills page event: apply skill to Hermes chat ───────
-  window.addEventListener('hermes-skill-apply', (e) => {
-    const { name, content } = e.detail || {}
-    if (!content) return
+  // ── Send to Hermes ────────────────────────────────
+  async function sendToHermes(text) {
     const cur = active()
-    if (!cur) { newSession() }
+    if (!cur) newSession()
     const id = activeId
-    const sess = sessions.find(s => s.id === id)
-    if (sess) {
-      sess.messages.push({ role: 'user', content, _time: Date.now() })
-      sess.updated = Date.now()
-      if (!sess.title) sess.title = `技能: ${name || content.slice(0, 28)}`
-      saveSessions(sessions)
+    
+    // Handle attachments
+    let content = text
+    if (attachFiles.length > 0) {
+      const files = attachFiles.map(a => 
+        a.type?.startsWith('image/') 
+          ? `![${a.name}](${a.dataUrl})` 
+          : `[${a.name}](${a.path || a.name})`
+      ).join('\n')
+      content = `${text}\n\n附件:\n${files}`
     }
+
+    cur.messages.push({role:'user', content, _time:Date.now(), files:attachFiles})
+    cur.updated = Date.now()
+    if (!cur.title) cur.title = text.slice(0,35).replace(/\n/g,' ').trim()
+    saveSessions(sessions)
+    
+    attachFiles = []
     streaming = true; pendingText = ''; activeTools = []
     cleanupListeners?.()
     cleanupListeners = null
     draw()
-    sendToHermes(content, id).catch(() => {})
-  })
+    scrollBottom()
+    
+    cleanupListeners = await setupRunListeners()
+    const hist = cur.messages.slice(0,-1).map(m => ({role:m.role, content:m.content}))
+    
+    api.hermesAgentRun(text, id, hist.length ? hist : null, null).catch(err => {
+      streaming = false
+      cur.messages.push({role:'assistant', content:`⚠️ ${err}`, _time:Date.now()})
+      cur.updated = Date.now()
+      saveSessions(sessions)
+      cleanupListeners?.()
+      draw()
+    })
+  }
+  
+  async function setupRunListeners() {
+    const unlisten = await tauriListen('hermes-tool-call', ({payload}) => {
+      activeTools.push({id:genId(), ...payload})
+      draw()
+    })
+    return unlisten
+  }
+
+  function scrollBottom() {
+    setTimeout(() => { 
+      const m = el.querySelector('.hc-messages')
+      if (m) m.scrollTop = m.scrollHeight 
+    }, 20)
+  }
+
+  // ── File handlers ────────────────────────────────
+  async function handleFileSelect(type) {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = type === 'image' ? 'image/*' : type === 'video' ? 'video/*' : '*/*'
+    input.multiple = true
+    input.onchange = async (e) => {
+      const files = Array.from(e.target.files || [])
+      for (const f of files) {
+        const reader = new FileReader()
+        reader.onload = () => {
+          attachFiles.push({ name:f.name, size:f.size, type:f.type, dataUrl:reader.result })
+          draw()
+        }
+        if (f.type.startsWith('image/')) {
+          reader.readAsDataURL(f)
+        } else {
+          reader.readAsText(f)
+        }
+      }
+    }
+    input.click()
+  }
+
+  // ── Render ──────────────────────────────────────────
+  function draw() {
+    const cur = active()
+    el.innerHTML = `
+    <div class="hc-layout ${showContextPanel ? 'hc-has-context' : ''}">
+      <!-- Sidebar -->
+      <aside class="hc-sidebar">
+        <div class="hc-sidebar-header">
+          <div class="hc-logo"><span>🤖</span><span>Hermes</span></div>
+          <button class="hc-icon-btn" data-action="new" title="新建对话">+</button>
+        </div>
+        <input class="hc-search" placeholder="🔍 搜索对话...">
+        <div class="hc-session-list">
+          ${sessions.map(s => `<div class="hc-session-item ${s.id === activeId ? 'hc-active' : ''}" data-id="${s.id}">
+            <div class="hc-session-icon">💬</div>
+            <div class="hc-session-info">
+              <div class="hc-session-title" data-dbl="1">${escHtml(sessionTitle(s))}</div>
+              <div class="hc-session-meta">${formatTime(s.updated)} · ${s.messages?.length||0}条</div>
+            </div>
+            <button class="hc-session-del" data-del="${s.id}">×</button>
+          </div>`).join('')}
+        </div>
+        <div class="hc-sidebar-footer">
+          <div class="hc-footer-item" data-goto="dashboard"><span>📊</span>仪表盘</div>
+          <div class="hc-footer-item" data-goto="skills"><span>🧠</span>技能中心</div>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="hc-main">
+        <!-- Top bar -->
+        <div class="hc-topbar">
+          <div class="hc-topbar-left">
+            ${editingTitleId === activeId ? `
+              <input class="hc-title-edit" id="hc-title-input" value="${escHtml(sessionTitle(cur||{}))}">
+            ` : `
+              <span class="hc-title-display" id="hc-title-display" title="双击重命名">${escHtml(sessionTitle(cur||{}))}</span>
+            `}
+          </div>
+          <div class="hc-topbar-right">
+            <!-- Model picker -->
+            <div class="hc-model-picker">
+              <button class="hc-model-btn" id="hc-model-btn">
+                <span>🧠</span><span id="hc-model-name">${currentModel}</span><span>▾</span>
+              </button>
+              <div class="hc-model-dropdown ${showModelPanel ? 'hc-open' : ''}">
+                ${MODEL_PRESETS.map(m => `<div class="hc-model-opt" data-model="${m.value}">
+                  <span>${m.label}</span>
+                  ${currentModel === m.value ? '<span>✓</span>' : ''}
+                </div>`).join('')}
+              </div>
+            </div>
+            <button class="hc-icon-btn" data-action="cmd" title="快捷指令">⚡</button>
+            <button class="hc-icon-btn" data-action="attach" title="附件">📎</button>
+            <button class="hc-icon-btn" data-action="clear" title="清空">🗑️</button>
+            <button class="hc-icon-btn" data-action="export" title="导出">📤</button>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="hc-messages">
+          ${cur?.messages?.length ? cur.messages.map((m,i) => buildMsg(m,i)).join('') : buildEmpty()}
+          ${streaming ? buildPending() : ''}
+          ${activeTools.length ? buildTools() : ''}
+        </div>
+
+        <!-- Input -->
+        <div class="hc-input-area">
+          ${attachFiles.length ? `<div class="hc-attach-bar">
+            ${attachFiles.map((f,i) => `<div class="hc-attach-chip">
+              ${f.type?.startsWith('image/') ? '🖼️' : f.type?.startsWith('video/') ? '🎬' : '📎'}
+              <span>${f.name}</span>
+              <button data-rm="${i}">×</button>
+            </div>`).join('')}
+          </div>` : ''}
+          <div class="hc-input-row">
+            <div class="hc-input-tools">
+              <button class="hc-tool-btn" data-upload="file" title="文件">📎</button>
+              <button class="hc-tool-btn" data-upload="image" title="图片">🖼️</button>
+              <button class="hc-tool-btn" data-upload="video" title="视频">🎬</button>
+            </div>
+            <textarea class="hc-input" id="hc-input" placeholder="输入消息... (Enter发送, Shift+Enter换行)" rows="1"></textarea>
+            <button class="hc-send-btn" data-action="send">▶</button>
+          </div>
+        </div>
+      </main>
+
+      <!-- Context panel -->
+      ${showContextPanel ? `<aside class="hc-context-panel">
+        <div class="hc-ctx-tabs">
+          <button class="hc-ctx-tab ${contextTab==='attach'?'active':''}" data-tab="attach">📎</button>
+          <button class="hc-ctx-tab ${contextTab==='cmd'?'active':''}" data-tab="cmd">⚡</button>
+          <button class="hc-ctx-tab ${contextTab==='skill'?'active':''}" data-tab="skill">🧠</button>
+          <button class="hc-ctx-close" data-action="ctx-close">×</button>
+        </div>
+        <div class="hc-ctx-body">${buildCtxBody()}</div>
+      </aside>` : ''}
+
+      <!-- Command popup -->
+      ${showCmdPanel ? `<div class="hc-popup-overlay" id="hc-popup-overlay">
+        <div class="hc-popup-panel">
+          <div class="hc-popup-header">
+            <span>⚡ 快捷指令</span>
+            <input class="hc-popup-search" id="hc-popup-search" placeholder="搜索..." value="${escHtml(cmdSearch)}">
+            <button class="hc-popup-close" data-action="popup-close">×</button>
+          </div>
+          <div class="hc-popup-body">${buildCmdPanel()}</div>
+          <div class="hc-popup-footer">
+            <button class="hc-btn-primary" data-action="send-all">发送全部</button>
+            <button class="hc-btn-secondary" data-action="popup-cancel">取消</button>
+          </div>
+        </div>
+      </div>` : ''}
+    `
+    bind()
+    scrollBottom()
+  }
+
+  // ── Builders ───────────────────────────────────────
+  function buildMsg(m, i) {
+    if (m.role === 'user') {
+      const att = m.files?.length ? m.files.map(f => 
+        f.type?.startsWith('image/') && f.dataUrl 
+          ? `<img class="hc-msg-img" src="${f.dataUrl}">` 
+          : `<div class="hc-msg-file">📎 ${f.name}</div>`
+      ).join('') : ''
+      return `<div class="hc-msg-row hc-user"><div class="hc-bubble hc-bubble-me">${att}<div class="hc-msg-text">${escHtml(m.content)}</div></div><div class="hc-avatar">🧑</div></div>`
+    }
+    return `<div class="hc-msg-row hc-ai"><div class="hc-avatar">🤖</div><div class="hc-bubble hc-bubble-ai"><div class="hc-msg-text">${renderMd(m.content)}</div></div></div>`
+  }
+
+  function buildPending() {
+    return `<div class="hc-msg-row hc-ai"><div class="hc-avatar">🤖</div><div class="hc-bubble hc-bubble-ai"><div class="hc-msg-text">${escHtml(pendingText)}<span class="hc-cursor">▋</span></div></div></div>`
+  }
+
+  function buildTools() {
+    return `<div class="hc-tools">${activeTools.map(t => `<span class="hc-tool-chip">${TOOL_ICONS[t.name]||'🔧'} ${t.name}</span>`).join('')}</div>`
+  }
+
+  function buildEmpty() {
+    return `<div class="hc-empty"><div class="hc-empty-icon">🤖</div><div class="hc-empty-title">开始与 Hermes 对话</div><div class="hc-empty-sub">发送消息或使用快捷指令</div><div class="hc-empty-actions">
+      <button class="hc-quick-btn" data-qcmd="hermes help">📖 帮助</button>
+      <button class="hc-quick-btn" data-qcmd="hermes status">🔍 状态</button>
+      <button class="hc-quick-btn" data-qcmd="hermes skill list">🧠 技能</button>
+    </div></div>`
+  }
+
+  function buildCtxBody() {
+    if (contextTab === 'attach') {
+      return `<div class="hc-ctx-section">
+        <div class="hc-ctx-title">📎 上传附件</div>
+        <div class="hc-ctx-btns">
+          <button data-upload="file">📎 文件</button>
+          <button data-upload="image">🖼️ 图片</button>
+          <button data-upload="video">🎬 视频</button>
+        </div>
+        ${attachFiles.length ? `<div class="hc-ctx-files">${attachFiles.map((f,i) => `<div class="hc-ctx-file"><span>${f.type?.startsWith('image/')?'🖼️':f.type?.startsWith('video/')?'🎬':'📎'}</span><span>${f.name}</span><span>${formatFileSize(f.size)}</span><button data-rm="${i}">×</button></div>`).join('')}</div>` : '<div class="hc-ctx-empty">暂无附件</div>'}
+      </div>`
+    } else if (contextTab === 'cmd') {
+      return `<div class="hc-ctx-section"><div class="hc-ctx-title">⚡ 快捷指令</div>${COMMAND_CATEGORIES.map(cat => `<div class="hc-ctx-cat"><div class="hc-ctx-cat-name">${cat.name}</div>${cat.commands.map(cmd => `<div class="hc-ctx-cmd" data-cmd="${escHtml(cmd.c)}"><span>${cmd.l}</span><code>${cmd.c}</code></div>`).join('')}</div>`).join('')}</div>`
+    } else {
+      return `<div class="hc-ctx-section"><div class="hc-ctx-title">🧠 必备技能</div>${SKILLS.map(s => `<div class="hc-ctx-skill" data-lab="${s.l}" data-desc="${s.d}"><div>${s.l}</div><div>${s.d}</div></div>`).join('')}</div>`
+    }
+  }
+
+  const SKILLS = [
+    {l:'自动创建技能',d:'完成后自动生成技能文档'},
+    {l:'服务状态管理',d:'掌握start/stop/restart指令'},
+    {l:'配置与模型切换',d:'config edit和model switch'},
+    {l:'网页浏览检索',d:'获取最新数据并标注来源'},
+    {l:'代码执行开发',d:'Python/JS代码执行和测试'},
+    {l:'文件系统操作',d:'创建读取修改删除文件'},
+    {l:'知识库问答',d:'语义索引和引用标注'},
+    {l:'上下文理解',d:'记住关键信息避免重复'},
+    {l:'结果格式化',d:'表格/流程图/代码注释'},
+    {l:'自我反思改进',d:'任务后生成反思报告'},
+  ]
+
+  function buildCmdPanel() {
+    const q = cmdSearch.toLowerCase()
+    const filtered = COMMAND_CATEGORIES.map(cat => ({
+      ...cat, commands: cat.commands.filter(c => !q || c.l.toLowerCase().includes(q) || c.c.toLowerCase().includes(q))
+    })).filter(cat => cat.commands.length > 0)
+    if (!filtered.length) return '<div class="hc-popup-empty">无匹配指令</div>'
+    return filtered.map(cat => `<div class="hc-popup-cat"><div class="hc-popup-cat-name">${cat.name}</div>${cat.commands.map(cmd => `<div class="hc-popup-item" data-cmd="${escHtml(cmd.c)}"><span>${escHtml(cmd.l)}</span><code>${escHtml(cmd.c)}</code><button>发送</button></div>`).join('')}</div>`).join('')
+  }
+
+  // ── Bind ──────────────────────────────────────────────
+  function bind() {
+    // New session
+    el.querySelector('[data-action="new"]')?.addEventListener('click', () => { newSession(); draw() })
+    
+    // Session click
+    el.querySelectorAll('.hc-session-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.hc-session-del')) {
+          if (confirm('确定删除此对话?')) deleteSession(e.target.dataset.del)
+          draw()
+          return
+        }
+        activeId = item.dataset.id; attachFiles = []; draw()
+      })
+    })
+
+    // Double-click rename
+    el.querySelectorAll('[data-dbl="1"]').forEach(t => {
+      t.addEventListener('dblclick', () => { editingTitleId = activeId; draw() })
+    })
+    el.querySelector('#hc-title-display')?.addEventListener('dblclick', () => { editingTitleId = activeId; draw() })
+    el.querySelector('#hc-title-input')?.addEventListener('blur', function() {
+      if (this.value.trim()) renameSession(editingTitleId, this.value)
+      editingTitleId = null; draw()
+    })
+
+    // Send
+    el.querySelector('[data-action="send"]')?.addEventListener('click', handleSend)
+    el.querySelector('#hc-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } })
+    el.querySelector('#hc-input')?.addEventListener('input', function() { this.style.height='auto'; this.style.height = Math.min(this.scrollHeight,200)+'px' })
+
+    // Model picker
+    el.querySelector('#hc-model-btn')?.addEventListener('click', (e) => { e.stopPropagation(); showModelPanel = !showModelPanel; draw() })
+    el.querySelectorAll('.hc-model-opt').forEach(opt => {
+      opt.addEventListener('click', () => { currentModel = opt.dataset.model; showModelPanel = false; draw() })
+    })
+
+    // Toolbar buttons
+    el.querySelector('[data-action="cmd"]')?.addEventListener('click', () => { showCmdPanel = true; draw() })
+    el.querySelector('[data-action="attach"]')?.addEventListener('click', () => { showContextPanel = !showContextPanel; contextTab = 'attach'; draw() })
+    el.querySelector('[data-action="clear"]')?.addEventListener('click', () => { if (confirm('确定清空当前对话?')) clearSession(); draw() })
+    el.querySelector('[data-action="export"]')?.addEventListener('click', exportChat)
+
+    // File upload buttons
+    el.querySelectorAll('[data-upload]').forEach(btn => {
+      btn.addEventListener('click', () => handleFileSelect(btn.dataset.upload))
+    })
+
+    // Remove attachment
+    el.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.addEventListener('click', () => { attachFiles.splice(parseInt(btn.dataset.rm), 1); draw() })
+    })
+
+    // Context panel tabs
+    el.querySelectorAll('.hc-ctx-tab').forEach(tab => {
+      tab.addEventListener('click', () => { contextTab = tab.dataset.tab; draw() })
+    })
+    el.querySelector('[data-action="ctx-close"]')?.addEventListener('click', () => { showContextPanel = false; draw() })
+
+    // Command popup
+    el.querySelector('#hc-popup-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'hc-popup-overlay') { showCmdPanel = false; draw() } })
+    el.querySelector('[data-action="popup-close"]')?.addEventListener('click', () => { showCmdPanel = false; draw() })
+    el.querySelector('[data-action="popup-cancel"]')?.addEventListener('click', () => { showCmdPanel = false; draw() })
+    el.querySelector('[data-action="send-all"]')?.addEventListener('click', sendAllCommands)
+    el.querySelector('#hc-popup-search')?.addEventListener('input', function() { cmdSearch = this.value; draw() })
+
+    // Command items
+    el.querySelectorAll('[data-cmd]').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (!e.target.closest('button')) return
+        sendToHermes(item.dataset.cmd)
+        showCmdPanel = false
+      })
+    })
+
+    // Quick commands
+    el.querySelectorAll('[data-qcmd]').forEach(btn => {
+      btn.addEventListener('click', () => { if (!sessions.length) newSession(); sendToHermes(btn.dataset.qcmd) })
+    })
+
+    // Context panel commands/skills
+    el.querySelectorAll('.hc-ctx-cmd').forEach(item => {
+      item.addEventListener('click', () => sendToHermes(item.dataset.cmd))
+    })
+    el.querySelectorAll('.hc-ctx-skill').forEach(item => {
+      item.addEventListener('click', () => sendToHermes(`请学习技能：${item.dataset.lab}\n\n${item.dataset.desc}`))
+    })
+  }
+
+  async function handleSend() {
+    const input = el.querySelector('#hc-input')
+    const text = input?.value.trim()
+    if (!text && !attachFiles.length) return
+    input.value = ''
+    input.style.height = 'auto'
+    if (!sessions.length) newSession()
+    sendToHermes(text)
+  }
+
+  async function sendAllCommands() {
+    const cmds = COMMAND_CATEGORIES.flatMap(c => c.commands).map(c => c.c).join('\n')
+    sendToHermes(`以下是快捷指令大全，请学会这些指令：\n\n${cmds}`)
+    showCmdPanel = false
+  }
+
+  function exportChat() {
+    const cur = active()
+    if (!cur) return
+    const text = cur.messages.map(m => 
+      `${m.role === 'user' ? '🧑' : '🤖'} ${m.content}`
+    ).join('\n\n')
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${cur.title || 'chat'}-${Date.now()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   // Init
   if (!sessions.length) newSession()
   draw()
-
   return el
 }
