@@ -132,8 +132,11 @@ export function render() {
   let showContextPanel = false
   let editingTitleId = null
   let cmdSearch = ''
-  let currentModel = 'gpt-4o'
+  let currentModel = 'MiniMax-M2.7'
+  let gatewayRunning = false
+  let gatewayChecking = false
   let contextTab = 'attach'
+  let pendingMsgIndex = -1
   
   let _listenFn = null
   async function tauriListen(event, cb) {
@@ -164,11 +167,44 @@ export function render() {
     if (cur) { cur.messages = []; cur.updated = Date.now(); saveSessions(sessions) }
   }
 
+  // ── Gateway management ─────────────────────────────
+  async function ensureGateway() {
+    if (gatewayChecking) return false
+    gatewayChecking = true
+    try {
+      await api.hermesHealthCheck()
+      gatewayRunning = true
+      return true
+    } catch {
+      gatewayRunning = false
+      try {
+        await api.hermesGatewayAction('start')
+        gatewayRunning = true
+        return true
+      } catch {
+        gatewayRunning = false
+        return false
+      }
+    } finally {
+      gatewayChecking = false
+    }
+  }
+
   // ── Send to Hermes ────────────────────────────────
   async function sendToHermes(text) {
     const cur = active()
     if (!cur) newSession()
     const id = activeId
+    
+    // Check gateway first
+    const gwOk = await ensureGateway()
+    if (!gwOk) {
+      cur.messages.push({role:'assistant', content:'⚠️ Hermes Gateway 未运行，请在仪表盘启动 Hermes 后重试。', _time:Date.now()})
+      cur.updated = Date.now()
+      saveSessions(sessions)
+      draw()
+      return
+    }
     
     // Handle attachments
     let content = text
@@ -181,7 +217,7 @@ export function render() {
       content = `${text}\n\n附件:\n${files}`
     }
 
-    cur.messages.push({role:'user', content, _time:Date.now(), files:attachFiles})
+    cur.messages.push({role:'user', content, _time:Date.now(), files:[...attachFiles]})
     cur.updated = Date.now()
     if (!cur.title) cur.title = text.slice(0,35).replace(/\n/g,' ').trim()
     saveSessions(sessions)
@@ -204,10 +240,10 @@ export function render() {
       await api.hermesAgentRun(text, id, hist.length ? hist : null, null)
     } catch (err) {
       streaming = false
-      if (pendingMsgIndex >= 0) {
-        cur.messages[pendingMsgIndex].content = `⚠️ ${err}`
+      if (pendingMsgIndex >= 0 && cur.messages[pendingMsgIndex]) {
+        cur.messages[pendingMsgIndex].content = `⚠️ 调用失败: ${err}`
       } else {
-        cur.messages.push({role:'assistant', content:`⚠️ ${err}`, _time:Date.now()})
+        cur.messages.push({role:'assistant', content:`⚠️ 调用失败: ${err}`, _time:Date.now()})
       }
       cur.updated = Date.now()
       saveSessions(sessions)
@@ -218,7 +254,6 @@ export function render() {
   }
   
   // ── Stream response handlers ─────────────────────────────
-  let pendingMsgIndex = -1
   
   async function setupRunListeners() {
     const unlistenTool = await tauriListen('hermes-run-tool', ({payload}) => {
@@ -624,6 +659,7 @@ export function render() {
 
   // Init
   if (!sessions.length) newSession()
+  loadConfig()
   draw()
   return el
 }
