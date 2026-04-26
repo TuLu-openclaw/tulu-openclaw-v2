@@ -805,7 +805,14 @@ fn extract_from_yaml_or_default() -> u16 {
         for line in content.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with("port:") {
-                let rest = trimmed.strip_prefix("port:").unwrap().trim().split('#').next().unwrap().trim();
+                let rest = trimmed
+                    .strip_prefix("port:")
+                    .unwrap()
+                    .trim()
+                    .split('#')
+                    .next()
+                    .unwrap()
+                    .trim();
                 if let Ok(port) = rest.parse::<u16>() {
                     if port > 0 {
                         return port;
@@ -827,7 +834,10 @@ fn extract_from_yaml_or_default() -> u16 {
 
 /// 从 URL 字符串中提取端口号
 fn extract_port_from_url(url: &str) -> Option<u16> {
-    let url = url.trim_start_matches("http://").trim_start_matches("https://").trim_end_matches('/');
+    let url = url
+        .trim_start_matches("http://")
+        .trim_start_matches("https://")
+        .trim_end_matches('/');
     if let Some(colon_pos) = url.find(':') {
         let port_str = &url[colon_pos + 1..];
         port_str.parse::<u16>().ok()

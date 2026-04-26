@@ -41,15 +41,15 @@ fn fetch_with_powershell(url: &str, cookie: Option<&str>) -> ProxyResponse {
                         .map(String::from);
                     return ProxyResponse {
                         ok: parsed.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
-                        status: parsed
-                            .get("status")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as u16,
+                        status: parsed.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
                         content_type: parsed
                             .get("contentType")
                             .and_then(|v| v.as_str())
                             .map(String::from),
-                        html: parsed.get("html").and_then(|v| v.as_str()).map(String::from),
+                        html: parsed
+                            .get("html")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
                         set_cookie,
                         error: None,
                     };
