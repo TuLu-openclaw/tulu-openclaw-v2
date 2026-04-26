@@ -659,7 +659,20 @@ export function render() {
 
   // Init
   if (!sessions.length) newSession()
-  loadConfig()
+  init()
   draw()
+
+  async function init() {
+    try {
+      const cfg = await api.hermesReadConfig()
+      if (cfg?.model?.default) currentModel = cfg.model.default
+    } catch {}
+    try {
+      await api.hermesHealthCheck()
+      gatewayRunning = true
+    } catch {
+      gatewayRunning = false
+    }
+  }
   return el
 }
