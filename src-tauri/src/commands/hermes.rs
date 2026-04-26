@@ -766,26 +766,55 @@ pub fn check_hermes() -> Result<Value, String> {
     Ok(Value::Object(result))
 }
 
-/// Hermes Gateway 默认端口
+/// Hermes Gateway 端口
+/// Hermes Gateway 端口
+/// 优先级：1. panel config gatewayUrl 中的端口；2. config.yaml 的 port 字段；3. 默认 8642
 fn hermes_gateway_port() -> u16 {
-    // 尝试从 config.yaml 读取自定义端口
+    // 1. 优先从 panel config gatewayUrl 中提取（UI 配置的连接目标）
+    let url_str = {
+        let v = match super::read_panel_config_value() {
+            Some(Value::Object(m)) => m,
+            _ => return extract_from_yaml_or_default(),
+        };
+        let hermes_val = match v.get("hermes") {
+            Some(Value::Object(m)) => m,
+            _ => return extract_from_yaml_or_default(),
+        };
+        let url_val = match hermes_val.get("gatewayUrl") {
+            Some(val) => val,
+            _ => return extract_from_yaml_or_default(),
+        };
+        let s = match url_val.as_str() {
+            Some(s) => s,
+            _ => return extract_from_yaml_or_default(),
+        };
+        s.trim().to_string()
+    };
+    if !url_str.is_empty() {
+        if let Some(port) = extract_port_from_url(&url_str) {
+            return port;
+        }
+    }
+
+    extract_from_yaml_or_default()
+}
+
+fn extract_from_yaml_or_default() -> u16 {
     let config_path = hermes_home().join("config.yaml");
     if let Ok(content) = std::fs::read_to_string(&config_path) {
         for line in content.lines() {
             let trimmed = line.trim();
-            // 支持两种格式：
-            //   api_server:
-            //     port: 18830
-            // 以及旧的 api_server_port: 18830
-            if let Some(rest) = trimmed.strip_prefix("port:") {
-                if let Ok(port) = rest.trim().parse::<u16>() {
+            if trimmed.starts_with("port:") {
+                let rest = trimmed.strip_prefix("port:").unwrap().trim().split('#').next().unwrap().trim();
+                if let Ok(port) = rest.parse::<u16>() {
                     if port > 0 {
                         return port;
                     }
                 }
             }
             if let Some(rest) = trimmed.strip_prefix("api_server_port:") {
-                if let Ok(port) = rest.trim().parse::<u16>() {
+                let rest = rest.trim().split('#').next().unwrap().trim();
+                if let Ok(port) = rest.parse::<u16>() {
                     if port > 0 {
                         return port;
                     }
@@ -793,7 +822,18 @@ fn hermes_gateway_port() -> u16 {
             }
         }
     }
-    8642 // Hermes 默认端口
+    8642
+}
+
+/// 从 URL 字符串中提取端口号
+fn extract_port_from_url(url: &str) -> Option<u16> {
+    let url = url.trim_start_matches("http://").trim_start_matches("https://").trim_end_matches('/');
+    if let Some(colon_pos) = url.find(':') {
+        let port_str = &url[colon_pos + 1..];
+        port_str.parse::<u16>().ok()
+    } else {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
