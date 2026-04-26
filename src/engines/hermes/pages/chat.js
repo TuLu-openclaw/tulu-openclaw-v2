@@ -186,6 +186,10 @@ export function render() {
     if (!cur.title) cur.title = text.slice(0,35).replace(/\n/g,' ').trim()
     saveSessions(sessions)
     
+    // Add empty assistant message for streaming
+    cur.messages.push({role:'assistant', content:'', _time:Date.now()})
+    pendingMsgIndex = cur.messages.length - 1
+    
     attachFiles = []
     streaming = true; pendingText = ''; activeTools = []
     cleanupListeners?.()
@@ -194,24 +198,78 @@ export function render() {
     scrollBottom()
     
     cleanupListeners = await setupRunListeners()
-    const hist = cur.messages.slice(0,-1).map(m => ({role:m.role, content:m.content}))
+    const hist = cur.messages.slice(0,-2).map(m => ({role:m.role, content:m.content}))
     
-    api.hermesAgentRun(text, id, hist.length ? hist : null, null).catch(err => {
+    try {
+      await api.hermesAgentRun(text, id, hist.length ? hist : null, null)
+    } catch (err) {
       streaming = false
-      cur.messages.push({role:'assistant', content:`⚠️ ${err}`, _time:Date.now()})
+      if (pendingMsgIndex >= 0) {
+        cur.messages[pendingMsgIndex].content = `⚠️ ${err}`
+      } else {
+        cur.messages.push({role:'assistant', content:`⚠️ ${err}`, _time:Date.now()})
+      }
       cur.updated = Date.now()
       saveSessions(sessions)
       cleanupListeners?.()
+      cleanupListeners = null
       draw()
-    })
+    }
   }
   
+  // ── Stream response handlers ─────────────────────────────
+  let pendingMsgIndex = -1
+  
   async function setupRunListeners() {
-    const unlisten = await tauriListen('hermes-tool-call', ({payload}) => {
-      activeTools.push({id:genId(), ...payload})
+    const unlistenTool = await tauriListen('hermes-run-tool', ({payload}) => {
+      // Tool call events from SSE
+      const tool = payload.delta?.name || payload.name || 'tool'
+      activeTools.push({id:genId(), name:tool, input:payload.delta?.input || payload.input})
       draw()
     })
-    return unlisten
+    
+    const unlistenDelta = await tauriListen('hermes-run-delta', ({payload}) => {
+      // Streaming text tokens
+      pendingText += payload.delta || ''
+      const cur = active()
+      if (cur && pendingMsgIndex >= 0) {
+        cur.messages[pendingMsgIndex].content = pendingText
+        draw()
+        scrollBottom()
+      }
+    })
+    
+    const unlistenDone = await tauriListen('hermes-run-done', ({payload}) => {
+      // Run completed - finalize message
+      streaming = false
+      const cur = active()
+      if (cur && pendingMsgIndex >= 0) {
+        cur.messages[pendingMsgIndex].content = payload.output || pendingText
+        cur.updated = Date.now()
+        saveSessions(sessions)
+      }
+      cleanupListeners?.()
+      cleanupListeners = null
+      draw()
+    })
+    
+    const unlistenError = await tauriListen('hermes-run-error', ({payload}) => {
+      // Run failed
+      streaming = false
+      const cur = active()
+      if (cur) {
+        cur.messages.push({role:'assistant', content:`⚠️ ${payload.error || '未知错误'}`, _time:Date.now()})
+        cur.updated = Date.now()
+        saveSessions(sessions)
+      }
+      cleanupListeners?.()
+      cleanupListeners = null
+      draw()
+    })
+    
+    return () => {
+      unlistenTool(); unlistenDelta(); unlistenDone(); unlistenError()
+    }
   }
 
   function scrollBottom() {
@@ -464,10 +522,21 @@ export function render() {
     el.querySelector('#hc-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } })
     el.querySelector('#hc-input')?.addEventListener('input', function() { this.style.height='auto'; this.style.height = Math.min(this.scrollHeight,200)+'px' })
 
-    // Model picker
+    // Model picker - real backend call
     el.querySelector('#hc-model-btn')?.addEventListener('click', (e) => { e.stopPropagation(); showModelPanel = !showModelPanel; draw() })
     el.querySelectorAll('.hc-model-opt').forEach(opt => {
-      opt.addEventListener('click', () => { currentModel = opt.dataset.model; showModelPanel = false; draw() })
+      opt.addEventListener('click', async () => {
+        const model = opt.dataset.model
+        try {
+          const result = await api.hermesUpdateModel(model)
+          currentModel = model
+          showModelPanel = false
+          alert(`模型已切换为 ${model}: ${result}`)
+          draw()
+        } catch (err) {
+          alert(`切换模型失败: ${err}`)
+        }
+      })
     })
 
     // Toolbar buttons
