@@ -3081,7 +3081,8 @@ pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
 #[allow(dead_code)]
 pub async fn hermes_skill_save(name: String, content: String) -> Result<String, String> {
     let skills_dir = hermes_home().join("skills");
-    std::fs::create_dir_all(&skills_dir).map_err(|e| format!("Failed to create skills dir: {e}"))?;
+    std::fs::create_dir_all(&skills_dir)
+        .map_err(|e| format!("Failed to create skills dir: {e}"))?;
     let safe_name = name.replace("/", "_").replace("\\", "_").replace("..", "_");
     let file_path = skills_dir.join(format!("{}.md", safe_name));
     std::fs::write(&file_path, &content).map_err(|e| format!("Failed to write skill: {e}"))?;
