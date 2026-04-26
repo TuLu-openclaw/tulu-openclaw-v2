@@ -180,14 +180,15 @@ const CACHE_TTL = 15000 // 15秒
 const _requestLogs = []
 const MAX_LOGS = 100
 
-function logRequest(cmd, args, duration, cached = false) {
+function logRequest(cmd, args, duration, cached = false, err = '') {
   const log = {
     timestamp: Date.now(),
     time: new Date().toLocaleTimeString('zh-CN', { hour12: false, fractionalSecondDigits: 3 }),
     cmd,
     args: JSON.stringify(args),
     duration: duration ? `${duration}ms` : '-',
-    cached
+    cached,
+    err
   }
   _requestLogs.push(log)
   if (_requestLogs.length > MAX_LOGS) {
@@ -216,7 +217,7 @@ function cachedInvoke(cmd, args = {}, ttl = CACHE_TTL) {
   if (_inflight.has(key)) {
     return _inflight.get(key)
   }
-  const p = invoke(cmd, args).then(val => {
+  const p = invoke(cmd, args, ttl).then(val => {
     _cache.set(key, { val, ts: Date.now() })
     _inflight.delete(key)
     return val
@@ -242,20 +243,36 @@ function invalidate(...cmds) {
 // 导出 invalidate 供外部使用
 export { invalidate }
 
-export async function invoke(cmd, args = {}) {
+export async function invoke(cmd, args = {}, extraTimeout = 0) {
   const start = Date.now()
   const tauriInvoke = WEB_ONLY_CMDS.has(cmd) ? null : await getTauriInvoke()
-  if (tauriInvoke) {
-    const result = await tauriInvoke(cmd, args)
+
+  const baseTimeout = 10000 // 10s default
+  const cmdTimeout = extraTimeout || baseTimeout
+  const timeoutMs = Math.max(1000, cmdTimeout)
+
+  let timeoutId = null
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`invoke timeout: ${cmd} (${timeoutMs}ms)`)), timeoutMs)
+  })
+
+  try {
+    let result
+    if (tauriInvoke) {
+      result = await Promise.race([tauriInvoke(cmd, args), timeoutPromise])
+    } else {
+      result = await Promise.race([webInvoke(cmd, args), timeoutPromise])
+    }
+    clearTimeout(timeoutId)
     const duration = Date.now() - start
     logRequest(cmd, args, duration, false)
     return result
+  } catch (e) {
+    clearTimeout(timeoutId)
+    const duration = Date.now() - start
+    logRequest(cmd, args, duration, false, String(e))
+    throw e
   }
-  // Web 模式：调用 dev-api 后端（真实数据）
-  const result = await webInvoke(cmd, args)
-  const duration = Date.now() - start
-  logRequest(cmd, args, duration, false)
-  return result
 }
 
 // Web 模式：通过 Vite 开发服务器的 API 端点调用真实后端
