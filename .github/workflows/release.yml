@@ -19,6 +19,7 @@ on:
 
 env:
   TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
+  SAFE_TAG_NAME: ${{ replace(github.event.inputs.tag_name || github.ref_name, '/', '-') }}
 
 jobs:
   # ── Windows x64 ────────────────────────────────────────
@@ -61,13 +62,13 @@ jobs:
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-x64-setup
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Windows-x64-setup
           path: src-tauri/target/release/bundle/nsis/*.exe
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-x64-msi
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Windows-x64-msi
           path: src-tauri/target/release/bundle/msi/*.msi
 
   # ── Windows ARM64 ──────────────────────────────────────
@@ -115,13 +116,13 @@ jobs:
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-ARM64-setup
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Windows-ARM64-setup
           path: src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Windows-ARM64-msi
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Windows-ARM64-msi
           path: src-tauri/target/aarch64-pc-windows-msvc/release/bundle/msi/*.msi
 
   # ── macOS ARM64 ────────────────────────────────────────
@@ -174,7 +175,7 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-macOS-ARM64-dmg
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-ARM64-dmg
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
 
   # ── macOS Intel ────────────────────────────────────────
@@ -227,7 +228,7 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-macOS-Intel-dmg
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-Intel-dmg
           path: src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.dmg
 
   # ── Linux x64 ─────────────────────────────────────────
@@ -284,13 +285,13 @@ jobs:
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Linux-x64-appimage
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Linux-x64-appimage
           path: src-tauri/target/release/bundle/appimage/*.AppImage
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
-          name: TuLuOpenClaw-${{ env.TAG_NAME }}-Linux-x64-deb
+          name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Linux-x64-deb
           path: src-tauri/target/release/bundle/deb/*.deb
 
   # ── GitHub Release（推送标签时触发，上传全部平台 artifact）──────
