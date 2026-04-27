@@ -157,4 +157,7 @@ export default {
   hostedApiError: _('API 错误 {code}', 'API Error {code}', 'API 錯誤 {code}'),
   hostedPrefix: _('[托管 Agent] ', '[Hosted Agent] '),
   hostedContextSummary: _('[上下文摘要 - 已压缩 {n} 条历史]', '[Context Summary - compressed {n} history entries]', '[上下文摘要 - 已壓縮 {n} 條歷史]'),
+  collabAction: _('🦞⇄🤖 协同执行', '🦞⇄🤖 Collaborative Run', '🦞⇄🤖 協同執行'),
+  collabActionHint: _('注入双引擎协同模板', 'Insert dual-engine collaboration template', '注入雙引擎協同模板'),
+  collabTemplate: _('请以“主导引擎 + 协作引擎”的方式执行这个任务。\n\n任务目标：\n- [在这里填写目标]\n\n分工要求：\n- 主导引擎：负责拆解任务、汇总结论、输出最终结果\n- 协作引擎：负责补充分析、交叉验证、处理分支子任务\n\n执行规则：\n- 必须明确谁主导、谁协作\n- 先给出执行计划，再开始执行\n- 最终只输出一份合并后的结果\n\n如果需要我主动分配，请直接按上面的结构执行。', 'Execute this task using a "lead engine + collaborator engine" pattern.\n\nGoal:\n- [fill in the task here]\n\nRole split:\n- Lead engine: break down the task, synthesize findings, and produce the final answer\n- Collaborator engine: add analysis, cross-check, and handle branch subtasks\n\nRules:\n- Clearly state who leads and who collaborates\n- Provide the plan first, then execute\n- Output only one merged final result\n\nIf you need me to actively assign roles, follow the structure above.', '請以「主導引擎 + 協作引擎」的方式執行這個任務。\n\n任務目標：\n- [在這裡填寫目標]\n\n分工要求：\n- 主導引擎：負責拆解任務、匯總結論、輸出最終結果\n- 協作引擎：負責補充分析、交叉驗證、處理分支子任務\n\n執行規則：\n- 必須明確誰主導、誰協作\n- 先給出執行計畫，再開始執行\n- 最終只輸出一份合併後的結果\n\n如果需要我主動分配，請直接按上面的結構執行。'),
 }

@@ -162,6 +162,9 @@ export async function render() {
             <span class="chat-workspace-trigger-label">${t('chat.workspace')}</span>
             <span class="chat-workspace-trigger-agent" id="chat-workspace-trigger-agent">main</span>
           </button>
+          <button class="btn btn-sm btn-ghost" id="btn-collab" title="${t('chat.collabActionHint')}">
+            ${t('chat.collabAction')}
+          </button>
           <button class="btn btn-sm btn-ghost" id="btn-cmd" title="${t('chat.shortcuts')}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z"/></svg>
           </button>
@@ -430,6 +433,7 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-new-session').addEventListener('click', () => showNewSessionDialog())
+  page.querySelector('#btn-collab').addEventListener('click', () => injectCollabTemplate())
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
   page.querySelector('#btn-reset-session').addEventListener('click', () => resetCurrentSession())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))
@@ -1539,11 +1543,35 @@ function toggleCmdPanel() {
   else { _textarea.value = '/'; showCmdPanel(); _textarea.focus() }
 }
 
+function emitLobsterPhase(phase, message) {
+  try {
+    window.dispatchEvent(new CustomEvent('lobster-work-start', {
+      detail: {
+        phase,
+        state: phase === 'done' ? 'idle' : (phase === 'tool' ? 'tool' : 'writing'),
+        message: message || phase,
+      }
+    }))
+    if (phase === 'done') window.dispatchEvent(new CustomEvent('lobster-work-end'))
+  } catch {}
+}
+
+function injectCollabTemplate() {
+  if (!_textarea) return
+  _textarea.value = t('chat.collabTemplate')
+  emitLobsterPhase('thinking', '准备协同任务模板')
+  _textarea.focus()
+  _textarea.style.height = 'auto'
+  _textarea.style.height = Math.min(_textarea.scrollHeight, 150) + 'px'
+  updateSendState()
+}
+
 // ── 消息发送 ──
 
 function sendMessage() {
   const text = _textarea.value.trim()
   if (!text && !_attachments.length) return
+  emitLobsterPhase('ack', text ? `收到任务：${text.slice(0, 32)}` : '收到任务')
   if (!wsClient.gatewayReady || !_sessionKey) {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
@@ -1565,6 +1593,7 @@ async function doSend(text, attachments = []) {
     return
   }
   appendUserMessage(text, attachments)
+  emitLobsterPhase(text.includes('主导引擎') || text.includes('协作引擎') ? 'working' : 'thinking', text.includes('主导引擎') || text.includes('协作引擎') ? '执行双引擎协同任务' : 'AI 开始处理中')
   saveMessage({
     id: uuid(), sessionKey: _sessionKey, role: 'user', content: text, timestamp: Date.now(),
     attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
@@ -1580,6 +1609,7 @@ async function doSend(text, attachments = []) {
     appendSystemMessage(`${t('chat.sendFailed')}${err.message}`)
   } finally {
     _isSending = false
+    if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
   }
 }
@@ -1622,6 +1652,7 @@ function handleEvent(msg) {
     // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
     if (toolName && !_isStreaming) {
+      emitLobsterPhase('tool', `调用工具：${toolName}`)
       showTyping(true, t('chat.usingTool', { name: toolName }))
     }
   }

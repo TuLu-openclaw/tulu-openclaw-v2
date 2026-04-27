@@ -2,7 +2,7 @@ import { _ } from '../helper.js'
 
 export default {
   title: _('系统诊断', 'System Diagnostics', '系統诊斷', 'システム診断', '시스템 진단', 'Chẩn đoán hệ thống', 'Diagnóstico del sistema', 'Diagnóstico do sistema', 'Диагностика системы', 'Diagnostic système', 'Systemdiagnose'),
-  desc: _('全面检测系统状态，快速定位问题', 'Comprehensive system status check, quickly locate issues', '全面檢測系統狀態，快速定位問題', 'WebSocket 接続診断とネットワークデバッグ', 'WebSocket 연결 진단 및 네트워크 디버그', 'Chẩn đoán kết nối WebSocket và gỡ lỗi mạng', 'Diagnóstico de conexión WebSocket y depuración de red', 'Diagnóstico de conexão WebSocket e depuração de rede', 'Диагностика WebSocket и отладка сети', 'Diagnostic de connexion WebSocket et débogage réseau', 'WebSocket-Verbindungsdiagnose und Netzwerk-Debugging'),
+  desc: _('全面检测系统状态，快速定位问题', 'Comprehensive system status check for quickly locating issues', '全面檢測系統狀態，快速定位問題', 'システム全体の状態を総合診断し、問題をすばやく特定します', '시스템 상태를 종합적으로 점검하여 문제를 빠르게 찾습니다', 'Kiểm tra toàn diện trạng thái hệ thống để nhanh chóng xác định sự cố', 'Comprobación integral del estado del sistema para localizar problemas rápidamente', 'Verificação abrangente do estado do sistema para localizar problemas rapidamente', 'Комплексная проверка состояния системы для быстрого поиска проблем', 'Vérification complète de l’état du système pour localiser rapidement les problèmes', 'Umfassende Systemstatusprüfung zur schnellen Fehlerlokalisierung'),
   sectionAppState: _('应用状态', 'App State', '應用狀態'),
   sectionWs: _('WebSocket 连接', 'WebSocket Connection', 'WebSocket 連線'),
   sectionNode: _('Node.js 环境', 'Node.js Environment', 'Node.js 環境'),
@@ -25,7 +25,12 @@ export default {
   allFunctionsOk: _('所有核心功能运行正常', 'All core functions running normally', '所有核心功能執行正常'),
   someFunctionsError: _('部分功能异常，请查看下方详情', 'Some functions abnormal, see details below', '部分功能異常，請查看下方詳情'),
   openclawReady: _('OpenClaw 就绪', 'OpenClaw Ready', 'OpenClaw 就緒'),
-  gatewayRunning: _('Gateway 运行中', 'Gateway Running', 'Gateway 執行中'),
+  gatewayRunning: _('Gateway 状态', 'Gateway Status', 'Gateway 狀態'),
+  gatewayReady: _('运行中（已就绪）', 'Running (Ready)', '執行中（已就緒）'),
+  gatewayDegraded: _('运行中（未完全就绪）', 'Running (Not fully ready)', '執行中（未完全就緒）'),
+  gatewayRecovering: _('自动恢复中', 'Recovering automatically', '自動恢復中'),
+  gatewayForeign: _('外部实例占用', 'Occupied by external instance', '外部執行個體占用'),
+  gatewayOffline: _('未运行', 'Not running', '未執行'),
   connStatus: _('连接状态', 'Connection Status', '連線狀態'),
   connected: _('已连接', 'Connected', '已連線'),
   notConnected: _('未连接', 'Not Connected', '未連線'),

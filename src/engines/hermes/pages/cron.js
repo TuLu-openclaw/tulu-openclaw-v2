@@ -84,12 +84,15 @@ export function render() {
 
   async function init() {
     try {
-      const info = await api.checkHermes()
-      gwOnline = !!info?.gatewayRunning
-    } catch (_) {}
-    await loadJobs()
-    loading = false
-    draw()
+      try {
+        const info = await api.checkHermes()
+        gwOnline = !!info?.gatewayRunning
+      } catch (_) {}
+      await loadJobs()
+    } finally {
+      loading = false
+      draw()
+    }
   }
 
   async function loadJobs() {
@@ -356,8 +359,11 @@ export function render() {
     })
     el.querySelector('.hm-cron-refresh')?.addEventListener('click', async () => {
       loading = true; draw()
-      await loadJobs()
-      loading = false; draw()
+      try {
+        await loadJobs()
+      } finally {
+        loading = false; draw()
+      }
     })
     el.querySelectorAll('.hm-cron-toggle').forEach(btn => {
       btn.addEventListener('click', async () => {

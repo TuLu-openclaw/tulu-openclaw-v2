@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="ClawPanel">
+  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
 </p>
 
 <p align="center">
@@ -25,10 +25,10 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="ClawPanel Showcase">
+  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw Showcase">
 </p>
 
-ClawPanel — это визуальная панель управления для фреймворка AI-агентов [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Со **встроенным интеллектуальным ИИ-ассистентом**, который помогает установить OpenClaw одним кликом, автоматически диагностировать конфигурации, устранять неполадки и исправлять ошибки. 8 инструментов + 4 режима + интерактивный Q&A — удобное управление для новичков и экспертов.
+屠戮OpenClaw — это визуальная панель управления для фреймворка AI-агентов [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Со **встроенным интеллектуальным ИИ-ассистентом**, который помогает установить OpenClaw одним кликом, автоматически диагностировать конфигурации, устранять неполадки и исправлять ошибки. 8 инструментов + 4 режима + интерактивный Q&A — удобное управление для новичков и экспертов.
 
 > 🌐 **Сайт**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Скачать**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 

@@ -280,7 +280,7 @@ export function render() {
     el.innerHTML = `
       <div class="hm-sessions-hero">
         <div>
-          <div class="hm-sessions-eyebrow">HERMES · SESSIONS</div>
+          <div class="hm-sessions-eyebrow">${escHtml(t('engine.sessionsHero'))}</div>
           <h1>${escHtml(t('engine.sessionsPageTitle'))}</h1>
           <p>${escHtml(t('engine.sessionsPageDesc'))}</p>
         </div>

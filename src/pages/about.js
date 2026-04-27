@@ -9,6 +9,7 @@ import { setUpgrading } from '../lib/app-state.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t, getLang } from '../lib/i18n.js'
 import { getActiveEngineId } from '../lib/engine-manager.js'
+import { getGatewayState as getHermesGatewayState } from '../engines/hermes/index.js'
 
 export async function render() {
   const page = document.createElement('div')
@@ -80,7 +81,27 @@ async function loadHermesData(page) {
     checkNewVersion(cards, panelVersion)
 
     const installed = !!hermesInfo?.installed
-    const gwRunning = !!hermesInfo?.gatewayRunning
+    const hermesGatewayState = getHermesGatewayState()
+    const hermesStatus = hermesGatewayState?.status || (hermesInfo?.gatewayRunning ? 'running' : 'offline')
+    const hermesStatusText = hermesStatus === 'running'
+      ? t('about.gatewayReady')
+      : hermesStatus === 'degraded'
+        ? t('about.gatewayDegraded')
+        : hermesStatus === 'recovering'
+          ? t('about.gatewayRecovering')
+          : t('about.gatewayStopped')
+    const hermesStatusColor = hermesStatus === 'running'
+      ? 'var(--success)'
+      : hermesStatus === 'degraded' || hermesStatus === 'recovering'
+        ? 'var(--warning)'
+        : 'var(--text-tertiary)'
+    const hermesStatusDot = hermesStatus === 'running'
+      ? '●'
+      : hermesStatus === 'degraded'
+        ? '◐'
+        : hermesStatus === 'recovering'
+          ? '◌'
+          : '○'
     const version = hermesInfo?.hermesVersion || hermesInfo?.version || ''
     const model = hermesInfo?.model || ''
     const port = hermesInfo?.gatewayPort || 8642
@@ -93,7 +114,7 @@ async function loadHermesData(page) {
 
     cards.innerHTML = `
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">ClawPanel</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">屠戮OpenClaw</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
       </div>
@@ -101,9 +122,7 @@ async function loadHermesData(page) {
         <div class="stat-card-header"><span class="stat-card-label">Hermes Agent</span></div>
         <div class="stat-card-value">${installed ? (version || t('about.installed')) : t('about.notInstalled')}</div>
         <div class="stat-card-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          ${gwRunning
-            ? `<span style="color:var(--success)">● Gateway ${t('engine.dashRunning')} · :${port}</span>`
-            : `<span style="color:var(--text-tertiary)">○ Gateway ${t('engine.dashStopped')}</span>`}
+          <span style="color:${hermesStatusColor}">${hermesStatusDot} Gateway ${hermesStatusText}${hermesStatus === 'offline' ? '' : ` · :${port}`}</span>
           ${model ? `<span style="color:var(--text-secondary)">${t('engine.dashModel')}: ${esc(model)}</span>` : ''}
           ${!installed ? `<a class="btn btn-primary btn-sm" href="#/h/setup" style="${btnSm}">${t('about.hermesSetup')}</a>` : ''}
           ${installed ? `

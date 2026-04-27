@@ -15,29 +15,29 @@ export function render() {
 
   el.innerHTML = `
     <div class="page-header">
-      <h1>OpenClaw 设置</h1>
-      <p style="color:var(--text-secondary);margin-top:4px">OpenClaw 主引擎配置</p>
+      <h1>${t('openclawSetup.title')}</h1>
+      <p style="color:var(--text-secondary);margin-top:4px">${t('openclawSetup.subtitle')}</p>
     </div>
     <div style="max-width:600px;display:flex;flex-direction:column;gap:16px">
 
       <div class="config-section">
-        <div class="config-section-title">引擎管理</div>
+        <div class="config-section-title">${t('openclawSetup.sectionEngine')}</div>
         <div style="display:flex;flex-direction:column;gap:12px">
 
           <div style="padding:16px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
               <span style="font-size:24px">🤖</span>
               <div>
-                <div style="font-weight:600">Hermes Agent 引擎</div>
-                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">新一代 AI 对话引擎 · ClawPanel 内置</div>
+                <div style="font-weight:600">${t('openclawSetup.hermesTitle')}</div>
+                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('openclawSetup.hermesTagline')}</div>
               </div>
             </div>
             <p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin:0 0 12px;line-height:1.6">
-              Hermes Agent 是 ClawPanel 内置的新一代 AI 对话引擎，支持一键部署、多渠道接入、长期记忆等高级功能。
+              ${t('openclawSetup.hermesDesc')}
             </p>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-primary btn-sm" id="btn-switch-to-hermes">
-                切换到 Hermes Agent
+                ${t('openclawSetup.switchToHermes')}
               </button>
               <button class="btn btn-secondary btn-sm" id="btn-goto-hermes-setup">
                 ${t('about.hermesSetup')}
@@ -49,12 +49,12 @@ export function render() {
             <div style="display:flex;align-items:center;gap:12px">
               <span style="font-size:24px">🪶</span>
               <div>
-                <div style="font-weight:600">OpenClaw 主引擎</div>
-                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">当前激活</div>
+                <div style="font-weight:600">${t('openclawSetup.openclawTitle')}</div>
+                <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('openclawSetup.currentActive')}</div>
               </div>
             </div>
             <p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin:12px 0 0;line-height:1.6">
-              OpenClaw 原生引擎，提供完整的管理面板功能。
+              ${t('openclawSetup.openclawDesc')}
             </p>
           </div>
 
@@ -62,7 +62,7 @@ export function render() {
       </div>
 
       <div class="config-section">
-        <div class="config-section-title">快速链接</div>
+        <div class="config-section-title">${t('openclawSetup.sectionLinks')}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <button class="btn btn-secondary btn-sm" id="btn-goto-dashboard">${t('sidebar.dashboard')}</button>
           <button class="btn btn-secondary btn-sm" id="btn-goto-models">${t('sidebar.models')}</button>

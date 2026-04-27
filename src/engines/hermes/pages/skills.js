@@ -125,9 +125,10 @@ export function render() {
       console.error('Failed to load skills:', e)
       categories = []
       toast(t('engine.skillsLoadFailed') + ': ' + (e?.message || e), 'error')
+    } finally {
+      loading = false
+      draw()
     }
-    loading = false
-    draw()
   }
 
   /**

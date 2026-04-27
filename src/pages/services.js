@@ -5,13 +5,55 @@
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { showConfirm, showModal, showUpgradeModal } from '../components/modal.js'
-import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart } from '../lib/app-state.js'
+import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
+import { wsClient } from '../lib/ws-client.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { diagnoseInstallError } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 // HTML 转义，防止 XSS
+function getGatewayUiSnapshot(service) {
+  const state = getGatewayHealthState()
+  const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+  const health = state?.health || 'unknown'
+  const reconnectState = wsInfo?.reconnectState || 'idle'
+  const gatewayReady = !!wsInfo?.gatewayReady
+  const wsConnected = !!wsInfo?.connected
+  const lastCheckLabel = state?.lastCheckAt ? new Date(state.lastCheckAt).toLocaleTimeString() : t('common.unknown')
+
+  let tone = 'stopped'
+  let statusText = t('services.stop')
+  if (state?.foreign) {
+    tone = 'warning'
+    statusText = t('services.gatewayForeign')
+  } else if (health === 'running' && gatewayReady) {
+    tone = 'running'
+    statusText = t('services.gatewayReady')
+  } else if (health === 'recovering') {
+    tone = 'loading'
+    statusText = t('services.gatewayRecovering')
+  } else if (health === 'degraded') {
+    tone = 'warning'
+    statusText = reconnectState === 'scheduled' || reconnectState === 'attempting'
+      ? t('services.gatewayReconnect')
+      : t('services.gatewayDegraded')
+  } else if (service?.running) {
+    tone = 'warning'
+    statusText = t('services.gatewayStarting')
+  }
+
+  const details = [
+    `状态：${statusText}`,
+    `WS：${wsConnected ? '已连接' : '未连接'}`,
+    `握手：${gatewayReady ? '已完成' : '未完成'}`,
+    `重连：${reconnectState}`,
+    `最近检查：${lastCheckLabel}`,
+  ]
+
+  return { tone, statusText, details: details.join(' · '), state, wsInfo }
+}
+
 function escapeHtml(str) {
   if (!str) return ''
   return String(str)
@@ -451,6 +493,7 @@ function renderServices(container, services) {
 
   let html = ''
   if (gw) {
+    const gatewayUi = getGatewayUiSnapshot(gw)
     // 检测 CLI 是否安装
     const cliMissing = gw.cli_installed === false
     const foreignGateway = !cliMissing && isForeignGatewayService(gw)
@@ -459,14 +502,14 @@ function renderServices(container, services) {
     html += `
     <div class="service-card" data-label="${gw.label}">
       <div class="service-info">
-        <span class="status-dot ${cliMissing ? 'stopped' : foreignGateway ? 'warning' : gw.running ? 'running' : 'stopped'}"></span>
+        <span class="status-dot ${cliMissing ? 'stopped' : foreignGateway ? 'warning' : gatewayUi.tone}"></span>
         <div>
           <div class="service-name">${gw.label}</div>
           <div class="service-desc">${cliMissing
             ? t('services.cliNotInstalled')
             : foreignGateway
               ? t('services.foreignGatewayDesc', { pid: foreignPidText, settings: t('sidebar.settings') })
-            : (gw.description || '') + (gw.pid ? ' (PID: ' + gw.pid + ')' : '')
+              : `${gatewayUi.details}${gw.pid ? ' · PID: ' + gw.pid : ''}`
           }</div>
         </div>
       </div>
@@ -647,6 +690,27 @@ const ACTION_LABELS = { start: t('services.start'), stop: t('services.stop'), re
 const POLL_INTERVAL = 1500  // 轮询间隔 ms
 const POLL_TIMEOUT = 30000  // 最长等待 30s
 
+function isGatewayActionSettled(action, service) {
+  const gatewayState = getGatewayHealthState()
+  const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+
+  if (action === 'stop') {
+    return service?.running === false && !wsInfo.connected && !wsInfo.gatewayReady
+  }
+
+  if (service?.running !== true) return false
+  if (gatewayState?.foreign) return false
+
+  if (action === 'restart' || action === 'start') {
+    if (gatewayState?.health === 'running' && wsInfo.gatewayReady) return true
+    if (gatewayState?.health === 'degraded' && wsInfo.connected && ['idle', 'scheduled', 'attempting'].includes(wsInfo.reconnectState || 'idle')) {
+      return true
+    }
+  }
+
+  return false
+}
+
 async function handleServiceAction(action, label, page) {
   const fn = { start: api.startService, stop: api.stopService, restart: api.restartService }[action]
   const actionLabel = ACTION_LABELS[action]
@@ -722,11 +786,11 @@ async function handleServiceAction(action, label, page) {
     // 检查实际状态
     try {
       const services = await api.getServicesStatus()
+      await refreshGatewayStatus().catch(() => {})
       const svc = services?.find?.(s => s.label === label) || services?.[0]
-      if (svc && svc.running === expectRunning) {
-        toast(t('services.actionDone', { label, action: actionLabel }) + (svc.pid ? ' (PID: ' + svc.pid + ')' : ''), 'success')
-        // 立刻同步全局 Gateway 状态（顶部 banner + WS 连接）
-        import('../lib/app-state.js').then(m => m.refreshGatewayStatus()).catch(() => {})
+      if (svc && isGatewayActionSettled(action, svc)) {
+        const gatewayUi = getGatewayUiSnapshot(svc)
+        toast(t('services.actionDone', { label, action: actionLabel }) + ` · ${gatewayUi.statusText}` + (svc.pid ? ' (PID: ' + svc.pid + ')' : ''), 'success')
         await loadServices(page)
         return
       }

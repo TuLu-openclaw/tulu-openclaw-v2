@@ -82,7 +82,7 @@
 - **Gateway 死循环** — `_autoPairAndReconnect` 配对成功后不再调用 `reconnect()` 重置计数器，防止 origin not allowed 修复触发无限循环阻塞服务器 (fixes #160)
 - **readConfig 未定义** — Web 模式替换为内联 `fs.readFileSync/writeFileSync` (fixes #165)
 - **systemd PATH 缺失** — `findOpenclawBin` 添加 npm 全局路径，systemd 服务注入 PATH 环境变量 (fixes #156)
-- **Docker 双容器冲突** — 新增 `DISABLE_GATEWAY_SPAWN` 环境变量，禁止 ClawPanel 容器启动本地 Gateway (fixes #159)
+- **Docker 双容器冲突** — 新增 `DISABLE_GATEWAY_SPAWN` 环境变量，禁止 屠戮OpenClaw 容器启动本地 Gateway (fixes #159)
 - **Gateway 检测冲突** — `linuxCheckGateway` 验证进程名，拒绝操作非 OpenClaw 进程 (fixes #151)
 - **版本源检测重构** — standalone 目录集中化、Windows .cmd shim 解析、Linux 检测补全，修复跨源切换后显示旧源的问题 (#161)
 - **汉化版检测兜底** — 版本号含 `-zh` 时强制判定为汉化版，不再依赖文件系统路径检测
@@ -142,7 +142,7 @@
 - **Cron 投递参数格式** — delivery mode 从错误的 `push` 修正为 `announce`，移除无效的 `to` 字段 (fixes #141)
 - **Cron 单渠道用户** — 允许单渠道用户选择投递渠道（之前 ≤1 个渠道会隐藏选择器）
 - **Cron 编辑保留投递** — 任务编辑时正确保留 delivery 字段
-- **Ollama 配置覆盖** — ClawPanel 不再将用户手动配置的 `api: "ollama"` 覆盖为 `openai-completions` (fixes #140)
+- **Ollama 配置覆盖** — 屠戮OpenClaw 不再将用户手动配置的 `api: "ollama"` 覆盖为 `openai-completions` (fixes #140)
 - **版本检测错误** — Windows 下优先通过 CLI 路径判断安装来源，默认返回 `official` 而非 `chinese` (fixes #139)
 - **版本号读取** — npm 全局目录按活跃 CLI 来源决定检查顺序，避免读到非活跃包的旧版本号
 - **助手 API 类型一致性** — `normalizeApiType` 统一 `google-generative-ai` 键名，修复 `requiresApiKey` 判断
@@ -324,7 +324,7 @@
 - **Agent 模型显示 [object Object]** — 正确解析 model 对象的 primary 字段，兼容字符串和对象两种格式
 - **定时任务触发/编辑/删除失败** — cron.run/update/remove RPC 参数从 id 修正为 jobId，匹配 Gateway schema
 - **聊天会话列表消失** — 恢复 chat header 中的 sidebar toggle 按钮（PR#88 将按钮移入 sidebar 内导致折叠后无法展开）
-- **Gateway 启动失败 Unknown config keys** — stripUiFields 现在清理根层级的 ClawPanel 内部字段（version info），防止污染 openclaw.json
+- **Gateway 启动失败 Unknown config keys** — stripUiFields 现在清理根层级的 屠戮OpenClaw 内部字段（version info），防止污染 openclaw.json
 - **Docker 安装超时** — npm 镜像源不再 fallback 到海外 registry.npmjs.org，优先使用国内 npmmirror
 - **SkillHub CLI 检测误报"请先安装"** — 检测参数从 --version 修正为 --cli-version
 - **消息渠道配置被仪表盘覆盖** — 仪表盘自愈逻辑用缓存 config 覆盖文件导致 channels 丢失，现在先读取最新配置再 patch
@@ -582,7 +582,7 @@
 
 - **Linux Gateway 服务管理不可用 (#7, #10)** — 新增 `linuxCheckGateway()`（ss → lsof → /proc/net/tcp 三级 fallback）、`linuxStartGateway()`（detached 子进程）、`linuxStopGateway()`（SIGTERM），所有 handler 分支加入 Linux 支持；修复 `reload_gateway` / `restart_gateway` 错误执行 `systemctl restart clawpanel`（重启面板而非 Gateway）的问题
 - **systemd 环境下 OpenClaw CLI 检测失败 (#8)** — 新增 `findOpenclawBin()` 路径扫描，覆盖 nvm / volta / nodenv / fnm / `/usr/local/lib/nodejs` 等所有常见路径，替代仅依赖 `which` 的方式
-- **非 root 用户无法部署 ClawPanel (#9)** — `linux-deploy.sh` 支持非 root 安装：普通用户安装到 `$HOME/.local/share/clawpanel`，使用 user-level systemd 服务 + `loginctl enable-linger`；系统包安装通过 `run_pkg_cmd()` 按需 sudo
+- **非 root 用户无法部署 屠戮OpenClaw (#9)** — `linux-deploy.sh` 支持非 root 安装：普通用户安装到 `$HOME/.local/share/clawpanel`，使用 user-level systemd 服务 + `loginctl enable-linger`；系统包安装通过 `run_pkg_cmd()` 按需 sudo
 
 ## [0.4.8] - 2026-03-06
 
@@ -611,13 +611,13 @@
 - **nvm 用户 Node.js/CLI 检测失败** — `enhanced_path()` 新增扫描 `~/.nvm/versions/node/*/bin`（macOS/Linux）和 `%APPDATA%\nvm\*`（Windows），从 Finder/桌面启动也能找到 nvm 安装的 Node.js
 - **Tauri v2 参数名不匹配** — `check_node_at_path`、`save_custom_node_path` 及所有 memory 函数的 snake_case 参数改为 camelCase，修复手动指定 Node.js 路径报 `missing required key` 的问题
 - **Windows OpenClaw CLI 检测遗漏** — `is_cli_installed()` 仅检查 `%APPDATA%\npm\openclaw.cmd`，新增通过 PATH 运行 `openclaw --version` 兜底，兼容 nvm、自定义 prefix 等安装方式
-- **Agent 管理/记忆文件页面晦涩错误** — `No such file or directory (os error 2)` 替换为中文提示「OpenClaw CLI 未找到，请确认已安装并重启 ClawPanel」
+- **Agent 管理/记忆文件页面晦涩错误** — `No such file or directory (os error 2)` 替换为中文提示「OpenClaw CLI 未找到，请确认已安装并重启 屠戮OpenClaw」
 
 ### 新增 (Features)
 
 - **初始设置自动创建配置文件** — 检测到 CLI 已装但 `openclaw.json` 不存在时，自动创建含合理默认值的配置文件（mode:local, tools:full 等），无需手动执行 `openclaw configure`
 - **一键初始化配置按钮** — 自动创建失败时，设置页第三步显示「一键初始化配置」按钮作为手动备选
-- **ClawPanel Web 版部署文档** — 新增 Linux 一键部署脚本和 Docker 部署指南，官网增加文档中心
+- **屠戮OpenClaw Web 版部署文档** — 新增 Linux 一键部署脚本和 Docker 部署指南，官网增加文档中心
 
 ## [0.4.4] - 2026-03-06
 
@@ -643,7 +643,7 @@
 
 - **Node.js 路径扫描** — 检测不到 Node.js 时提供「自动扫描」按钮，扫描 C/D/E/F/G 盘常见安装路径（含 AI 工具目录），找到后一键选用
 - **手动指定 Node.js 路径** — 用户可手动输入 Node.js 安装目录，检测通过后自动保存到 `~/.openclaw/clawpanel.json`，后续所有命令自动使用
-- **跨平台检测引导** — 安装引导页 Node.js 检测失败时，macOS 提示从终端启动，Windows 提示重启 ClawPanel 或检查 PATH
+- **跨平台检测引导** — 安装引导页 Node.js 检测失败时，macOS 提示从终端启动，Windows 提示重启 屠戮OpenClaw 或检查 PATH
 - **错误诊断模块** — 新增 `error-diagnosis.js` 共享模块，安装引导页和服务管理页共用错误诊断逻辑
 - **README 常见问题** — 新增 7 个常见安装问题的排查指南
 
@@ -728,7 +728,7 @@
 
 ### 新增 (Features)
 
-- **ClawPanel 自动更新检测** — 关于页面自动检查 ClawPanel 最新版本，显示更新链接
+- **屠戮OpenClaw 自动更新检测** — 关于页面自动检查 屠戮OpenClaw 最新版本，显示更新链接
 - **系统诊断页面** — 全面检测系统状态（服务、WebSocket、Node.js、设备密钥），一键修复配对
 - **聊天连接引导遮罩** — WebSocket 连接失败时显示友好引导界面，提供「修复并重连」按钮，替代原始错误消息
 - **图片上传与粘贴** — 聊天页面支持附件上传和 Ctrl+V 粘贴图片，支持多模态对话

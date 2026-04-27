@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="ClawPanel">
+  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
 </p>
 
 <p align="center">
@@ -25,10 +25,10 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="ClawPanel Showcase">
+  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw Showcase">
 </p>
 
-ClawPanel ist ein visuelles Verwaltungspanel für das KI-Agenten-Framework [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Mit einem **integrierten intelligenten KI-Assistenten**, der bei der Ein-Klick-Installation von OpenClaw hilft, Konfigurationen automatisch diagnostiziert, Probleme behebt und Fehler korrigiert. 8 Werkzeuge + 4 Modi + interaktives Q&A — einfache Verwaltung für Anfänger und Experten.
+屠戮OpenClaw ist ein visuelles Verwaltungspanel für das KI-Agenten-Framework [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Mit einem **integrierten intelligenten KI-Assistenten**, der bei der Ein-Klick-Installation von OpenClaw hilft, Konfigurationen automatisch diagnostiziert, Probleme behebt und Fehler korrigiert. 8 Werkzeuge + 4 Modi + interaktives Q&A — einfache Verwaltung für Anfänger und Experten.
 
 > 🌐 **Website**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Download**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 

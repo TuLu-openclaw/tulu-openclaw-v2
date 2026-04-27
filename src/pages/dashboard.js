@@ -3,7 +3,7 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { getActiveInstance, onGatewayChange } from '../lib/app-state.js'
+import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
@@ -106,6 +106,7 @@ function syncDashboardInstanceScope() {
 }
 
 async function loadDashboardData(page, fullRefresh = false) {
+  await refreshGatewayStatus().catch(() => {})
   syncDashboardInstanceScope()
   // 分波加载：关键数据先渲染，次要数据后填充，减少白屏等待
   // 轻量调用（读文件）每次都做；重量调用（spawn CLI/网络请求）只在首次或手动刷新时做
@@ -214,10 +215,48 @@ async function openGatewayConflict(page, error = null, reason = null) {
   })
 }
 
+function gatewayDashboardStatus() {
+  const state = getGatewayHealthState()
+  if (state.foreign) {
+    return {
+      text: t('dashboard.externalInstance'),
+      meta: t('dashboard.externalGatewayDetected', { pid: '' }),
+      tone: 'warning',
+    }
+  }
+  if (state.health === 'running') {
+    return {
+      text: t('dashboard.gatewayReady'),
+      meta: t('dashboard.gatewayReadyMeta'),
+      tone: 'running',
+    }
+  }
+  if (state.health === 'degraded') {
+    return {
+      text: t('dashboard.gatewayDegraded'),
+      meta: t('dashboard.gatewayDegradedMeta'),
+      tone: 'warning',
+    }
+  }
+  if (state.health === 'recovering') {
+    return {
+      text: t('dashboard.gatewayRecovering'),
+      meta: t('dashboard.gatewayRecoveringMeta'),
+      tone: 'warning',
+    }
+  }
+  return {
+    text: t('common.stopped'),
+    meta: t('dashboard.notStarted'),
+    tone: 'stopped',
+  }
+}
+
 function renderStatCards(page, services, version, agents, config, panelConfig) {
   const cardsEl = page.querySelector('#stat-cards')
   const gw = services.find(s => s.label === 'ai.openclaw.gateway')
   const foreignGateway = isForeignGatewayService(gw)
+  const gwStatus = gatewayDashboardStatus()
   const runningCount = services.filter(s => s.running).length
   const versionMeta = version.recommended
     ? `${version.ahead_of_recommended ? t('dashboard.versionAhead', { version: version.recommended }) : version.is_recommended ? t('dashboard.versionStable', { version: version.recommended }) : t('dashboard.versionRecommend', { version: version.recommended })}${version.latest_update_available && version.latest ? ' · ' + t('dashboard.versionLatest', { version: version.latest }) : ''}`
@@ -237,10 +276,10 @@ function renderStatCards(page, services, version, agents, config, panelConfig) {
     <div class="stat-card">
       <div class="stat-card-header">
         <span class="stat-card-label">${t('dashboard.gateway')}</span>
-        <span class="status-dot ${gw?.running ? 'running' : 'stopped'}"></span>
+        <span class="status-dot ${gwStatus.tone}"></span>
       </div>
-      <div class="stat-card-value">${foreignGateway ? t('dashboard.externalInstance') : gw?.running ? t('common.running') : t('common.stopped')}</div>
-      <div class="stat-card-meta">${foreignGateway ? t('dashboard.externalGatewayDetected', { pid: gw?.pid ? ' · PID ' + gw.pid : '' }) : gw?.pid ? 'PID: ' + gw.pid : (gw?.running ? t('dashboard.portDetect') : t('dashboard.notStarted'))}</div>
+      <div class="stat-card-value">${gwStatus.text}</div>
+      <div class="stat-card-meta">${foreignGateway ? t('dashboard.externalGatewayDetected', { pid: gw?.pid ? ' · PID ' + gw.pid : '' }) : gw?.pid ? 'PID: ' + gw.pid + ' · ' + gwStatus.meta : gwStatus.meta}</div>
       ${foreignGateway
         ? `<div class="stat-card-meta" style="margin-top:8px;color:var(--warning);line-height:1.6">${t('dashboard.foreignGatewayHint')}</div>
            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
@@ -302,6 +341,7 @@ function renderOverview(page, services, mcpConfig, backups, config, agents, stat
   const containerEl = page.querySelector('#dashboard-overview-container')
   const gw = services.find(s => s.label === 'ai.openclaw.gateway')
   const foreignGateway = isForeignGatewayService(gw)
+  const gwStatus = gatewayDashboardStatus()
   const mcpCount = mcpConfig?.mcpServers ? Object.keys(mcpConfig.mcpServers).length : 0
 
   const formatDate = (timestamp) => {
@@ -329,13 +369,13 @@ function renderOverview(page, services, mcpConfig, backups, config, agents, stat
     <div class="dashboard-overview">
       <div class="overview-grid">
         <div class="overview-card" data-nav="/gateway">
-          <div class="overview-card-icon" style="color:${foreignGateway ? 'var(--warning)' : gw?.running ? 'var(--success)' : 'var(--error)'}">
+          <div class="overview-card-icon" style="color:${foreignGateway ? 'var(--warning)' : gwStatus.tone === 'running' ? 'var(--success)' : gwStatus.tone === 'warning' ? 'var(--warning)' : 'var(--error)'}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           </div>
           <div class="overview-card-body">
             <div class="overview-card-title">Gateway</div>
-            <div class="overview-card-value" style="color:${foreignGateway ? 'var(--warning)' : gw?.running ? 'var(--success)' : 'var(--error)'}">${foreignGateway ? t('dashboard.externalInstance') : gw?.running ? t('common.running') : t('common.stopped')}</div>
-            <div class="overview-card-meta">${foreignGateway ? `${t('dashboard.port')} ${gwPort}${gw?.pid ? ' · PID ' + gw.pid : ''} · ${t('dashboard.viewOnlyStatus')}` : `${t('dashboard.port')} ${gwPort} ${gw?.pid ? '· PID ' + gw.pid : ''}`}</div>
+            <div class="overview-card-value" style="color:${foreignGateway ? 'var(--warning)' : gwStatus.tone === 'running' ? 'var(--success)' : gwStatus.tone === 'warning' ? 'var(--warning)' : 'var(--error)'}">${gwStatus.text}</div>
+            <div class="overview-card-meta">${foreignGateway ? `${t('dashboard.port')} ${gwPort}${gw?.pid ? ' · PID ' + gw.pid : ''} · ${t('dashboard.viewOnlyStatus')}` : `${t('dashboard.port')} ${gwPort}${gw?.pid ? ' · PID ' + gw.pid : ''} · ${gwStatus.meta}`}</div>
           </div>
           <div class="overview-card-actions">
             ${foreignGateway

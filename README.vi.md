@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="ClawPanel">
+  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
 </p>
 
 <p align="center">
@@ -25,10 +25,10 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="ClawPanel Showcase">
+  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw Showcase">
 </p>
 
-ClawPanel là bảng quản lý trực quan cho framework AI Agent [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Tích hợp **trợ lý AI thông minh**, giúp bạn cài đặt OpenClaw một cú nhấp, tự động chẩn đoán cấu hình, xử lý sự cố và sửa lỗi. 8 công cụ + 4 chế độ + hỏi đáp tương tác — dễ dàng quản lý cho cả người mới và chuyên gia.
+屠戮OpenClaw là bảng quản lý trực quan cho framework AI Agent [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Tích hợp **trợ lý AI thông minh**, giúp bạn cài đặt OpenClaw một cú nhấp, tự động chẩn đoán cấu hình, xử lý sự cố và sửa lỗi. 8 công cụ + 4 chế độ + hỏi đáp tương tác — dễ dàng quản lý cho cả người mới và chuyên gia.
 
 > 🌐 **Website**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Tải xuống**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 

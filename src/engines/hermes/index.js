@@ -1,32 +1,125 @@
 /**
- * Hermes Agent 引擎
+ * Hermes Gateway 状态守护
+ * - 轮询 checkHermes / hermesHealthCheck
+ * - 断开后自动重启（用户主动停止除外）
+ * - 对外暴露状态监听，供 UI 做实时动态展示
  */
-import { t } from '../../lib/i18n.js'
 import { api, invalidate } from '../../lib/tauri-api.js'
+import { t } from '../../lib/i18n.js'
+import {
+  evaluateAutoRestartAttempt,
+  shouldResetAutoRestartCount,
+} from '../../lib/gateway-guardian-policy.js'
+
+const HERMES_POLL_INTERVAL = 15000
+const HERMES_OFFLINE_THRESHOLD = 3
 
 // Hermes 状态
 let _ready = false
 let _running = false
 let _listeners = []
 let _pollTimer = null
+let _health = null
+let _lastCheckAt = 0
+let _stopCount = 0
+let _userStopped = false
+let _autoRestartCount = 0
+let _lastRestartTime = 0
+let _gatewayRunningSince = 0
+let _gatewayStatus = 'unknown' // running | degraded | offline | recovering | unknown
+let _checkInFlight = false
+
+function emitState() {
+  const payload = {
+    ready: _ready,
+    running: _running,
+    health: _health,
+    lastCheckAt: _lastCheckAt,
+    autoRestartCount: _autoRestartCount,
+    userStopped: _userStopped,
+    status: _gatewayStatus,
+  }
+  _listeners.forEach(fn => { try { fn(payload) } catch (_) {} })
+}
+
+async function tryAutoRestart() {
+  if (_userStopped || !_ready) return
+  const now = Date.now()
+  const decision = evaluateAutoRestartAttempt({
+    now,
+    lastRestartTime: _lastRestartTime,
+    autoRestartCount: _autoRestartCount,
+  })
+  if (decision.action === 'cooldown' || decision.action === 'give_up') return
+  _autoRestartCount = decision.autoRestartCount
+  _lastRestartTime = decision.lastRestartTime
+  _gatewayStatus = 'recovering'
+  emitState()
+  try {
+    await api.hermesGatewayAction('start')
+  } catch (_) {}
+}
+
+function setRunning(nextRunning) {
+  const changed = _running !== !!nextRunning
+  _running = !!nextRunning
+  if (_running) {
+    _stopCount = 0
+    _gatewayStatus = _health ? 'running' : 'degraded'
+    if (!_gatewayRunningSince) _gatewayRunningSince = Date.now()
+    if (shouldResetAutoRestartCount({
+      autoRestartCount: _autoRestartCount,
+      runningSince: _gatewayRunningSince,
+      now: Date.now(),
+    })) {
+      _autoRestartCount = 0
+    }
+  } else {
+    _gatewayRunningSince = 0
+  }
+  if (changed) {
+    emitState()
+    if (!_running) tryAutoRestart()
+  }
+}
 
 async function detectHermesStatus() {
+  if (_checkInFlight) return _ready
+  _checkInFlight = true
   try {
     invalidate('check_hermes')
     const info = await api.checkHermes()
     _ready = !!info?.installed && !!info?.configExists
-    _running = !!info?.gatewayRunning
+    const gatewayRunning = !!info?.gatewayRunning
+
+    if (gatewayRunning) {
+      _stopCount = 0
+      _health = await api.hermesHealthCheck().catch(() => null)
+      _gatewayStatus = _health ? 'running' : 'degraded'
+      setRunning(true)
+    } else {
+      _health = null
+      _stopCount += 1
+      _gatewayStatus = _stopCount >= HERMES_OFFLINE_THRESHOLD ? 'offline' : 'degraded'
+      if (_stopCount >= HERMES_OFFLINE_THRESHOLD || !_running) setRunning(false)
+    }
   } catch (_) {
     _ready = false
-    _running = false
+    _health = null
+    _stopCount += 1
+    _gatewayStatus = _stopCount >= HERMES_OFFLINE_THRESHOLD ? 'offline' : 'degraded'
+    if (_stopCount >= HERMES_OFFLINE_THRESHOLD) setRunning(false)
+  } finally {
+    _lastCheckAt = Date.now()
+    _checkInFlight = false
   }
-  _listeners.forEach(fn => { try { fn({ ready: _ready, running: _running }) } catch (_) {} })
+  emitState()
   return _ready
 }
 
 function startPoll() {
   if (_pollTimer) return
-  _pollTimer = setInterval(detectHermesStatus, 15000)
+  _pollTimer = setInterval(detectHermesStatus, HERMES_POLL_INTERVAL)
 }
 
 function stopPoll() {
@@ -52,6 +145,29 @@ export async function boot() {
 
 export function cleanup() {
   stopPoll()
+}
+
+export function setUserStopped(v) {
+  _userStopped = !!v
+}
+
+export function resetAutoRestart() {
+  _userStopped = false
+  _autoRestartCount = 0
+  _lastRestartTime = 0
+  _gatewayRunningSince = 0
+}
+
+export function getGatewayState() {
+  return {
+    ready: _ready,
+    running: _running,
+    health: _health,
+    lastCheckAt: _lastCheckAt,
+    autoRestartCount: _autoRestartCount,
+    userStopped: _userStopped,
+    status: _gatewayStatus,
+  }
 }
 
 export function getNavItems() {
@@ -157,4 +273,7 @@ export default {
   onStateChange,
   onReadyChange,
   isFeatureAvailable,
+  setUserStopped,
+  resetAutoRestart,
+  getGatewayState,
 }

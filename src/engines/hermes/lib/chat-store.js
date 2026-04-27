@@ -662,6 +662,7 @@ function createStore() {
         return null
       }
       if (evtType === 'tool.started') {
+        emitLobsterPhase('tool', `Hermes 调用工具：${toolName}`)
         const input = extract(evt, ['input', 'args', 'arguments', 'parameters', 'params', 'data'])
         state.liveTools.push({
           id: uid(),
@@ -729,6 +730,7 @@ function createStore() {
 
       persistSessionMessages(s.id)
       persistSessions()
+      emitLobsterPhase('done', 'Hermes 任务处理完成')
       cleanupAfterRun()
     })
     const u4 = await tauriListen('hermes-run-error', (e) => {
@@ -836,6 +838,17 @@ function createStore() {
     try { return JSON.stringify(val) } catch { return String(val) }
   }
 
+  function emitLobsterPhase(phase, message) {
+    try {
+      window.dispatchEvent(new CustomEvent('lobster-work-start', {
+        detail: { phase, message }
+      }))
+      if (phase === 'done') {
+        window.dispatchEvent(new CustomEvent('lobster-work-end'))
+      }
+    } catch {}
+  }
+
   async function sendMessage(content, opts = {}) {
     const text = (content || '').trim()
     if (!text || state.streaming) return
@@ -854,6 +867,7 @@ function createStore() {
     updateSessionTitleFromFirstUser(s)
     s.updatedAt = Date.now()
     s.lastActiveAt = Date.now()
+    emitLobsterPhase(text.includes('主导引擎') || text.includes('协作引擎') ? 'working' : 'thinking', text.includes('主导引擎') || text.includes('协作引擎') ? 'Hermes 执行双引擎协同任务' : 'Hermes 开始处理中')
     persistActiveMessages()
     persistSessions()
 
@@ -879,6 +893,7 @@ function createStore() {
         timestamp: Date.now(),
       })
       persistSessionMessages(s.id)
+      emitLobsterPhase('done', 'Hermes 任务异常结束')
       cleanupAfterRun()
     }
   }

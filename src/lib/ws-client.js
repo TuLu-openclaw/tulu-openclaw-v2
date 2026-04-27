@@ -87,6 +87,8 @@ export class WsClient {
     return {
       connected: this._connected,
       gatewayReady: this._gatewayReady,
+      handshaking: this._handshaking,
+      connecting: this._connecting,
       lastConnectedAt: this._lastConnectedAt,
       lastMessageAt: this._lastMessageAt,
       reconnectAttempts: this._reconnectAttempts,
@@ -94,6 +96,9 @@ export class WsClient {
       serverVersion: this._serverVersion,
       missedHeartbeats: this._missedHeartbeats,
       pendingReconnect: this._pendingReconnect,
+      intentionalClose: this._intentionalClose,
+      url: this._url,
+      sessionKey: this._sessionKey,
     }
   }
 

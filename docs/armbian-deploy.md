@@ -1,6 +1,6 @@
 # Armbian / ARM 设备部署指南
 
-ClawPanel 支持在 ARM 开发板（如 Orange Pi、Raspberry Pi、RK3588 等）上运行，通过 **Web 模式** 或 **Docker 模式** 部署，无需图形界面。
+屠戮OpenClaw 支持在 ARM 开发板（如 Orange Pi、Raspberry Pi、RK3588 等）上运行，通过 **Web 模式** 或 **Docker 模式** 部署，无需图形界面。
 
 ## 系统要求
 
@@ -54,7 +54,7 @@ npm run serve -- --port 1420
 ```bash
 sudo tee /etc/systemd/system/clawpanel.service << 'EOF'
 [Unit]
-Description=ClawPanel Web Server
+Description=屠戮OpenClaw Web Server
 After=network.target
 
 [Service]
@@ -84,7 +84,7 @@ sudo systemctl enable --now clawpanel
 # 安装 Docker（如果还没有）
 curl -fsSL https://get.docker.com | sh
 
-# 一键启动（OpenClaw + ClawPanel 一体）
+# 一键启动（OpenClaw + 屠戮OpenClaw 一体）
 docker run -d \
   --name openclaw \
   -p 1420:1420 \

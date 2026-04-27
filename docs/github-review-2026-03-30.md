@@ -1,4 +1,4 @@
-# ClawPanel GitHub Issues & PRs 待处理清单
+# 屠戮OpenClaw GitHub Issues & PRs 待处理清单
 
 > 生成时间：2026-03-30 | 范围：2026-03-25 ~ 2026-03-30 | 仓库：qingchencloud/clawpanel
 
@@ -21,7 +21,7 @@
 ### Issue #160 — [Bug] 恶性Bug：特定操作导致服务器必定阻塞
 - **状态**: OPEN 🔥 | **标签**: `bug`, `openclaw-processing`
 - **提交者**: yushu200403 | **创建**: 03-27
-- **问题**: 点击"实时聊天"页面的自动修复 Origin 按钮后，ClawPanel 进入无限循环持续尝试访问 Gateway，导致 2C4G 服务器完全阻塞，只能强制重启
+- **问题**: 点击"实时聊天"页面的自动修复 Origin 按钮后，屠戮OpenClaw 进入无限循环持续尝试访问 Gateway，导致 2C4G 服务器完全阻塞，只能强制重启
 - **环境**: Ubuntu 22.04, v0.10.0
 - **根因推测**: 配置更改后进入无延迟死循环
 - **修复建议**: 检查 Gateway 连接重试逻辑，加退避/上限
@@ -30,7 +30,7 @@
 ### Issue #151 — [Bug] Gateway 检测错误导致与系统 OpenClaw 冲突不断重启
 - **状态**: OPEN 🔥 | **标签**: `bug`, `openclaw-processing`
 - **提交者**: fakers777 | **创建**: 03-26
-- **问题**: Gateway 检测逻辑错误，ClawPanel 与系统已运行的 OpenClaw 冲突，造成不断重启
+- **问题**: Gateway 检测逻辑错误，屠戮OpenClaw 与系统已运行的 OpenClaw 冲突，造成不断重启
 - **环境**: Ubuntu, v0.10.0
 - **链接**: https://github.com/qingchencloud/clawpanel/issues/151
 
@@ -38,10 +38,10 @@
 
 ## 🟠 P1 高优 — 核心功能故障
 
-### Issue #150 — [Bug] 升级到 0.99 版本后完全打不开 ClawPanel
+### Issue #150 — [Bug] 升级到 0.99 版本后完全打不开 屠戮OpenClaw
 - **状态**: OPEN | **标签**: `bug`
 - **提交者**: carlyle168 | **创建**: 03-25
-- **问题**: 从 0.97 一路升级到 0.98/0.99 后 ClawPanel 无法打开，反复安装无效
+- **问题**: 从 0.97 一路升级到 0.98/0.99 后 屠戮OpenClaw 无法打开，反复安装无效
 - **环境**: Windows 10
 - **链接**: https://github.com/qingchencloud/clawpanel/issues/150
 
@@ -56,7 +56,7 @@
 ### Issue #159 — [Bug] Docker 双容器找不到 openclaw，单容器把系统搞死
 - **状态**: OPEN | **标签**: `bug`, `openclaw-processing`
 - **提交者**: wanababy | **创建**: 03-27
-- **问题**: Docker 双容器部署时 ClawPanel 找不到 OpenClaw CLI；单容器模式下 ClawPanel 自动拉起 Gateway 与已有进程冲突导致系统崩溃
+- **问题**: Docker 双容器部署时 屠戮OpenClaw 找不到 OpenClaw CLI；单容器模式下 屠戮OpenClaw 自动拉起 Gateway 与已有进程冲突导致系统崩溃
 - **修复建议**: 需要添加 `DISABLE_LOCAL_GATEWAY_SPAWN` 环境变量开关，或支持纯远程 Gateway 模式
 - **链接**: https://github.com/qingchencloud/clawpanel/issues/159
 
@@ -118,7 +118,7 @@
 ### Issue #149 — [Bug] Models configured via OAuth not being pulled
 - **状态**: OPEN | **创建**: 03-25
 - **提交者**: adam479
-- **问题**: 通过 OAuth 配置的模型不被 ClawPanel 拉取/显示
+- **问题**: 通过 OAuth 配置的模型不被 屠戮OpenClaw 拉取/显示
 - **根因推测**: OAuth token 未在模型发现接口的请求头中传递
 - **链接**: https://github.com/qingchencloud/clawpanel/issues/149
 
@@ -132,7 +132,7 @@
 ### Issue #146 — 升级 OpenClaw 后触发重复升级检测
 - **状态**: OPEN | **创建**: 03-25
 - **提交者**: z1a2q3wolf
-- **问题**: 升级完成后每次打开 ClawPanel 仍弹出升级提示
+- **问题**: 升级完成后每次打开 屠戮OpenClaw 仍弹出升级提示
 - **根因**: 版本检测逻辑有误，升级后未正确更新本地缓存版本号
 - **链接**: https://github.com/qingchencloud/clawpanel/issues/146
 
@@ -151,7 +151,7 @@
 ### Issue #158 — [Bug] Channel 插件包无法在面板安装
 - **状态**: OPEN | **标签**: `bug` | **创建**: 03-27
 - **提交者**: joeshen2021
-- **问题**: 在 ClawPanel 上安装 channel 插件始终失败，请求支持手动 CLI 安装方式
+- **问题**: 在 屠戮OpenClaw 上安装 channel 插件始终失败，请求支持手动 CLI 安装方式
 - **链接**: https://github.com/qingchencloud/clawpanel/issues/158
 
 ---

@@ -5,7 +5,7 @@
  *   GET  /api/hermes/memory            → { memory, user, soul, mtimes }
  *   POST /api/hermes/memory            → { section, content }
  *
- * ClawPanel calls the equivalent Rust/Web-stub commands (`hermes_memory_read_all`
+ * 屠戮OpenClaw calls the equivalent Rust/Web-stub commands (`hermes_memory_read_all`
  * + `hermes_memory_write`) so the page works on Tauri and Web modes.
  *
  * All three files live in `~/.hermes/memories/` and are plain Markdown.
@@ -101,9 +101,10 @@ export function render() {
       mtimes.soul = res?.soul_mtime ?? null
     } catch (e) {
       loadError = String(e?.message || e).replace(/^Error:\s*/, '')
+    } finally {
+      loading = false
+      draw()
     }
-    loading = false
-    draw()
   }
 
   function startEdit(key) {

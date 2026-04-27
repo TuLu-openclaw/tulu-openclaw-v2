@@ -8,7 +8,7 @@ if (window._splashTimer) { clearTimeout(window._splashTimer); window._splashTime
 import { registerRoute, initRouter, navigate, setDefaultRoute } from './router.js'
 import { renderSidebar, openMobileSidebar } from './components/sidebar.js'
 import { initTheme } from './lib/theme.js'
-import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange } from './lib/app-state.js'
+import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, getGatewayHealthState, refreshGatewayStatus } from './lib/app-state.js'
 import { wsClient } from './lib/ws-client.js'
 import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStatusChange } from './lib/tauri-api.js'
 import { version as APP_VERSION } from '../package.json'
@@ -436,11 +436,56 @@ async function boot() {
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
 // ── 龙虾办公室状态同步 ─────────────────────────────────
 // 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
-window.updateLobsterState = function(state, message) {
+const LOBSTER_PHASE_PRESETS = {
+  ack: { state: 'ack', emoji: '🟡', message: '已收到任务' },
+  thinking: { state: 'thinking', emoji: '💭', message: '思考中' },
+  planning: { state: 'planning', emoji: '🧭', message: '规划执行方案' },
+  tool: { state: 'tool', emoji: '🛠️', message: '调用工具中' },
+  working: { state: 'working', emoji: '🔴', message: '处理中' },
+  verifying: { state: 'verifying', emoji: '🔍', message: '校验结果中' },
+  streaming: { state: 'streaming', emoji: '✍️', message: '生成输出中' },
+  done: { state: 'done', emoji: '🟢', message: '任务完成' },
+  idle: { state: 'idle', emoji: '🟢', message: '待命中' },
+}
+let _lobsterPhaseOverrides = {}
+
+async function loadLobsterPhaseOverrides() {
+  try {
+    const cfg = await api.readOpenclawConfig()
+    const sr = cfg?.messages?.statusReactions || {}
+    _lobsterPhaseOverrides = {
+      ack: sr.ack || '',
+      thinking: sr.thinking || '',
+      tool: sr.tool || '',
+      working: sr.working || '',
+      done: sr.done || '',
+    }
+    window.__lobsterPhaseOverrides = _lobsterPhaseOverrides
+  } catch {
+    _lobsterPhaseOverrides = window.__lobsterPhaseOverrides || {}
+  }
+}
+
+function getLobsterPhaseEmoji(phase, fallback) {
+  return _lobsterPhaseOverrides?.[phase] || window.__lobsterPhaseOverrides?.[phase] || fallback || ''
+}
+
+function normalizeLobsterDetail(detail = {}) {
+  const phase = detail?.phase || ''
+  const preset = LOBSTER_PHASE_PRESETS[phase] || null
+  const state = detail?.state || preset?.state || 'working'
+  const emoji = detail?.emoji || getLobsterPhaseEmoji(phase, preset?.emoji) || ''
+  const message = detail?.message || preset?.message || ''
+  return { phase, state, emoji, message }
+}
+
+window.updateLobsterState = function(state, message, extra = {}) {
   try {
     localStorage.setItem('lobsterState', JSON.stringify({
       state: state,
       message: message || '',
+      emoji: extra?.emoji || '',
+      phase: extra?.phase || '',
       ts: Date.now()
     }))
   } catch (e) {}
@@ -450,16 +495,18 @@ window.updateLobsterState = function(state, message) {
 window.addEventListener('hashchange', () => {
   const route = location.hash.replace('#', '') || location.pathname
   if (route && route !== '/') {
-    window.updateLobsterState('writing', '导航到 ' + route)
+    window.updateLobsterState('working', '导航到 ' + route, { phase: 'working', emoji: '🔴' })
   }
 })
 
 // AI 消息发送时通知龙虾（通过自定义事件）
 window.addEventListener('lobster-work-start', e => {
-  window.updateLobsterState(e.detail?.state || 'writing', e.detail?.message || '工作中')
+  const detail = normalizeLobsterDetail(e.detail || {})
+  window.updateLobsterState(detail.state, detail.message || '工作中', { phase: detail.phase, emoji: detail.emoji })
 })
 window.addEventListener('lobster-work-end', () => {
-  window.updateLobsterState('idle', '待命中')
+  const detail = normalizeLobsterDetail({ phase: 'done' })
+  window.updateLobsterState('idle', detail.message, { phase: detail.phase, emoji: detail.emoji })
 })
   registerRoute('/lobster-office', () => import('./pages/lobster-office.js'))
   registerRoute('/coming-soon', () => import('./pages/coming-soon.js'))
@@ -523,7 +570,7 @@ window.addEventListener('lobster-work-end', () => {
       }).catch(() => {})
     : Promise.resolve()
 
-  ensureWebSession.then(() => loadActiveInstance()).then(() => detectOpenclawStatus()).then(() => {
+  ensureWebSession.then(() => loadLobsterPhaseOverrides()).then(() => loadActiveInstance()).then(() => detectOpenclawStatus()).then(() => {
     // 重新渲染侧边栏（检测完成后 isOpenclawReady 状态已更新）
     renderSidebar(sidebar)
     if (!isOpenclawReady()) {
@@ -664,23 +711,78 @@ async function autoConnectWebSocket() {
   }
 }
 
+function getGatewayBannerSnapshot(running, foreign = false) {
+  const state = getGatewayHealthState()
+  const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+  const health = state?.health || 'unknown'
+
+  if (foreign || state?.foreign) {
+    return {
+      tone: 'warning',
+      text: t('dashboard.foreignGatewayBanner'),
+      detail: `状态：外部实例占用 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 重连：${wsInfo.reconnectState || 'idle'}`,
+    }
+  }
+
+  if (!running && health !== 'recovering') {
+    return {
+      tone: 'info',
+      text: t('dashboard.controlUINotRunning'),
+      detail: `状态：未运行 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 握手：${wsInfo.gatewayReady ? '已完成' : '未完成'}`,
+    }
+  }
+
+  if (health === 'recovering') {
+    return {
+      tone: 'warning',
+      text: 'Gateway 自动恢复中，请稍候。',
+      detail: `状态：自动恢复中 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 重连：${wsInfo.reconnectState || 'idle'}`,
+    }
+  }
+
+  if (health === 'degraded') {
+    return {
+      tone: 'warning',
+      text: 'Gateway 已启动，但连接尚未完全就绪。',
+      detail: `状态：未完全就绪 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 握手：${wsInfo.gatewayReady ? '已完成' : '未完成'} · 重连：${wsInfo.reconnectState || 'idle'}`,
+    }
+  }
+
+  return {
+    tone: 'success',
+    text: 'Gateway 正在运行。',
+    detail: `状态：运行中（已就绪） · WS：${wsInfo.connected ? '已连接' : '未连接'} · 握手：${wsInfo.gatewayReady ? '已完成' : '未完成'}`,
+  }
+}
+
 function setupGatewayBanner() {
   const banner = document.getElementById('gw-banner')
   if (!banner) return
 
-  function update(running, foreign) {
-    if (running || sessionStorage.getItem('gw-banner-dismissed')) {
+  async function update(running, foreign = false) {
+    const dismissed = sessionStorage.getItem('gw-banner-dismissed') === '1'
+    await refreshGatewayStatus().catch(() => {})
+    const snapshot = getGatewayBannerSnapshot(running, foreign)
+
+    if (dismissed && snapshot.tone === 'success') {
       banner.classList.add('gw-banner-hidden')
       return
     }
+    if (snapshot.tone === 'success') {
+      banner.classList.add('gw-banner-hidden')
+      return
+    }
+
     banner.classList.remove('gw-banner-hidden')
 
     if (foreign) {
-      // Gateway 在运行但属于外部实例 —— 显示认领按钮
       banner.innerHTML = `
-        <div class="gw-banner-content">
+        <div class="gw-banner-content" style="flex-wrap:wrap;gap:8px">
           <span class="gw-banner-icon">${statusIcon('warning', 16)}</span>
-          <span>${t('dashboard.foreignGatewayBanner')}</span>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span>${snapshot.text}</span>
+            <span style="font-size:11px;opacity:0.75">${escapeHtml(snapshot.detail)}</span>
+          </div>
           <button class="btn btn-sm btn-secondary" id="btn-gw-claim" style="margin-left:auto">${t('dashboard.claimGateway')}</button>
           <a class="btn btn-sm btn-ghost" href="#/services">${t('sidebar.services')}</a>
           <button class="gw-banner-close" id="btn-gw-dismiss" title="${t('common.close')}">&times;</button>
@@ -696,9 +798,8 @@ function setupGatewayBanner() {
         btn.textContent = t('common.processing')
         try {
           await api.claimGateway()
-          // 认领后立刻刷新全局状态
-          const { refreshGatewayStatus } = await import('./lib/app-state.js')
           await refreshGatewayStatus()
+          update(isGatewayRunning(), isGatewayForeign())
         } catch (err) {
           btn.disabled = false
           btn.textContent = t('dashboard.claimGateway')
@@ -708,11 +809,13 @@ function setupGatewayBanner() {
       return
     }
 
-    // Gateway 未运行 —— 显示启动按钮
     banner.innerHTML = `
       <div class="gw-banner-content">
-        <span class="gw-banner-icon">${statusIcon('info', 16)}</span>
-        <span>${t('dashboard.controlUINotRunning')}</span>
+        <span class="gw-banner-icon">${statusIcon(snapshot.tone, 16)}</span>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span>${snapshot.text}</span>
+          <span style="font-size:11px;opacity:0.75">${escapeHtml(snapshot.detail)}</span>
+        </div>
         <button class="btn btn-sm btn-secondary" id="btn-gw-start" style="margin-left:auto">${t('dashboard.startBtn')}</button>
         <a class="btn btn-sm btn-ghost" href="#/services">${t('sidebar.services')}</a>
         <button class="gw-banner-close" id="btn-gw-dismiss" title="${t('common.close')}">&times;</button>
@@ -723,61 +826,62 @@ function setupGatewayBanner() {
       sessionStorage.setItem('gw-banner-dismissed', '1')
     })
     banner.querySelector('#btn-gw-start')?.addEventListener('click', async (e) => {
-        const btn = e.target
-        btn.disabled = true
-        btn.classList.add('btn-loading')
-        btn.textContent = t('dashboard.starting')
-        try {
-          await api.startService('ai.openclaw.gateway')
-        } catch (err) {
-          if (isForeignGatewayError(err)) {
-            await openGatewayConflict(err)
-            update(false)
-            return
-          }
-          const errMsg = (err.message || String(err)).slice(0, 120)
-          banner.innerHTML = `
-            <div class="gw-banner-content" style="flex-wrap:wrap">
-              <span class="gw-banner-icon">${statusIcon('info', 16)}</span>
-              <span>${t('dashboard.startFail')}</span>
-              <button class="btn btn-sm btn-secondary" id="btn-gw-start" style="margin-left:auto">${t('dashboard.retry')}</button>
-              <a class="btn btn-sm btn-ghost" href="#/services">${t('sidebar.services')}</a>
-              <a class="btn btn-sm btn-ghost" href="#/logs">${t('sidebar.logs')}</a>
-            </div>
-            <div style="font-size:11px;opacity:0.7;margin-top:4px;font-family:monospace;word-break:break-all">${escapeHtml(errMsg)}</div>
-          `
+      const btn = e.target
+      btn.disabled = true
+      btn.classList.add('btn-loading')
+      btn.textContent = t('dashboard.starting')
+      try {
+        await api.startService('ai.openclaw.gateway')
+      } catch (err) {
+        if (isForeignGatewayError(err)) {
+          await openGatewayConflict(err)
           update(false)
           return
         }
-        // 轮询等待实际启动
-        const t0 = Date.now()
-        while (Date.now() - t0 < 30000) {
-          try {
-            const s = await api.getServicesStatus()
-            const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
-            if (gw?.running) { update(true); return }
-          } catch {}
-          const sec = Math.floor((Date.now() - t0) / 1000)
-          btn.textContent = `${t('dashboard.starting')} ${sec}s`
-          await new Promise(r => setTimeout(r, 1500))
-        }
-        // 超时后尝试获取日志帮助排查
-        let logHint = ''
-        try {
-          const logs = await api.readLogTail('gateway', 5)
-          if (logs?.trim()) logHint = `<div style="font-size:12px;margin-top:4px;opacity:0.8;font-family:monospace;white-space:pre-wrap">${logs.trim().split('\n').slice(-3).join('\n')}</div>`
-        } catch {}
+        const errMsg = (err.message || String(err)).slice(0, 120)
         banner.innerHTML = `
-          <div class="gw-banner-content">
+          <div class="gw-banner-content" style="flex-wrap:wrap">
             <span class="gw-banner-icon">${statusIcon('info', 16)}</span>
-            <span>${t('dashboard.startTimeout')}</span>
-            <button class="btn btn-sm btn-secondary" id="btn-gw-start" style="margin-left:auto">${t('dashboard.retry')}</button>
+            <span>${t('dashboard.startFail')}</span>
+            <a class="btn btn-sm btn-ghost" href="#/services" style="margin-left:auto">${t('sidebar.services')}</a>
             <a class="btn btn-sm btn-ghost" href="#/logs">${t('sidebar.logs')}</a>
           </div>
-          ${logHint}
+          <div style="font-size:11px;opacity:0.7;margin-top:4px;font-family:monospace;word-break:break-all">${escapeHtml(errMsg)}</div>
         `
-        update(false)
-      })
+        return
+      }
+
+      const t0 = Date.now()
+      while (Date.now() - t0 < 30000) {
+        try {
+          await refreshGatewayStatus().catch(() => {})
+          const state = getGatewayHealthState()
+          const info = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+          if (state.running && (state.health === 'running' || (state.health === 'degraded' && info.connected))) {
+            update(true)
+            return
+          }
+        } catch {}
+        const sec = Math.floor((Date.now() - t0) / 1000)
+        btn.textContent = `${t('dashboard.starting')} ${sec}s`
+        await new Promise(r => setTimeout(r, 1500))
+      }
+
+      let logHint = ''
+      try {
+        const logs = await api.readLogTail('gateway', 5)
+        if (logs?.trim()) logHint = `<div style="font-size:12px;margin-top:4px;opacity:0.8;font-family:monospace;white-space:pre-wrap">${escapeHtml(logs.trim().split('\n').slice(-3).join('\n'))}</div>`
+      } catch {}
+      banner.innerHTML = `
+        <div class="gw-banner-content">
+          <span class="gw-banner-icon">${statusIcon('info', 16)}</span>
+          <span>${t('dashboard.startTimeout')}</span>
+          <a class="btn btn-sm btn-ghost" href="#/services" style="margin-left:auto">${t('sidebar.services')}</a>
+          <a class="btn btn-sm btn-ghost" href="#/logs">${t('sidebar.logs')}</a>
+        </div>
+        ${logHint}
+      `
+    })
   }
 
   update(isGatewayRunning(), isGatewayForeign())
@@ -1034,12 +1138,22 @@ function startUpdateChecker() {
 
     // 注册各页面上下文提供器
     registerPageContext('/chat-debug', async () => {
-      const { isOpenclawReady, isGatewayRunning } = await import('./lib/app-state.js')
+      const { isOpenclawReady, getGatewayHealthState } = await import('./lib/app-state.js')
       const { wsClient } = await import('./lib/ws-client.js')
       const { api } = await import('./lib/tauri-api.js')
       const lines = ['## 系统诊断快照']
+      const gw = getGatewayHealthState()
+      const gwLabel = gw.foreign
+        ? '外部实例占用'
+        : gw.health === 'running'
+          ? '运行中（已就绪）'
+          : gw.health === 'degraded'
+            ? '运行中（未完全就绪）'
+            : gw.health === 'recovering'
+              ? '自动恢复中'
+              : '未运行'
       lines.push(`- OpenClaw: ${isOpenclawReady() ? '就绪' : '未就绪'}`)
-      lines.push(`- Gateway: ${isGatewayRunning() ? '运行中' : '未运行'}`)
+      lines.push(`- Gateway: ${gwLabel}`)
       lines.push(`- WebSocket: ${wsClient.connected ? '已连接' : '未连接'}`)
       try {
         const node = await api.checkNode()
@@ -1053,10 +1167,20 @@ function startUpdateChecker() {
     })
 
     registerPageContext('/services', async () => {
-      const { isGatewayRunning } = await import('./lib/app-state.js')
+      const { getGatewayHealthState } = await import('./lib/app-state.js')
       const { api } = await import('./lib/tauri-api.js')
       const lines = ['## 服务状态']
-      lines.push(`- Gateway: ${isGatewayRunning() ? '运行中' : '未运行'}`)
+      const gw = getGatewayHealthState()
+      const gwLabel = gw.foreign
+        ? '外部实例占用'
+        : gw.health === 'running'
+          ? '运行中（已就绪）'
+          : gw.health === 'degraded'
+            ? '运行中（未完全就绪）'
+            : gw.health === 'recovering'
+              ? '自动恢复中'
+              : '未运行'
+      lines.push(`- Gateway: ${gwLabel}`)
       try {
         const svc = await api.getServicesStatus()
         if (svc?.[0]) {

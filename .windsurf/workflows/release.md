@@ -23,7 +23,7 @@ git status
 - `package.json` — npm 版本
 - `src-tauri/tauri.conf.json` — Tauri 版本
 - `src-tauri/Cargo.toml` → `Cargo.lock` — Rust 版本
-- `docs/index.html` — JSON-LD `softwareVersion`、下载链接文件名（`ClawPanel_x.y.z_xxx`）、版本徽标（`vx.y.z 最新版`）
+- `docs/index.html` — JSON-LD `softwareVersion`、下载链接文件名（`屠戮OpenClaw_x.y.z_xxx`）、版本徽标（`vx.y.z 最新版`）
 
 // turbo
 ```bash
@@ -99,7 +99,7 @@ git push origin v0.7.0
 
 ## 发布后同步
 
-Mac 堡垒机上的 ClawPanel 项目需要手动同步（如有需要）：
+Mac 堡垒机上的 屠戮OpenClaw 项目需要手动同步（如有需要）：
 ```bash
 ssh mac "cd /Users/admin/Desktop/clawpanel && export https_proxy=http://127.0.0.1:7897 && git pull"
 ```

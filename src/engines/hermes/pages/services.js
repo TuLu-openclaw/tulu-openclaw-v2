@@ -3,6 +3,10 @@
  */
 import { api, invalidate } from '../../../lib/tauri-api.js'
 import { t } from '../../../lib/i18n.js'
+import { setUserStopped as setHermesUserStopped, resetAutoRestart as resetHermesAutoRestart, onStateChange as onHermesStateChange } from '../index.js'
+
+const HERMES_ACTION_POLL_INTERVAL = 1500
+const HERMES_ACTION_POLL_TIMEOUT = 30000
 
 const ICONS = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>',
@@ -95,6 +99,32 @@ function renderInfoRow(label, value, mono = false) {
   `
 }
 
+function renderGatewayStatusText(state) {
+  const status = state?.status || 'unknown'
+  if (status === 'running') return '运行中（已就绪）'
+  if (status === 'degraded') return '运行中（未完全就绪）'
+  if (status === 'recovering') return '自动恢复中'
+  if (status === 'offline') return '已离线'
+  return state?.running ? '运行中' : '已停止'
+}
+
+function renderGatewayStatusTone(state) {
+  const status = state?.status || 'unknown'
+  if (status === 'running') return 'success'
+  if (status === 'degraded' || status === 'recovering') return 'warning'
+  if (status === 'offline') return 'error'
+  return state?.running ? 'success' : 'error'
+}
+
+function isHermesActionSettled(action, state) {
+  const status = state?.status || 'unknown'
+  if (action === 'stop') return state?.running === false && status === 'offline'
+  if (action === 'start' || action === 'restart') {
+    return state?.running === true && ['running', 'degraded'].includes(status)
+  }
+  return false
+}
+
 export function render() {
   const el = document.createElement('div')
   el.className = 'page hm-services-page'
@@ -116,6 +146,7 @@ export function render() {
   let connectMsgTone = 'muted'
   let targetMode = 'local'
   let customUrl = ''
+  let gatewayState = null
 
   function syncCustomInput() {
     const input = el.querySelector('#hm-services-custom-url')
@@ -172,7 +203,9 @@ export function render() {
       return
     }
 
-    const gwRunning = !!info?.gatewayRunning
+    const gwRunning = gatewayState?.running ?? !!info?.gatewayRunning
+    const gatewayStatusText = renderGatewayStatusText(gatewayState)
+    const gatewayStatusTone = renderGatewayStatusTone(gatewayState)
     const port = info?.gatewayPort || 8642
     const version = info?.version || '—'
     const gatewayUrl = info?.gatewayUrl || `http://127.0.0.1:${port}`
@@ -223,7 +256,7 @@ export function render() {
 
       <div class="hm-kpi-grid">
         ${renderKpi(t('engine.servicesInstallState'), installState, `${t('engine.servicesInstallType')} · ${installType}`, info?.installed ? 'success' : 'error')}
-        ${renderKpi(t('engine.dashGatewayStatus'), gwRunning ? t('engine.dashRunning') : t('engine.dashStopped'), `:${port}`, gwRunning ? 'success' : 'error')}
+        ${renderKpi(t('engine.dashGatewayStatus'), gatewayStatusText, `:${port}`, gatewayStatusTone)}
         ${renderKpi(t('engine.dashModel'), model, provider, 'accent')}
         ${renderKpi(t('engine.dashConnectTarget'), targetLabel, gatewayUrl, 'info')}
       </div>
@@ -337,7 +370,7 @@ export function render() {
             ${esc(t('engine.servicesHealthTitle'))}
           </div>
           <div class="hm-panel-actions">
-            <span class="hm-pill ${gwRunning ? 'hm-pill--ok' : 'hm-pill--muted'}">${esc(gwRunning ? t('engine.dashRunning') : t('engine.dashStopped'))}</span>
+            <span class="hm-pill ${gwRunning ? 'hm-pill--ok' : 'hm-pill--muted'}">${esc(gatewayStatusText)}</span>
           </div>
         </div>
         <div class="hm-panel-body">
@@ -438,14 +471,20 @@ export function render() {
     )
     draw()
     try {
-      if (action === 'restart') {
-        try { await api.hermesGatewayAction('stop') } catch (_) {}
-        await new Promise(resolve => setTimeout(resolve, 1200))
-        const result = await api.hermesGatewayAction('start')
-        setPageMessage(result || t('engine.dashRestartGw'), 'success')
+      if (action === 'stop') {
+        setHermesUserStopped(true)
       } else {
-        const result = await api.hermesGatewayAction(action)
-        setPageMessage(result || action, 'success')
+        setHermesUserStopped(false)
+        resetHermesAutoRestart()
+      }
+      const result = await api.hermesGatewayAction(action)
+      setPageMessage(result || action, 'success')
+
+      const t0 = Date.now()
+      while (Date.now() - t0 < HERMES_ACTION_POLL_TIMEOUT) {
+        await refresh(false)
+        if (isHermesActionSettled(action, gatewayState)) break
+        await new Promise(r => setTimeout(r, HERMES_ACTION_POLL_INTERVAL))
       }
     } catch (error) {
       setPageMessage(stripError(error), 'error')
@@ -564,10 +603,18 @@ export function render() {
     el.querySelector('.hm-services-uninstall-clean')?.addEventListener('click', () => runMaintenance('uninstall-clean'))
   }
 
+  const offGatewayState = onHermesStateChange((state) => {
+    gatewayState = state
+    draw()
+  })
+
   draw()
   Promise.allSettled([
     refresh(),
     detectEnvironments(),
   ])
+  el.__cleanup = () => {
+    try { offGatewayState?.() } catch (_) {}
+  }
   return el
 }

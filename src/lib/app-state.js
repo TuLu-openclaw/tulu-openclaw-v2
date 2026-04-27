@@ -3,23 +3,30 @@
  * 管理 openclaw 安装状态，供各组件查询
  */
 import { api } from './tauri-api.js'
+import { wsClient } from './ws-client.js'
 import {
   evaluateAutoRestartAttempt,
   shouldResetAutoRestartCount,
 } from './gateway-guardian-policy.js'
 
 const isTauri = !!window.__TAURI_INTERNALS__
+const GATEWAY_POLL_INTERVAL = 15000
+const GATEWAY_OFFLINE_THRESHOLD = 3
 
 let _openclawReady = false
 let _gatewayRunning = false
 let _gatewayForeign = false
+let _gatewayHealth = 'unknown' // running | degraded | offline | recovering | foreign | unknown
+let _gatewayLastCheckAt = 0
+let _gatewayRecovering = false
+let _gatewayCheckInFlight = false
 let _platform = ''  // 'macos' | 'win32' | ...
 let _deployMode = 'local' // 'local' | 'docker'
 let _inDocker = false
 let _dockerAvailable = false
 let _listeners = []
 let _gwListeners = []
-let _gwStopCount = 0  // 连续检测到"停止"的次数，防抖用
+let _gwStopCount = 0  // 连续检测到异常的次数，防抖用
 let _isUpgrading = false // 升级/切换版本期间，阻止 setup 跳转
 let _userStopped = false // 用户主动停止，不自动拉起
 let _autoRestartCount = 0 // 自动重启次数
@@ -47,6 +54,7 @@ export function resetAutoRestart() {
   _lastRestartTime = 0
   _gatewayRunningSince = 0
   _userStopped = false
+  _gatewayRecovering = false
 }
 
 /** 监听守护放弃事件（连续重启失败后触发，UI 可弹出恢复选项） */
@@ -63,6 +71,18 @@ export function isGatewayRunning() {
 /** Gateway 是否在运行但属于外部实例 */
 export function isGatewayForeign() {
   return _gatewayForeign
+}
+
+export function getGatewayHealthState() {
+  return {
+    running: _gatewayRunning,
+    foreign: _gatewayForeign,
+    health: _gatewayHealth,
+    lastCheckAt: _gatewayLastCheckAt,
+    recovering: _gatewayRecovering,
+    autoRestartCount: _autoRestartCount,
+    userStopped: _userStopped,
+  }
 }
 
 /** 获取后端平台 ('macos' | 'win32') */
@@ -146,24 +166,31 @@ export async function detectOpenclawStatus() {
   return _openclawReady
 }
 
-function _setGatewayRunning(val, foreign = false) {
+function _emitGatewayState() {
+  const snapshot = getGatewayHealthState()
+  _gwListeners.forEach(fn => {
+    try { fn(snapshot.running, snapshot.foreign, snapshot) } catch {}
+  })
+}
+
+function _setGatewayRunning(val, foreign = false, health = null) {
   const wasRunning = _gatewayRunning
   const wasForeign = _gatewayForeign
   const changed = wasRunning !== val || wasForeign !== foreign
   _gatewayRunning = val
   _gatewayForeign = foreign
+  if (health) _gatewayHealth = health
   if (changed) {
     if (val) {
-      // 仅记录恢复运行时间，避免短暂存活就把重启计数清零
+      _gatewayRecovering = false
       _gatewayRunningSince = Date.now()
     } else if (wasRunning && !_userStopped && !_isUpgrading && _openclawReady && !foreign) {
       _gatewayRunningSince = 0
-      // Gateway 意外停止，尝试自动重启
       _tryAutoRestart()
     } else if (!val) {
       _gatewayRunningSince = 0
     }
-    _gwListeners.forEach(fn => { try { fn(val, foreign) } catch {} })
+    _emitGatewayState()
   }
 }
 
@@ -203,30 +230,52 @@ async function _tryAutoRestart() {
 
   _autoRestartCount = decision.autoRestartCount
   _lastRestartTime = decision.lastRestartTime
+  _gatewayRecovering = true
+  _gatewayHealth = 'recovering'
+  _emitGatewayState()
   console.log(`[guardian] Gateway 意外停止，自动重启 (${_autoRestartCount}/3)...`)
   try {
     await api.startService('ai.openclaw.gateway')
     console.log('[guardian] Gateway 自动重启成功')
   } catch (e) {
+    _gatewayRecovering = false
     console.error('[guardian] Gateway 自动重启失败:', e)
   }
+}
+
+function _deriveGatewayHealth({ ownedRunning, foreignRunning, wsInfo }) {
+  if (foreignRunning) return 'foreign'
+  if (!ownedRunning) return _gatewayRecovering ? 'recovering' : 'offline'
+  if (wsInfo?.gatewayReady) return 'running'
+  if (wsInfo?.connected || wsInfo?.reconnectState === 'attempting' || wsInfo?.reconnectState === 'scheduled') return 'degraded'
+  return 'degraded'
 }
 
 /** 刷新 Gateway 运行状态（轻量，仅查服务状态）
  *  防抖：running→stopped 需要连续 2 次检测才切换，避免瞬态误判 */
 export async function refreshGatewayStatus() {
+  if (_gatewayCheckInFlight) return _gatewayRunning
+  _gatewayCheckInFlight = true
   try {
     const services = await api.getServicesStatus()
+    const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : null
     if (services?.length > 0) {
       const gw = services.find?.(s => s.label === 'ai.openclaw.gateway') || services[0]
       const ownedRunning = gw?.running === true && gw?.owned_by_current_instance !== false
       const foreignRunning = gw?.running === true && gw?.owned_by_current_instance === false
-      const nowRunning = ownedRunning
-      if (nowRunning) {
+      const nowHealth = _deriveGatewayHealth({ ownedRunning, foreignRunning, wsInfo })
+      _gatewayLastCheckAt = Date.now()
+
+      if (ownedRunning) {
         _gwStopCount = 0
-        if (!_gatewayRunning) {
-          _setGatewayRunning(true, false)
-        } else if (shouldResetAutoRestartCount({
+        _gatewayHealth = nowHealth
+        if (!_gatewayRunning || _gatewayForeign) {
+          _setGatewayRunning(true, false, nowHealth)
+        } else {
+          _gatewayRecovering = false
+          _emitGatewayState()
+        }
+        if (shouldResetAutoRestartCount({
           autoRestartCount: _autoRestartCount,
           runningSince: _gatewayRunningSince,
           now: Date.now(),
@@ -236,17 +285,28 @@ export async function refreshGatewayStatus() {
       } else {
         if (foreignRunning) {
           _gwStopCount = 0
+          _gatewayHealth = nowHealth
+          _gatewayRecovering = false
+          _setGatewayRunning(false, true, nowHealth)
         } else {
           _gwStopCount++
-        }
-        if (foreignRunning || _gwStopCount >= 2 || !_gatewayRunning) {
-          _setGatewayRunning(false, foreignRunning)
+          _gatewayHealth = _gwStopCount >= GATEWAY_OFFLINE_THRESHOLD ? (_gatewayRecovering ? 'recovering' : 'offline') : 'degraded'
+          if (_gwStopCount >= GATEWAY_OFFLINE_THRESHOLD || !_gatewayRunning) {
+            _setGatewayRunning(false, false, _gatewayHealth)
+          } else {
+            _emitGatewayState()
+          }
         }
       }
     }
   } catch {
     _gwStopCount++
-    if (_gwStopCount >= 2) _setGatewayRunning(false)
+    _gatewayLastCheckAt = Date.now()
+    _gatewayHealth = _gwStopCount >= GATEWAY_OFFLINE_THRESHOLD ? (_gatewayRecovering ? 'recovering' : 'offline') : 'degraded'
+    if (_gwStopCount >= GATEWAY_OFFLINE_THRESHOLD) _setGatewayRunning(false, false, _gatewayHealth)
+    else _emitGatewayState()
+  } finally {
+    _gatewayCheckInFlight = false
   }
   return _gatewayRunning
 }
@@ -255,7 +315,7 @@ let _pollTimer = null
 /** 启动 Gateway 状态轮询（每 15 秒检测一次） */
 export function startGatewayPoll() {
   if (_pollTimer) return
-  _pollTimer = setInterval(() => refreshGatewayStatus(), 15000)
+  _pollTimer = setInterval(() => refreshGatewayStatus(), GATEWAY_POLL_INTERVAL)
 }
 export function stopGatewayPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }

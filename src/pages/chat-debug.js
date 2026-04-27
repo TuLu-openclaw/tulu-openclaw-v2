@@ -4,7 +4,7 @@
  */
 import { api, getRequestLogs, clearRequestLogs, isTauriRuntime } from '../lib/tauri-api.js'
 import { wsClient } from '../lib/ws-client.js'
-import { isOpenclawReady, isGatewayRunning } from '../lib/app-state.js'
+import { isOpenclawReady, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { toast } from '../components/toast.js'
@@ -86,12 +86,22 @@ async function openGatewayConflict(error = null) {
 async function loadDebugInfo(page) {
   const el = page.querySelector('#debug-content')
 
+  await refreshGatewayStatus().catch(() => {})
+
+  const gatewayState = getGatewayHealthState()
+  const gatewayHealth = gatewayState?.health || 'unknown'
+  const gatewayReady = gatewayHealth === 'running'
+  const gatewayActive = ['running', 'degraded', 'recovering', 'foreign'].includes(gatewayHealth)
+
   const info = {
     timestamp: new Date().toLocaleString('zh-CN'),
     // 应用状态
     appState: {
       openclawReady: isOpenclawReady(),
-      gatewayRunning: isGatewayRunning(),
+      gatewayHealth,
+      gatewayReady,
+      gatewayActive,
+      gatewayForeign: !!gatewayState?.foreign,
     },
     // WebSocket 状态
     wsClient: {
@@ -142,10 +152,20 @@ async function loadDebugInfo(page) {
 }
 
 function renderDebugInfo(el, info) {
+  const gatewayStatusText = info.appState.gatewayForeign
+    ? t('chatDebug.gatewayForeign')
+    : info.appState.gatewayHealth === 'running'
+      ? t('chatDebug.gatewayReady')
+      : info.appState.gatewayHealth === 'degraded'
+        ? t('chatDebug.gatewayDegraded')
+        : info.appState.gatewayHealth === 'recovering'
+          ? t('chatDebug.gatewayRecovering')
+          : t('chatDebug.gatewayOffline')
+
   let html = `<div style="font-family:monospace;font-size:12px;line-height:1.6">`
 
   // 总体状态概览
-  const allOk = info.appState.openclawReady && info.appState.gatewayRunning && info.wsClient.gatewayReady
+  const allOk = info.appState.openclawReady && info.appState.gatewayReady && info.wsClient.gatewayReady
   html += `<div class="config-section" style="background:${allOk ? 'var(--success-bg)' : 'var(--warning-bg)'};border-left:3px solid ${allOk ? 'var(--success)' : 'var(--warning)'}">
     <div style="font-size:16px;font-weight:600;margin-bottom:8px">${allOk ? `${statusIcon('ok')} ${t('chatDebug.systemOk')}` : `${statusIcon('warn')} ${t('chatDebug.issuesFound')}`}</div>
     <div style="color:var(--text-secondary);font-size:13px">${allOk ? t('chatDebug.allFunctionsOk') : t('chatDebug.someFunctionsError')}</div>
@@ -156,7 +176,7 @@ function renderDebugInfo(el, info) {
     <div class="config-section-title">${t('chatDebug.sectionAppState')}</div>
     <table class="debug-table">
       <tr><td>${t('chatDebug.openclawReady')}</td><td>${info.appState.openclawReady ? statusIcon('ok') : statusIcon('err')}</td></tr>
-      <tr><td>${t('chatDebug.gatewayRunning')}</td><td>${info.appState.gatewayRunning ? statusIcon('ok') : statusIcon('err')}</td></tr>
+      <tr><td>${t('chatDebug.gatewayRunning')}</td><td>${info.appState.gatewayReady ? `${statusIcon('ok')} ${gatewayStatusText}` : info.appState.gatewayHealth === 'recovering' || info.appState.gatewayHealth === 'degraded' || info.appState.gatewayForeign ? `${statusIcon('warn')} ${gatewayStatusText}` : `${statusIcon('err')} ${gatewayStatusText}`}</td></tr>
     </table>
   </div>`
 

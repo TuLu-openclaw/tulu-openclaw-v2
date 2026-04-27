@@ -330,7 +330,7 @@ export function render() {
     el.innerHTML = `
       <section class="hm-usage-hero">
         <div class="hm-usage-hero-copy">
-          <div class="hm-usage-eyebrow">HERMES AGENT · ANALYTICS</div>
+          <div class="hm-usage-eyebrow">${escHtml(t('usage.refreshHero'))}</div>
           <h1 class="hm-usage-title">${escHtml(t('usage.title'))}</h1>
           <p class="hm-usage-desc">${escHtml(t('usage.desc'))}</p>
         </div>

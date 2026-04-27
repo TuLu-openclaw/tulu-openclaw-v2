@@ -75,6 +75,20 @@ async function saveConfig() {
     // 从当前表单收集值到 _config
     collectCurrentTab()
     await api.writeOpenclawConfig(_config)
+    try {
+      const sr = _config?.messages?.statusReactions || {}
+      window.__lobsterPhaseOverrides = {
+        ack: sr.ack || '',
+        thinking: sr.thinking || '',
+        planning: sr.planning || '',
+        tool: sr.tool || '',
+        working: sr.working || '',
+        verifying: sr.verifying || '',
+        streaming: sr.streaming || '',
+        done: sr.done || '',
+        idle: sr.idle || '',
+      }
+    } catch {}
     _dirty = false
     toast(t('communication.configSaved'), 'info')
     try { await api.reloadGateway(); toast(t('communication.gwReloaded'), 'success') } catch {}
@@ -159,6 +173,48 @@ function renderMessages(el) {
         </div>
         <label class="toggle-switch"><input type="checkbox" id="msg-sr-enabled" ${sr.enabled ? 'checked' : ''}><span class="toggle-slider"></span></label>
       </div>
+      <div class="form-group">
+        <label class="form-label">${t('communication.semanticStatusEmoji')}</label>
+        <div class="form-hint" style="margin-bottom:10px">${t('communication.semanticStatusEmojiHint')}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+          <div>
+            <label class="form-label">${t('communication.statusPhaseAck')}</label>
+            <input class="form-input" id="msg-sr-ack" value="${esc(sr.ack || '')}" placeholder="👀 / 🟡" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">${t('communication.statusPhaseThinking')}</label>
+            <input class="form-input" id="msg-sr-thinking" value="${esc(sr.thinking || '')}" placeholder="💭 / 🤔" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">规划 planning</label>
+            <input class="form-input" id="msg-sr-planning" value="${esc(sr.planning || '')}" placeholder="🧭 / 📋" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">${t('communication.statusPhaseTool')}</label>
+            <input class="form-input" id="msg-sr-tool" value="${esc(sr.tool || '')}" placeholder="🛠️ / 🔧" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">${t('communication.statusPhaseWorking')}</label>
+            <input class="form-input" id="msg-sr-working" value="${esc(sr.working || '')}" placeholder="🔴 / ⚙️" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">校验 verifying</label>
+            <input class="form-input" id="msg-sr-verifying" value="${esc(sr.verifying || '')}" placeholder="🔍 / ✅" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">输出 streaming</label>
+            <input class="form-input" id="msg-sr-streaming" value="${esc(sr.streaming || '')}" placeholder="✍️ / 📤" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">${t('communication.statusPhaseDone')}</label>
+            <input class="form-input" id="msg-sr-done" value="${esc(sr.done || '')}" placeholder="🟢 / ✅" style="max-width:200px">
+          </div>
+          <div>
+            <label class="form-label">待命 idle</label>
+            <input class="form-input" id="msg-sr-idle" value="${esc(sr.idle || '')}" placeholder="🟢 / 💤" style="max-width:200px">
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="config-section">
@@ -207,6 +263,15 @@ function collectMessages() {
 
   if (!m.statusReactions) m.statusReactions = {}
   m.statusReactions.enabled = c('msg-sr-enabled') || undefined
+  m.statusReactions.ack = v('msg-sr-ack')
+  m.statusReactions.thinking = v('msg-sr-thinking')
+  m.statusReactions.planning = v('msg-sr-planning')
+  m.statusReactions.tool = v('msg-sr-tool')
+  m.statusReactions.working = v('msg-sr-working')
+  m.statusReactions.verifying = v('msg-sr-verifying')
+  m.statusReactions.streaming = v('msg-sr-streaming')
+  m.statusReactions.done = v('msg-sr-done')
+  m.statusReactions.idle = v('msg-sr-idle')
 
   const debounceMs = n('msg-debounceMs')
   if (debounceMs != null) {

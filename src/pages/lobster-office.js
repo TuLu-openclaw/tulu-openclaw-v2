@@ -6,6 +6,23 @@
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 
+const PREVIEW_PRESETS = {
+  ack: { emoji: '🟡', title: '已收到 ack', desc: '已收到新任务，等待进入处理' },
+  thinking: { emoji: '💭', title: '思考 thinking', desc: '正在分析和组织方案' },
+  tool: { emoji: '🛠️', title: '工具 tool', desc: '正在调用工具或执行外部步骤' },
+  working: { emoji: '🔴', title: '处理中 working', desc: '正在持续处理任务' },
+  done: { emoji: '🟢', title: '完成 done', desc: '任务已处理完成' },
+  idle: { emoji: '🟢', title: '待命 idle', desc: '当前无任务，保持待命' },
+}
+
+function readLiveLobsterState() {
+  try {
+    return JSON.parse(localStorage.getItem('lobsterState') || '{}') || {}
+  } catch {
+    return {}
+  }
+}
+
 export default function render(el) {
   el.innerHTML = `
     <div class="page-header">
@@ -41,6 +58,14 @@ export default function render(el) {
 
       <div class="state-demo">
         <div class="demo-title">状态预览</div>
+        <div class="live-preview" id="lobster-live-preview">
+          <div class="live-preview-emoji" id="lobster-live-emoji">🟢</div>
+          <div class="live-preview-body">
+            <div class="live-preview-title" id="lobster-live-title">待命 idle</div>
+            <div class="live-preview-desc" id="lobster-live-desc">当前无任务，保持待命</div>
+            <div class="live-preview-meta" id="lobster-live-meta">phase: idle</div>
+          </div>
+        </div>
         <div class="demo-grid">
           <div class="demo-item">
             <div class="demo-dot" style="background:#8892b0"></div>
@@ -112,6 +137,12 @@ export default function render(el) {
       .state-demo { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); padding: 20px 24px; }
       .demo-title { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1px; }
       .demo-grid { display: flex; flex-direction: column; gap: 10px; }
+      .live-preview { display:flex; align-items:center; gap:14px; padding:14px 16px; margin-bottom:14px; background:linear-gradient(135deg,var(--bg-tertiary),rgba(233,69,96,0.08)); border:1px solid var(--border-primary); border-radius: var(--radius-md); }
+      .live-preview-emoji { font-size:32px; line-height:1; }
+      .live-preview-title { font-size: var(--font-size-md); font-weight:700; color:var(--text-primary); }
+      .live-preview-desc { font-size: var(--font-size-sm); color:var(--text-secondary); margin-top:2px; }
+      .live-preview-meta { font-size: var(--font-size-xs); color: var(--text-tertiary); margin-top:6px; }
+      .demo-grid { display: flex; flex-direction: column; gap: 10px; }
       .demo-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); }
       .demo-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
       .demo-name { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-primary); }
@@ -123,6 +154,28 @@ export default function render(el) {
     `
     document.head.appendChild(style)
   }
+
+  const refreshLivePreview = () => {
+    const state = readLiveLobsterState()
+    const phase = state.phase || (state.state === 'idle' ? 'idle' : 'working')
+    const preset = PREVIEW_PRESETS[phase] || PREVIEW_PRESETS.working
+    const emoji = state.emoji || preset.emoji
+    const title = preset.title
+    const desc = state.message || preset.desc
+    const meta = `phase: ${phase} · state: ${state.state || 'working'}`
+    const emojiEl = el.querySelector('#lobster-live-emoji')
+    const titleEl = el.querySelector('#lobster-live-title')
+    const descEl = el.querySelector('#lobster-live-desc')
+    const metaEl = el.querySelector('#lobster-live-meta')
+    if (emojiEl) emojiEl.textContent = emoji
+    if (titleEl) titleEl.textContent = title
+    if (descEl) descEl.textContent = desc
+    if (metaEl) metaEl.textContent = meta
+  }
+
+  refreshLivePreview()
+  window.addEventListener('storage', refreshLivePreview)
+  const pollTimer = setInterval(refreshLivePreview, 1200)
 
   // 绑定按钮事件
   let _lobsterWin = null
@@ -153,4 +206,9 @@ export default function render(el) {
       btn.textContent = '🦞 打开龙虾办公室'
     }
   })
+
+  el.__lobsterCleanup = () => {
+    window.removeEventListener('storage', refreshLivePreview)
+    clearInterval(pollTimer)
+  }
 }

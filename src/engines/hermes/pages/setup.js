@@ -73,11 +73,11 @@ export function render() {
   // --- 阶段指示器 ---
   function renderPhaseIndicator() {
     const phases = [
-      { id: 'detect', label: '检测' },
-      { id: 'install', label: '安装' },
-      { id: 'configure', label: '配置' },
-      { id: 'gateway', label: '启动' },
-      { id: 'complete', label: '完成' },
+      { id: 'detect', label: t('engine.phaseDetect') },
+      { id: 'install', label: t('engine.phaseInstall') },
+      { id: 'configure', label: t('engine.phaseConfigure') },
+      { id: 'gateway', label: t('engine.phaseGateway') },
+      { id: 'complete', label: t('engine.phaseComplete') },
     ]
     const idx = phases.findIndex(p => p.id === phase)
     return `<div class="hermes-phases">${phases.map((p, i) => {
@@ -167,7 +167,7 @@ export function render() {
           ` : ''}
           <div class="hermes-form">
             <label class="hermes-field">
-              <span>Gateway URL</span>
+              <span>${t('engine.configGatewayUrl')}</span>
               <input type="text" id="hm-custom-url" class="input" placeholder="http://127.0.0.1:8642" value="${esc(customGatewayUrl)}">
               <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${t('engine.installCustomHint')}</div>
             </label>
@@ -250,7 +250,7 @@ export function render() {
             <div id="hm-preset-detail" style="display:none;margin-top:6px;padding:8px 12px;background:var(--bg-tertiary);border-radius:var(--radius-md,8px);font-size:12px"></div>
           </div>
           <label class="hermes-field">
-            <span>API Base URL</span>
+            <span>${t('engine.configApiBaseUrl')}</span>
             <input type="text" id="hm-baseurl" class="input" placeholder="https://openrouter.ai/api/v1">
           </label>
           <div class="hermes-field">
@@ -351,11 +351,11 @@ export function render() {
         const detailEl = el.querySelector('#hm-preset-detail')
         if (detailEl && preset) {
           const envLine = preset.apiKeyEnvVars && preset.apiKeyEnvVars.length
-            ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">写入 <code>${preset.apiKeyEnvVars[0]}</code></div>`
+            ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetWriteEnv', { env: `<code>${preset.apiKeyEnvVars[0]}</code>` })}</div>`
             : ''
           const modelsPreview = preset.models && preset.models.length
-            ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${preset.models.length} 个已知模型</div>`
-            : '<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">聚合路由：请自行指定模型</div>'
+            ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetKnownModels', { count: preset.models.length })}</div>`
+            : `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetAggregatorHint')}</div>`
           detailEl.innerHTML = `<div style="color:var(--text-secondary);line-height:1.5">${preset.name}</div>${envLine}${modelsPreview}`
           detailEl.style.display = 'block'
         }
@@ -426,7 +426,7 @@ export function render() {
       }
       draw()
     } catch (e) {
-      logs.push(`检测错误: ${e}`)
+      logs.push(t('engine.detectError', { error: e }))
       phase = 'install'
       draw()
     }
@@ -690,7 +690,7 @@ export function render() {
 function renderGroupedProviderButtons() {
   if (!hermesProviders.length) {
     return `<div style="padding:10px 12px;background:var(--bg-tertiary);border-radius:var(--radius-sm,6px);color:var(--text-secondary);font-size:12px;line-height:1.6">
-      未能加载 provider 列表。Web 模式下可手动填写下方 Base URL 与 API Key 完成配置。
+      ${t('engine.providerListLoadFailed')}
     </div>`
   }
 
@@ -712,19 +712,19 @@ function renderGroupedProviderButtons() {
   const parts = []
 
   if (hermesGroups.apiKeyIntl.length) {
-    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">国际 · API Key</div><div style="${rowStyle}">${hermesGroups.apiKeyIntl.map(btn).join('')}</div></div>`)
+    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">${t('engine.providerGroupIntl')}</div><div style="${rowStyle}">${hermesGroups.apiKeyIntl.map(btn).join('')}</div></div>`)
   }
   if (hermesGroups.apiKeyCn.length) {
-    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">国内 · API Key</div><div style="${rowStyle}">${hermesGroups.apiKeyCn.map(btn).join('')}</div></div>`)
+    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">${t('engine.providerGroupCn')}</div><div style="${rowStyle}">${hermesGroups.apiKeyCn.map(btn).join('')}</div></div>`)
   }
   if (hermesGroups.aggregators.length) {
-    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">聚合 / 路由</div><div style="${rowStyle}">${hermesGroups.aggregators.map(btn).join('')}</div></div>`)
+    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">${t('engine.providerGroupAggregator')}</div><div style="${rowStyle}">${hermesGroups.aggregators.map(btn).join('')}</div></div>`)
   }
   if (hermesGroups.oauth.length) {
     const oauthItems = hermesGroups.oauth.map(p =>
-      `<div style="font-size:11px;color:var(--text-tertiary);margin-right:10px"><code>${p.name}</code>：需运行 <code>${p.cliAuthHint}</code></div>`
+      `<div style="font-size:11px;color:var(--text-tertiary);margin-right:10px"><code>${p.name}</code>：${t('engine.providerOAuthHint', { cmd: `<code>${p.cliAuthHint}</code>` })}</div>`
     ).join('')
-    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">OAuth 登录（需终端）</div><div style="display:flex;flex-wrap:wrap;gap:4px 0">${oauthItems}</div></div>`)
+    parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">${t('engine.providerGroupOAuth')}</div><div style="display:flex;flex-wrap:wrap;gap:4px 0">${oauthItems}</div></div>`)
   }
 
   return parts.join('')

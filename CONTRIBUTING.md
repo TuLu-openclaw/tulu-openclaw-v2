@@ -1,6 +1,6 @@
 # 贡献指南 & 维护手册
 
-感谢你对 ClawPanel 项目的关注！本文档同时作为**贡献指南**和**项目维护手册**，涵盖开发、构建、发版、部署的完整工作流。
+感谢你对 屠戮OpenClaw 项目的关注！本文档同时作为**贡献指南**和**项目维护手册**，涵盖开发、构建、发版、部署的完整工作流。
 
 > 🌐 **官网**: [claw.qt.cool](https://claw.qt.cool/)  |  📦 **仓库**: [github.com/qingchencloud/clawpanel](https://github.com/qingchencloud/clawpanel)
 
@@ -157,7 +157,7 @@ clawpanel/
 
 ## 运行模式
 
-ClawPanel 有两种运行模式，前端代码通过 `isTauri` 标志自动适配：
+屠戮OpenClaw 有两种运行模式，前端代码通过 `isTauri` 标志自动适配：
 
 | 模式 | 启动方式 | 后端 | API 通信 | 适用场景 |
 |------|----------|------|----------|----------|
@@ -286,11 +286,11 @@ git push origin :refs/tags/v0.6.0
 
 ### `~/.openclaw/openclaw.json`
 
-OpenClaw 主配置文件，包含模型配置、网关配置等。由 ClawPanel 的"模型配置"和"网关配置"页面读写。
+OpenClaw 主配置文件，包含模型配置、网关配置等。由 屠戮OpenClaw 的"模型配置"和"网关配置"页面读写。
 
 ### `~/.openclaw/clawpanel.json`
 
-ClawPanel 面板自身的配置文件，独立于 OpenClaw：
+屠戮OpenClaw 面板自身的配置文件，独立于 OpenClaw：
 
 ```json
 {
@@ -424,7 +424,7 @@ Tauri 桌面应用启动时 PATH 可能不完整（macOS Finder 启动、Windows
 
 ### 密码保护
 
-ClawPanel 支持访问密码保护，**Web 模式和 Tauri 桌面端均可启用**：
+屠戮OpenClaw 支持访问密码保护，**Web 模式和 Tauri 桌面端均可启用**：
 
 | 模式 | 密码存储 | 验证方式 | 会话管理 |
 |------|----------|----------|----------|

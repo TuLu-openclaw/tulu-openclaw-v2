@@ -17,6 +17,8 @@ import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
 import { toast } from '../../../components/toast.js'
 import { showConfirm } from '../../../components/modal.js'
+import { getActiveEngineId } from '../../../lib/engine-manager.js'
+import { runDualEngineCollab } from '../../../lib/collab-orchestrator.js'
 import { getChatStore, getSourceLabel } from '../lib/chat-store.js'
 
 const HERMES_COMMANDS_PROMPT = `Hermes，以下是你必须学会并熟练掌握的最全指令大全，涵盖了你所有的工作场景。你必须将这些指令烂熟于心，做到随用随取，执行无误。
@@ -273,10 +275,9 @@ function formatTime(ts) {
   if (!Number.isFinite(d.getTime())) return ''
   const now = new Date()
   if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   }
-  const mo = d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-  return mo
+  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 
 function sessionDisplayTitle(s) {
@@ -471,6 +472,8 @@ export function render() {
   let inputCaret = 0                  // caret position restored after re-render
   let lastActiveSessionId = store.state.activeSessionId
   let forceScrollBottom = true
+  let quickCommandMenuOpen = false
+  let quickCommandQuery = ''
 
   // Multi-select for batch session deletion. When non-null, the sidebar
   // switches into "selection mode": a checkbox appears on every row and
@@ -819,7 +822,96 @@ export function render() {
     `
   }
 
+  function renderQuickCommandMenu() {
+    if (!quickCommandMenuOpen) return ''
+    const q = quickCommandQuery.trim().toLowerCase()
+    const filtered = HERMES_COMMAND_OPTIONS.filter(([cmd, desc]) => {
+      if (!q) return true
+      const hay = `${cmd} ${desc}`.toLowerCase()
+      return hay.includes(q)
+    })
+    return `
+      <div class="hm-chat-quick-command-menu" id="hm-chat-quick-command-menu">
+        <div class="hm-chat-quick-command-head">
+          <div class="hm-chat-quick-command-title">Hermes 快捷指令</div>
+          <button type="button" class="hm-chat-quick-command-close" id="hm-chat-quick-command-close" title="关闭">${ICONS.close}</button>
+        </div>
+        <div class="hm-chat-quick-command-search-wrap">
+          <input type="text" id="hm-chat-quick-command-search" class="hm-chat-quick-command-search"
+                 placeholder="搜索命令或说明..." value="${escAttr(quickCommandQuery)}" />
+        </div>
+        <div class="hm-chat-quick-command-list">
+          ${filtered.length ? filtered.map(([cmd, desc]) => `
+            <button type="button" class="hm-chat-quick-command-item" data-quick-command="${escAttr(cmd)}">
+              <span class="hm-chat-quick-command-item-main">
+                <span class="hm-chat-quick-command-item-cmd">${escHtml(cmd)}</span>
+                <span class="hm-chat-quick-command-item-desc">${escHtml(desc)}</span>
+              </span>
+              <span class="hm-chat-quick-command-item-send">发送</span>
+            </button>
+          `).join('') : `<div class="hm-chat-quick-command-empty">没有匹配的快捷指令</div>`}
+        </div>
+      </div>
+    `
+  }
+
+  function renderCollabPicker() {
+    if (!collabPickerOpen) return ''
+    const mkBtn = (kind, value, current) => `
+      <button type="button" class="hm-collab-picker-chip ${current === value ? 'is-active' : ''}" data-collab-${kind}="${escAttr(value)}">${escHtml(value)}</button>
+    `
+    return `
+      <div class="hm-collab-picker" id="hm-collab-picker">
+        <div class="hm-collab-picker-head">
+          <div class="hm-collab-picker-title">真协同配置面板</div>
+          <button type="button" class="hm-collab-picker-close" id="hm-collab-picker-close" title="关闭">${ICONS.close}</button>
+        </div>
+        <div class="hm-collab-picker-group">
+          <div class="hm-collab-picker-label">主导引擎</div>
+          <div class="hm-collab-picker-row">
+            ${mkBtn('lead', 'Hermes', collabLeadEngine)}
+            ${mkBtn('lead', 'OpenClaw', collabLeadEngine)}
+          </div>
+        </div>
+        <div class="hm-collab-picker-group">
+          <div class="hm-collab-picker-label">协作引擎</div>
+          <div class="hm-collab-picker-row">
+            ${mkBtn('support', 'Hermes', collabSupportEngine)}
+            ${mkBtn('support', 'OpenClaw', collabSupportEngine)}
+          </div>
+        </div>
+        <div class="hm-collab-picker-group">
+          <div class="hm-collab-picker-label">主导任务</div>
+          <textarea id="hm-collab-lead-task" class="hm-chat-input" rows="3" placeholder="例如：由 Hermes 编写代码、修改文件、输出补丁">${escHtml(collabLeadTask)}</textarea>
+        </div>
+        <div class="hm-collab-picker-group">
+          <div class="hm-collab-picker-label">协作任务</div>
+          <textarea id="hm-collab-support-task" class="hm-chat-input" rows="3" placeholder="例如：由 OpenClaw 执行测试、构建验证、返回失败日志">${escHtml(collabSupportTask)}</textarea>
+        </div>
+        <div class="hm-collab-picker-group">
+          <div class="hm-collab-picker-label">执行策略</div>
+          <div class="hm-collab-picker-row" style="justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">
+              <input type="checkbox" id="hm-collab-auto-iterate" ${collabAutoIterate ? 'checked' : ''}>
+              自动迭代
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">
+              最大轮数
+              <input type="number" id="hm-collab-max-rounds" min="1" max="10" value="${Number(collabMaxRounds) || 3}" style="width:72px" class="form-input">
+            </label>
+          </div>
+        </div>
+        <div class="hm-collab-picker-actions">
+          <button type="button" class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-collab-picker-cancel">取消</button>
+          <button type="button" class="hm-btn hm-btn--primary hm-btn--sm" id="hm-collab-picker-apply">应用到协同模板</button>
+          <button type="button" class="hm-btn hm-btn--primary hm-btn--sm" id="hm-collab-picker-run">直接启动真协同</button>
+        </div>
+      </div>
+    `
+  }
+
   function renderInput() {
+    const collabPicker = renderCollabPicker()
     const active = store.activeSession()
     const streaming = store.state.streaming
     const placeholder = streaming
@@ -844,9 +936,14 @@ export function render() {
     return `
       <div class="hm-chat-input-area">
         ${renderSlashMenu()}
+        ${renderQuickCommandMenu()}
+        ${collabPicker}
         <div class="hm-chat-quickbar">
-          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-command" title="选择并发送 Hermes 快捷指令">⚡ 快捷指令</button>
-          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-skills" title="发送必备技能清单给 Hermes">🧠 必备技能</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-collab" title="${escAttr(t('engine.collabActionHint'))}">${escHtml(t('engine.collabAction'))}</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-collab-auto" title="${escAttr(t('engine.collabAutoHint'))}">⚙️ ${escHtml(t('engine.collabAutoAction'))}</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-collab-run" title="真正发起 OpenClaw + Hermes 双引擎协同执行">🦞⇄🤖 真协同</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-command" title="选择并一键发送 Hermes 快捷指令">⚡ 快捷指令</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-skills" title="一键发送必备技能清单给 Hermes">🧠 必备技能</button>
         </div>
         ${showUsage ? `
           <div class="hm-chat-usage-bar" title="${escAttr(t('engine.chatUsageTooltip'))}">
@@ -910,7 +1007,7 @@ export function render() {
           <div class="hm-chat-gw-status ${gwOnline ? 'is-online' : 'is-offline'}"
                title="${escHtml(gwOnline ? t('engine.chatGatewayOnline') : t('engine.chatGatewayOffline'))}">
             <span class="hm-chat-gw-dot"></span>
-            <span class="hm-chat-gw-label">GATEWAY</span>
+            <span class="hm-chat-gw-label">网关</span>
             <span class="hm-chat-gw-text">${escHtml(gwOnline ? t('engine.chatGatewayOnlineShort') : t('engine.chatGatewayOfflineShort'))}</span>
             ${currentModel ? `<span class="hm-chat-gw-model">${escHtml(currentModel)}</span>` : ''}
           </div>
@@ -1295,7 +1392,55 @@ export function render() {
     }
 
     el.querySelector('#hm-chat-send')?.addEventListener('click', handleSend)
-    el.querySelector('#hm-chat-quick-command')?.addEventListener('click', openQuickCommandPicker)
+    el.querySelector('#hm-chat-collab')?.addEventListener('click', injectCollabTemplate)
+    el.querySelector('#hm-chat-collab-auto')?.addEventListener('click', injectAutoCollabTemplate)
+    el.querySelector('#hm-chat-collab-run')?.addEventListener('click', openCollabPicker)
+    el.querySelector('#hm-collab-picker-close')?.addEventListener('click', closeCollabPicker)
+    el.querySelector('#hm-collab-picker-cancel')?.addEventListener('click', closeCollabPicker)
+    el.querySelector('#hm-collab-picker-apply')?.addEventListener('click', applyCollabPicker)
+    el.querySelector('#hm-collab-picker-run')?.addEventListener('click', async () => {
+      syncCollabPickerFields()
+      closeCollabPicker()
+      injectCollabTemplate()
+      await runTrueCollab()
+    })
+    el.querySelectorAll('[data-collab-lead]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        collabLeadEngine = btn.getAttribute('data-collab-lead') || 'Hermes'
+        if (collabLeadEngine === collabSupportEngine) collabSupportEngine = collabLeadEngine === 'Hermes' ? 'OpenClaw' : 'Hermes'
+        draw()
+      })
+    })
+    el.querySelectorAll('[data-collab-support]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        collabSupportEngine = btn.getAttribute('data-collab-support') || 'OpenClaw'
+        if (collabSupportEngine === collabLeadEngine) collabLeadEngine = collabSupportEngine === 'Hermes' ? 'OpenClaw' : 'Hermes'
+        draw()
+      })
+    })
+    el.querySelector('#hm-chat-quick-command')?.addEventListener('click', () => {
+      quickCommandMenuOpen = !quickCommandMenuOpen
+      if (!quickCommandMenuOpen) quickCommandQuery = ''
+      draw()
+    })
+    el.querySelector('#hm-chat-quick-command-close')?.addEventListener('click', () => {
+      quickCommandMenuOpen = false
+      quickCommandQuery = ''
+      draw()
+    })
+    el.querySelector('#hm-chat-quick-command-search')?.addEventListener('input', (e) => {
+      quickCommandQuery = e.target.value || ''
+      draw()
+    })
+    el.querySelectorAll('[data-quick-command]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const cmd = btn.dataset.quickCommand
+        if (!cmd) return
+        quickCommandMenuOpen = false
+        quickCommandQuery = ''
+        await sendPresetText(cmd)
+      })
+    })
     el.querySelector('#hm-chat-quick-skills')?.addEventListener('click', sendSkillsChecklist)
     el.querySelector('#hm-chat-stop')?.addEventListener('click', () => {
       store.stopStreaming()
@@ -1388,19 +1533,133 @@ export function render() {
   }
 
   async function sendPresetText(text) {
-    inputValue = text
-    inputCaret = inputValue.length
-    await handleSend()
+    if (!text) return
+    try {
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: '收到 Hermes 预设任务' } }))
+    } catch {}
+    forceScrollBottom = true
+    resetInput()
+    draw()
+    await store.sendMessage(text)
   }
 
-  async function openQuickCommandPicker() {
-    const current = prompt(
-      '请输入要发送的 Hermes 指令。\n可直接编辑，或从下面复制：\n\n' +
-      HERMES_COMMAND_OPTIONS.map(([cmd, desc]) => `${cmd} — ${desc}`).join('\n'),
-      HERMES_COMMAND_OPTIONS[0][0]
-    )
-    if (!current) return
-    await sendPresetText(current)
+  function openQuickCommandPicker() {
+    quickCommandMenuOpen = true
+    quickCommandQuery = ''
+    draw()
+  }
+
+  function injectCollabTemplate() {
+    try {
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'thinking', message: '准备 Hermes 协同模板' } }))
+    } catch {}
+    const active = getActiveEngineId()
+    const lead = collabLeadEngine || (active === 'hermes' ? 'Hermes' : 'OpenClaw')
+    const peer = collabSupportEngine || (active === 'hermes' ? 'OpenClaw' : 'Hermes')
+    inputValue = `# 双引擎协同任务\n\n[任务目标]\n- [在这里填写目标]\n\n[建议分配]\n- 主导引擎: ${lead}\n- 协作引擎: ${peer}\n\n[主导任务]\n- ${collabLeadTask || '[例如：由 Hermes 完成代码编写 / 方案设计 / 文档起草]'}\n\n[协作任务]\n- ${collabSupportTask || '[例如：由 OpenClaw 执行测试 / 跑构建 / 验证结果 / 补充修复]'}\n\n[执行策略]\n- 自动迭代: ${collabAutoIterate ? '开启' : '关闭'}\n- 最大轮数: ${collabMaxRounds}\n\n[主导引擎职责]\n- 拆解任务\n- 汇总结论\n- 输出最终结果\n\n[协作引擎职责]\n- 补充分析\n- 交叉验证\n- 处理分支子任务\n\n[执行规则]\n- 用户填写的主导引擎 / 协作引擎 / 主导任务 / 协作任务优先级最高\n- 必须明确谁主导、谁协作\n- 先给出执行计划，再开始执行\n- 最终只输出一份合并后的结果\n\n[最终输出要求]\n- 结果必须包含“执行计划 / 协同分工 / 最终结论”三个部分`
+    inputCaret = inputValue.length
+    inputFocused = true
+    showSlash = false
+    draw()
+  }
+
+  function injectAutoCollabTemplate() {
+    try {
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'thinking', message: '生成自动协同编排方案' } }))
+    } catch {}
+    const goal = (inputValue || '').trim()
+    const active = getActiveEngineId()
+    const preferredLead = active === 'hermes' ? 'Hermes' : 'OpenClaw'
+    const preferredPeer = active === 'hermes' ? 'OpenClaw' : 'Hermes'
+    const lowered = goal.toLowerCase()
+    let mode = '通用任务'
+    let extra = '请按通用复杂任务的方式，自动判断主导/协作关系并分工执行。'
+    let leadDuties = ['拆解任务', '推进主线执行', '汇总结论', '输出最终结果']
+    let peerDuties = ['补充分析', '交叉验证', '检查遗漏', '处理分支子任务']
+    let riskHints = ['避免主导与协作职责重叠', '如结论不一致，必须说明冲突点', '最终只保留一份合并结果']
+    if (/code|编码|编程|修复|bug|debug|脚本|开发|函数|接口|build|构建/.test(lowered)) {
+      mode = '代码/工程任务'
+      extra = '优先让更擅长工程落地的引擎主导，让协作引擎负责代码审查、边界条件和回归验证。'
+      leadDuties = ['负责代码修改与实现路径选择', '推进构建、调试与修复主线', '整合最终变更说明']
+      peerDuties = ['负责代码审查', '检查边界条件与潜在副作用', '补充回归验证建议']
+      riskHints = ['避免只修表面现象而遗漏根因', '避免改动破坏现有构建链路', '输出中必须说明验证范围']
+    } else if (/文档|README|说明|翻译|i18n|多语言|文案|总结/.test(goal)) {
+      mode = '文档/多语言任务'
+      extra = '优先让更擅长结构化表达的引擎主导，让协作引擎负责术语统一、漏项检查和风格校正。'
+      leadDuties = ['负责整体结构设计', '统一主叙事与输出顺序', '完成最终文案定稿']
+      peerDuties = ['检查术语一致性', '检查漏项与歧义', '修正语言风格与多语言偏差']
+      riskHints = ['避免术语前后不一致', '避免翻译语义漂移', '如改动文档名称，需注意历史语义与品牌影响']
+    } else if (/排查|故障|日志|异常|崩溃|诊断|why|error|trace/.test(lowered)) {
+      mode = '排障/诊断任务'
+      extra = '优先让更擅长诊断链路的引擎主导，让协作引擎负责交叉验证、假设枚举和根因收敛。'
+      leadDuties = ['负责建立问题假设', '推进日志/链路诊断主线', '收敛根因并给出修复方向']
+      peerDuties = ['枚举替代假设', '交叉验证证据链', '指出诊断盲区与误判风险']
+      riskHints = ['避免把症状误判为根因', '避免忽略环境因素或配置差异', '输出中必须区分已证实与待验证项']
+    }
+    inputValue = `# 自动双引擎协同编排\n\n[任务类型]\n- ${mode}\n\n[当前引擎上下文]\n- 当前激活引擎: ${active}\n- 建议主导引擎: ${preferredLead}\n- 建议协作引擎: ${preferredPeer}\n\n[当前任务]\n${goal || '- [请在这里填写任务目标]'}\n\n[编排偏好]\n- ${extra}\n\n[建议主导职责]\n${leadDuties.map(x => `- ${x}`).join('\n')}\n\n[建议协作职责]\n${peerDuties.map(x => `- ${x}`).join('\n')}\n\n[风险点]\n${riskHints.map(x => `- ${x}`).join('\n')}\n\n[自动决策要求]\n1. 先判断哪个引擎更适合作为主导引擎，哪个更适合作为协作引擎；若当前激活引擎不适合主导，要明确说明原因。\n2. 输出结构化的“执行计划 / 主导职责 / 协作职责 / 风险点 / 协同复核”。\n3. 如需调用工具或拆分子任务，明确写出每一步由谁负责。\n4. 协同复核必须说明协作引擎验证了什么、补充了什么、否定了什么。\n5. 最终只输出一份合并后的完整结果。\n\n[期望输出结构]\n- 执行计划\n- 主导职责\n- 协作职责\n- 风险点\n- 协同复核\n- 最终结论`
+    inputCaret = inputValue.length
+    inputFocused = true
+    showSlash = false
+    draw()
+  }
+
+  function syncCollabPickerFields() {
+    collabLeadTask = el.querySelector('#hm-collab-lead-task')?.value?.trim?.() || collabLeadTask || ''
+    collabSupportTask = el.querySelector('#hm-collab-support-task')?.value?.trim?.() || collabSupportTask || ''
+    collabAutoIterate = !!el.querySelector('#hm-collab-auto-iterate')?.checked
+    const rounds = Number(el.querySelector('#hm-collab-max-rounds')?.value || collabMaxRounds || 3)
+    collabMaxRounds = Number.isFinite(rounds) ? Math.max(1, Math.min(10, rounds)) : 3
+  }
+
+  function openCollabPicker() {
+    collabPickerOpen = true
+    draw()
+  }
+
+  function closeCollabPicker() {
+    collabPickerOpen = false
+    draw()
+  }
+
+  function applyCollabPicker() {
+    if (collabLeadEngine === collabSupportEngine) {
+      toast('主导引擎和协作引擎不能相同', 'warning')
+      return
+    }
+    syncCollabPickerFields()
+    collabPickerOpen = false
+    injectCollabTemplate()
+  }
+
+  async function runTrueCollab() {
+    const goal = (inputValue || '').trim()
+    if (!goal) {
+      toast('请先输入任务目标，再发起真协同', 'warning')
+      return
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'planning', message: '双引擎协同任务编排中' } }))
+    } catch {}
+    const text = `# 真正双引擎协同执行中\n\n任务：\n${goal}\n\n状态：\n- 将优先解析用户填写的主导引擎 / 协作引擎 / 主导任务 / 协作任务\n- 已开始请求 OpenClaw 与 Hermes 进入协同链路\n- 完成后将自动生成互审与收敛结果` 
+    await store.sendMessage(text)
+    try {
+      const result = await runDualEngineCollab(goal, {
+        autoIterate: collabAutoIterate,
+        maxRounds: collabMaxRounds,
+      })
+      const summary = result.mode === 'pipeline'
+        ? `${result.mergedPrompt}\n\n[系统抓取的串行闭环结果]\n## 主导引擎首轮产出\n${result.leadFirst?.text || '-'}\n\n## 协作引擎首轮验证/测试\n${result.supportVerify?.text || '-'}\n\n## 主导引擎修正后产出\n${result.leadFix?.text || '-'}\n\n## 协作引擎最终复测\n${result.supportRetest?.text || '-'}`
+        : `${result.mergedPrompt}\n\n[系统抓取的协同原始结果]\n## OpenClaw 首轮\n${result.openclaw?.text || '-'}\n\n## Hermes 首轮\n${result.hermes?.text || '-'}\n\n## OpenClaw 复核 Hermes\n${result.openclawReview?.text || '-'}\n\n## Hermes 复核 OpenClaw\n${result.hermesReview?.text || '-'}${result.extraRounds?.length ? `\n\n## 额外自动迭代轮次\n${result.extraRounds.map(r => `### 第 ${r.round} 轮\n- OpenClaw:\n${r.openclaw?.text || '-'}\n- Hermes:\n${r.hermes?.text || '-'}`).join('\n\n')}` : ''}`
+      await store.sendMessage(summary)
+      try {
+        window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'verifying', message: '双引擎互审完成，等待最终收敛输出' } }))
+      } catch {}
+    } catch (e) {
+      toast('双引擎真协同失败：' + (e?.message || e), 'error')
+      try {
+        window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'done', message: '双引擎协同执行失败' } }))
+      } catch {}
+    }
   }
 
   async function sendSkillsChecklist() {
@@ -1410,6 +1669,9 @@ export function render() {
   async function handleSend() {
     const text = inputValue.trim()
     if (!text || store.state.streaming) return
+    try {
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: text ? `收到 Hermes 任务：${text.slice(0, 32)}` : '收到 Hermes 任务' } }))
+    } catch {}
 
     // Local slash commands short-circuit before going to the agent.
     if (text === '/clear') {
@@ -1440,7 +1702,9 @@ export function render() {
       store.pushLocalUser(text)
       try {
         const info = await api.checkHermes()
-        const gw = info?.gatewayRunning ? '✅' : '❌'
+        const gw = info?.gatewayRunning
+          ? (gwOnline ? '✅ 已运行' : '🟡 运行中但未完全就绪')
+          : '❌ 未运行'
         const port = info?.gatewayPort || 8642
         const model = info?.model || '—'
         store.pushLocalAssistant([
@@ -1479,6 +1743,13 @@ export function render() {
   // the main chat redraws and is easy to dismiss with outside clicks.
 
   let searchOverlay = null
+  let collabPickerOpen = false
+  let collabLeadEngine = 'Hermes'
+  let collabSupportEngine = 'OpenClaw'
+  let collabLeadTask = ''
+  let collabSupportTask = ''
+  let collabAutoIterate = true
+  let collabMaxRounds = 3
 
   function openSearch() {
     if (searchState) return

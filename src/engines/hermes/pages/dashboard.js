@@ -8,6 +8,7 @@ import {
   loadHermesProviders,
   inferProviderByBaseUrl,
 } from '../lib/providers.js'
+import { getGatewayState, onStateChange, setUserStopped as setHermesUserStopped, resetAutoRestart as resetHermesAutoRestart } from '../index.js'
 
 const ICONS = {
   running: `<svg viewBox="0 0 24 24" fill="none" stroke="var(--success, #22c55e)" stroke-width="2.5" width="20" height="20"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>`,
@@ -32,6 +33,30 @@ async function tauriListen(event, cb) {
 }
 
 const HERMES_DASHBOARD_URL = 'http://127.0.0.1:9119/'
+
+function hermesStatusText(state) {
+  const status = state?.status || 'unknown'
+  if (status === 'running') return '运行中（已就绪）'
+  if (status === 'degraded') return '运行中（未完全就绪）'
+  if (status === 'recovering') return '自动恢复中'
+  if (status === 'offline') return '已离线'
+  return state?.running ? t('engine.dashRunning') : t('engine.dashStopped')
+}
+
+function hermesStatusTone(state) {
+  const status = state?.status || 'unknown'
+  if (status === 'running') return 'success'
+  if (status === 'degraded' || status === 'recovering') return 'warn'
+  if (status === 'offline') return 'error'
+  return state?.running ? 'success' : 'error'
+}
+
+function isHermesActionSettled(action, state) {
+  const status = state?.status || 'unknown'
+  if (action === 'stop') return state?.running === false && status === 'offline'
+  if (action === 'start' || action === 'restart') return state?.running === true && ['running', 'degraded'].includes(status)
+  return false
+}
 
 /**
  * Open `url` in the user's system browser. Tauri desktop uses the shell
@@ -75,6 +100,7 @@ export function render() {
   let customGwUrl = ''      // 自定义 Gateway URL
   let connectMsg = ''       // 连接区消息
   let modelConfigCollapsed = true // 模型配置默认折叠
+  let gatewayState = getGatewayState()
 
   // 表单状态（跨 draw 保持，不被覆盖）
   let formBaseUrl = ''
@@ -161,7 +187,9 @@ export function render() {
       return
     }
 
-    const gwRunning = info?.gatewayRunning
+    const gwRunning = gatewayState?.running ?? info?.gatewayRunning
+    const gwStatusText = hermesStatusText(gatewayState)
+    const gwTone = hermesStatusTone(gatewayState)
     const port = info?.gatewayPort || 8642
     const version = info?.version || '-'
     const modelName = formModel || hermesConfig?.model || health?.model || info?.model || ''
@@ -183,7 +211,7 @@ export function render() {
         <div class="hm-hero-title">
           <div class="hm-hero-eyebrow">
             <span class="hm-dot hm-dot--${gwRunning ? 'run' : 'stop'}"></span>
-            ${gwRunning ? t('engine.dashEyebrowOnline') : t('engine.dashEyebrowOffline')}
+            ${esc(gwStatusText)}
           </div>
           <h1 class="hm-hero-h1">${t('engine.hermesDashboardTitle')}</h1>
           <div class="hm-hero-sub">127.0.0.1:${port} · ${esc(displayModel || '—')} · v${version}</div>
@@ -198,11 +226,11 @@ export function render() {
 
       <!-- KPI grid: 5 cards with tone indicators -->
       <div class="hm-kpi-grid">
-        <div class="hm-kpi" data-tone="${gwRunning ? 'success' : 'error'}">
+        <div class="hm-kpi" data-tone="${gwTone}">
           <div class="hm-kpi-label">${t('engine.dashGatewayStatus')}</div>
           <div class="hm-kpi-value" style="font-size:15px">
             <span class="hm-dot hm-dot--${gwRunning ? 'run' : 'stop'}"></span>
-            ${gwRunning ? t('engine.dashRunning') : t('engine.dashStopped')}
+            ${esc(gwStatusText)}
           </div>
           <div class="hm-kpi-foot">${t('engine.dashPort')} <span style="color:var(--hm-text-secondary)">:${port}</span></div>
         </div>
@@ -438,26 +466,61 @@ export function render() {
       actionBusy = true; draw()
       showGwMsg(t('engine.gatewayStarting'), false)
       try {
+        setHermesUserStopped(false)
+        resetHermesAutoRestart()
         const result = await api.hermesGatewayAction('start')
         showGwMsg(result || t('engine.dashGatewayStarted'), false)
+        const t0 = Date.now()
+        while (Date.now() - t0 < 30000) {
+          await refresh()
+          if (isHermesActionSettled('start', gatewayState)) break
+          await new Promise(r => setTimeout(r, 1500))
+        }
       } catch (e) {
         showGwMsg(String(e).replace(/^Error:\s*/, ''), true)
+      } finally {
+        actionBusy = false
+        await refresh()
       }
-      actionBusy = false; await refresh()
     })
     el.querySelector('.hm-dash-stop')?.addEventListener('click', async () => {
       actionBusy = true; draw()
-      try { await api.hermesGatewayAction('stop') } catch (e) { showGwMsg(String(e).replace(/^Error:\s*/, ''), true) }
-      actionBusy = false; await refresh()
+      try {
+        setHermesUserStopped(true)
+        await api.hermesGatewayAction('stop')
+        const t0 = Date.now()
+        while (Date.now() - t0 < 30000) {
+          await refresh()
+          if (isHermesActionSettled('stop', gatewayState)) break
+          await new Promise(r => setTimeout(r, 1500))
+        }
+      } catch (e) {
+        showGwMsg(String(e).replace(/^Error:\s*/, ''), true)
+      } finally {
+        actionBusy = false
+        await refresh()
+      }
     })
     el.querySelector('.hm-dash-restart')?.addEventListener('click', async () => {
       actionBusy = true; draw()
-      try { await api.hermesGatewayAction('stop') } catch (_) { /* ignore stop failure on Windows */ }
-      await new Promise(r => setTimeout(r, 1500))
+      showGwMsg(t('engine.dashRestarting') || t('engine.gatewayStarting'), false)
       try {
-        await api.hermesGatewayAction('start')
-      } catch (e) { showGwMsg(String(e).replace(/^Error:\s*/, ''), true) }
-      actionBusy = false; await refresh()
+        setHermesUserStopped(false)
+        resetHermesAutoRestart()
+        const result = await api.hermesGatewayAction('restart')
+        showGwMsg(result || t('engine.dashGatewayStarted'), false)
+        const t0 = Date.now()
+        while (Date.now() - t0 < 30000) {
+          await refresh()
+          if (isHermesActionSettled('restart', gatewayState)) break
+          await new Promise(r => setTimeout(r, 1500))
+        }
+      } catch (e) {
+        showGwMsg(String(e).replace(/^Error:\s*/, ''), true)
+      } finally {
+        actionBusy = false
+        await refresh()
+      }
     })
     // Quick links
     el.querySelectorAll('.hm-dash-link').forEach(btn => {
@@ -865,32 +928,42 @@ export function render() {
 
       info = infoResult.status === 'fulfilled' ? infoResult.value : info
       hermesConfig = configResult.status === 'fulfilled' ? configResult.value : hermesConfig
+      gatewayState = getGatewayState()
 
       if (info?.gatewayRunning) {
         try { health = await api.hermesHealthCheck() } catch (_) {}
       } else {
         health = null
       }
-    } catch (_) {}
-    loading = false
-    // 首次加载时用 hermesConfig 初始化表单
-    if (!formInited && hermesConfig) {
-      formBaseUrl = hermesConfig.base_url || ''
-      formApiKey = hermesConfig.api_key || ''
-      formModel = hermesConfig.model || ''
-      formInited = true
+    } catch (_) {
+    } finally {
+      loading = false
+      // 首次加载时用 hermesConfig 初始化表单
+      if (!formInited && hermesConfig) {
+        formBaseUrl = hermesConfig.base_url || ''
+        formApiKey = hermesConfig.api_key || ''
+        formModel = hermesConfig.model || ''
+        formInited = true
+      }
+      draw()
     }
-    draw()
   }
 
   // 初始加载：先拉取 provider registry（和 refresh 并行），再渲染
   ;(async () => {
     try {
-      hermesProviders = await loadHermesProviders()
-    } catch (err) {
-      console.warn('[hermes/dashboard] failed to load providers:', err)
+      try {
+        hermesProviders = await loadHermesProviders()
+      } catch (err) {
+        console.warn('[hermes/dashboard] failed to load providers:', err)
+      }
+      await refresh()
+    } finally {
+      if (loading) {
+        loading = false
+        draw()
+      }
     }
-    refresh()
   })()
 
   // --- Guardian 事件监听：实时响应 Gateway 状态变化 ---
@@ -899,9 +972,17 @@ export function render() {
 
   async function setupListeners() {
     try {
+      const unlisten1 = onStateChange((data) => {
+        gatewayState = data
+        if (info) info.gatewayRunning = !!data.running
+        draw()
+      })
+      unlisteners.push(unlisten1)
+
       // 监听 Guardian 推送的状态变化
-      const unlisten1 = await tauriListen('hermes-gateway-status', (evt) => {
+      const unlisten2 = await tauriListen('hermes-gateway-status', (evt) => {
         const data = evt.payload
+        gatewayState = { ...gatewayState, ...data }
         if (info) {
           const wasRunning = info.gatewayRunning
           info.gatewayRunning = !!data.running
@@ -909,24 +990,26 @@ export function render() {
           // 状态变化时刷新（不覆盖 form 表单）
           if (wasRunning !== info.gatewayRunning) {
             draw()
+          } else {
+            draw()
           }
         }
       })
-      unlisteners.push(unlisten1)
+      unlisteners.push(unlisten2)
 
       // 监听 Guardian 日志（显示在消息区）
-      const unlisten2 = await tauriListen('hermes-guardian-log', (evt) => {
+      const unlisten3 = await tauriListen('hermes-guardian-log', (evt) => {
         showGwMsg(evt.payload || '', false)
       })
       unlisteners.push(unlisten2)
 
       // 监听 config.yaml 自愈事件（api_server guardian）
-      const unlisten3 = await tauriListen('hermes-config-patched', async (evt) => {
+      const unlisten4 = await tauriListen('hermes-config-patched', async (evt) => {
         const { toast } = await import('../../../components/toast.js')
         const msg = evt?.payload?.message || t('engine.dashConfigPatched')
         toast(msg, 'info', { duration: 6000 })
       })
-      unlisteners.push(unlisten3)
+      unlisteners.push(unlisten4)
     } catch (_) {
       // Web 模式下无 Tauri 事件，静默忽略
     }
