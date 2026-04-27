@@ -19,7 +19,6 @@ on:
 
 env:
   TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
-  SAFE_TAG_NAME: ${{ replace(github.event.inputs.tag_name || github.ref_name, '/', '-') }}
 
 jobs:
   # ── Windows x64 ────────────────────────────────────────
@@ -58,6 +57,12 @@ jobs:
           npm run build
           npm run tauri build
         shell: powershell
+
+      - name: Normalize artifact tag
+        shell: bash
+        run: |
+          SAFE_TAG_NAME="${TAG_NAME//\//-}"
+          echo "SAFE_TAG_NAME=$SAFE_TAG_NAME" >> "$GITHUB_ENV"
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
@@ -112,6 +117,12 @@ jobs:
           npm run build
           npm run tauri build -- --target aarch64-pc-windows-msvc
         shell: powershell
+
+      - name: Normalize artifact tag
+        shell: bash
+        run: |
+          SAFE_TAG_NAME="${TAG_NAME//\//-}"
+          echo "SAFE_TAG_NAME=$SAFE_TAG_NAME" >> "$GITHUB_ENV"
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
@@ -172,6 +183,12 @@ jobs:
         id: find_dmg
         run: find src-tauri/target/aarch64-apple-darwin/release/bundle -name "*.dmg" -type f
 
+      - name: Normalize artifact tag
+        shell: bash
+        run: |
+          SAFE_TAG_NAME="${TAG_NAME//\//-}"
+          echo "SAFE_TAG_NAME=$SAFE_TAG_NAME" >> "$GITHUB_ENV"
+
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
@@ -224,6 +241,12 @@ jobs:
       - name: Find DMG
         id: find_dmg
         run: find src-tauri/target/x86_64-apple-darwin/release/bundle -name "*.dmg" -type f
+
+      - name: Normalize artifact tag
+        shell: bash
+        run: |
+          SAFE_TAG_NAME="${TAG_NAME//\//-}"
+          echo "SAFE_TAG_NAME=$SAFE_TAG_NAME" >> "$GITHUB_ENV"
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
@@ -281,6 +304,12 @@ jobs:
         run: |
           npm run build
           npm run tauri build
+
+      - name: Normalize artifact tag
+        shell: bash
+        run: |
+          SAFE_TAG_NAME="${TAG_NAME//\//-}"
+          echo "SAFE_TAG_NAME=$SAFE_TAG_NAME" >> "$GITHUB_ENV"
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
