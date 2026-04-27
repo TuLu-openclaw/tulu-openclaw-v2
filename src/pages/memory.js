@@ -127,7 +127,6 @@ export async function render() {
   page.querySelector('#btn-del-file').onclick = async () => {
     if (!state.currentPath) return
     const name = state.currentPath.split('/').pop()
-    const { showConfirm } = await import('../components/modal.js')
     const yes = await showConfirm(t('memory.confirmDelete', { name }))
     if (!yes) return
     try {

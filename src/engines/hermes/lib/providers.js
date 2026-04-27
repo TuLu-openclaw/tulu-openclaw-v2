@@ -48,83 +48,125 @@ let _loadPromise = null
 
 /**
  * Fetch the full provider list from Rust (cached for the session).
- * Call this once at module load or at first use.
+ * Returns [] if the backend is unreachable — callers should degrade gracefully.
  */
 export async function loadHermesProviders() {
   if (_cached) return _cached
   if (_loadPromise) return _loadPromise
-  _loadPromise = api.hermesListProviders().then(list => {
-    _cached = list || []
-    return _cached
-  }).catch(() => {
-    _cached = []
-    return _cached
-  })
+
+  _loadPromise = (async () => {
+    try {
+      const list = await api.hermesListProviders()
+      _cached = Array.isArray(list) ? list : []
+      return _cached
+    } catch (err) {
+      console.warn('[hermes/providers] failed to load registry:', err)
+      _cached = []
+      return _cached
+    } finally {
+      _loadPromise = null
+    }
+  })()
+
   return _loadPromise
 }
 
-/** Return all providers as a flat array. */
-export async function getAllProviders() {
-  return loadHermesProviders()
+/** Look up a provider by stable id; returns undefined if unknown. */
+export function findProviderById(list, id) {
+  return list?.find(p => p.id === id)
 }
 
-/** Return a single provider by id, or null. */
-export async function getProviderById(id) {
-  const list = await loadHermesProviders()
-  return list.find(p => p.id === id) || null
-}
-
-/** Return all models for a given provider id. */
-export async function getModelsForProvider(providerId) {
-  const p = await getProviderById(providerId)
-  return p?.models || []
+/** Case-insensitive search by display name or id. */
+export function searchProviders(list, query) {
+  const q = (query || '').trim().toLowerCase()
+  if (!q) return list
+  return list.filter(p =>
+    p.id.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)
+  )
 }
 
 /**
- * Return providers grouped for UI rendering:
- *   { international: Provider[], china: Provider[] }
- * China vs international is determined by the `cn` field on the provider.
+ * Group providers by auth type, with api_key further split into region
+ * buckets for UI rendering. Returns:
+ *   {
+ *     apiKeyIntl:   HermesProvider[],
+ *     apiKeyCn:     HermesProvider[],
+ *     aggregators:  HermesProvider[],
+ *     oauth:        HermesProvider[],
+ *     externalProc: HermesProvider[],
+ *     custom:       HermesProvider[],
+ *   }
  */
-export async function getGroupedProviders() {
-  const list = await loadHermesProviders()
-  const international = []
-  const china = []
-  for (const p of list) {
-    if (CN_PROVIDER_IDS.has(p.id)) {
-      china.push(p)
-    } else {
-      international.push(p)
-    }
+export function groupProviders(list) {
+  const groups = {
+    apiKeyIntl: [],
+    apiKeyCn: [],
+    aggregators: [],
+    oauth: [],
+    externalProc: [],
+    custom: [],
   }
-  return { international, china }
+
+  for (const p of list || []) {
+    if (p.id === 'custom') {
+      groups.custom.push(p)
+      continue
+    }
+    if (p.authType === AUTH_EXTERNAL_PROCESS) {
+      groups.externalProc.push(p)
+      continue
+    }
+    if (p.authType === AUTH_OAUTH_DEVICE || p.authType === AUTH_OAUTH_EXTERNAL) {
+      groups.oauth.push(p)
+      continue
+    }
+    if (p.isAggregator || AGGREGATOR_IDS.has(p.id)) {
+      groups.aggregators.push(p)
+      continue
+    }
+    if (CN_PROVIDER_IDS.has(p.id)) {
+      groups.apiKeyCn.push(p)
+      continue
+    }
+    groups.apiKeyIntl.push(p)
+  }
+
+  return groups
 }
 
-/** Infer the best-guess provider id from a base URL string. */
-export async function inferProviderByBaseUrl(baseUrl) {
-  if (!baseUrl) return null
-  const normalized = baseUrl.replace(/\/$/, '').toLowerCase()
-  const list = await loadHermesProviders()
-  for (const p of list) {
-    const pUrl = (p.base_url || '').replace(/\/$/, '').toLowerCase()
-    if (pUrl && normalized.includes(pUrl)) return p.id
+/**
+ * Given a freshly entered base URL, guess which provider best matches.
+ * Used by setup/dashboard forms to auto-highlight the preset button.
+ */
+export function inferProviderByBaseUrl(list, rawBaseUrl) {
+  const normalize = (u) => (u || '')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/(chat\/completions|completions|responses|messages|models)$/, '')
+  const target = normalize(rawBaseUrl)
+  if (!target) return null
+  for (const p of list || []) {
+    if (normalize(p.baseUrl) === target) return p
   }
   return null
 }
 
-/** Return all models across all providers that match a filter. */
-export async function searchModels(query, limit = 20) {
-  const q = (query || '').toLowerCase().trim()
-  if (!q) return []
-  const list = await loadHermesProviders()
-  const hits = []
-  for (const p of list) {
-    for (const m of (p.models || [])) {
-      const id = (m.id || '').toLowerCase()
-      const name = (m.name || '').toLowerCase()
-      if (id.includes(q) || name.includes(q) || id === q) {
-        hits.push({ ...m, provider: p.id, providerName: p.name })
-      }
-    }
-  }
-  return hits.slice(0, limit)
+/**
+ * Return a sensible default model for a provider.
+ * Aggregators may have empty `models` — callers must handle null.
+ */
+export function defaultModelFor(provider) {
+  if (!provider || !provider.models || !provider.models.length) return null
+  return provider.models[0]
+}
+
+/** Synchronous accessor for already-loaded registry. */
+export function getCachedProviders() {
+  return _cached || []
+}
+
+/** Force a reload on next call (e.g. after dev hot-reload). */
+export function clearProviderCache() {
+  _cached = null
+  _loadPromise = null
 }

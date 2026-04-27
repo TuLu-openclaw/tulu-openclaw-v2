@@ -19,6 +19,7 @@ pub mod config;
 pub mod device;
 pub mod extensions;
 pub mod hermes;
+pub mod hermes_providers;
 pub mod logs;
 pub mod memory;
 pub mod messaging;
@@ -126,6 +127,10 @@ fn read_gateway_port_from_config() -> u16 {
 fn panel_config_path() -> PathBuf {
     // 屠戮OpenClaw 自身配置始终在默认目录，不随 openclawDir 变化
     default_openclaw_dir().join("屠戮OpenClaw.json")
+}
+
+pub fn panel_config_candidate_paths() -> Vec<PathBuf> {
+    vec![panel_config_path()]
 }
 
 #[cfg(target_os = "windows")]

@@ -392,7 +392,19 @@ export function render() {
     }
     invalidate('check_hermes')
     try {
-      info = await api.checkHermes()
+      const [infoResult, configResult] = await Promise.allSettled([
+        api.checkHermes(),
+        api.hermesReadConfig(),
+      ])
+
+      if (infoResult.status === 'fulfilled') {
+        info = infoResult.value
+      } else {
+        throw infoResult.reason
+      }
+
+      config = configResult.status === 'fulfilled' ? configResult.value : null
+
       if (info?.gatewayRunning) {
         try {
           health = await api.hermesHealthCheck()
@@ -402,11 +414,6 @@ export function render() {
         }
       } else {
         health = null
-      }
-      try {
-        config = await api.hermesReadConfig()
-      } catch (_) {
-        config = null
       }
       syncTargetFromInfo()
     } catch (error) {
@@ -558,6 +565,9 @@ export function render() {
   }
 
   draw()
-  refresh()
+  Promise.allSettled([
+    refresh(),
+    detectEnvironments(),
+  ])
   return el
 }

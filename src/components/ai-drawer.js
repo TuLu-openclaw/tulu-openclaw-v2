@@ -5,6 +5,7 @@
  */
 
 import { t } from '../lib/i18n.js'
+import { toast } from './toast.js'
 
 const BOT_ICON = '<svg viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="5" y="8" width="14" height="12" rx="2"/><path d="M9 13h0"/><path d="M15 13h0"/><path d="M10 17h4"/></svg>'
 
@@ -54,9 +55,7 @@ export function openAIDrawerWithError(errorCtx) {
     if (_fab?.el) {
       _fab.el.classList.add('has-error')
     } else {
-      import('./toast.js')
-        .then(({ toast }) => toast(t('assistant.contextSavedToast', { assistant: t('sidebar.assistant') }), 'info'))
-        .catch(() => {})
+      toast(t('assistant.contextSavedToast', { assistant: t('sidebar.assistant') }), 'info')
     }
   } else {
     // 已在助手页 → 直接触发 banner 显示

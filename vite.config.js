@@ -65,11 +65,25 @@ export default defineConfig({
     target: ['es2021', 'chrome100', 'safari13'],
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    chunkSizeWarningLimit: 700,
     // Tauri 多页面入口：index.html + 龙虾办公室独立窗口页面
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'lobster-office': path.resolve(__dirname, 'lobster-office.html'),
+      },
+      output: {
+        manualChunks(id) {
+          if (!id) return
+          const cleanId = id.replace(/\\/g, '/')
+          if (cleanId.includes('/node_modules/')) {
+            if (cleanId.includes('@tauri-apps/api')) return 'vendor-tauri'
+            return 'vendor'
+          }
+          if (cleanId.includes('/src/engines/hermes/')) return 'hermes-core'
+          if (cleanId.includes('/src/lib/tauri-api.js') || cleanId.includes('/src/lib/ws-client.js')) return 'gateway-core'
+          if (cleanId.includes('/src/lib/app-state.js') || cleanId.includes('/src/lib/engine-manager.js') || cleanId.includes('/src/components/sidebar.js')) return 'app-core'
+        },
       },
     },
   },

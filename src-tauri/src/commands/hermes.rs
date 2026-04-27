@@ -220,9 +220,6 @@ async fn do_restart_gateway() -> Result<(), String> {
     cmd.args(["gateway", "run"])
         .current_dir(&home)
         .env("PATH", &enhanced)
-        .env("PYTHONIOENCODING", "utf-8")
-        .env("PYTHONUTF8", "1")
-        .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
         .stdin(std::process::Stdio::null())
         .stdout(log_file)
         .stderr(log_err);
@@ -362,6 +359,8 @@ fn uv_bin_path() -> PathBuf {
 fn uv_download_url(version: &str) -> String {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     let filename = "uv-x86_64-pc-windows-msvc.zip";
+    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+    let filename = "uv-aarch64-pc-windows-msvc.zip";
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     let filename = "uv-aarch64-apple-darwin.tar.gz";
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
@@ -370,14 +369,6 @@ fn uv_download_url(version: &str) -> String {
     let filename = "uv-x86_64-unknown-linux-gnu.tar.gz";
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     let filename = "uv-aarch64-unknown-linux-gnu.tar.gz";
-    #[cfg(not(any(
-        all(target_os = "windows", target_arch = "x86_64"),
-        all(target_os = "macos", target_arch = "aarch64"),
-        all(target_os = "macos", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "aarch64")
-    )))]
-    let filename = "uv-x86_64-pc-windows-msvc.zip"; // fallback for unsupported arches
 
     format!("https://github.com/astral-sh/uv/releases/download/{version}/{filename}")
 }
@@ -766,62 +757,16 @@ pub fn check_hermes() -> Result<Value, String> {
     Ok(Value::Object(result))
 }
 
-/// Hermes Gateway 端口
-/// Hermes Gateway 端口
-/// 优先级：1. panel config gatewayUrl 中的端口；2. config.yaml 的 port 字段；3. 默认 8642
+/// Hermes Gateway 默认端口
 fn hermes_gateway_port() -> u16 {
-    // 1. 优先从 panel config gatewayUrl 中提取（UI 配置的连接目标）
-    let url_str = {
-        let v = match super::read_panel_config_value() {
-            Some(Value::Object(m)) => m,
-            _ => return extract_from_yaml_or_default(),
-        };
-        let hermes_val = match v.get("hermes") {
-            Some(Value::Object(m)) => m,
-            _ => return extract_from_yaml_or_default(),
-        };
-        let url_val = match hermes_val.get("gatewayUrl") {
-            Some(val) => val,
-            _ => return extract_from_yaml_or_default(),
-        };
-        let s = match url_val.as_str() {
-            Some(s) => s,
-            _ => return extract_from_yaml_or_default(),
-        };
-        s.trim().to_string()
-    };
-    if !url_str.is_empty() {
-        if let Some(port) = extract_port_from_url(&url_str) {
-            return port;
-        }
-    }
-
-    extract_from_yaml_or_default()
-}
-
-fn extract_from_yaml_or_default() -> u16 {
+    // 尝试从 config.yaml 读取自定义端口
     let config_path = hermes_home().join("config.yaml");
     if let Ok(content) = std::fs::read_to_string(&config_path) {
+        // 简单解析 YAML 中的 api_server_port 或 port
         for line in content.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with("port:") {
-                let rest = trimmed
-                    .strip_prefix("port:")
-                    .unwrap()
-                    .trim()
-                    .split('#')
-                    .next()
-                    .unwrap()
-                    .trim();
-                if let Ok(port) = rest.parse::<u16>() {
-                    if port > 0 {
-                        return port;
-                    }
-                }
-            }
             if let Some(rest) = trimmed.strip_prefix("api_server_port:") {
-                let rest = rest.trim().split('#').next().unwrap().trim();
-                if let Ok(port) = rest.parse::<u16>() {
+                if let Ok(port) = rest.trim().parse::<u16>() {
                     if port > 0 {
                         return port;
                     }
@@ -829,21 +774,271 @@ fn extract_from_yaml_or_default() -> u16 {
             }
         }
     }
-    8642
+    8642 // Hermes 默认端口
 }
 
-/// 从 URL 字符串中提取端口号
-fn extract_port_from_url(url: &str) -> Option<u16> {
-    let url = url
-        .trim_start_matches("http://")
-        .trim_start_matches("https://")
-        .trim_end_matches('/');
-    if let Some(colon_pos) = url.find(':') {
-        let port_str = &url[colon_pos + 1..];
-        port_str.parse::<u16>().ok()
-    } else {
-        None
+/// Hermes Dashboard 端口 - 从 config.yaml 的 dashboard.port 读取，默认 9119
+fn hermes_dashboard_port() -> u16 {
+    let config_path = hermes_home().join("config.yaml");
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        let mut in_dashboard = false;
+        for line in content.lines() {
+            let t = line.trim();
+            if t.is_empty() || t.starts_with('#') {
+                continue;
+            }
+            let indent = line.len() - line.trim_start().len();
+            if indent == 0 {
+                in_dashboard = t == "dashboard:" || t.starts_with("dashboard:");
+                continue;
+            }
+            if in_dashboard && t.starts_with("port:") {
+                if let Ok(port) = t.trim_start_matches("port:").trim().parse::<u16>() {
+                    if port > 0 {
+                        return port;
+                    }
+                }
+            }
+        }
     }
+    9119 // Hermes Dashboard 默认端口
+}
+
+/// 探测 Hermes Dashboard 是否在运行（TCP 连接 127.0.0.1 上的 dashboard 端口）
+/// 返回 { running: bool, port: u16 }，前端据此决定是否打开浏览器或提示用户启动
+#[tauri::command]
+pub async fn hermes_dashboard_probe() -> Result<Value, String> {
+    let port = hermes_dashboard_port();
+    let addr = format!("127.0.0.1:{port}");
+    let socket_addr: std::net::SocketAddr = addr
+        .parse()
+        .map_err(|e| format!("address parse error: {e}"))?;
+    let running = tokio::task::spawn_blocking(move || {
+        std::net::TcpStream::connect_timeout(&socket_addr, std::time::Duration::from_millis(800))
+            .is_ok()
+    })
+    .await
+    .unwrap_or(false);
+    Ok(serde_json::json!({ "running": running, "port": port }))
+}
+
+/// 我们 spawn 的 Dashboard 进程 PID（0 = 没有）
+static DASH_PID: AtomicU32 = AtomicU32::new(0);
+
+/// 精准杀掉我们 spawn 的 Dashboard 进程（taskkill /F /PID）
+fn kill_dashboard_pid() -> bool {
+    let pid = DASH_PID.load(Ordering::SeqCst);
+    if pid == 0 {
+        return false;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("taskkill");
+        cmd.args(["/F", "/PID", &pid.to_string()]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let ok = cmd.output().map(|o| o.status.success()).unwrap_or(false);
+        if ok {
+            DASH_PID.store(0, Ordering::SeqCst);
+        }
+        ok
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let ok = std::process::Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok {
+            DASH_PID.store(0, Ordering::SeqCst);
+        }
+        ok
+    }
+}
+
+/// 启动 Hermes Dashboard 服务（`hermes dashboard`），idempotent
+/// 行为：
+///   1. 端口已可达 → 直接返回 `started: true, already_running: true`
+///   2. 否则 spawn `hermes dashboard`，等最多 90s（首次会 npm build 前端）
+///   3. 进程提前退出 → 读日志尾部检测 deps_missing / port_in_use
+/// 返回 `{ started, kind?, port, pid?, exit_code?, log_tail? }`
+#[tauri::command]
+pub async fn hermes_dashboard_start() -> Result<Value, String> {
+    let port = hermes_dashboard_port();
+    let addr_str = format!("127.0.0.1:{port}");
+    let socket_addr: std::net::SocketAddr = addr_str
+        .parse()
+        .map_err(|e| format!("address parse error: {e}"))?;
+
+    // 1. 已运行？
+    if std::net::TcpStream::connect_timeout(&socket_addr, std::time::Duration::from_millis(500))
+        .is_ok()
+    {
+        return Ok(serde_json::json!({
+            "started": true,
+            "already_running": true,
+            "port": port,
+        }));
+    }
+
+    // 2. 清掉残留 PID（来自上一次 spawn）
+    let _ = kill_dashboard_pid();
+
+    let home = hermes_home();
+    let log_path = home.join("dashboard-run.log");
+    let log_file =
+        std::fs::File::create(&log_path).map_err(|e| format!("创建日志文件失败: {e}"))?;
+    let log_err = log_file
+        .try_clone()
+        .map_err(|e| format!("克隆日志句柄失败: {e}"))?;
+
+    let enhanced = hermes_enhanced_path();
+    let mut cmd = std::process::Command::new("hermes");
+    cmd.args(["dashboard"])
+        .current_dir(&home)
+        .env("PATH", &enhanced)
+        .stdin(std::process::Stdio::null())
+        .stdout(log_file)
+        .stderr(log_err);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    // 注入 .env（与 gateway 启动一致）
+    let env_path = home.join(".env");
+    if let Ok(env_content) = std::fs::read_to_string(&env_path) {
+        for line in env_content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, val)) = line.split_once('=') {
+                cmd.env(key.trim(), val.trim());
+            }
+        }
+    }
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn hermes dashboard failed: {e}"))?;
+    let pid = child.id();
+    DASH_PID.store(pid, Ordering::SeqCst);
+
+    // 3. 等待 - 端口起来 / 进程提前死 / 超时
+    // 90s 是为了覆盖首次启动的 npm build（dashboard 文档说前端没构建会 auto build on first launch）
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    while std::time::Instant::now() < deadline {
+        // 进程提前退出？
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                DASH_PID.store(0, Ordering::SeqCst);
+                let log_raw = std::fs::read_to_string(&log_path).unwrap_or_default();
+                let tail = log_raw
+                    .lines()
+                    .rev()
+                    .take(40)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let lower = log_raw.to_lowercase();
+                let kind = if lower.contains("web ui dependencies not installed")
+                    || lower.contains("no module named 'fastapi'")
+                    || (lower.contains("import error") && lower.contains("fastapi"))
+                {
+                    "deps_missing"
+                } else if lower.contains("no module named 'fcntl'")
+                    || lower.contains("no module named 'termios'")
+                    || lower.contains("no module named 'pty'")
+                    || lower.contains("no module named 'tty'")
+                    || lower.contains("no module named 'pwd'")
+                    || lower.contains("no module named 'grp'")
+                {
+                    // Hermes 在 pty_bridge.py / memory_tool.py 等处无条件 import POSIX-only
+                    // 标准库（fcntl/termios/pty/tty/pwd/grp），Windows 上根本不存在
+                    // 上游 issue：https://github.com/NousResearch/hermes-agent/issues/5246
+                    "posix_only_module"
+                } else if lower.contains("address already in use")
+                    || lower.contains("address in use")
+                    || (lower.contains("port") && lower.contains("already in use"))
+                {
+                    "port_in_use"
+                } else {
+                    "spawn_failed"
+                };
+                return Ok(serde_json::json!({
+                    "started": false,
+                    "kind": kind,
+                    "exit_code": status.code(),
+                    "port": port,
+                    "log_tail": tail,
+                }));
+            }
+            Ok(None) => {
+                // 还活着，探端口
+                if std::net::TcpStream::connect_timeout(
+                    &socket_addr,
+                    std::time::Duration::from_millis(300),
+                )
+                .is_ok()
+                {
+                    // PID 仍记录在 DASH_PID，供后续 stop 使用
+                    return Ok(serde_json::json!({
+                        "started": true,
+                        "already_running": false,
+                        "port": port,
+                        "pid": pid,
+                    }));
+                }
+            }
+            Err(e) => {
+                // try_wait 异常：异常本身罕见，先记录并跳出
+                let log_raw = std::fs::read_to_string(&log_path).unwrap_or_default();
+                let tail = log_raw
+                    .lines()
+                    .rev()
+                    .take(40)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Ok(serde_json::json!({
+                    "started": false,
+                    "kind": "spawn_failed",
+                    "port": port,
+                    "log_tail": tail,
+                    "error": format!("try_wait error: {e}"),
+                }));
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+
+    // 4. 超时（进程还活着但端口没起来；常见于首次构建超过 90s）
+    let log_raw = std::fs::read_to_string(&log_path).unwrap_or_default();
+    let tail = log_raw
+        .lines()
+        .rev()
+        .take(40)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(serde_json::json!({
+        "started": false,
+        "kind": "timeout",
+        "port": port,
+        "pid": pid,
+        "log_tail": tail,
+    }))
+}
+
+/// 停止我们 spawn 的 Dashboard 进程
+#[tauri::command]
+pub async fn hermes_dashboard_stop() -> Result<bool, String> {
+    Ok(kill_dashboard_pid())
 }
 
 // ---------------------------------------------------------------------------
@@ -1269,35 +1464,38 @@ pub async fn configure_hermes(
         let _ = std::fs::create_dir_all(home.join(dir));
     }
 
-    // Hermes 不使用 provider 字段——它通过 .env 中的 API key/base_url 自动检测。
-    // 只需要区分 env key 名称（OPENAI_API_KEY vs ANTHROPIC_API_KEY 等）。
-    let env_provider = match provider.as_str() {
-        "anthropic" | "minimax" => "anthropic",
-        "openrouter" => "openrouter",
-        _ => "openai", // 所有 OpenAI 兼容的
-    };
+    // ---- Provider-aware key routing ----
+    // ClawPanel 使用 HERMES_PROVIDER_REGISTRY (22 providers) 决定 .env key 名和
+    // config.yaml 的 model.provider 字段。详见 hermes_providers.rs 的文档。
+    use super::hermes_providers;
 
-    // 模型标识：Hermes 直接用模型名，不加 provider/ 前缀
-    let model_str = model.unwrap_or_else(|| match env_provider {
-        "anthropic" => "claude-sonnet-4-20250514".into(),
-        "openrouter" => "anthropic/claude-sonnet-4-20250514".into(),
-        _ => "gpt-4o".into(),
+    let pcfg = hermes_providers::get_provider(&provider);
+
+    // 模型标识：优先使用调用方传入，否则用 provider 的首个已知模型；
+    // aggregator 没有默认模型，要求调用方显式提供。
+    let model_str = model.unwrap_or_else(|| {
+        pcfg.and_then(|p| p.models.first().map(|s: &&str| (*s).to_string()))
+            .unwrap_or_default()
     });
+    if model_str.is_empty() {
+        return Err(format!(
+            "Provider '{provider}' has no default model; please pass an explicit model name"
+        ));
+    }
 
     // ---- 写入 config.yaml（合并模式：保留用户自定义的 hooks/skills/cron 等） ----
     let config_path = home.join("config.yaml");
-    let base_url_line = if let Some(ref url) = base_url {
-        let u = url.trim();
-        if !u.is_empty() {
-            format!("  base_url: {u}\n")
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
+    let base_url_line = match base_url.as_ref() {
+        Some(url) if !url.trim().is_empty() => format!("  base_url: {}\n", url.trim()),
+        _ => String::new(),
     };
-    // Hermes 不使用 provider 字段，留空即可
-    let provider_line = String::new();
+    // Provider 字段：Hermes v0.14+ 的 model_switch 依赖该字段决定 env_var。
+    // `custom` 不写 provider 行，让 Hermes 从 base_url 自动推断。
+    let provider_line = if provider == "custom" || provider.is_empty() {
+        String::new()
+    } else {
+        format!("  provider: {provider}\n")
+    };
 
     let config_content = if config_path.exists() {
         // 读取现有配置，只更新 model 区块，保留其余内容
@@ -1309,7 +1507,7 @@ pub async fn configure_hermes(
             r#"# Hermes Agent configuration (managed by ClawPanel)
 model:
   default: {model_str}
-{base_url_line}platform_toolsets:
+{provider_line}{base_url_line}platform_toolsets:
   api_server:
     - hermes-api-server
 terminal:
@@ -1324,35 +1522,34 @@ platforms:
         .map_err(|e| format!("写入 config.yaml 失败: {e}"))?;
 
     // ---- 写入 .env（合并模式：保留用户自定义的环境变量如 TAVILY_API_KEY 等） ----
-    let env_key = match env_provider {
-        "anthropic" => "ANTHROPIC_API_KEY",
-        "openrouter" => "OPENROUTER_API_KEY",
-        _ => "OPENAI_API_KEY",
-    };
-    // ClawPanel 管理的 key 列表（更新时覆盖，其他 key 保留）
-    let managed_keys: Vec<&str> = vec![
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "OPENROUTER_API_KEY",
-        "OPENAI_BASE_URL",
-        "ANTHROPIC_BASE_URL",
-        "GATEWAY_ALLOW_ALL_USERS",
-        "API_SERVER_KEY",
-    ];
+    // 根据 provider 选择正确的 env var；OAuth/external_process 类没有 api_key_env_vars，
+    // 此时跳过写 key（CLI 登录后 Hermes 会自行管理 auth.json）。
+    let key_env = hermes_providers::primary_api_key_env(&provider);
+    let url_env = hermes_providers::primary_base_url_env(&provider);
+
+    // ClawPanel 管理的 key 列表：包含所有 provider 的 api_key_env_vars + base_url_env_vars
+    // + ClawPanel 特定的两个 key。换 provider 时这些会被重写或清除。
+    let managed_keys_owned = hermes_providers::all_managed_env_keys();
+    let managed_keys: Vec<&str> = managed_keys_owned.to_vec();
+
     let mut new_pairs: Vec<(String, String)> = vec![
-        (env_key.into(), api_key.clone()),
         ("GATEWAY_ALLOW_ALL_USERS".into(), "true".into()),
         ("API_SERVER_KEY".into(), "clawpanel-local".into()),
     ];
-    // 清除旧 provider 的 key（换 provider 时不残留旧凭证）
-    // 新的 base_url
-    if let Some(ref url) = base_url {
-        if !url.trim().is_empty() {
-            let url_key = match env_provider {
-                "anthropic" => "ANTHROPIC_BASE_URL",
-                _ => "OPENAI_BASE_URL",
-            };
-            new_pairs.push((url_key.into(), url.trim().into()));
+
+    if let Some(env) = key_env {
+        if !api_key.trim().is_empty() {
+            new_pairs.push((env.to_string(), api_key.trim().to_string()));
+        }
+    } else if !api_key.trim().is_empty() {
+        // OAuth provider 传了 api_key —— 记日志，不落盘
+        eprintln!("[configure_hermes] Provider '{provider}' uses OAuth; ignoring provided api_key");
+    }
+
+    if let (Some(env), Some(url)) = (url_env, base_url.as_ref()) {
+        let u: &str = url.trim();
+        if !u.is_empty() {
+            new_pairs.push((env.to_string(), u.to_string()));
         }
     }
 
@@ -1521,6 +1718,8 @@ fn merge_env_file(existing: &str, managed_keys: &[&str], new_pairs: &[(String, S
 
 #[tauri::command]
 pub async fn hermes_read_config() -> Result<Value, String> {
+    use super::hermes_providers;
+
     let home = hermes_home();
     let config_path = home.join("config.yaml");
     let env_path = home.join(".env");
@@ -1528,15 +1727,14 @@ pub async fn hermes_read_config() -> Result<Value, String> {
     // 读取 config.yaml
     let config_raw = std::fs::read_to_string(&config_path).unwrap_or_default();
     let mut model_name = String::new();
-    let mut base_url = String::new();
-    let mut provider = String::new();
-    // 简易 YAML 解析（避免引入 yaml 依赖）
+    let mut base_url_from_yaml = String::new();
+    let mut provider_from_yaml = String::new();
     let mut in_model = false;
     for line in config_raw.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("model:") {
             in_model = true;
-            // model: "xxx" 单行格式
+            // `model: "xxx"` 单行格式
             if let Some(v) = trimmed
                 .strip_prefix("model:")
                 .map(|s| s.trim().trim_matches('"'))
@@ -1556,14 +1754,14 @@ pub async fn hermes_read_config() -> Result<Value, String> {
                     .trim_matches('"')
                     .to_string();
             } else if trimmed.starts_with("base_url:") {
-                base_url = trimmed
+                base_url_from_yaml = trimmed
                     .strip_prefix("base_url:")
                     .unwrap()
                     .trim()
                     .trim_matches('"')
                     .to_string();
             } else if trimmed.starts_with("provider:") {
-                provider = trimmed
+                provider_from_yaml = trimmed
                     .strip_prefix("provider:")
                     .unwrap()
                     .trim()
@@ -1576,37 +1774,53 @@ pub async fn hermes_read_config() -> Result<Value, String> {
         }
     }
 
-    // 读取 .env 中的 API key
+    // 读取 .env 到 key→value map
     let env_raw = std::fs::read_to_string(&env_path).unwrap_or_default();
-    let mut api_key = String::new();
-    for line in env_raw.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("OPENAI_API_KEY=") {
-            api_key = trimmed.strip_prefix("OPENAI_API_KEY=").unwrap().to_string();
-        } else if trimmed.starts_with("ANTHROPIC_API_KEY=") && api_key.is_empty() {
-            api_key = trimmed
-                .strip_prefix("ANTHROPIC_API_KEY=")
-                .unwrap()
-                .to_string();
-        } else if trimmed.starts_with("OPENROUTER_API_KEY=") && api_key.is_empty() {
-            api_key = trimmed
-                .strip_prefix("OPENROUTER_API_KEY=")
-                .unwrap()
-                .to_string();
-        }
-        // base_url from .env if not in config
-        if trimmed.starts_with("OPENAI_BASE_URL=") && base_url.is_empty() {
-            base_url = trimmed
-                .strip_prefix("OPENAI_BASE_URL=")
-                .unwrap()
-                .to_string();
-        } else if trimmed.starts_with("ANTHROPIC_BASE_URL=") && base_url.is_empty() {
-            base_url = trimmed
-                .strip_prefix("ANTHROPIC_BASE_URL=")
-                .unwrap()
-                .to_string();
-        }
-    }
+    let env_map: std::collections::HashMap<String, String> = env_raw
+        .lines()
+        .filter_map(|line| {
+            let t = line.trim();
+            if t.is_empty() || t.starts_with('#') {
+                return None;
+            }
+            t.split_once('=')
+                .map(|(k, v)| (k.trim().to_string(), v.to_string()))
+        })
+        .collect();
+
+    // 推断 provider：优先 config.yaml.model.provider，其次从 .env 反查
+    let provider_id: String = if !provider_from_yaml.is_empty() {
+        provider_from_yaml.clone()
+    } else {
+        let keys_refs: Vec<&str> = env_map.keys().map(|s| s.as_str()).collect();
+        hermes_providers::infer_provider_from_env_keys(&keys_refs)
+            .map(String::from)
+            .unwrap_or_default()
+    };
+
+    // 按 provider 的 api_key_env_vars 顺序拿 api_key
+    let api_key: String = hermes_providers::get_provider(&provider_id)
+        .and_then(|p| {
+            p.api_key_env_vars
+                .iter()
+                .find_map(|ev| env_map.get(*ev).cloned())
+        })
+        .unwrap_or_default();
+
+    // 有效 base_url：优先 config.yaml.model.base_url，其次 provider 的 base_url_env_var
+    let effective_base_url: String = if !base_url_from_yaml.is_empty() {
+        base_url_from_yaml.clone()
+    } else {
+        hermes_providers::get_provider(&provider_id)
+            .and_then(|p| {
+                if p.base_url_env_var.is_empty() {
+                    None
+                } else {
+                    env_map.get(p.base_url_env_var).cloned()
+                }
+            })
+            .unwrap_or_default()
+    };
 
     // UI 显示用短名（去掉 provider/ 前缀），如 openai/QC-S05 → QC-S05
     let display_model = if let Some(pos) = model_name.find('/') {
@@ -1618,8 +1832,8 @@ pub async fn hermes_read_config() -> Result<Value, String> {
     Ok(serde_json::json!({
         "model": display_model,
         "model_raw": model_name,
-        "base_url": base_url,
-        "provider": provider,
+        "base_url": effective_base_url,
+        "provider": provider_id,
         "api_key": api_key,
         "config_exists": config_path.exists(),
     }))
@@ -1634,13 +1848,45 @@ pub async fn hermes_fetch_models(
     base_url: String,
     api_key: String,
     api_type: Option<String>,
+    provider: Option<String>,
 ) -> Result<Vec<String>, String> {
+    use super::hermes_providers;
+
+    // 如果显式指定了 provider，优先走注册表决定 probe 方式 + fallback
+    if let Some(pid) = provider.as_ref() {
+        if let Some(pcfg) = hermes_providers::get_provider(pid) {
+            // OAuth / external_process / copilot → 不能用 api_key 探测，
+            // 直接返回静态 catalog
+            if pcfg.models_probe == hermes_providers::PROBE_NONE {
+                let mut models: Vec<String> = pcfg
+                    .models
+                    .iter()
+                    .map(|s: &&str| (*s).to_string())
+                    .collect();
+                models.sort();
+                return Ok(models);
+            }
+        }
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
-    let api = api_type.unwrap_or_else(|| "openai".into());
+    // api_type 优先级：调用方 api_type > provider.transport 推断 > 默认 openai
+    let api = api_type.unwrap_or_else(|| {
+        provider
+            .as_ref()
+            .and_then(|pid| hermes_providers::get_provider(pid))
+            .map(|p| match p.transport {
+                hermes_providers::TRANSPORT_ANTHROPIC => "anthropic-messages".to_string(),
+                hermes_providers::TRANSPORT_GOOGLE => "google-generative-ai".to_string(),
+                _ => "openai".to_string(),
+            })
+            .unwrap_or_else(|| "openai".into())
+    });
+
     let mut base = base_url.trim_end_matches('/').to_string();
     // 移除尾部的 chat/completions 等路径
     for suffix in &[
@@ -1733,34 +1979,100 @@ pub async fn hermes_fetch_models(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn hermes_update_model(model: String) -> Result<String, String> {
+pub async fn hermes_update_model(
+    model: String,
+    provider: Option<String>,
+) -> Result<String, String> {
+    use super::hermes_providers;
+
     let home = hermes_home();
     let config_path = home.join("config.yaml");
     let config_raw =
         std::fs::read_to_string(&config_path).map_err(|e| format!("读取 config.yaml 失败: {e}"))?;
 
-    // Hermes 直接用模型名，不加 provider/ 前缀
     let model_str = model.clone();
 
-    // 替换 model.default 行
-    let mut found = false;
-    let new_content: String = config_raw
-        .lines()
-        .map(|line| {
-            let trimmed = line.trim();
-            if trimmed.starts_with("default:") && !found {
-                found = true;
-                let indent = line.len() - line.trim_start().len();
-                format!("{}default: {}", " ".repeat(indent), model_str)
-            } else {
-                line.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    // Provider 决定策略：
+    //   1. 调用方显式提供 → 直接使用
+    //   2. 从静态 catalog 反查唯一匹配 → 使用反查结果
+    //   3. 找不到 / 模糊 → 保持现有 provider（不改）
+    let resolved_provider: Option<String> =
+        provider.or_else(|| hermes_providers::find_provider_by_model(&model).map(String::from));
 
-    if !found {
+    // 一次性扫描并替换 model 区块中的 default / provider 字段。
+    let lines: Vec<&str> = config_raw.lines().collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);
+    let mut in_model = false;
+    let mut default_written = false;
+    let mut provider_written = false;
+    let mut default_indent: String = "  ".into();
+
+    for line in lines.iter() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("model:") {
+            in_model = true;
+            out.push(line.to_string());
+            continue;
+        }
+        if in_model {
+            let is_indented = line.starts_with("  ") || line.starts_with('\t');
+            if !is_indented && !trimmed.is_empty() && !trimmed.starts_with('#') {
+                // 离开 model 区块 —— 先补齐未写入的 provider 行
+                if let Some(pid) = resolved_provider.as_ref() {
+                    if !provider_written && !pid.is_empty() && pid != "custom" {
+                        out.push(format!("{default_indent}provider: {pid}"));
+                        provider_written = true;
+                    }
+                }
+                in_model = false;
+                out.push(line.to_string());
+                continue;
+            }
+
+            if trimmed.starts_with("default:") {
+                let indent_len = line.len() - line.trim_start().len();
+                default_indent = " ".repeat(indent_len);
+                out.push(format!("{default_indent}default: {model_str}"));
+                default_written = true;
+                continue;
+            }
+            if trimmed.starts_with("provider:") {
+                if let Some(pid) = resolved_provider.as_ref() {
+                    if !pid.is_empty() && pid != "custom" {
+                        let indent_len = line.len() - line.trim_start().len();
+                        let indent = " ".repeat(indent_len);
+                        out.push(format!("{indent}provider: {pid}"));
+                        provider_written = true;
+                        continue;
+                    }
+                    // custom → 删除 provider 行
+                    continue;
+                }
+                // 未提供新 provider，保留旧值
+                out.push(line.to_string());
+                provider_written = true;
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+
+    // 文件末尾还在 model 块里：补 provider 行
+    if in_model {
+        if let Some(pid) = resolved_provider.as_ref() {
+            if !provider_written && !pid.is_empty() && pid != "custom" {
+                out.push(format!("{default_indent}provider: {pid}"));
+            }
+        }
+    }
+
+    if !default_written {
         return Err("config.yaml 中未找到 model.default 字段".into());
+    }
+
+    let mut new_content = out.join("\n");
+    if !new_content.ends_with('\n') {
+        new_content.push('\n');
     }
 
     std::fs::write(&config_path, new_content).map_err(|e| format!("写入 config.yaml 失败: {e}"))?;
@@ -1779,6 +2091,11 @@ pub async fn hermes_gateway_action(
     let enhanced = hermes_enhanced_path();
     match action.as_str() {
         "start" => {
+            // Guardian: ensure platforms.api_server.enabled:true is present
+            // before every start. Auto-heal if missing (with a .bak backup).
+            // See `ensure_api_server_enabled` for rationale.
+            ensure_api_server_enabled(&app)?;
+
             #[cfg(target_os = "windows")]
             {
                 let home = hermes_home();
@@ -1834,9 +2151,6 @@ pub async fn hermes_gateway_action(
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
-                    .env("PYTHONUTF8", "1")
-                    .env("PYTHONIOENCODING", "utf-8")
-                    .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
                     .stdin(std::process::Stdio::null())
                     .stdout(log_file)
                     .stderr(log_err)
@@ -1922,8 +2236,6 @@ pub async fn hermes_gateway_action(
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
-                    .env("PYTHONUTF8", "1")
-                    .env("PYTHONIOENCODING", "utf-8")
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
@@ -1973,13 +2285,7 @@ pub async fn hermes_gateway_action(
                     Err(e) => {
                         // fallback: hermes gateway start
                         let mut fallback = tokio::process::Command::new("hermes");
-                        fallback
-                            .args(["gateway", "start"])
-                            .env("PATH", &enhanced)
-                            .env("PYTHONUTF8", "1")
-                            .env("PYTHONIOENCODING", "utf-8");
-                        #[cfg(target_os = "windows")]
-                        fallback.creation_flags(CREATE_NO_WINDOW);
+                        fallback.args(["gateway", "start"]).env("PATH", &enhanced);
                         let out = fallback
                             .output()
                             .await
@@ -2012,10 +2318,7 @@ pub async fn hermes_gateway_action(
 
             // 2. 尝试 hermes gateway stop（作为补充）
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "stop"])
-                .env("PATH", &enhanced)
-                .env("PYTHONUTF8", "1")
-                .env("PYTHONIOENCODING", "utf-8");
+            cmd.args(["gateway", "stop"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let stop_result = cmd.output().await;
@@ -2058,10 +2361,7 @@ pub async fn hermes_gateway_action(
         }
         "status" => {
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "status"])
-                .env("PATH", &enhanced)
-                .env("PYTHONUTF8", "1")
-                .env("PYTHONIOENCODING", "utf-8");
+            cmd.args(["gateway", "status"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("查询失败: {e}"))?;
@@ -2070,10 +2370,7 @@ pub async fn hermes_gateway_action(
         }
         "install" => {
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "install"])
-                .env("PATH", &enhanced)
-                .env("PYTHONUTF8", "1")
-                .env("PYTHONIOENCODING", "utf-8");
+            cmd.args(["gateway", "install"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("安装失败: {e}"))?;
@@ -2085,10 +2382,7 @@ pub async fn hermes_gateway_action(
         }
         "uninstall" => {
             let mut cmd = tokio::process::Command::new("hermes");
-            cmd.args(["gateway", "uninstall"])
-                .env("PATH", &enhanced)
-                .env("PYTHONUTF8", "1")
-                .env("PYTHONIOENCODING", "utf-8");
+            cmd.args(["gateway", "uninstall"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
             let out = cmd.output().await.map_err(|e| format!("卸载失败: {e}"))?;
@@ -2280,19 +2574,19 @@ pub async fn hermes_detect_environments() -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn hermes_set_gateway_url(url: Option<String>) -> Result<String, String> {
-    let config_path = super::panel_config_path();
-    let config_path_clone = config_path.clone();
+    let config_paths = super::panel_config_candidate_paths();
+    let config_path = config_paths.first().ok_or("找不到配置文件路径")?;
 
-    let mut config = if config_path_clone.exists() {
-        let content = std::fs::read_to_string(&config_path_clone)
-            .map_err(|e| format!("读取配置失败: {e}"))?;
+    let mut config = if config_path.exists() {
+        let content =
+            std::fs::read_to_string(config_path).map_err(|e| format!("读取配置失败: {e}"))?;
         serde_json::from_str::<Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
 
     // 确保 hermes 对象存在
-    if !config.get("hermes").is_some_and(|v| v.is_object()) {
+    if config.get("hermes").and_then(|v| v.as_object()).is_none() {
         config["hermes"] = serde_json::json!({});
     }
 
@@ -2312,7 +2606,8 @@ pub async fn hermes_set_gateway_url(url: Option<String>) -> Result<String, Strin
     if let Some(parent) = config_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    std::fs::write(&config_path, json_str).map_err(|e| format!("写入配置失败: {e}"))?;
+    std::fs::write(config_path, json_str).map_err(|e| format!("写入配置失败: {e}"))?;
+
     let current_url = hermes_gateway_url();
     Ok(format!("Gateway URL 已设置: {current_url}"))
 }
@@ -2322,7 +2617,6 @@ pub async fn hermes_set_gateway_url(url: Option<String>) -> Result<String, Strin
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     let _ = app.emit("hermes-install-log", "📦 升级 Hermes Agent...");
 
@@ -2369,7 +2663,6 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn uninstall_hermes(clean_config: bool) -> Result<String, String> {
     let uv_path = uv_bin_path();
     let uv = if uv_path.exists() {
@@ -2414,7 +2707,6 @@ pub async fn uninstall_hermes(clean_config: bool) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_api_proxy(
     method: String,
     path: String,
@@ -2641,23 +2933,11 @@ pub async fn hermes_agent_run(
             }
             let data = trimmed[6..].trim();
             if data == "[DONE]" {
-                let input_tokens = input.chars().count() / 4;
-                let output_tokens = final_output.chars().count() / 4;
-                let cost_usd = (output_tokens as f64) * 0.001 / 1000.0;
                 let _ = app.emit(
                     "hermes-run-done",
                     serde_json::json!({
                         "run_id": &run_id,
                         "output": &final_output,
-                    }),
-                );
-                let _ = app.emit(
-                    "hermes-token-usage",
-                    serde_json::json!({
-                        "run_id": &run_id,
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "cost_usd": cost_usd,
                     }),
                 );
                 return Ok(run_id);
@@ -2688,24 +2968,11 @@ pub async fn hermes_agent_run(
                         if let Some(output) = evt["output"].as_str() {
                             final_output = output.to_string();
                         }
-                        // Estimate tokens: ~4 chars per token for input, actual output chars/4
-                        let input_tokens = input.chars().count() / 4;
-                        let output_tokens = final_output.chars().count() / 4;
-                        let cost_usd = (output_tokens as f64) * 0.001 / 1000.0;
                         let _ = app.emit(
                             "hermes-run-done",
                             serde_json::json!({
                                 "run_id": &run_id,
                                 "output": &final_output,
-                            }),
-                        );
-                        let _ = app.emit(
-                            "hermes-token-usage",
-                            serde_json::json!({
-                                "run_id": &run_id,
-                                "input_tokens": input_tokens,
-                                "output_tokens": output_tokens,
-                                "cost_usd": cost_usd,
                             }),
                         );
                         return Ok(run_id);
@@ -2730,23 +2997,11 @@ pub async fn hermes_agent_run(
         }
     }
 
-    let input_tokens = input.chars().count() / 4;
-    let output_tokens = final_output.chars().count() / 4;
-    let cost_usd = (output_tokens as f64) * 0.001 / 1000.0;
     let _ = app.emit(
         "hermes-run-done",
         serde_json::json!({
             "run_id": &run_id,
             "output": &final_output,
-        }),
-    );
-    let _ = app.emit(
-        "hermes-token-usage",
-        serde_json::json!({
-            "run_id": &run_id,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "cost_usd": cost_usd,
         }),
     );
     Ok(run_id)
@@ -2757,19 +3012,23 @@ pub async fn hermes_agent_run(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_sessions_list(
     source: Option<String>,
     limit: Option<usize>,
+    profile: Option<String>,
 ) -> Result<Value, String> {
-    let mut args = vec!["sessions", "export", "-"];
-    let source_owned;
-    if let Some(s) = &source {
-        source_owned = s.clone();
-        args.push("--source");
-        args.push(&source_owned);
+    let mut args: Vec<String> = Vec::new();
+    if let Some(p) = profile.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--profile".into());
+        args.push(p.to_string());
     }
-    let output = match run_silent("hermes", &args) {
+    args.extend(["sessions", "export", "-"].iter().map(|s| s.to_string()));
+    if let Some(s) = source.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--source".into());
+        args.push(s.to_string());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let output = match run_silent("hermes", &refs) {
         Ok(s) => s,
         Err(_) => return Ok(serde_json::json!([])),
     };
@@ -2780,6 +3039,25 @@ pub async fn hermes_sessions_list(
             continue;
         }
         if let Ok(obj) = serde_json::from_str::<Value>(t) {
+            // Extra numeric fields for Usage analytics. Carry through as-is so
+            // the frontend can aggregate without another round-trip. Missing
+            // fields fall back to 0 / null rather than breaking the shape.
+            //
+            // `started_at` is a POSIX seconds timestamp produced by the
+            // official Hermes CLI export. We also surface it under that name
+            // (matching the web UI contract) so the Usage store can group
+            // sessions by day without needing a separate parse.
+            let started_at = obj
+                .get("started_at")
+                .and_then(|v| v.as_u64())
+                .unwrap_or_else(|| {
+                    // Fallback: parse `created_at` as ISO8601 → epoch seconds.
+                    obj.get("created_at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.timestamp() as u64)
+                        .unwrap_or(0)
+                });
             sessions.push(serde_json::json!({
                 "id": obj.get("session_id").or(obj.get("id")).and_then(|v| v.as_str()).unwrap_or(""),
                 "title": obj.get("title").or(obj.get("name")).and_then(|v| v.as_str()).unwrap_or(""),
@@ -2788,6 +3066,14 @@ pub async fn hermes_sessions_list(
                 "created_at": obj.get("created_at").or(obj.get("createdAt")).and_then(|v| v.as_str()).unwrap_or(""),
                 "updated_at": obj.get("updated_at").or(obj.get("updatedAt")).and_then(|v| v.as_str()).unwrap_or(""),
                 "message_count": obj.get("message_count").and_then(|v| v.as_u64()).unwrap_or(0),
+                // --- Usage analytics fields ---
+                "started_at": started_at,
+                "input_tokens": obj.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "output_tokens": obj.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "cache_read_tokens": obj.get("cache_read_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "cache_write_tokens": obj.get("cache_write_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                "estimated_cost_usd": obj.get("estimated_cost_usd").and_then(|v| v.as_f64()),
+                "actual_cost_usd": obj.get("actual_cost_usd").and_then(|v| v.as_f64()),
             }));
         }
     }
@@ -2805,10 +3091,254 @@ pub async fn hermes_sessions_list(
 }
 
 #[tauri::command]
-#[allow(dead_code)]
-pub async fn hermes_session_detail(session_id: String) -> Result<Value, String> {
-    let output = run_silent("hermes", &["sessions", "export", "-"])
-        .map_err(|e| format!("Failed to read sessions: {e}"))?;
+pub async fn hermes_sessions_summary_list(
+    source: Option<String>,
+    limit: Option<usize>,
+    profile: Option<String>,
+) -> Result<Value, String> {
+    let lim = limit.unwrap_or(80).clamp(1, 500);
+    let mut args: Vec<String> = Vec::new();
+    if let Some(p) = profile.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--profile".into());
+        args.push(p.to_string());
+    }
+    args.extend(
+        ["sessions", "list", "--limit"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
+    args.push(lim.to_string());
+    if let Some(s) = source.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--source".into());
+        args.push(s.to_string());
+    }
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let output = match run_silent("hermes", &refs) {
+        Ok(s) => s,
+        Err(_) => return Ok(serde_json::json!([])),
+    };
+    let sep = regex::Regex::new(r"\s{2,}").map_err(|e| e.to_string())?;
+    let mut has_titles = false;
+    let mut sessions: Vec<Value> = Vec::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "No sessions found." || trimmed.starts_with('─') {
+            continue;
+        }
+        if trimmed.contains("Title") && trimmed.contains("Preview") && trimmed.contains("ID") {
+            has_titles = true;
+            continue;
+        }
+        if trimmed.contains("Preview") && trimmed.contains("Last Active") && trimmed.contains("ID")
+        {
+            has_titles = false;
+            continue;
+        }
+        let cols: Vec<&str> = sep
+            .split(trimmed)
+            .filter(|s| !s.trim().is_empty())
+            .collect();
+        if cols.len() < 3 {
+            continue;
+        }
+        let id = cols.last().copied().unwrap_or("").trim();
+        if id.is_empty() {
+            continue;
+        }
+        let (title, preview, last_active, parsed_source) = if has_titles {
+            let title = cols.first().copied().unwrap_or("").trim();
+            let preview = cols.get(1).copied().unwrap_or("").trim();
+            let last_active = cols.get(2).copied().unwrap_or("").trim();
+            (
+                if title == "—" { "" } else { title },
+                preview,
+                last_active,
+                source.as_deref().unwrap_or(""),
+            )
+        } else {
+            let preview = cols.first().copied().unwrap_or("").trim();
+            let last_active = cols.get(1).copied().unwrap_or("").trim();
+            let parsed_source = cols
+                .get(2)
+                .copied()
+                .unwrap_or(source.as_deref().unwrap_or(""))
+                .trim();
+            ("", preview, last_active, parsed_source)
+        };
+        sessions.push(serde_json::json!({
+            "id": id,
+            "title": title,
+            "source": parsed_source,
+            "model": "",
+            "created_at": "",
+            "updated_at": "",
+            "last_active_label": last_active,
+            "preview": preview,
+            "message_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }));
+    }
+    Ok(Value::Array(sessions))
+}
+
+#[tauri::command]
+pub async fn hermes_usage_analytics(
+    days: Option<u64>,
+    profile: Option<String>,
+) -> Result<Value, String> {
+    let days = days.unwrap_or(30).clamp(1, 365);
+    let cutoff = chrono::Utc::now().timestamp() - (days as i64 * 86_400);
+    let sessions = hermes_sessions_list(None, None, profile).await?;
+    let mut total_input: u64 = 0;
+    let mut total_output: u64 = 0;
+    let mut total_cache_read: u64 = 0;
+    let mut total_cache_write: u64 = 0;
+    let mut total_estimated_cost = 0.0_f64;
+    let mut total_actual_cost = 0.0_f64;
+    let mut total_sessions: u64 = 0;
+    let mut daily: std::collections::BTreeMap<String, serde_json::Map<String, Value>> =
+        std::collections::BTreeMap::new();
+    let mut by_model: std::collections::BTreeMap<String, serde_json::Map<String, Value>> =
+        std::collections::BTreeMap::new();
+    if let Some(arr) = sessions.as_array() {
+        for s in arr {
+            let started = s.get("started_at").and_then(|v| v.as_i64()).unwrap_or(0);
+            if started > 0 && started < cutoff {
+                continue;
+            }
+            let input = s.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let output = s.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+            let cache_read = s
+                .get("cache_read_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let cache_write = s
+                .get("cache_write_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let estimated = s
+                .get("estimated_cost_usd")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let actual = s
+                .get("actual_cost_usd")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            total_input += input;
+            total_output += output;
+            total_cache_read += cache_read;
+            total_cache_write += cache_write;
+            total_estimated_cost += estimated;
+            total_actual_cost += actual;
+            total_sessions += 1;
+            let day = if started > 0 {
+                chrono::DateTime::from_timestamp(started, 0)
+                    .map(|dt| dt.format("%Y-%m-%d").to_string())
+                    .unwrap_or_else(|| "unknown".into())
+            } else {
+                "unknown".into()
+            };
+            let d = daily.entry(day.clone()).or_insert_with(|| {
+                let mut m = serde_json::Map::new();
+                m.insert("day".into(), Value::String(day));
+                m.insert("input_tokens".into(), Value::from(0_u64));
+                m.insert("output_tokens".into(), Value::from(0_u64));
+                m.insert("cache_read_tokens".into(), Value::from(0_u64));
+                m.insert("estimated_cost".into(), Value::from(0.0));
+                m.insert("actual_cost".into(), Value::from(0.0));
+                m.insert("sessions".into(), Value::from(0_u64));
+                m
+            });
+            *d.get_mut("input_tokens").unwrap() =
+                Value::from(d["input_tokens"].as_u64().unwrap_or(0) + input);
+            *d.get_mut("output_tokens").unwrap() =
+                Value::from(d["output_tokens"].as_u64().unwrap_or(0) + output);
+            *d.get_mut("cache_read_tokens").unwrap() =
+                Value::from(d["cache_read_tokens"].as_u64().unwrap_or(0) + cache_read);
+            *d.get_mut("estimated_cost").unwrap() =
+                Value::from(d["estimated_cost"].as_f64().unwrap_or(0.0) + estimated);
+            *d.get_mut("actual_cost").unwrap() =
+                Value::from(d["actual_cost"].as_f64().unwrap_or(0.0) + actual);
+            *d.get_mut("sessions").unwrap() = Value::from(d["sessions"].as_u64().unwrap_or(0) + 1);
+            let model = s
+                .get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if !model.is_empty() {
+                let model_key = model.clone();
+                let m = by_model.entry(model_key.clone()).or_insert_with(|| {
+                    let mut row = serde_json::Map::new();
+                    row.insert("model".into(), Value::String(model_key));
+                    row.insert("input_tokens".into(), Value::from(0_u64));
+                    row.insert("output_tokens".into(), Value::from(0_u64));
+                    row.insert("estimated_cost".into(), Value::from(0.0));
+                    row.insert("sessions".into(), Value::from(0_u64));
+                    row
+                });
+                *m.get_mut("input_tokens").unwrap() =
+                    Value::from(m["input_tokens"].as_u64().unwrap_or(0) + input);
+                *m.get_mut("output_tokens").unwrap() =
+                    Value::from(m["output_tokens"].as_u64().unwrap_or(0) + output);
+                *m.get_mut("estimated_cost").unwrap() =
+                    Value::from(m["estimated_cost"].as_f64().unwrap_or(0.0) + estimated);
+                *m.get_mut("sessions").unwrap() =
+                    Value::from(m["sessions"].as_u64().unwrap_or(0) + 1);
+            }
+        }
+    }
+    let mut models: Vec<Value> = by_model.into_values().map(Value::Object).collect();
+    models.sort_by(|a, b| {
+        let at = a["input_tokens"].as_u64().unwrap_or(0) + a["output_tokens"].as_u64().unwrap_or(0);
+        let bt = b["input_tokens"].as_u64().unwrap_or(0) + b["output_tokens"].as_u64().unwrap_or(0);
+        bt.cmp(&at)
+    });
+    Ok(serde_json::json!({
+        "daily": daily.into_values().map(Value::Object).collect::<Vec<_>>(),
+        "by_model": models,
+        "totals": {
+            "total_input": total_input,
+            "total_output": total_output,
+            "total_cache_read": total_cache_read,
+            "total_cache_write": total_cache_write,
+            "total_estimated_cost": total_estimated_cost,
+            "total_actual_cost": total_actual_cost,
+            "total_sessions": total_sessions,
+            "total_api_calls": 0,
+        },
+        "period_days": days,
+        "skills": {
+            "summary": {
+                "total_skill_loads": 0,
+                "total_skill_edits": 0,
+                "total_skill_actions": 0,
+                "distinct_skills_used": 0,
+            },
+            "top_skills": [],
+        },
+    }))
+}
+
+#[tauri::command]
+pub async fn hermes_session_detail(
+    session_id: String,
+    profile: Option<String>,
+) -> Result<Value, String> {
+    let mut args: Vec<String> = Vec::new();
+    if let Some(p) = profile.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--profile".into());
+        args.push(p.to_string());
+    }
+    args.extend(
+        ["sessions", "export", "-", "--session-id"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
+    args.push(session_id.clone());
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let output =
+        run_silent("hermes", &refs).map_err(|e| format!("Failed to read sessions: {e}"))?;
     for line in output.lines() {
         let t = line.trim();
         if t.is_empty() {
@@ -2854,21 +3384,117 @@ pub async fn hermes_session_detail(session_id: String) -> Result<Value, String> 
 }
 
 #[tauri::command]
-#[allow(dead_code)]
-pub async fn hermes_session_delete(session_id: String) -> Result<String, String> {
-    run_silent("hermes", &["sessions", "delete", &session_id, "--yes"])?;
+pub async fn hermes_session_delete(
+    session_id: String,
+    profile: Option<String>,
+) -> Result<String, String> {
+    let mut args: Vec<String> = Vec::new();
+    if let Some(p) = profile.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--profile".into());
+        args.push(p.to_string());
+    }
+    args.extend(["sessions", "delete"].iter().map(|s| s.to_string()));
+    args.push(session_id);
+    args.push("--yes".into());
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    run_silent("hermes", &refs)?;
     Ok("ok".into())
 }
 
 #[tauri::command]
-#[allow(dead_code)]
-pub async fn hermes_session_rename(session_id: String, title: String) -> Result<String, String> {
-    run_silent("hermes", &["sessions", "rename", &session_id, &title])?;
+pub async fn hermes_session_rename(
+    session_id: String,
+    title: String,
+    profile: Option<String>,
+) -> Result<String, String> {
+    let mut args: Vec<String> = Vec::new();
+    if let Some(p) = profile.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        args.push("--profile".into());
+        args.push(p.to_string());
+    }
+    args.extend(["sessions", "rename"].iter().map(|s| s.to_string()));
+    args.push(session_id);
+    args.push(title);
+    let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    run_silent("hermes", &refs)?;
     Ok("ok".into())
 }
 
 #[tauri::command]
-#[allow(dead_code)]
+pub async fn hermes_profiles_list() -> Result<Value, String> {
+    let output = match run_silent("hermes", &["profile", "list"]) {
+        Ok(s) => s,
+        Err(_) => return Ok(serde_json::json!({ "active": "default", "profiles": [] })),
+    };
+    let mut active = "default".to_string();
+    let mut profiles: Vec<Value> = Vec::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.contains("Profile")
+            || trimmed.starts_with('─')
+            || trimmed.starts_with('-')
+        {
+            continue;
+        }
+        let is_active = trimmed.starts_with('◆');
+        let row = trimmed.trim_start_matches('◆').trim();
+        let parts: Vec<&str> = row.split_whitespace().collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let name = parts[0];
+        if name != "default"
+            && !name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+        {
+            continue;
+        }
+        let gateway_idx = parts
+            .iter()
+            .position(|p| *p == "running" || *p == "stopped")
+            .unwrap_or(2);
+        if gateway_idx <= 1 || gateway_idx >= parts.len() {
+            continue;
+        }
+        let model = parts[1..gateway_idx].join(" ");
+        let gateway = parts[gateway_idx];
+        let alias = parts.get(gateway_idx + 1).copied().unwrap_or("—");
+        if is_active {
+            active = name.to_string();
+        }
+        profiles.push(serde_json::json!({
+            "name": name,
+            "active": is_active,
+            "model": if model == "—" { "" } else { &model },
+            "gatewayRunning": gateway == "running",
+            "alias": if alias == "—" { "" } else { alias },
+        }));
+    }
+    if !profiles
+        .iter()
+        .any(|p| p.get("active").and_then(|v| v.as_bool()).unwrap_or(false))
+    {
+        if let Some(p) = profiles
+            .iter_mut()
+            .find(|p| p.get("name").and_then(|v| v.as_str()) == Some("default"))
+        {
+            if let Some(obj) = p.as_object_mut() {
+                obj.insert("active".to_string(), Value::Bool(true));
+            }
+        }
+    }
+    Ok(serde_json::json!({ "active": active, "profiles": profiles }))
+}
+
+#[tauri::command]
+pub async fn hermes_profile_use(name: String) -> Result<String, String> {
+    run_silent("hermes", &["profile", "use", &name])?;
+    Ok("ok".into())
+}
+
+#[tauri::command]
 pub async fn hermes_logs_list() -> Result<Value, String> {
     let logs_dir = hermes_home().join("logs");
     if !logs_dir.exists() {
@@ -2914,7 +3540,6 @@ pub async fn hermes_logs_list() -> Result<Value, String> {
 }
 
 /// Simple timestamp formatter (no chrono crate dependency)
-#[allow(dead_code)]
 fn chrono_simple(epoch_secs: i64) -> String {
     // Use system time formatting via std
     let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch_secs as u64);
@@ -2923,7 +3548,6 @@ fn chrono_simple(epoch_secs: i64) -> String {
 }
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_logs_read(
     name: String,
     lines: Option<usize>,
@@ -2988,14 +3612,12 @@ pub async fn hermes_logs_read(
     Ok(Value::Array(entries))
 }
 
-#[allow(dead_code)]
 struct ParsedLogLine {
     timestamp: Option<String>,
     level: Option<String>,
     message: Option<String>,
 }
 
-#[allow(dead_code)]
 fn parse_log_line(line: &str) -> ParsedLogLine {
     // Pattern: "YYYY-MM-DD HH:MM:SS LEVEL rest..." or "HH:MM:SS LEVEL rest..."
     let parts: Vec<&str> = line.splitn(4, char::is_whitespace).collect();
@@ -3038,90 +3660,223 @@ fn parse_log_line(line: &str) -> ParsedLogLine {
     }
 }
 
+/// Extract the first `# Heading` or the first long prose line from Markdown,
+/// used as a skill's canonical name/description. Mirrors hermes-web-ui's
+/// `extractDescription()` behaviour — first non-empty/non-heading line,
+/// truncated to 200 chars.
+fn md_first_heading(content: &str) -> Option<String> {
+    content
+        .lines()
+        .find(|l| l.starts_with("# "))
+        .map(|l| l[2..].trim().to_string())
+}
+
+fn md_first_description(content: &str) -> String {
+    content
+        .lines()
+        .find(|l| !l.starts_with('#') && !l.trim().is_empty() && l.trim().len() > 10)
+        .map(|l| {
+            let s = l.trim();
+            if s.len() > 200 {
+                format!("{}...", &s[..200])
+            } else {
+                s.to_string()
+            }
+        })
+        .unwrap_or_default()
+}
+
+/// Read `config.yaml` and return the list of `skills.disabled` entries.
+/// Gracefully handles missing file / missing section → empty list.
+///
+/// The disable mechanism matches upstream `hermes-web-ui`:
+///
+/// ```yaml
+/// skills:
+///   disabled:
+///     - web_search
+///     - file_tools
+/// ```
+fn read_disabled_skills() -> Vec<String> {
+    let config_path = hermes_home().join("config.yaml");
+    let raw = match std::fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let mut disabled: Vec<String> = Vec::new();
+    let mut in_skills = false;
+    let mut in_disabled = false;
+    for line in raw.lines() {
+        // Strip trailing comments.
+        let line = match line.find('#') {
+            Some(i) => &line[..i],
+            None => line,
+        };
+        let trimmed_full = line.trim_end();
+        if trimmed_full.is_empty() {
+            continue;
+        }
+        let indent = trimmed_full.len() - trimmed_full.trim_start().len();
+        let body = trimmed_full.trim_start();
+
+        if indent == 0 {
+            in_skills = body.starts_with("skills:");
+            in_disabled = false;
+        } else if in_skills && indent == 2 && body.starts_with("disabled:") {
+            in_disabled = true;
+        } else if in_skills && in_disabled && indent >= 4 && body.starts_with("- ") {
+            // Strip the `- ` prefix and any surrounding quotes.
+            let name = body
+                .trim_start_matches("- ")
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'');
+            if !name.is_empty() {
+                disabled.push(name.to_string());
+            }
+        } else if indent <= 2 {
+            // Left the disabled list.
+            in_disabled = false;
+        }
+    }
+    disabled
+}
+
+/// Shape returned to the frontend — kept compatible with the previous
+/// version (file/name/description/path) while adding `enabled` and the
+/// optional `isDir`/`category` fields that `hermes-web-ui` also uses.
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_skills_list() -> Result<Value, String> {
     let skills_dir = hermes_home().join("skills");
     if !skills_dir.exists() {
         return Ok(serde_json::json!([]));
     }
+    let disabled_names = read_disabled_skills();
+    let is_enabled = |name: &str| -> bool { !disabled_names.iter().any(|d| d == name) };
+
     let mut categories: Vec<Value> = Vec::new();
     let entries =
         std::fs::read_dir(&skills_dir).map_err(|e| format!("Failed to read skills dir: {e}"))?;
+
     for entry in entries.flatten() {
         let ft = match entry.file_type() {
             Ok(t) => t,
             Err(_) => continue,
         };
-        let name = entry.file_name().to_string_lossy().to_string();
+        let cat_name = entry.file_name().to_string_lossy().to_string();
+        if cat_name.starts_with('.') {
+            continue;
+        }
+
         if ft.is_dir() {
-            let cat_dir = skills_dir.join(&name);
+            let cat_dir = skills_dir.join(&cat_name);
+
+            // Category description from optional DESCRIPTION.md
+            let cat_desc = std::fs::read_to_string(cat_dir.join("DESCRIPTION.md"))
+                .ok()
+                .map(|c| {
+                    md_first_heading(&c)
+                        .unwrap_or_else(|| c.trim().lines().next().unwrap_or("").to_string())
+                })
+                .unwrap_or_default();
+
             let mut skills: Vec<Value> = Vec::new();
             if let Ok(files) = std::fs::read_dir(&cat_dir) {
                 for f in files.flatten() {
                     let fname = f.file_name().to_string_lossy().to_string();
-                    if !fname.ends_with(".md") {
+                    let fpath = cat_dir.join(&fname);
+                    let ftype = match f.file_type() {
+                        Ok(t) => t,
+                        Err(_) => continue,
+                    };
+
+                    // v0.14.1 structured skill: <category>/<skill>/SKILL.md
+                    if ftype.is_dir() {
+                        let skill_md = fpath.join("SKILL.md");
+                        if !skill_md.exists() {
+                            continue;
+                        }
+                        let content = std::fs::read_to_string(&skill_md).unwrap_or_default();
+                        let display = md_first_heading(&content).unwrap_or_else(|| fname.clone());
+                        let desc = md_first_description(&content);
+                        skills.push(serde_json::json!({
+                            "file": fname.clone(),
+                            "name": display,
+                            "slug": fname.clone(),
+                            "description": desc,
+                            "path": skill_md.to_string_lossy(),
+                            "skill_dir": fpath.to_string_lossy(),
+                            "isDir": true,
+                            "enabled": is_enabled(&fname),
+                        }));
                         continue;
                     }
-                    let fpath = cat_dir.join(&fname);
+
+                    // Legacy flat skill: <category>/<name>.md
+                    if !fname.ends_with(".md") || fname == "DESCRIPTION.md" {
+                        continue;
+                    }
                     let content = std::fs::read_to_string(&fpath).unwrap_or_default();
-                    let skill_name = content
-                        .lines()
-                        .find(|l| l.starts_with("# "))
-                        .map(|l| l[2..].trim().to_string())
-                        .unwrap_or_else(|| fname.trim_end_matches(".md").to_string());
-                    let description = content
-                        .lines()
-                        .find(|l| {
-                            !l.starts_with('#') && !l.trim().is_empty() && l.trim().len() > 10
-                        })
-                        .map(|l| {
-                            let s = l.trim();
-                            if s.len() > 200 {
-                                format!("{}...", &s[..200])
-                            } else {
-                                s.to_string()
-                            }
-                        })
-                        .unwrap_or_default();
+                    let slug = fname.trim_end_matches(".md").to_string();
+                    let display = md_first_heading(&content).unwrap_or_else(|| slug.clone());
+                    let desc = md_first_description(&content);
                     skills.push(serde_json::json!({
                         "file": fname,
-                        "name": skill_name,
-                        "description": description,
+                        "name": display,
+                        "slug": slug.clone(),
+                        "description": desc,
                         "path": fpath.to_string_lossy(),
+                        "isDir": false,
+                        "enabled": is_enabled(&slug),
                     }));
                 }
             }
             if !skills.is_empty() {
+                skills.sort_by(|a, b| {
+                    a["name"]
+                        .as_str()
+                        .unwrap_or("")
+                        .cmp(b["name"].as_str().unwrap_or(""))
+                });
                 categories.push(serde_json::json!({
-                    "category": name,
+                    "category": cat_name,
+                    "description": cat_desc,
                     "skills": skills,
                 }));
             }
-        } else if name.ends_with(".md") {
-            let fpath = skills_dir.join(&name);
+        } else if cat_name.ends_with(".md") && cat_name != "DESCRIPTION.md" {
+            // Uncategorized top-level skill file.
+            let fpath = skills_dir.join(&cat_name);
             let content = std::fs::read_to_string(&fpath).unwrap_or_default();
-            let skill_name = content
-                .lines()
-                .find(|l| l.starts_with("# "))
-                .map(|l| l[2..].trim().to_string())
-                .unwrap_or_else(|| name.trim_end_matches(".md").to_string());
+            let slug = cat_name.trim_end_matches(".md").to_string();
+            let display = md_first_heading(&content).unwrap_or_else(|| slug.clone());
             categories.push(serde_json::json!({
                 "category": "_root",
+                "description": "",
                 "skills": [{
-                    "file": name,
-                    "name": skill_name,
-                    "description": "",
+                    "file": cat_name,
+                    "name": display,
+                    "slug": slug.clone(),
+                    "description": md_first_description(&content),
                     "path": fpath.to_string_lossy(),
+                    "isDir": false,
+                    "enabled": is_enabled(&slug),
                 }],
             }));
         }
     }
+
+    categories.sort_by(|a, b| {
+        a["category"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(b["category"].as_str().unwrap_or(""))
+    });
+
     Ok(Value::Array(categories))
 }
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
     let skills_dir = hermes_home().join("skills");
     let resolved = PathBuf::from(&file_path);
@@ -3137,39 +3892,262 @@ pub async fn hermes_skill_detail(file_path: String) -> Result<String, String> {
     std::fs::read_to_string(&canonical).map_err(|e| format!("Failed to read skill: {e}"))
 }
 
+// ============================================================================
+// Skills — enable/disable toggle (Phase 3)
+// ============================================================================
+
+/// Toggle a skill's enabled state by mutating `config.yaml`'s
+/// `skills.disabled` list. Matches the behaviour of hermes-web-ui's
+/// `PUT /api/hermes/skills/toggle`.
+///
+/// * `enabled = true`  → remove `name` from disabled list
+/// * `enabled = false` → add `name` to disabled list
+///
+/// A `config.yaml.bak-<epoch>` backup is written before any mutation so
+/// users can always recover a broken config.
 #[tauri::command]
-#[allow(dead_code)]
-pub async fn hermes_skill_save(name: String, content: String) -> Result<String, String> {
-    let skills_dir = hermes_home().join("skills");
-    std::fs::create_dir_all(&skills_dir)
-        .map_err(|e| format!("Failed to create skills dir: {e}"))?;
-    let safe_name = name.replace("/", "_").replace("\\", "_").replace("..", "_");
-    let file_path = skills_dir.join(format!("{}.md", safe_name));
-    std::fs::write(&file_path, &content).map_err(|e| format!("Failed to write skill: {e}"))?;
-    Ok(file_path.to_string_lossy().to_string())
+pub async fn hermes_skill_toggle(name: String, enabled: bool) -> Result<Value, String> {
+    if name.is_empty() {
+        return Err("Skill name is required".into());
+    }
+    let config_path = hermes_home().join("config.yaml");
+    let raw = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config.yaml: {e}"))?;
+
+    // Write a timestamped backup before any mutation.
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let backup_path = hermes_home().join(format!("config.yaml.bak-{ts}"));
+    let _ = std::fs::write(&backup_path, &raw);
+
+    let patched = patch_yaml_toggle_skill(&raw, &name, enabled);
+    std::fs::write(&config_path, &patched)
+        .map_err(|e| format!("Failed to write config.yaml: {e}"))?;
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "skill": name,
+        "enabled": enabled,
+        "backup": backup_path.to_string_lossy(),
+    }))
 }
 
-#[tauri::command]
-#[allow(dead_code)]
-pub async fn hermes_skill_delete(name: String) -> Result<String, String> {
-    let skills_dir = hermes_home().join("skills");
-    let safe_name = name.replace("/", "_").replace("\\", "_").replace("..", "_");
-    let file_path = skills_dir.join(format!("{}.md", safe_name));
-    if file_path.exists() {
-        std::fs::remove_file(&file_path).map_err(|e| format!("Failed to delete skill: {e}"))?;
+/// YAML patcher: add/remove `name` from `skills.disabled[]`.
+///
+/// Careful to preserve line ordering + indentation + other sections so that
+/// user-edited comments and custom keys survive round-trips.
+fn patch_yaml_toggle_skill(raw: &str, name: &str, enabled: bool) -> String {
+    let mut lines: Vec<String> = raw.lines().map(str::to_string).collect();
+
+    // Find `skills:` top-level key.
+    let skills_idx = lines.iter().position(|l| {
+        let trimmed = l.trim_end();
+        let indent = trimmed.len() - trimmed.trim_start().len();
+        indent == 0 && trimmed.trim_start().starts_with("skills:")
+    });
+
+    // If no `skills:` block exists yet, synthesize one.
+    if skills_idx.is_none() {
+        if enabled {
+            // Already enabled (not in any disabled list). Nothing to do.
+            return raw.to_string();
+        }
+        // Append a new skills.disabled block.
+        if !raw.is_empty() && !raw.ends_with('\n') {
+            lines.push(String::new());
+        }
+        lines.push("skills:".to_string());
+        lines.push("  disabled:".to_string());
+        lines.push(format!("    - {name}"));
+        lines.push(String::new());
+        return lines.join("\n");
     }
+
+    let skills_idx = skills_idx.unwrap();
+
+    // Find `disabled:` under skills.
+    let mut disabled_idx: Option<usize> = None;
+    let mut i = skills_idx + 1;
+    while i < lines.len() {
+        let trimmed = lines[i].trim_end();
+        let indent = trimmed.len() - trimmed.trim_start().len();
+        if !trimmed.is_empty() && indent == 0 {
+            break; // left the skills block
+        }
+        if indent == 2 && trimmed.trim_start().starts_with("disabled:") {
+            disabled_idx = Some(i);
+            break;
+        }
+        i += 1;
+    }
+
+    // Create a `disabled:` list if absent.
+    if disabled_idx.is_none() {
+        if enabled {
+            // Already not disabled — nothing to do.
+            return raw.to_string();
+        }
+        let insert_at = skills_idx + 1;
+        lines.insert(insert_at, "  disabled:".to_string());
+        lines.insert(insert_at + 1, format!("    - {name}"));
+        return lines.join("\n");
+    }
+
+    let disabled_idx = disabled_idx.unwrap();
+
+    // Collect existing list item line indices + their values.
+    let mut item_rows: Vec<(usize, String)> = Vec::new();
+    let mut j = disabled_idx + 1;
+    while j < lines.len() {
+        let trimmed = lines[j].trim_end();
+        let indent = trimmed.len() - trimmed.trim_start().len();
+        if !trimmed.is_empty() && indent < 4 {
+            break;
+        }
+        let body = trimmed.trim_start();
+        if body.starts_with("- ") {
+            let v = body
+                .trim_start_matches("- ")
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
+            item_rows.push((j, v));
+        }
+        j += 1;
+    }
+
+    let has_item = item_rows.iter().any(|(_, v)| v == name);
+
+    if enabled {
+        // Remove all rows that match.
+        if !has_item {
+            return raw.to_string();
+        }
+        let to_remove: Vec<usize> = item_rows
+            .iter()
+            .filter(|(_, v)| v == name)
+            .map(|(i, _)| *i)
+            .collect();
+        for idx in to_remove.iter().rev() {
+            lines.remove(*idx);
+        }
+    } else {
+        if has_item {
+            return raw.to_string();
+        }
+        // Insert right after the `disabled:` key line or at the end of
+        // existing items — whichever produces stable ordering.
+        let insert_at = item_rows
+            .last()
+            .map(|(i, _)| *i + 1)
+            .unwrap_or(disabled_idx + 1);
+        lines.insert(insert_at, format!("    - {name}"));
+    }
+
+    lines.join("\n")
+}
+
+/// Recursively list all files inside a skill directory. Returns an array
+/// of `{ path, name, isDir }` where `path` is relative to `~/.hermes/`.
+/// Skips the top-level `SKILL.md` because the UI already renders it
+/// separately in the detail pane.
+#[tauri::command]
+pub async fn hermes_skill_files(category: String, skill: String) -> Result<Value, String> {
+    let skills_root = hermes_home().join("skills");
+    let skill_dir = skills_root.join(&category).join(&skill);
+    if !skill_dir.exists() || !skill_dir.is_dir() {
+        return Ok(serde_json::json!([]));
+    }
+
+    let mut out: Vec<Value> = Vec::new();
+    fn walk(root: &PathBuf, rel_base: &str, out: &mut Vec<Value>) {
+        let entries = match std::fs::read_dir(root) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let rel = if rel_base.is_empty() {
+                name.clone()
+            } else {
+                format!("{rel_base}/{name}")
+            };
+            let full = root.join(&name);
+            let is_dir = full.is_dir();
+            // Skip the flagship SKILL.md at the root level.
+            if rel_base.is_empty() && name == "SKILL.md" {
+                continue;
+            }
+            out.push(serde_json::json!({
+                "path": rel,
+                "name": name,
+                "isDir": is_dir,
+            }));
+            if is_dir {
+                walk(&full, &rel, out);
+            }
+        }
+    }
+    walk(&skill_dir, "", &mut out);
+    out.sort_by(|a, b| {
+        a["path"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(b["path"].as_str().unwrap_or(""))
+    });
+    Ok(Value::Array(out))
+}
+
+/// Write (create/update) a skill file. Path must be inside
+/// `~/.hermes/skills/`. Intermediate directories are auto-created.
+#[tauri::command]
+pub async fn hermes_skill_write(file_path: String, content: String) -> Result<String, String> {
+    let skills_dir = hermes_home().join("skills");
+    let target = PathBuf::from(&file_path);
+
+    // Ensure the target lives under the skills directory. We compare
+    // absolute-normalized paths to allow writing *new* files (which cannot
+    // be canonicalized yet) while still rejecting traversal.
+    let skills_canon = skills_dir
+        .canonicalize()
+        .map_err(|e| format!("Skills dir not accessible: {e}"))?;
+    let target_abs = if target.is_absolute() {
+        target.clone()
+    } else {
+        skills_dir.join(&target)
+    };
+    let parent = target_abs
+        .parent()
+        .ok_or_else(|| "Invalid target path".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {e}"))?;
+    let parent_canon = parent
+        .canonicalize()
+        .map_err(|e| format!("Path error: {e}"))?;
+    if !parent_canon.starts_with(&skills_canon) {
+        return Err("Access denied".into());
+    }
+    std::fs::write(&target_abs, &content).map_err(|e| format!("Failed to write skill: {e}"))?;
     Ok("ok".into())
 }
 
+/// Resolve `memory|user|soul` to its filename inside `~/.hermes/memories/`.
+fn memory_file_name(kind: &str) -> Option<&'static str> {
+    match kind {
+        "memory" => Some("MEMORY.md"),
+        "user" => Some("USER.md"),
+        "soul" => Some("SOUL.md"),
+        _ => None,
+    }
+}
+
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_memory_read(r#type: Option<String>) -> Result<String, String> {
     let kind = r#type.as_deref().unwrap_or("memory");
-    let file_name = if kind == "user" {
-        "USER.md"
-    } else {
-        "MEMORY.md"
-    };
+    let file_name = memory_file_name(kind)
+        .ok_or_else(|| format!("Invalid memory kind '{kind}' (expected memory|user|soul)"))?;
     let file_path = hermes_home().join("memories").join(file_name);
     if !file_path.exists() {
         return Ok(String::new());
@@ -3178,20 +4156,824 @@ pub async fn hermes_memory_read(r#type: Option<String>) -> Result<String, String
 }
 
 #[tauri::command]
-#[allow(dead_code)]
 pub async fn hermes_memory_write(
     r#type: Option<String>,
     content: String,
 ) -> Result<String, String> {
     let kind = r#type.as_deref().unwrap_or("memory");
+    let file_name = memory_file_name(kind)
+        .ok_or_else(|| format!("Invalid memory kind '{kind}' (expected memory|user|soul)"))?;
     let mem_dir = hermes_home().join("memories");
     std::fs::create_dir_all(&mem_dir).map_err(|e| format!("Failed to create dir: {e}"))?;
-    let file_name = if kind == "user" {
-        "USER.md"
-    } else {
-        "MEMORY.md"
-    };
     let file_path = mem_dir.join(file_name);
     std::fs::write(&file_path, &content).map_err(|e| format!("Failed to write memory: {e}"))?;
     Ok("ok".into())
+}
+
+/// Read all memory sections (memory/user/soul) in one call, returning content
+/// + last-modified UNIX timestamp (seconds) for each. A missing file yields an
+/// empty string and `None` mtime — the caller shows "not yet written" state.
+///
+/// Shape matches `hermes-web-ui`'s `GET /api/hermes/memory` response so the
+/// frontend can mirror the official UI's three-column layout.
+#[tauri::command]
+pub async fn hermes_memory_read_all() -> Result<Value, String> {
+    let mem_dir = hermes_home().join("memories");
+    let section = |kind: &str| -> (String, Option<u64>) {
+        let name = match memory_file_name(kind) {
+            Some(n) => n,
+            None => return (String::new(), None),
+        };
+        let path = mem_dir.join(name);
+        if !path.exists() {
+            return (String::new(), None);
+        }
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let mtime = std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs());
+        (content, mtime)
+    };
+    let (memory, memory_mtime) = section("memory");
+    let (user, user_mtime) = section("user");
+    let (soul, soul_mtime) = section("soul");
+    Ok(serde_json::json!({
+        "memory": memory,
+        "user": user,
+        "soul": soul,
+        "memory_mtime": memory_mtime,
+        "user_mtime": user_mtime,
+        "soul_mtime": soul_mtime,
+    }))
+}
+
+fn downloads_dir_fallback() -> PathBuf {
+    dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn safe_download_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => c,
+        })
+        .collect()
+}
+
+/// Read an entire log file and save it to the user's Downloads/ClawPanel
+/// directory. We refuse path traversal and only allow files whose canonical
+/// path lives inside `~/.hermes/logs/`.
+#[tauri::command]
+pub async fn hermes_logs_download(name: String) -> Result<Value, String> {
+    // Reject traversal before any disk access.
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err("Invalid log file name".into());
+    }
+    let logs_dir = hermes_home().join("logs");
+    let file_path = logs_dir.join(&name);
+    // Canonicalize both sides to ensure symlinks/relative segments can't
+    // escape the logs directory.
+    let canon_dir = logs_dir
+        .canonicalize()
+        .map_err(|e| format!("Logs dir not found: {e}"))?;
+    let canon_file = file_path
+        .canonicalize()
+        .map_err(|e| format!("Log file not found: {e}"))?;
+    if !canon_file.starts_with(&canon_dir) {
+        return Err("Access denied".into());
+    }
+    let content =
+        std::fs::read_to_string(&canon_file).map_err(|e| format!("Failed to read log: {e}"))?;
+    let out_dir = downloads_dir_fallback().join("ClawPanel");
+    std::fs::create_dir_all(&out_dir).map_err(|e| format!("Failed to create download dir: {e}"))?;
+    let out_path = out_dir.join(safe_download_filename(&name));
+    std::fs::write(&out_path, content).map_err(|e| format!("Failed to save log: {e}"))?;
+    Ok(serde_json::json!({
+        "path": out_path.to_string_lossy().to_string(),
+    }))
+}
+
+// ============================================================================
+// api_server guardian (Step 5 / G7)
+//
+// ClawPanel's Hermes integration requires `platforms.api_server.enabled: true`
+// in ~/.hermes/config.yaml so that `hermes gateway run` exposes the
+// /v1/runs endpoint we depend on. The setting is written once by
+// `configure_hermes`, but several real-world scenarios can remove it:
+//   * User upgrades Hermes and the new default config.yaml is merged
+//     without the api_server platform entry.
+//   * User manually edits config.yaml (via Hermes CLI or text editor).
+//   * Migration scripts accidentally drop the section.
+//
+// Rather than silently failing at Gateway start time with an opaque
+// "endpoint not found" error, this guardian checks before every start and
+// auto-heals the config. A timestamped backup (config.yaml.bak-<epoch>)
+// is written before any mutation so users can always roll back.
+// ============================================================================
+
+/// Scan a YAML string for `platforms.api_server.enabled: true` and return
+/// true only when that exact path exists with a truthy value.
+fn config_has_api_server_enabled(raw: &str) -> bool {
+    let mut in_platforms = false;
+    let mut in_api_server = false;
+    for line in raw.lines() {
+        // Strip comments (crude, but matches the simple YAML we write).
+        let line = match line.find('#') {
+            Some(i) => &line[..i],
+            None => line,
+        };
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let indent = trimmed.len() - trimmed.trim_start().len();
+
+        if indent == 0 {
+            in_platforms = trimmed.trim_start().starts_with("platforms:");
+            in_api_server = false;
+            continue;
+        }
+        if !in_platforms {
+            continue;
+        }
+        // Inside platforms:
+        if indent <= 2 {
+            in_api_server = trimmed.trim_start().starts_with("api_server:");
+            continue;
+        }
+        if !in_api_server {
+            continue;
+        }
+        // Inside platforms.api_server:
+        let t = trimmed.trim_start();
+        if let Some(rest) = t.strip_prefix("enabled:") {
+            let v = rest.trim().trim_matches(|c: char| c == '"' || c == '\'');
+            return matches!(v.to_ascii_lowercase().as_str(), "true" | "yes" | "on" | "1");
+        }
+    }
+    false
+}
+
+/// Produce a patched YAML that guarantees
+/// `platforms.api_server.enabled: true` is present, preserving everything
+/// else verbatim. If the config already has the setting (as `true`) this
+/// returns the original text unchanged.
+fn patch_yaml_ensure_api_server(raw: &str) -> String {
+    if config_has_api_server_enabled(raw) {
+        return raw.to_string();
+    }
+
+    // Strategy:
+    //   * If `platforms:` exists, inject / replace api_server subtree under it.
+    //   * Otherwise append a new top-level `platforms:` block at EOF.
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 4);
+    let mut platforms_found = false;
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        let trimmed = line.trim_end();
+        let indent = trimmed.len() - trimmed.trim_start().len();
+
+        if indent == 0 && trimmed.trim_start().starts_with("platforms:") {
+            // Copy the platforms: header
+            out.push(line.to_string());
+            platforms_found = true;
+            i += 1;
+            // Accumulate children and drop the existing api_server subtree
+            // (we'll rewrite it at the top of the block). Keep siblings.
+            let mut accumulated_children: Vec<String> = Vec::new();
+            let mut skipping_api_server = false;
+            while i < lines.len() {
+                let l = lines[i];
+                let t = l.trim_end();
+                let ind = t.len() - t.trim_start().len();
+                if ind == 0 && !t.is_empty() {
+                    break; // leaving platforms block
+                }
+                if ind <= 2 {
+                    skipping_api_server = t.trim_start().starts_with("api_server:");
+                }
+                if !skipping_api_server {
+                    accumulated_children.push(l.to_string());
+                }
+                i += 1;
+            }
+            // Inject a fresh api_server entry at the top of platforms:
+            out.push("  api_server:".into());
+            out.push("    enabled: true".into());
+            out.extend(accumulated_children);
+            continue;
+        }
+        out.push(line.to_string());
+        i += 1;
+    }
+
+    if !platforms_found {
+        if let Some(last) = out.last() {
+            if !last.is_empty() {
+                out.push(String::new());
+            }
+        }
+        out.push("platforms:".into());
+        out.push("  api_server:".into());
+        out.push("    enabled: true".into());
+    }
+
+    let mut content = out.join("\n");
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content
+}
+
+/// Guardian called from `hermes_gateway_action` on every `start` request.
+/// Returns Ok(()) when the config is healthy (either it was already correct
+/// or the patch succeeded). Emits `hermes-config-patched` on auto-heal so
+/// the frontend can display a transparent toast.
+fn ensure_api_server_enabled(app: &tauri::AppHandle) -> Result<(), String> {
+    let config_path = hermes_home().join("config.yaml");
+    if !config_path.exists() {
+        // Nothing to guard — configure_hermes will create a compliant file
+        // on first run. Don't auto-create here; that's outside the guard's
+        // responsibility.
+        return Ok(());
+    }
+    let raw = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config.yaml: {e}"))?;
+    if config_has_api_server_enabled(&raw) {
+        return Ok(());
+    }
+
+    // Back up with a timestamped filename so we never overwrite an earlier
+    // .bak (rapid re-starts would lose history otherwise).
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let backup_path = config_path.with_extension(format!("yaml.bak-{ts}"));
+    let _ = std::fs::write(&backup_path, &raw);
+
+    let patched = patch_yaml_ensure_api_server(&raw);
+    std::fs::write(&config_path, &patched)
+        .map_err(|e| format!("Failed to write config.yaml: {e}"))?;
+
+    // Inform the frontend so it can surface a toast. Failure to emit is
+    // non-fatal — the patch itself already succeeded.
+    use tauri::Emitter;
+    let _ = app.emit(
+        "hermes-config-patched",
+        serde_json::json!({
+            "kind": "api_server_enabled",
+            "backup": backup_path.to_string_lossy(),
+            "message": "platforms.api_server.enabled 缺失，已自动修复并备份原文件",
+        }),
+    );
+    Ok(())
+}
+
+// ============================================================================
+// .env editor commands (Step 4 / G6)
+//
+// Users may need to set custom environment variables for Hermes (e.g.
+// `TAVILY_API_KEY` for the tavily skill, `HTTP_PROXY`, etc.). These keys
+// live in ~/.hermes/.env alongside the ClawPanel-managed provider keys.
+//
+// The three commands below:
+//   * `hermes_env_read_unmanaged` — returns every key in .env that is NOT
+//      managed by ClawPanel (i.e. not in `hermes_providers::all_managed_env_keys`)
+//   * `hermes_env_set`            — writes or updates an unmanaged key
+//   * `hermes_env_delete`         — removes an unmanaged key
+//
+// All three refuse to touch `all_managed_env_keys` to prevent users from
+// accidentally clobbering provider keys from the editor UI (those should
+// be configured via the setup page / configure_hermes).
+// ============================================================================
+
+/// Lenient .env parser shared by the three commands below.
+/// Returns a Vec of (key, value, original_line_index) for every `KEY=VALUE`
+/// pair. Comments and blanks are preserved by line index but not returned.
+fn parse_env_file_lines(raw: &str) -> Vec<(String, String, usize)> {
+    let mut out = Vec::new();
+    for (i, line) in raw.lines().enumerate() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = t.split_once('=') {
+            let k = k.trim().to_string();
+            if k.is_empty() {
+                continue;
+            }
+            out.push((k, v.to_string(), i));
+        }
+    }
+    out
+}
+
+/// Return every non-managed `KEY=VALUE` pair from ~/.hermes/.env.
+///
+/// Output is ordered by the order of appearance in the file. Managed keys
+/// (provider API keys, base URLs, `GATEWAY_ALLOW_ALL_USERS`, `API_SERVER_KEY`)
+/// are filtered out — those are surfaced separately in the config UI.
+#[tauri::command]
+pub fn hermes_env_read_unmanaged() -> Result<Vec<(String, String)>, String> {
+    use super::hermes_providers;
+
+    let env_path = hermes_home().join(".env");
+    if !env_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let raw =
+        std::fs::read_to_string(&env_path).map_err(|e| format!("Failed to read .env: {e}"))?;
+
+    let managed = hermes_providers::all_managed_env_keys();
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+    for (k, v, _) in parse_env_file_lines(&raw) {
+        if managed.contains(&k.as_str()) {
+            continue;
+        }
+        if seen.insert(k.clone()) {
+            out.push((k, v));
+        }
+    }
+    Ok(out)
+}
+
+/// Write or update a single unmanaged env var in ~/.hermes/.env.
+///
+/// Refuses to write keys in `hermes_providers::all_managed_env_keys`.
+/// Creates the file (and parent dir) if missing.
+#[tauri::command]
+pub fn hermes_env_set(key: String, value: String) -> Result<(), String> {
+    use super::hermes_providers;
+
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Key cannot be empty".into());
+    }
+    // Basic sanity: env var keys are typically A-Z0-9_
+    if !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(format!(
+            "Invalid env var key '{key}': only [A-Z0-9_] are allowed"
+        ));
+    }
+    let managed = hermes_providers::all_managed_env_keys();
+    if managed.contains(&key.as_str()) {
+        return Err(format!(
+            "'{key}' is managed by ClawPanel; please configure it via the provider setup page"
+        ));
+    }
+
+    let env_path = hermes_home().join(".env");
+    if let Some(parent) = env_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create .hermes dir: {e}"))?;
+    }
+
+    let raw = if env_path.exists() {
+        std::fs::read_to_string(&env_path).map_err(|e| format!("Failed to read .env: {e}"))?
+    } else {
+        String::new()
+    };
+
+    // Preserve file structure: if the key already exists, update the first
+    // occurrence and leave the rest (which would be dead code anyway for
+    // dotenv loaders) alone. Otherwise append a new line.
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len() + 1);
+    let mut replaced = false;
+    for line in lines.iter() {
+        let t = line.trim();
+        if t.starts_with('#') || t.is_empty() {
+            out.push(line.to_string());
+            continue;
+        }
+        if let Some((k, _)) = t.split_once('=') {
+            if k.trim() == key && !replaced {
+                out.push(format!("{key}={value}"));
+                replaced = true;
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    if !replaced {
+        out.push(format!("{key}={value}"));
+    }
+    let mut content = out.join("\n");
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    std::fs::write(&env_path, content).map_err(|e| format!("Failed to write .env: {e}"))?;
+    Ok(())
+}
+
+/// Remove an unmanaged env var from ~/.hermes/.env.
+///
+/// Refuses to delete keys in `hermes_providers::all_managed_env_keys`.
+/// No-op if the key doesn't exist.
+#[tauri::command]
+pub fn hermes_env_delete(key: String) -> Result<(), String> {
+    use super::hermes_providers;
+
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Key cannot be empty".into());
+    }
+    let managed = hermes_providers::all_managed_env_keys();
+    if managed.contains(&key.as_str()) {
+        return Err(format!(
+            "'{key}' is managed by ClawPanel; please configure it via the provider setup page"
+        ));
+    }
+
+    let env_path = hermes_home().join(".env");
+    if !env_path.exists() {
+        return Ok(());
+    }
+    let raw =
+        std::fs::read_to_string(&env_path).map_err(|e| format!("Failed to read .env: {e}"))?;
+
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    for line in lines.iter() {
+        let t = line.trim();
+        if t.starts_with('#') || t.is_empty() {
+            out.push(line.to_string());
+            continue;
+        }
+        if let Some((k, _)) = t.split_once('=') {
+            if k.trim() == key {
+                continue; // drop
+            }
+        }
+        out.push(line.to_string());
+    }
+    let mut content = out.join("\n");
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    std::fs::write(&env_path, content).map_err(|e| format!("Failed to write .env: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn hermes_config_raw_read() -> Result<Value, String> {
+    let path = hermes_home().join("config.yaml");
+    let yaml = std::fs::read_to_string(&path).unwrap_or_default();
+    Ok(serde_json::json!({ "yaml": yaml }))
+}
+
+#[tauri::command]
+pub fn hermes_config_raw_write(yaml_text: String) -> Result<Value, String> {
+    let path = hermes_home().join("config.yaml");
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {e}"))?;
+    }
+    if path.exists() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let backup = path.with_extension(format!("yaml.bak-{ts}"));
+        let _ = std::fs::copy(&path, backup);
+    }
+    std::fs::write(&path, yaml_text).map_err(|e| format!("Failed to write config.yaml: {e}"))?;
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+#[tauri::command]
+pub fn hermes_env_reveal(key: String) -> Result<Value, String> {
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Key cannot be empty".into());
+    }
+    let env_path = hermes_home().join(".env");
+    let raw =
+        std::fs::read_to_string(&env_path).map_err(|e| format!("Failed to read .env: {e}"))?;
+    for (k, v, _) in parse_env_file_lines(&raw) {
+        if k == key {
+            return Ok(serde_json::json!({ "key": key, "value": v }));
+        }
+    }
+    Err(format!("{key} not found in .env"))
+}
+
+fn hermes_dashboard_theme_name(raw: &str) -> String {
+    let mut in_dashboard = false;
+    for line in raw.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        if indent == 0 {
+            in_dashboard = t == "dashboard:" || t.starts_with("dashboard:");
+            if t.starts_with("dashboard:") && t != "dashboard:" {
+                return t
+                    .trim_start_matches("dashboard:")
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string();
+            }
+            continue;
+        }
+        if in_dashboard && t.starts_with("theme:") {
+            return t
+                .trim_start_matches("theme:")
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_string();
+        }
+    }
+    "default".into()
+}
+
+fn patch_dashboard_theme(raw: &str, name: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut in_dashboard = false;
+    let mut dashboard_seen = false;
+    let mut theme_written = false;
+    for line in raw.lines() {
+        let t = line.trim();
+        let indent = line.len() - line.trim_start().len();
+        if indent == 0 && !t.is_empty() && !t.starts_with('#') {
+            if in_dashboard && !theme_written {
+                out.push(format!("  theme: {name}"));
+                theme_written = true;
+            }
+            in_dashboard = t == "dashboard:" || t.starts_with("dashboard:");
+            if in_dashboard {
+                dashboard_seen = true;
+            }
+        }
+        if in_dashboard && indent > 0 && t.starts_with("theme:") {
+            out.push(format!("{}theme: {name}", " ".repeat(indent)));
+            theme_written = true;
+            continue;
+        }
+        out.push(line.to_string());
+    }
+    if in_dashboard && !theme_written {
+        out.push(format!("  theme: {name}"));
+    }
+    if !dashboard_seen {
+        if out.last().map(|s| !s.is_empty()).unwrap_or(false) {
+            out.push(String::new());
+        }
+        out.push("dashboard:".into());
+        out.push(format!("  theme: {name}"));
+    }
+    let mut content = out.join("\n");
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content
+}
+
+#[tauri::command]
+pub fn hermes_dashboard_themes() -> Result<Value, String> {
+    let config_raw = std::fs::read_to_string(hermes_home().join("config.yaml")).unwrap_or_default();
+    let active = hermes_dashboard_theme_name(&config_raw);
+    let mut themes = vec![
+        serde_json::json!({ "name": "default", "label": "Default", "description": "Hermes default dashboard theme" }),
+        serde_json::json!({ "name": "midnight", "label": "Midnight", "description": "Dark blue dashboard theme" }),
+        serde_json::json!({ "name": "ember", "label": "Ember", "description": "Warm dashboard theme" }),
+        serde_json::json!({ "name": "mono", "label": "Mono", "description": "Monochrome dashboard theme" }),
+        serde_json::json!({ "name": "cyberpunk", "label": "Cyberpunk", "description": "Neon dashboard theme" }),
+        serde_json::json!({ "name": "rose", "label": "Rose", "description": "Soft rose dashboard theme" }),
+    ];
+    let dir = hermes_home().join("dashboard-themes");
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let ext_ok = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("yaml") || s.eq_ignore_ascii_case("yml"))
+                .unwrap_or(false);
+            if !ext_ok {
+                continue;
+            }
+            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                themes.push(serde_json::json!({
+                    "name": name,
+                    "label": name,
+                    "description": "User dashboard theme",
+                }));
+            }
+        }
+    }
+    Ok(serde_json::json!({ "themes": themes, "active": active }))
+}
+
+#[tauri::command]
+pub fn hermes_dashboard_theme_set(name: String) -> Result<Value, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Theme name cannot be empty".into());
+    }
+    let path = hermes_home().join("config.yaml");
+    let raw = std::fs::read_to_string(&path).unwrap_or_default();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {e}"))?;
+    }
+    std::fs::write(&path, patch_dashboard_theme(&raw, &name))
+        .map_err(|e| format!("Failed to write config.yaml: {e}"))?;
+    Ok(serde_json::json!({ "ok": true, "theme": name }))
+}
+
+fn scan_dashboard_plugins() -> Vec<Value> {
+    let mut plugins = Vec::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+    let roots = [hermes_home().join("plugins")];
+    for root in roots {
+        if let Ok(entries) = std::fs::read_dir(root) {
+            for entry in entries.flatten() {
+                let dir = entry.path();
+                if !dir.is_dir() {
+                    continue;
+                }
+                let manifest = dir.join("dashboard").join("manifest.json");
+                if !manifest.exists() {
+                    continue;
+                }
+                let raw = match std::fs::read_to_string(&manifest) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                let data: Value = match serde_json::from_str(&raw) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let name = data
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| dir.file_name().and_then(|s| s.to_str()))
+                    .unwrap_or("");
+                if name.is_empty() || !seen.insert(name.to_string()) {
+                    continue;
+                }
+                let tab = data.get("tab").cloned().unwrap_or_else(
+                    || serde_json::json!({ "path": format!("/{name}"), "position": "end" }),
+                );
+                plugins.push(serde_json::json!({
+                    "name": name,
+                    "label": data.get("label").and_then(|v| v.as_str()).unwrap_or(name),
+                    "description": data.get("description").and_then(|v| v.as_str()).unwrap_or(""),
+                    "icon": data.get("icon").and_then(|v| v.as_str()).unwrap_or("Puzzle"),
+                    "version": data.get("version").and_then(|v| v.as_str()).unwrap_or("0.0.0"),
+                    "tab": tab,
+                    "slots": data.get("slots").cloned().unwrap_or_else(|| serde_json::json!([])),
+                    "entry": data.get("entry").and_then(|v| v.as_str()).unwrap_or("dist/index.js"),
+                    "css": data.get("css").cloned().unwrap_or(Value::Null),
+                    "has_api": data.get("api").is_some(),
+                    "source": "user",
+                }));
+            }
+        }
+    }
+    plugins
+}
+
+#[tauri::command]
+pub fn hermes_dashboard_plugins() -> Result<Value, String> {
+    Ok(Value::Array(scan_dashboard_plugins()))
+}
+
+#[tauri::command]
+pub fn hermes_dashboard_plugins_rescan() -> Result<Value, String> {
+    let plugins = scan_dashboard_plugins();
+    Ok(serde_json::json!({ "ok": true, "count": plugins.len() }))
+}
+
+#[tauri::command]
+pub fn hermes_toolsets_list() -> Result<Value, String> {
+    let output = run_silent("hermes", &["tools", "list", "--platform", "cli"]).unwrap_or_default();
+    Ok(serde_json::json!({ "raw": output }))
+}
+
+#[tauri::command]
+pub fn hermes_cron_jobs_list() -> Result<Value, String> {
+    let path = hermes_home().join("cron").join("jobs.json");
+    if !path.exists() {
+        return Ok(Value::Array(Vec::new()));
+    }
+    let raw =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read cron jobs: {e}"))?;
+    serde_json::from_str::<Value>(&raw).map_err(|e| format!("Failed to parse cron jobs: {e}"))
+}
+
+// ============================================================================
+// Unit tests for the pure YAML helpers (no filesystem I/O).
+// ============================================================================
+
+#[cfg(test)]
+mod guardian_tests {
+    use super::{config_has_api_server_enabled, patch_yaml_ensure_api_server};
+
+    #[test]
+    fn detects_enabled_variants() {
+        let yaml = "\
+model:
+  default: deepseek-chat
+platforms:
+  api_server:
+    enabled: true
+";
+        assert!(config_has_api_server_enabled(yaml));
+
+        for v in ["true", "True", "TRUE", "yes", "on", "1"] {
+            let y = format!("platforms:\n  api_server:\n    enabled: {v}\n");
+            assert!(
+                config_has_api_server_enabled(&y),
+                "expected {v} to count as enabled"
+            );
+        }
+    }
+
+    #[test]
+    fn detects_missing_or_disabled() {
+        assert!(!config_has_api_server_enabled("model:\n  default: foo\n"));
+        assert!(!config_has_api_server_enabled(
+            "platforms:\n  other:\n    enabled: true\n"
+        ));
+        assert!(!config_has_api_server_enabled(
+            "platforms:\n  api_server:\n    enabled: false\n"
+        ));
+        assert!(!config_has_api_server_enabled(
+            "platforms:\n  api_server:\n    something: else\n"
+        ));
+    }
+
+    #[test]
+    fn ignores_commented_enabled() {
+        let yaml = "platforms:\n  api_server:\n    # enabled: true\n";
+        assert!(!config_has_api_server_enabled(yaml));
+    }
+
+    #[test]
+    fn patch_is_noop_when_already_enabled() {
+        let yaml = "\
+model:
+  default: x
+platforms:
+  api_server:
+    enabled: true
+";
+        assert_eq!(patch_yaml_ensure_api_server(yaml), yaml);
+    }
+
+    #[test]
+    fn patch_appends_when_no_platforms() {
+        let yaml = "model:\n  default: x\n";
+        let patched = patch_yaml_ensure_api_server(yaml);
+        assert!(config_has_api_server_enabled(&patched));
+        assert!(patched.contains("model:"));
+        assert!(patched.contains("default: x"));
+    }
+
+    #[test]
+    fn patch_injects_under_existing_platforms() {
+        let yaml = "\
+platforms:
+  other:
+    enabled: true
+terminal:
+  backend: local
+";
+        let patched = patch_yaml_ensure_api_server(yaml);
+        assert!(config_has_api_server_enabled(&patched));
+        assert!(patched.contains("other:"));
+        assert!(patched.contains("terminal:"));
+        assert!(patched.contains("backend: local"));
+    }
+
+    #[test]
+    fn patch_replaces_disabled_api_server() {
+        let yaml = "\
+platforms:
+  api_server:
+    enabled: false
+    extra: keepme
+  other:
+    enabled: true
+";
+        let patched = patch_yaml_ensure_api_server(yaml);
+        assert!(config_has_api_server_enabled(&patched));
+        assert!(patched.contains("other:"));
+        assert!(
+            !patched.contains("enabled: false"),
+            "disabled marker should have been removed"
+        );
+    }
 }

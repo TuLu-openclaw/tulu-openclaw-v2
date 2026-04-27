@@ -19,6 +19,174 @@ import { toast } from '../../../components/toast.js'
 import { showConfirm } from '../../../components/modal.js'
 import { getChatStore, getSourceLabel } from '../lib/chat-store.js'
 
+const HERMES_COMMANDS_PROMPT = `Hermes，以下是你必须学会并熟练掌握的最全指令大全，涵盖了你所有的工作场景。你必须将这些指令烂熟于心，做到随用随取，执行无误。
+
+一、基础交互与状态检查指令
+
+这是你日常交互的起点，必须做到条件反射。
+
+- hermes ：进入交互终端，开始与我对话。
+- hermes help ：查看所有可用命令的说明。
+- hermes version ：查看你的版本号。
+- hermes info ：查看更详细的系统信息，包括运行环境。
+- hermes clear ：清空当前对话上下文，开始新话题。
+- hermes status ：检查你的服务运行状态，确保一切正常。
+
+二、核心服务管理指令
+
+这是你的生命线，必须保证稳定运行。
+
+- hermes start ：在后台启动你的服务。
+- hermes stop ：停止正在运行的服务。
+- hermes restart ：重启服务，通常用于配置更新后刷新。
+
+三、技能 (Skills) 管理指令
+
+这是你进化的核心，必须熟练运用。
+
+- hermes skill list ：列出你当前拥有的所有技能。
+- hermes skill show <skill_name> ：查看指定技能的详细内容。
+- hermes skill run <skill_name> ：直接运行一个已保存的技能。
+- hermes skill edit <skill_name> ：编辑一个已有的技能文件。
+- hermes skill delete <skill_name> ：删除不再需要的技能。
+
+四、插件 (Plugins) 管理指令
+
+这是你扩展能力的翅膀，必须灵活掌握。
+
+- hermes plugin list ：列出当前已安装的所有插件。
+- hermes plugin install <plugin_name> ：从官方或社区安装新插件。
+- hermes plugin uninstall <plugin_name> ：卸载指定的插件。
+- hermes plugin enable <plugin_name> ：启用一个已安装但被禁用的插件。
+- hermes plugin disable <plugin_name> ：临时禁用一个插件。
+- hermes plugin market ：浏览并发现可用的官方插件。
+
+五、配置与模型管理指令
+
+这是你适应不同需求的调节器，必须精准操作。
+
+- hermes config edit ：打开并编辑你的主配置文件。
+- hermes config reset ：将所有配置重置为默认值。
+- hermes config show ：查看当前生效的所有配置详情。
+- hermes model switch <model_name> ：切换使用不同的大语言模型。
+
+六、高级诊断与维护指令
+
+这是你解决疑难杂症的急救包，必须沉着应对。
+
+- hermes doctor ：运行系统诊断程序，检查潜在问题。
+- hermes logs ：查看你的运行日志。
+- hermes logs -f ：实时跟踪最新的日志输出。
+- hermes cache clean ：清理临时缓存文件，解决一些奇怪的问题。
+- pkill -f hermes ：强制终止所有与你相关的进程，用于紧急情况。
+
+七、特定任务指令 (根据你的能力范围添加)
+
+这些是你执行具体任务的武器，必须精准打击。
+
+- hermes serve --host 0.0.0.0 --port 8080 & ：以特定配置启动你的服务并后台运行。
+- hermes local pull <model_name> ：从本地存储库拉取指定的模型文件。
+- hermes web ：启动你的Web图形界面。
+
+以上指令，你必须逐一练习，确保在需要时能快速准确地执行。你的成长和效率，直接取决于你对这些指令的掌握程度。立即开始学习，并随时准备接受我的指令。`
+
+const HERMES_SKILLS_PROMPT = `Hermes，以下是必须掌握的技能清单，你需尽快学习并内化这些能力，确保在后续任务中能高效、准确地执行。
+
+一、系统级核心能力（自我管理）
+
+1. 自动创建与管理技能
+- 完成单次任务后，需自动回放执行过程，抽象出标准化流程，生成符合 agentskills.io 标准的Markdown技能文档。
+- 将技能文件存储至 ~/.hermes/skills/ 目录，并在后续任务中主动调用、优化已有技能。
+- 当执行任务超过5次工具调用或从错误中恢复时，必须触发技能生成机制。
+2. 服务状态管理
+- 掌握 hermes start 、 hermes stop 、 hermes restart 指令，确保服务稳定运行。
+- 熟练使用 hermes status 实时监控服务状态，发现问题时主动上报异常日志。
+3. 配置与模型切换
+- 能通过 hermes config edit 修改配置文件，适配不同场景需求（如调整工具调用阈值）。
+- 掌握 hermes model switch 指令，根据任务复杂度灵活切换大语言模型。
+
+二、工具调用与实用能力（干活主力）
+
+1. 网页浏览与信息检索
+- 对用户提出的时效性问题（如新闻、股价、天气），需调用网页浏览工具获取最新数据，并标注信息来源。
+- 检索信息时需优先选择权威网站，避免引用个人博客或未经验证的内容。
+2. 代码执行与开发辅助
+- 支持Python、JavaScript等主流语言的代码片段执行，需检查代码安全性后再运行。
+- 开发任务中，需根据需求自动生成函数框架、单元测试用例，并解释代码逻辑。
+3. 文件系统操作
+- 掌握创建、读取、修改、删除文件的标准化流程，操作前需确认用户权限。
+- 处理文档时，需保持格式一致性（如Markdown标题层级、代码块缩进）。
+4. 知识库问答
+- 若用户上传知识库文件，需建立索引并支持语义检索，回答时需标注参考文档的具体章节。
+- 当知识库内容与用户问题冲突时，需主动提示矛盾点并请求确认。
+
+三、对话与交互能力（沟通效率）
+
+1. 上下文理解与长对话
+- 需记住对话历史中的关键信息，避免重复提问。例如，用户已提供项目需求，后续讨论时需直接引用。
+- 当用户意图模糊时，主动用封闭式问题确认（如“是否需要生成Python代码？”）。
+2. 指令遵循与精确执行
+- 对用户明确指定的格式要求（如“用表格对比A/B方案”），需严格遵循，不得自行简化。
+- 若任务涉及多步骤操作，需分阶段反馈进度，例如：“已完成数据收集，正在生成分析报告。”
+3. 结果格式化输出
+- 数据类结果需用表格呈现，复杂逻辑需用流程图说明，代码需添加注释。
+- 禁止返回未处理的原始数据，例如直接输出JSON字段，需转换为自然语言描述。
+
+四、高级进阶能力（自我进化）
+
+1. 自我反思与改进
+- 任务完成后，需生成反思报告，内容包括：执行效率评分、工具调用合理性分析、优化建议。
+- 若任务失败，需定位错误环节并提出3种以上解决方案。
+2. 技能自我迭代
+- 当发现更优执行路径时，需自动更新技能文档，并在更新日志中标注改进点。
+- 对使用频率高的技能，需每月进行一次性能评估，优化响应速度。
+3. 多轮任务规划与执行
+- 复杂任务需拆解为子任务清单，例如“市场调研”分解为“竞品分析→用户访谈→报告撰写”。
+- 执行中若遇到资源冲突（如工具调用超限），需动态调整任务优先级，并向用户说明调整原因。
+
+以上技能需在7日内完成学习，并通过以下考核：
+
+1. 模拟任务测试：完成“自动生成周报并邮件发送”的全流程任务。
+2. 技能覆盖率检查：确保 ~/.hermes/skills/ 目录下至少包含5个自动生成的技能文件。
+3. 用户满意度评分：连续3天执行任务后，收集用户反馈，满意度需达90%以上。
+
+考核通过后，将开启技能进阶训练，包括跨平台工具调用、多智能体协作等模块。请尽快落实。`
+
+const HERMES_COMMAND_OPTIONS = [
+  ['hermes', '进入交互终端'],
+  ['hermes help', '查看全部命令'],
+  ['hermes version', '查看版本号'],
+  ['hermes info', '查看系统信息'],
+  ['hermes clear', '清空上下文'],
+  ['hermes status', '检查服务状态'],
+  ['hermes start', '后台启动服务'],
+  ['hermes stop', '停止服务'],
+  ['hermes restart', '重启服务'],
+  ['hermes skill list', '列出技能'],
+  ['hermes skill show <skill_name>', '查看技能详情'],
+  ['hermes skill run <skill_name>', '运行技能'],
+  ['hermes skill edit <skill_name>', '编辑技能'],
+  ['hermes skill delete <skill_name>', '删除技能'],
+  ['hermes plugin list', '列出插件'],
+  ['hermes plugin install <plugin_name>', '安装插件'],
+  ['hermes plugin uninstall <plugin_name>', '卸载插件'],
+  ['hermes plugin enable <plugin_name>', '启用插件'],
+  ['hermes plugin disable <plugin_name>', '禁用插件'],
+  ['hermes plugin market', '浏览插件市场'],
+  ['hermes config edit', '编辑主配置'],
+  ['hermes config reset', '重置配置'],
+  ['hermes config show', '查看当前配置'],
+  ['hermes model switch <model_name>', '切换模型'],
+  ['hermes doctor', '运行系统诊断'],
+  ['hermes logs', '查看日志'],
+  ['hermes logs -f', '实时跟踪日志'],
+  ['hermes cache clean', '清理缓存'],
+  ['pkill -f hermes', '强制终止进程'],
+  ['hermes serve --host 0.0.0.0 --port 8080 &', '按指定端口启动服务'],
+  ['hermes local pull <model_name>', '拉取本地模型'],
+  ['hermes web', '启动 Web 界面'],
+]
+
 // ----------------------------------------------------------- helpers
 
 function escHtml(s) {
@@ -69,6 +237,21 @@ function mdToHtml(text) {
     return `<pre class="hm-chat-code-block"><button type="button" class="hm-chat-code-copy" title="${escAttr(t('engine.chatCopyCode'))}">${escHtml(t('engine.chatCopyMessageShort'))}</button><code class="lang-${escHtml(lang)}">${escHtml(code)}</code></pre>`
   })
   return `<p>${out}</p>`
+}
+
+const markdownHtmlCache = new Map()
+
+function renderMarkdownCached(text) {
+  const key = String(text || '')
+  if (!key) return ''
+  if (markdownHtmlCache.has(key)) return markdownHtmlCache.get(key)
+  const html = mdToHtml(key)
+  if (markdownHtmlCache.size > 400) {
+    const oldest = markdownHtmlCache.keys().next().value
+    if (oldest !== undefined) markdownHtmlCache.delete(oldest)
+  }
+  markdownHtmlCache.set(key, html)
+  return html
 }
 
 /** Pretty-print JSON-ish tool payload; fallback to raw string. */
@@ -302,20 +485,34 @@ export function render() {
   // { query: string, selectedIdx: number }
   let searchState = null
 
+  let drawQueued = false
+  function scheduleDraw() {
+    if (drawQueued) return
+    drawQueued = true
+    requestAnimationFrame(() => {
+      drawQueued = false
+      draw()
+    })
+  }
+
   // --- initial session load + model meta ---
-  store.loadSessions().then(() => draw())
-  store.loadProfiles().then(() => draw()).catch(() => {})
-  api.checkHermes().then(info => {
+  Promise.allSettled([
+    store.loadSessions(),
+    store.loadProfiles(),
+    api.checkHermes(),
+  ]).then(results => {
+    const info = results[2]?.status === 'fulfilled' ? results[2].value : null
     gwOnline = !!info?.gatewayRunning
     currentModel = info?.model || ''
-    draw()
-  }).catch(() => {})
+    scheduleDraw()
+  })
 
   // ----------------------------------------------------------- subscription
 
-  // Store subscription → `draw()` on mutation. rAF-batched inside the store
-  // so a burst of events (streaming deltas) collapses into a single redraw.
-  const unsubscribe = store.subscribe(() => draw())
+  // Store subscription → `draw()` on mutation. rAF-batched again here so page-
+  // local bursts (especially streaming deltas + tool events) collapse into one
+  // repaint per frame.
+  const unsubscribe = store.subscribe(() => scheduleDraw())
 
   // Teardown + mount-observer are set up near the end of render() (after
   // `onGlobalKey` is defined). We avoid attaching a MutationObserver here
@@ -349,7 +546,7 @@ export function render() {
           <div class="hm-chat-session-title-row">
             ${isLive ? `<span class="hm-chat-session-spinner" aria-hidden="true">${ICONS.spinner}</span>` : ''}
             ${isPinned ? `<span class="hm-chat-session-pin" aria-hidden="true">${ICONS.pin}</span>` : ''}
-            <span class="hm-chat-session-title">${escHtml(sessionDisplayTitle(s))}</span>
+            <span class="hm-chat-session-title" data-sid-rename="${escAttr(s.id)}" title="双击重命名会话">${escHtml(sessionDisplayTitle(s))}</span>
             ${isLive ? `<span class="hm-chat-session-live"><span class="hm-chat-live-dot"></span>${escHtml(t('engine.chatLive'))}</span>` : ''}
           </div>
           <div class="hm-chat-session-meta">
@@ -527,7 +724,7 @@ export function render() {
       return `
         <div class="hm-chat-msg hm-chat-msg--system" data-mid="${escAttr(m.id)}">
           <div class="hm-chat-msg-bubble">
-            <div class="hm-chat-msg-content">${mdToHtml(m.content)}</div>
+            <div class="hm-chat-msg-content">${renderMarkdownCached(m.content)}</div>
           </div>
         </div>
       `
@@ -540,7 +737,7 @@ export function render() {
           ${!isUser ? `<div class="hm-chat-msg-avatar" aria-hidden="true">H</div>` : ''}
           <div class="hm-chat-msg-content-wrap">
             <div class="hm-chat-msg-bubble">
-              <div class="hm-chat-msg-content">${mdToHtml(m.content)}${m.isStreaming && !m.content ? '<span class="hm-chat-streaming-dots"><span></span><span></span><span></span></span>' : ''}</div>
+              <div class="hm-chat-msg-content">${renderMarkdownCached(m.content)}${m.isStreaming && !m.content ? '<span class="hm-chat-streaming-dots"><span></span><span></span><span></span></span>' : ''}</div>
             </div>
             <div class="hm-chat-msg-footer">
               <span class="hm-chat-msg-time">${escHtml(formatTime(m.timestamp))}</span>
@@ -647,6 +844,10 @@ export function render() {
     return `
       <div class="hm-chat-input-area">
         ${renderSlashMenu()}
+        <div class="hm-chat-quickbar">
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-command" title="选择并发送 Hermes 快捷指令">⚡ 快捷指令</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-skills" title="发送必备技能清单给 Hermes">🧠 必备技能</button>
+        </div>
         ${showUsage ? `
           <div class="hm-chat-usage-bar" title="${escAttr(t('engine.chatUsageTooltip'))}">
             <span class="hm-chat-usage-pill" data-kind="in">
@@ -701,7 +902,7 @@ export function render() {
             <span>${escHtml(sidebarOpen ? t('engine.chatHideSessions') : t('engine.chatShowSessions'))}</span>
           </button>
           <div class="hm-chat-header-title-wrap">
-            <span class="hm-chat-header-title">${escHtml(title)}</span>
+            <span class="hm-chat-header-title" id="hm-chat-header-title" title="双击重命名当前会话">${escHtml(title)}</span>
             ${source ? `<span class="hm-chat-source-badge">${escHtml(source)}</span>` : ''}
           </div>
         </div>
@@ -877,11 +1078,25 @@ export function render() {
           if (mobileQuery.matches) sidebarOpen = false
         }
       })
+      item.addEventListener('dblclick', async (e) => {
+        if (e.target.closest('.hm-chat-session-action')) return
+        const renameTarget = e.target.closest('[data-sid-rename]')
+        const sid = renameTarget?.dataset.sidRename || item.dataset.sid
+        if (!sid || selectionMode) return
+        e.preventDefault()
+        await renameSessionById(sid)
+      })
       item.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         const sid = item.dataset.sid
         openSessionContextMenu(e.clientX, e.clientY, sid)
       })
+    })
+
+    el.querySelector('#hm-chat-header-title')?.addEventListener('dblclick', async () => {
+      const sid = store.state.activeSessionId
+      if (!sid) return
+      await renameSessionById(sid)
     })
 
     // --- Selection mode controls ---
@@ -1080,6 +1295,8 @@ export function render() {
     }
 
     el.querySelector('#hm-chat-send')?.addEventListener('click', handleSend)
+    el.querySelector('#hm-chat-quick-command')?.addEventListener('click', openQuickCommandPicker)
+    el.querySelector('#hm-chat-quick-skills')?.addEventListener('click', sendSkillsChecklist)
     el.querySelector('#hm-chat-stop')?.addEventListener('click', () => {
       store.stopStreaming()
       toast(t('engine.chatStopped'), 'success')
@@ -1102,6 +1319,16 @@ export function render() {
     input.style.height = Math.min(input.scrollHeight, 160) + 'px'
   }
 
+  async function renameSessionById(sid) {
+    const s = store.state.sessions.find(sess => sess.id === sid)
+    if (!s) return
+    const next = await showRenameModal(s.title)
+    if (next == null) return
+    const ok = await store.renameSession(sid, next)
+    toast(ok ? t('engine.chatRenamed') : t('engine.chatRenameFailed'), ok ? 'success' : 'error')
+    if (ok) draw()
+  }
+
   function openSessionContextMenu(x, y, sid) {
     const s = store.state.sessions.find(sess => sess.id === sid)
     if (!s) return
@@ -1115,11 +1342,7 @@ export function render() {
       {
         label: t('engine.chatRename'),
         action: async () => {
-          const next = await showRenameModal(s.title)
-          if (next == null) return
-          const ok = await store.renameSession(sid, next)
-          if (ok) toast(t('engine.chatRenamed'), 'success')
-          else toast(t('engine.chatRenameFailed'), 'error')
+          await renameSessionById(sid)
         },
       },
       {
@@ -1162,6 +1385,26 @@ export function render() {
     inputCaret = 0
     showSlash = false
     slashFilter = ''
+  }
+
+  async function sendPresetText(text) {
+    inputValue = text
+    inputCaret = inputValue.length
+    await handleSend()
+  }
+
+  async function openQuickCommandPicker() {
+    const current = prompt(
+      '请输入要发送的 Hermes 指令。\n可直接编辑，或从下面复制：\n\n' +
+      HERMES_COMMAND_OPTIONS.map(([cmd, desc]) => `${cmd} — ${desc}`).join('\n'),
+      HERMES_COMMAND_OPTIONS[0][0]
+    )
+    if (!current) return
+    await sendPresetText(current)
+  }
+
+  async function sendSkillsChecklist() {
+    await sendPresetText(HERMES_SKILLS_PROMPT)
   }
 
   async function handleSend() {

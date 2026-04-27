@@ -9,7 +9,7 @@
  * 5. 从 snapshot.sessionDefaults.mainSessionKey 获取 sessionKey
  * 6. 开始正常通信
  */
-import { api } from './tauri-api.js'
+import { invoke } from './tauri-api.js'
 
 export function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID()
@@ -313,12 +313,12 @@ export class WsClient {
     this._autoPairAttempts++
     try {
       console.log('[ws] 执行自动配对（第', this._autoPairAttempts, '次）...')
-      const result = await api.autoPairDevice()
+      const result = await invoke('auto_pair_device')
       console.log('[ws] 配对结果:', result)
 
       // 配对后需要 reload Gateway 使 allowedOrigins 生效
       try {
-        await api.reloadGateway()
+        await invoke('reload_gateway')
         console.log('[ws] Gateway 已重载')
       } catch (e) {
         console.warn('[ws] reloadGateway 失败（非致命）:', e)
@@ -343,7 +343,7 @@ export class WsClient {
   async _sendConnectFrame(nonce) {
     this._handshaking = true
     try {
-      const frame = await api.createConnectFrame(nonce, this._token)
+      const frame = await invoke('create_connect_frame', { nonce, gatewayToken: this._token })
       if (this._ws && this._ws.readyState === WebSocket.OPEN) {
         console.log('[ws] 发送 connect frame')
         this._ws.send(JSON.stringify(frame))

@@ -33,27 +33,28 @@ function stopPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
 }
 
-const _engine = {
+export const engineMeta = {
   id: 'hermes',
   name: 'Hermes Agent',
   description: 'Hermes AI Agent with tool-calling capabilities',
   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+}
 
-  async detect() {
-    await detectHermesStatus()
-    return { installed: _ready, ready: _ready }
-  },
+export async function detect() {
+  await detectHermesStatus()
+  return { installed: _ready, ready: _ready }
+}
 
-  async boot() {
-    await detectHermesStatus()
-    startPoll()
-  },
+export async function boot() {
+  await detectHermesStatus()
+  startPoll()
+}
 
-  cleanup() {
-    stopPoll()
-  },
+export function cleanup() {
+  stopPoll()
+}
 
-  getNavItems() {
+export function getNavItems() {
     // 未就绪时显示 Setup 菜单
     if (!_ready) {
       return [{
@@ -96,9 +97,9 @@ const _engine = {
         { route: '/about', label: t('sidebar.about'), icon: 'about' },
       ]
     }]
-  },
+}
 
-  getRoutes() {
+export function getRoutes() {
     return [
       // Hermes 专属页面（/h/ 前缀）
       { path: '/h/setup', loader: () => import('./pages/setup.js') },
@@ -120,31 +121,40 @@ const _engine = {
       { path: '/settings', loader: () => import('../../pages/settings.js') },
       { path: '/about', loader: () => import('../../pages/about.js') },
     ]
-  },
-
-  getSetupRoute() { return '/h/setup' },
-  getDefaultRoute() { return '/h/dashboard' },
-
-  isReady() { return _ready },
-  isGatewayRunning() { return _running },
-  isGatewayForeign() { return false },
-
-  onStateChange(fn) {
-    _listeners.push(fn)
-    return () => { _listeners = _listeners.filter(cb => cb !== fn) }
-  },
-  onReadyChange(fn) {
-    _listeners.push(fn)
-    return () => { _listeners = _listeners.filter(cb => cb !== fn) }
-  },
-
-  isFeatureAvailable() { return true },
 }
 
-// 兼容 main.js 的命名导出
-export const engineMeta = _engine
-export const getRoutes = _engine.getRoutes.bind(_engine)
-export const getDefaultRoute = _engine.getDefaultRoute.bind(_engine)
-export const boot = _engine.boot.bind(_engine)
-export const cleanup = _engine.cleanup.bind(_engine)
-export default _engine
+export function getSetupRoute() { return '/h/setup' }
+export function getDefaultRoute() { return '/h/dashboard' }
+
+export function isReady() { return _ready }
+export function isGatewayRunning() { return _running }
+export function isGatewayForeign() { return false }
+
+export function onStateChange(fn) {
+  _listeners.push(fn)
+  return () => { _listeners = _listeners.filter(cb => cb !== fn) }
+}
+
+export function onReadyChange(fn) {
+  _listeners.push(fn)
+  return () => { _listeners = _listeners.filter(cb => cb !== fn) }
+}
+
+export function isFeatureAvailable() { return true }
+
+export default {
+  ...engineMeta,
+  detect,
+  boot,
+  cleanup,
+  getNavItems,
+  getRoutes,
+  getSetupRoute,
+  getDefaultRoute,
+  isReady,
+  isGatewayRunning,
+  isGatewayForeign,
+  onStateChange,
+  onReadyChange,
+  isFeatureAvailable,
+}
