@@ -40,7 +40,7 @@ export function render() {
         <div class="hm-panel-header">
           <div class="hm-panel-title">config.yaml</div>
           <div class="hm-panel-actions">
-            <span class="hm-muted">${saving ? 'saving…' : loading ? 'loading…' : 'raw yaml editor'}</span>
+            <span class="hm-muted">${saving ? '保存中…' : loading ? '加载中…' : '原始 YAML 编辑器'}</span>
           </div>
         </div>
         <div class="hm-panel-body" style="padding:0">

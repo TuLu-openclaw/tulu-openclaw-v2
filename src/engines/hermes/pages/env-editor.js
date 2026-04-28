@@ -83,8 +83,8 @@ export function render() {
         <div class="hm-panel-body hm-panel-body--none">
           <div id="env-list"></div>
           <div id="env-empty" style="display:none;padding:32px 28px;text-align:center">
-            <div style="font-family:var(--hm-font-serif);font-style:italic;font-size:14px;color:var(--hm-text-tertiary);margin-bottom:6px">no custom variables yet</div>
-            <div class="hm-muted">click "add variable" below to create one</div>
+            <div style="font-family:var(--hm-font-serif);font-style:italic;font-size:14px;color:var(--hm-text-tertiary);margin-bottom:6px">还没有自定义变量</div>
+            <div class="hm-muted">点击下方“添加变量”创建第一项</div>
           </div>
           <div id="env-error" style="display:none;margin:14px 28px;padding:10px 14px;background:var(--hm-error-soft);border-radius:var(--hm-radius-sm);color:var(--hm-error);font-family:var(--hm-font-mono);font-size:12px"></div>
         </div>
@@ -100,7 +100,7 @@ export function render() {
     // update count badge in panel header
     const countEl = el.querySelector('#env-row-count')
     if (countEl) {
-      countEl.textContent = loading ? '' : (rows.length ? `${rows.length} variable${rows.length > 1 ? 's' : ''}` : '')
+      countEl.textContent = loading ? '' : (rows.length ? `${rows.length} 个变量` : '')
     }
 
     if (loading) {
@@ -126,9 +126,9 @@ export function render() {
     // Table-style header
     const header = `
       <div style="display:grid;grid-template-columns:1fr 2fr 148px;gap:14px;padding:14px 28px;font-family:var(--hm-font-serif);font-style:italic;font-size:12px;color:var(--hm-text-tertiary);background:var(--hm-surface-0);border-bottom:1px solid var(--hm-border)">
-        <div>variable</div>
-        <div>value</div>
-        <div style="text-align:right">action</div>
+        <div>变量名</div>
+        <div>变量值</div>
+        <div style="text-align:right">操作</div>
       </div>
     `
 
@@ -171,10 +171,10 @@ export function render() {
     const footer = document.createElement('div')
     footer.style.cssText = 'padding:18px 28px;border-top:1px solid var(--hm-border);display:flex;gap:10px;align-items:center'
     footer.innerHTML = hasAddRow
-      ? '<span class="hm-muted">editing new variable…</span>'
+      ? '<span class="hm-muted">正在编辑新变量…</span>'
       : `<button class="hm-btn hm-btn--cta env-add-btn">${ICONS.plus} 添加变量</button>
          <span class="hm-spacer"></span>
-         <span class="hm-muted">changes take effect on next gateway restart</span>`
+         <span class="hm-muted">修改将在下次重启 Gateway 后生效</span>`
     // Remove existing footer
     const old = el.querySelector('.env-footer')
     if (old) old.remove()
