@@ -102,14 +102,20 @@ const NAV_ITEMS_HERMES = [
   {
     section: '',
     items: [
-      { route: '/hermes/chat', label: 'AI 对话', icon: 'chat' },
-      { route: '/hermes/dashboard', label: '控制台', icon: 'dashboard' },
-      { route: '/hermes/setup', label: '引擎设置', icon: 'setup' },
-      { route: '/hermes/skills', label: '技能中心', icon: 'skills' },
-      { route: '/hermes/channels', label: '对话渠道', icon: 'channels' },
-      { route: '/hermes/logs', label: '运行日志', icon: 'logs' },
-      { route: '/hermes/memory', label: '记忆管理', icon: 'memory' },
-      { route: '/hermes/config', label: '引擎配置', icon: 'settings' },
+      { route: '/h/chat', label: 'AI 对话', icon: 'chat' },
+      { route: '/h/dashboard', label: '控制台', icon: 'dashboard' },
+      { route: '/h/setup', label: '引擎设置', icon: 'setup' },
+      { route: '/h/sessions', label: '会话记录', icon: 'chat' },
+      { route: '/h/usage', label: '用量分析', icon: 'bar-chart' },
+      { route: '/h/skills', label: '技能中心', icon: 'skills' },
+      { route: '/h/channels', label: '对话渠道', icon: 'channels' },
+      { route: '/h/logs', label: '运行日志', icon: 'logs' },
+      { route: '/h/memory', label: '记忆管理', icon: 'memory' },
+      { route: '/h/cron', label: '定时任务', icon: 'clock' },
+      { route: '/h/extensions', label: '扩展中心', icon: 'extensions' },
+      { route: '/h/services', label: '服务管理', icon: 'services' },
+      { route: '/h/config', label: '引擎配置', icon: 'settings' },
+      { route: '/h/env', label: '环境变量', icon: 'settings' },
     ]
   },
 ]
@@ -284,7 +290,7 @@ export function renderSidebar(el) {
           <svg class="lang-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M18 15l-6-6-6 6"/></svg>
         </button>
         <div class="lang-dropdown" id="lang-dropdown">
-          ${langs.length > 4 ? '<div class="lang-search-wrap"><input class="lang-search" id="lang-search" type="text" placeholder="Search..." autocomplete="off"></div>' : ''}
+          ${langs.length > 4 ? '<div class="lang-search-wrap"><input class="lang-search" id="lang-search" type="text" placeholder="搜索语言..." autocomplete="off"></div>' : ''}
           <div class="lang-options" id="lang-options">${langOptions}</div>
         </div>
       </div>
@@ -317,15 +323,15 @@ export function renderSidebar(el) {
           if (getActiveEngineId() !== 'hermes') {
             switchEngine('hermes').then(() => {
               toast('正在切换到 Hermes Engine…', 'info')
-              navigate('/hermes/setup')
+              navigate('/h/setup')
               renderSidebar(el)
             })
           } else {
-            navigate('/hermes/setup')
+            navigate('/h/setup')
             renderSidebar(el)
           }
         } else if (route) {
-          if (route.startsWith('/hermes') && getActiveEngineId() !== 'hermes') {
+          if (route.startsWith('/h/') && getActiveEngineId() !== 'hermes') {
             switchEngine('hermes').then(() => {
               navigate(route)
               renderSidebar(el)
@@ -427,11 +433,11 @@ export function renderSidebar(el) {
         if (getActiveEngineId() !== 'hermes') {
           switchEngine('hermes').then(() => {
             toast('正在切换到 Hermes Engine…', 'info')
-            navigate('/hermes/setup')
+            navigate('/h/setup')
             renderSidebar(el)
           })
         } else {
-          navigate('/hermes/setup')
+          navigate('/h/setup')
           renderSidebar(el)
         }
         _closeMobileSidebar()

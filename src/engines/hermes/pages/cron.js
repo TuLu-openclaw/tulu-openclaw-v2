@@ -212,22 +212,22 @@ export function render() {
           <div class="hm-kpi" data-tone="accent">
             <div class="hm-kpi-label">${t('engine.cronTotal')}</div>
             <div class="hm-kpi-value">${total}</div>
-            <div class="hm-kpi-foot">jobs defined</div>
+            <div class="hm-kpi-foot">已定义任务数</div>
           </div>
           <div class="hm-kpi" data-tone="success">
             <div class="hm-kpi-label">${t('engine.cronRunning')}</div>
             <div class="hm-kpi-value">${runningCount}</div>
-            <div class="hm-kpi-foot">actively executing</div>
+            <div class="hm-kpi-foot">正在执行中</div>
           </div>
           <div class="hm-kpi" data-tone="${paused > 0 ? 'warn' : ''}">
             <div class="hm-kpi-label">${t('engine.cronPaused')}</div>
             <div class="hm-kpi-value">${paused}</div>
-            <div class="hm-kpi-foot">manually paused</div>
+            <div class="hm-kpi-foot">手动暂停中</div>
           </div>
           <div class="hm-kpi" data-tone="${failed > 0 ? 'error' : ''}">
             <div class="hm-kpi-label">${t('engine.cronFailed')}</div>
             <div class="hm-kpi-value">${failed}</div>
-            <div class="hm-kpi-foot">last run failed</div>
+            <div class="hm-kpi-foot">最近一次运行失败</div>
           </div>
         </div>
 

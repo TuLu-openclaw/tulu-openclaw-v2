@@ -926,14 +926,55 @@ export function render() {
         api.hermesReadConfig(),
       ])
 
-      info = infoResult.status === 'fulfilled' ? infoResult.value : info
-      hermesConfig = configResult.status === 'fulfilled' ? configResult.value : hermesConfig
-      gatewayState = getGatewayState()
+      if (infoResult.status === 'fulfilled') {
+        info = infoResult.value
+      }
+      if (configResult.status === 'fulfilled') {
+        hermesConfig = configResult.value
+      }
+
+      const liveGatewayState = getGatewayState()
+      if (liveGatewayState?.running != null) {
+        gatewayState = {
+          ...gatewayState,
+          ...liveGatewayState,
+          running: liveGatewayState.running,
+          status: liveGatewayState.status || gatewayState?.status,
+        }
+      } else {
+        gatewayState = {
+          ...gatewayState,
+          running: !!info?.gatewayRunning,
+          status: info?.gatewayRunning ? (gatewayState?.status || 'running') : 'offline',
+          port: info?.gatewayPort || gatewayState?.port,
+        }
+      }
 
       if (info?.gatewayRunning) {
-        try { health = await api.hermesHealthCheck() } catch (_) {}
+        try {
+          health = await api.hermesHealthCheck()
+          if (health) {
+            gatewayState = {
+              ...gatewayState,
+              running: true,
+              status: health?.ok === false ? 'degraded' : (gatewayState?.status === 'recovering' ? 'recovering' : 'running'),
+            }
+          }
+        } catch (_) {
+          health = null
+          gatewayState = {
+            ...gatewayState,
+            running: !!info?.gatewayRunning,
+            status: info?.gatewayRunning ? 'degraded' : 'offline',
+          }
+        }
       } else {
         health = null
+        gatewayState = {
+          ...gatewayState,
+          running: false,
+          status: 'offline',
+        }
       }
     } catch (_) {
     } finally {
@@ -1001,7 +1042,7 @@ export function render() {
       const unlisten3 = await tauriListen('hermes-guardian-log', (evt) => {
         showGwMsg(evt.payload || '', false)
       })
-      unlisteners.push(unlisten2)
+      unlisteners.push(unlisten3)
 
       // 监听 config.yaml 自愈事件（api_server guardian）
       const unlisten4 = await tauriListen('hermes-config-patched', async (evt) => {

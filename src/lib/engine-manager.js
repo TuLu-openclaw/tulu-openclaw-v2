@@ -88,7 +88,7 @@ export async function activateEngine(id, persist = true) {
     setDefaultRoute(engine.getDefaultRoute())
   }
 
-  if (persist && engine.boot) {
+  if (engine.boot) {
     try { await engine.boot() } catch (e) {
       console.warn('[engine-manager] boot 失败:', e)
     }

@@ -78,7 +78,7 @@ export function onLangChange(fn) {
   return () => { _listeners = _listeners.filter(cb => cb !== fn) }
 }
 
-/** 初始化：localStorage > navigator.language > fallback */
+/** 初始化：localStorage 优先；未保存时默认简体中文，仅对繁体中文做自动识别 */
 export function initI18n() {
   const saved = localStorage.getItem(LANG_KEY)
   if (saved && LANGS[saved]) {
@@ -86,30 +86,12 @@ export function initI18n() {
     _dict = LANGS[saved]
     return
   }
-  // 自动检测浏览器语言
+  // 默认优先简体中文，避免因浏览器/系统语言为英文导致界面意外回退成英文
   const nav = navigator.language || navigator.languages?.[0] || ''
   if (nav === 'zh-TW' || nav === 'zh-HK') {
     _lang = 'zh-TW'
-  } else if (nav.startsWith('zh')) {
+  } else {
     _lang = 'zh-CN'
-  } else if (nav.startsWith('ja')) {
-    _lang = 'ja'
-  } else if (nav.startsWith('ko')) {
-    _lang = 'ko'
-  } else if (nav.startsWith('vi')) {
-    _lang = 'vi'
-  } else if (nav.startsWith('es')) {
-    _lang = 'es'
-  } else if (nav.startsWith('pt')) {
-    _lang = 'pt'
-  } else if (nav.startsWith('ru')) {
-    _lang = 'ru'
-  } else if (nav.startsWith('fr')) {
-    _lang = 'fr'
-  } else if (nav.startsWith('de')) {
-    _lang = 'de'
-  } else if (nav.startsWith('en')) {
-    _lang = 'en'
   }
   _dict = LANGS[_lang] || LANGS[FALLBACK]
 }

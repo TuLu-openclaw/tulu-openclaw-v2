@@ -408,6 +408,11 @@ function createStore() {
     state.loadingProfiles = true
     notify()
     try {
+      if (typeof api.hermesProfilesList !== 'function') {
+        state.profiles = []
+        state.activeProfile = state.activeProfile || 'default'
+        return
+      }
       const data = await api.hermesProfilesList()
       const profiles = Array.isArray(data?.profiles) ? data.profiles : []
       state.profiles = profiles
@@ -420,6 +425,10 @@ function createStore() {
         loadProfilePrefs()
         loadSessionsCache()
       }
+    } catch (e) {
+      state.profiles = []
+      state.activeProfile = state.activeProfile || 'default'
+      state.error = state.error || e?.message || String(e)
     } finally {
       state.loadingProfiles = false
       notify()
@@ -428,7 +437,9 @@ function createStore() {
 
   async function switchProfile(name) {
     if (!name || name === state.activeProfile || state.streaming) return
-    await api.hermesProfileUse(name)
+    if (typeof api.hermesProfileUse === 'function') {
+      await api.hermesProfileUse(name)
+    }
     state.activeProfile = name
     safeSet(STORAGE_PROFILE, name)
     state.sessions = []
