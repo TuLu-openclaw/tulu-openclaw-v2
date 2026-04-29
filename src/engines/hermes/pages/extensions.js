@@ -3,6 +3,29 @@ import { icon } from '../../../lib/icons.js'
 import { toast } from '../../../components/toast.js'
 import { t } from '../../../lib/i18n.js'
 
+function normalizeGatewayUrl(url, fallbackPort = 8642) {
+  const raw = String(url || '').trim()
+  if (!raw) return `http://127.0.0.1:${fallbackPort}/`
+  try {
+    const parsed = new URL(raw)
+    if (!parsed.pathname || parsed.pathname === '') parsed.pathname = '/'
+    return parsed.toString()
+  } catch (_) {
+    return `http://127.0.0.1:${fallbackPort}/`
+  }
+}
+
+function replacePortInUrl(url, port) {
+  try {
+    const parsed = new URL(url)
+    parsed.port = String(port)
+    if (!parsed.pathname || parsed.pathname === '') parsed.pathname = '/'
+    return parsed.toString()
+  } catch (_) {
+    return normalizeGatewayUrl(`http://127.0.0.1:${port}/`, port)
+  }
+}
+
 function esc(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -36,15 +59,15 @@ export function render() {
   let plugins = []
   let analytics = null
   let error = ''
-
-  const docs = [
-    ['engine.extensionsDocGettingStarted', 'https://hermes-agent.nousresearch.com/docs/getting-started/installation/'],
-    ['engine.extensionsDocCron', 'https://hermes-agent.nousresearch.com/docs/guides/automate-with-cron/'],
-    ['engine.extensionsDocSkills', 'https://hermes-agent.nousresearch.com/docs/guides/skills/'],
-    ['engine.extensionsDocDashboard', 'http://127.0.0.1:9119/'],
-  ]
+  let gatewayUrl = 'http://127.0.0.1:8642/'
 
   function draw() {
+    const docs = [
+      ['engine.extensionsDocGettingStarted', 'https://hermes-agent.nousresearch.com/docs/getting-started/installation/'],
+      ['engine.extensionsDocCron', 'https://hermes-agent.nousresearch.com/docs/guides/automate-with-cron/'],
+      ['engine.extensionsDocSkills', 'https://hermes-agent.nousresearch.com/docs/guides/skills/'],
+      ['engine.extensionsDocDashboard', gatewayUrl],
+    ]
     const totals = analytics?.totals || {}
     const tokens = Number(totals.total_input || 0) + Number(totals.total_output || 0)
     el.innerHTML = `
@@ -123,35 +146,37 @@ export function render() {
 
     el.querySelector('#hm-ext-refresh')?.addEventListener('click', load)
     el.querySelector('#hm-ext-rescan')?.addEventListener('click', rescan)
-    // 拦截 Dashboard 本地链接：probe → auto-start → 打开。避免直接打开浏览器看到 ERR_CONNECTION_REFUSED
-    el.querySelectorAll('a[href^="http://127.0.0.1:9119"]').forEach(a => {
+    // 拦截 Dashboard 本地链接：probe → auto-start → 打开。避免直接打开本地面板时先撞到 ERR_CONNECTION_REFUSED
+    el.querySelectorAll('a.hm-native-dashboard-link').forEach(a => {
       a.addEventListener('click', async (ev) => {
         ev.preventDefault()
         const openWith = async (port) => {
-          const url = a.href.replace(/:9119(\/?)/, ':' + port + '$1')
+          const url = replacePortInUrl(a.href, port)
           if (window.__TAURI_INTERNALS__) {
-            const { open } = await import('@tauri-apps/plugin-shell')
-            await open(url)
-          } else {
-            window.open(url, '_blank', 'noopener,noreferrer')
+            if (/^https?:\/\/127\.0\.0\.1(?::\d+)?\/?/i.test(url) || /^https?:\/\/localhost(?::\d+)?\/?/i.test(url)) {
+              await api.openGlobalBuiltinWindow()
+              return
+            }
           }
+          const win = window.open(url, '_blank', 'noopener,noreferrer')
+          if (!win) throw new Error('popup blocked')
         }
         // 1. probe
-        const probe = await api.hermesDashboardProbe().catch(() => ({ running: false, port: 9119 }))
+        const probe = await api.hermesDashboardProbe().catch(() => ({ running: false, port: 8642 }))
         if (probe?.running) {
-          try { await openWith(probe.port || 9119) }
+          try { await openWith(probe.port || 8642) }
           catch (err) { toast(t('engine.dashNativePanelOpenFail') + ': ' + (err?.message || err), 'error') }
           return
         }
         // 2. auto-start
-        const r = await api.hermesDashboardStart().catch(() => ({ started: false, kind: 'spawn_failed', port: probe?.port || 9119 }))
+        const r = await api.hermesDashboardStart().catch(() => ({ started: false, kind: 'spawn_failed', port: probe?.port || 8642 }))
         if (r?.started) {
-          try { await openWith(r.port || 9119) }
+          try { await openWith(r.port || 8642) }
           catch (err) { toast(t('engine.dashNativePanelOpenFail') + ': ' + (err?.message || err), 'error') }
           return
         }
         // 3. 失败 → toast（dashboard 页面有完整安装流程，这里只引导）
-        const port = r?.port || probe?.port || 9119
+        const port = r?.port || probe?.port || 8642
         if (r?.kind === 'deps_missing') {
           toast(t('engine.dashNativePanelDepHint'), 'warning', { duration: 6000 })
         } else {
@@ -180,15 +205,17 @@ export function render() {
     error = ''
     draw()
     try {
-      const [themeData, pluginData, usageData] = await Promise.all([
+      const [themeData, pluginData, usageData, hermesInfo] = await Promise.all([
         api.hermesDashboardThemes(),
         api.hermesDashboardPlugins(),
         api.hermesUsageAnalytics(30),
+        api.checkHermes(),
       ])
       themes = Array.isArray(themeData?.themes) ? themeData.themes : []
       activeTheme = themeData?.active || 'default'
       plugins = Array.isArray(pluginData) ? pluginData : []
       analytics = usageData || null
+      gatewayUrl = normalizeGatewayUrl(hermesInfo?.gatewayUrl || '', hermesInfo?.gatewayPort || 8642)
     } catch (err) {
       error = String(err?.message || err).replace(/^Error:\s*/, '')
     } finally {

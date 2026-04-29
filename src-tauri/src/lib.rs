@@ -180,6 +180,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::open_lobster_office,
             #[cfg(target_os = "windows")]
+            assistant::open_global_builtin_window,
+            #[cfg(target_os = "windows")]
             assistant::vod_fetch,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,

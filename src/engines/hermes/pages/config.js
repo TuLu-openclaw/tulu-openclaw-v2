@@ -26,13 +26,13 @@ export function render() {
     el.innerHTML = `
       <div class="hm-hero">
         <div class="hm-hero-title">
-          <div class="hm-hero-eyebrow">HERMES AGENT · CONFIG</div>
+          <div class="hm-hero-eyebrow">${t('engine.configEditorEyebrow')}</div>
           <h1 class="hm-hero-h1">${t('engine.hermesConfigTitle')}</h1>
           <div class="hm-hero-sub">~/.hermes/config.yaml</div>
         </div>
         <div class="hm-hero-actions">
-          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-config-reload" ${loading || saving ? 'disabled' : ''}>重新加载</button>
-          <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-config-save" ${loading || saving ? 'disabled' : ''}>保存配置</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-config-reload" ${loading || saving ? 'disabled' : ''}>${t('engine.configEditorReload')}</button>
+          <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-config-save" ${loading || saving ? 'disabled' : ''}>${t('engine.configEditorSave')}</button>
         </div>
       </div>
 
@@ -40,7 +40,7 @@ export function render() {
         <div class="hm-panel-header">
           <div class="hm-panel-title">config.yaml</div>
           <div class="hm-panel-actions">
-            <span class="hm-muted">${saving ? '保存中…' : loading ? '加载中…' : '原始 YAML 编辑器'}</span>
+            <span class="hm-muted">${saving ? t('engine.memorySaving') : loading ? t('engine.memoryLoading') : t('engine.configEditorRawYaml')}</span>
           </div>
         </div>
         <div class="hm-panel-body" style="padding:0">
@@ -76,7 +76,7 @@ export function render() {
     draw()
     try {
       await api.hermesConfigRawWrite(yaml)
-      toast('配置已保存，建议重启 Hermes Gateway 生效', 'success')
+      toast(t('engine.configEditorSaved'), 'success')
     } catch (err) {
       error = String(err?.message || err).replace(/^Error:\s*/, '')
       toast(error, 'error')

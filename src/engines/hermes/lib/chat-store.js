@@ -1,25 +1,21 @@
 /**
- * Hermes Chat Store — reactive state for sessions, messages and streaming.
+ * Hermes Chat Store —— 会话、消息与流式输出的响应式状态层。
  *
- * Mirrors the shape of `hermes-web-ui`'s Pinia `chat` store in a dependency-
- * free, vanilla JS pub/sub style. A single instance is exported (`chatStore`);
- * the page subscribes via `chatStore.subscribe(listener)` and receives a
- * notification on every mutation.
+ * 结构参考 `hermes-web-ui` 的 Pinia `chat` store，
+ * 但这里使用无依赖的原生 JS 发布/订阅实现。导出单例 `chatStore`，
+ * 页面通过 `chatStore.subscribe(listener)` 监听每次状态变更。
  *
- * Responsibilities:
- *   - Load sessions from the backend (via `api.hermesSessionsList`) and merge
- *     with local-only sessions that haven't been flushed yet.
- *   - Load + map a session's messages (role/content/tool details).
- *   - Handle streaming via Tauri's `hermes-run-*` events, accumulating delta
- *     text into an assistant message and tracking live tool calls.
- *   - Persist session summaries + per-session messages to `localStorage` so
- *     reopening the page renders instantly while server data revalidates.
- *   - Manage pinned sessions + collapsed groups (UI prefs).
+ * 主要职责：
+ *   - 从后端加载会话（`api.hermesSessionsList`），并与本地尚未落盘的会话合并。
+ *   - 加载并映射单个会话的消息（role/content/tool 细节）。
+ *   - 通过 Tauri 的 `hermes-run-*` 事件处理流式输出，持续累积 assistant 文本并跟踪工具调用。
+ *   - 将会话摘要和每个会话的消息持久化到 `localStorage`，保证页面重开后先秒开、再与服务端重新校验。
+ *   - 管理置顶会话和折叠分组等 UI 偏好。
  *
- * Non-responsibilities (left for the page):
- *   - Rendering (the store never touches the DOM).
- *   - File attachment uploads (kept out of scope for Phase 4).
- *   - Full tmux-like run resume (Tauri events are in-process and reliable).
+ * 非职责范围（交给页面层处理）：
+ *   - 渲染（store 本身不操作 DOM）。
+ *   - 文件上传（Phase 4 暂不纳入）。
+ *   - 完整 tmux 式运行恢复（当前 Tauri 进程内事件已足够可靠）。
  */
 import { api } from '../../../lib/tauri-api.js'
 
@@ -102,10 +98,7 @@ function parseEpochMs(value) {
 
 // ---------- message mapping ----------
 
-/**
- * Convert Hermes CLI-exported messages (mixed roles + tool_calls) into the
- * flat display list we render. Matches `hermes-web-ui`'s `mapHermesMessages`.
- */
+/** 将 Hermes CLI 导出的消息（混合 role + tool_calls）转换成页面渲染用的扁平消息列表，对齐 `hermes-web-ui` 的 `mapHermesMessages`。 */
 function mapHermesMessages(msgs) {
   if (!Array.isArray(msgs)) return []
 

@@ -10,7 +10,20 @@ import { version as APP_VERSION } from '../../package.json'
 import { t, getLang, setLang, getAvailableLangs } from '../lib/i18n.js'
 import { getActiveEngine, getActiveEngineId, listEngines, switchEngine } from '../lib/engine-manager.js'
 
+const GLOBAL_BUILTIN_ROUTE = '/coming-soon'
+
 function _escSidebar(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+async function _openGlobalBuiltinInIndependentWindow() {
+  try {
+    await api.openGlobalBuiltinWindow()
+    toast('已打开全球内置独立窗口', 'success')
+    return true
+  } catch (err) {
+    toast(err?.message || '全球内置窗口打开失败', 'error')
+    return false
+  }
+}
 
 // === 引擎切换器 ===
 function _renderEngineSwitcher() {
@@ -331,7 +344,9 @@ export function renderSidebar(el) {
             renderSidebar(el)
           }
         } else if (route) {
-          if (route.startsWith('/h/') && getActiveEngineId() !== 'hermes') {
+          if (route === GLOBAL_BUILTIN_ROUTE) {
+            _openGlobalBuiltinInIndependentWindow()
+          } else if (route.startsWith('/h/') && getActiveEngineId() !== 'hermes') {
             switchEngine('hermes').then(() => {
               navigate(route)
               renderSidebar(el)

@@ -4,6 +4,7 @@
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
 import { showContentModal, showUpgradeModal } from '../../../components/modal.js'
+import { toast } from '../../../components/toast.js'
 import {
   loadHermesProviders,
   inferProviderByBaseUrl,
@@ -32,7 +33,39 @@ async function tauriListen(event, cb) {
   return _listenFn(event, cb)
 }
 
-const HERMES_DASHBOARD_URL = 'http://127.0.0.1:9119/'
+const DEFAULT_HERMES_GATEWAY_URL = 'http://127.0.0.1:8642/'
+
+function normalizeGatewayUrl(url, fallbackPort = 8642) {
+  const raw = String(url || '').trim()
+  if (!raw) return `http://127.0.0.1:${fallbackPort}/`
+  try {
+    const parsed = new URL(raw)
+    if (!parsed.pathname || parsed.pathname === '') parsed.pathname = '/'
+    return parsed.toString()
+  } catch (_) {
+    return `http://127.0.0.1:${fallbackPort}/`
+  }
+}
+
+function resolveGatewayBaseUrl(info, customGwUrl, connectMode, envData) {
+  const port = info?.gatewayPort || 8642
+  const infoUrl = String(info?.gatewayUrl || '').trim()
+  if (infoUrl) return normalizeGatewayUrl(infoUrl, port)
+  if (connectMode === 'custom' && customGwUrl) return normalizeGatewayUrl(customGwUrl, port)
+  if (connectMode === 'wsl2' && envData?.wsl2?.gatewayUrl) return normalizeGatewayUrl(envData.wsl2.gatewayUrl, port)
+  return normalizeGatewayUrl(DEFAULT_HERMES_GATEWAY_URL, port)
+}
+
+function replacePortInUrl(url, port) {
+  try {
+    const parsed = new URL(url)
+    parsed.port = String(port)
+    if (!parsed.pathname || parsed.pathname === '') parsed.pathname = '/'
+    return parsed.toString()
+  } catch (_) {
+    return normalizeGatewayUrl(`http://127.0.0.1:${port}/`, port)
+  }
+}
 
 function hermesStatusText(state) {
   const status = state?.status || 'unknown'
@@ -58,21 +91,36 @@ function isHermesActionSettled(action, state) {
   return false
 }
 
+async function waitForGatewayAction(action, refreshFn, getState, timeoutMs = 60000) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    await refreshFn()
+    if (isHermesActionSettled(action, getState())) return true
+    await new Promise(resolve => setTimeout(resolve, 1500))
+  }
+  return false
+}
+
 /**
- * Open `url` in the user's system browser. Tauri desktop uses the shell
- * plugin (which respects `xdg-open` / `start` / `open`); Web mode uses
- * `window.open` with `noopener` to avoid tab-jacking. Errors propagate so
- * the caller can decide how to surface them — silent fallback hid real
- * scope/CSP errors and made "9119 打不开" hard to diagnose.
+ * 打开 Hermes Gateway 面板。
+ *
+ * 这里保留“本地面板”语义：
+ * - Tauri 桌面端优先走原生独立窗口承载本地 Gateway 面板；
+ * - Web 模式才退化为新标签页；
+ * - 错误必须显式暴露，避免把真实探活/依赖问题静默吞掉。
  */
-async function openExternalUrl(url) {
+async function openGatewayPanelUrl(url) {
   if (!url) return
   if (window.__TAURI_INTERNALS__) {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
+    const normalized = String(url || '')
+    if (/^https?:\/\/127\.0\.0\.1(?::\d+)?\/?/i.test(normalized) || /^https?:\/\/localhost(?::\d+)?\/?/i.test(normalized)) {
+      await api.openGlobalBuiltinWindow()
+      return
+    }
+    const win = window.open(normalized, '_blank', 'noopener,noreferrer')
+    if (!win) throw new Error('popup blocked')
     return
   }
-  // Web 模式：打开用户浏览器中的新标签
   const win = window.open(url, '_blank', 'noopener,noreferrer')
   if (!win) throw new Error('popup blocked')
 }
@@ -107,6 +155,19 @@ export function render() {
   let formApiKey = ''
   let formModel = ''
   let formInited = false    // 首次加载后用 hermesConfig 初始化
+
+  function getPresetApiType(provider) {
+    return provider?.transport === 'anthropic_messages' ? 'anthropic-messages'
+      : provider?.transport === 'google_gemini' ? 'google-generative-ai'
+      : 'openai-completions'
+  }
+
+  function findOpenClawPrimaryProvider(config) {
+    const primary = config?.agents?.defaults?.model?.primary || ''
+    const [providerId, modelId] = String(primary).split('/', 2)
+    const provider = providerId ? config?.models?.providers?.[providerId] : null
+    return { providerId, modelId, provider }
+  }
 
   function syncFormFromDom() {
     const u = el.querySelector('#hm-cfg-baseurl')
@@ -192,6 +253,7 @@ export function render() {
     const gwTone = hermesStatusTone(gatewayState)
     const port = info?.gatewayPort || 8642
     const version = info?.version || '-'
+    const currentGatewayUrl = resolveGatewayBaseUrl(info, customGwUrl, connectMode, envData)
     const modelName = formModel || hermesConfig?.model || health?.model || info?.model || ''
     const displayModel = modelName || t('engine.dashNoModel')
 
@@ -214,7 +276,7 @@ export function render() {
             ${esc(gwStatusText)}
           </div>
           <h1 class="hm-hero-h1">${t('engine.hermesDashboardTitle')}</h1>
-          <div class="hm-hero-sub">127.0.0.1:${port} · ${esc(displayModel || '—')} · v${version}</div>
+          <div class="hm-hero-sub">${esc(currentGatewayUrl)} · ${esc(displayModel || '—')} · v${version}</div>
         </div>
         <div class="hm-hero-actions">
           ${!gwRunning ? `<button class="hm-btn hm-btn--cta hm-dash-start" ${actionBusy ? 'disabled' : ''}>▶ ${actionBusy ? t('engine.gatewayStarting') : t('engine.dashStartGw')}</button>` : ''}
@@ -246,8 +308,8 @@ export function render() {
         </div>
         <div class="hm-kpi">
           <div class="hm-kpi-label">${t('engine.dashApiEndpoint')}</div>
-          <div class="hm-kpi-value" style="font-size:13px">127.0.0.1</div>
-          <div class="hm-kpi-foot"><code class="hm-code" style="padding:0 5px;font-size:10.5px">:${port}/v1</code></div>
+          <div class="hm-kpi-value" style="font-size:13px">${esc(currentGatewayUrl.replace(/\/$/, ''))}</div>
+          <div class="hm-kpi-foot"><code class="hm-code" style="padding:0 5px;font-size:10.5px">${esc(currentGatewayUrl.replace(/\/$/, '') + '/v1')}</code></div>
         </div>
         <div class="hm-kpi hm-kpi--link hm-dash-open-panel" data-tone="accent">
           <div class="hm-kpi-label">
@@ -261,7 +323,7 @@ export function render() {
 
       <div class="hm-native-dashboard-hint">
         <span>${t('engine.dashNativePanelDesc')}</span>
-        <button class="hm-native-dashboard-link hm-dash-open-native" data-href="${HERMES_DASHBOARD_URL}">
+        <button class="hm-native-dashboard-link hm-dash-open-native" data-href="${esc(currentGatewayUrl)}">
           ${t('engine.dashNativePanelOpen')}
         </button>
       </div>
@@ -283,13 +345,16 @@ export function render() {
           <div class="hm-field-label" style="margin-bottom:10px">${t('engine.dashProviderPresets')}</div>
           <div class="hm-pills" style="margin-bottom:18px">
             ${hermesProviders.filter(p => p.id !== 'custom').map(p => {
-              const api = p.transport === 'anthropic_messages' ? 'anthropic-messages'
-                : p.transport === 'google_gemini' ? 'google-generative-ai'
-                : 'openai-completions'
+              const api = getPresetApiType(p)
               const active = activePreset?.id === p.id
               return `<button class="hm-pill hm-preset-btn ${active ? 'is-active' : ''}" data-key="${p.id}" data-url="${esc(p.baseUrl)}" data-api="${api}">${esc(p.name)}</button>`
             }).join('')}
           </div>
+          <div class="hm-stack" style="margin:-6px 0 14px">
+            <button class="hm-btn hm-btn--ghost hm-btn--sm hm-import-openclaw-model">${t('engine.dashImportOpenClawModel')}</button>
+            <button class="hm-btn hm-btn--ghost hm-btn--sm hm-import-openclaw-persona">${t('engine.dashImportOpenClawPersona')}</button>
+          </div>
+          <div class="hm-muted" style="margin:-4px 0 10px;font-size:11px">${t('engine.dashImportOpenClawHint')}</div>
           <div class="hm-field-row">
             <label class="hm-field">
               <span class="hm-field-label">${t('engine.dashApiBaseUrl')}</span>
@@ -470,11 +535,9 @@ export function render() {
         resetHermesAutoRestart()
         const result = await api.hermesGatewayAction('start')
         showGwMsg(result || t('engine.dashGatewayStarted'), false)
-        const t0 = Date.now()
-        while (Date.now() - t0 < 30000) {
-          await refresh()
-          if (isHermesActionSettled('start', gatewayState)) break
-          await new Promise(r => setTimeout(r, 1500))
+        const settled = await waitForGatewayAction('start', refresh, () => gatewayState, 60000)
+        if (!settled) {
+          showGwMsg(t('engine.gatewayStartPending'), false)
         }
       } catch (e) {
         showGwMsg(String(e).replace(/^Error:\s*/, ''), true)
@@ -488,12 +551,7 @@ export function render() {
       try {
         setHermesUserStopped(true)
         await api.hermesGatewayAction('stop')
-        const t0 = Date.now()
-        while (Date.now() - t0 < 30000) {
-          await refresh()
-          if (isHermesActionSettled('stop', gatewayState)) break
-          await new Promise(r => setTimeout(r, 1500))
-        }
+        await waitForGatewayAction('stop', refresh, () => gatewayState, 30000)
       } catch (e) {
         showGwMsg(String(e).replace(/^Error:\s*/, ''), true)
       } finally {
@@ -509,11 +567,9 @@ export function render() {
         resetHermesAutoRestart()
         const result = await api.hermesGatewayAction('restart')
         showGwMsg(result || t('engine.dashGatewayStarted'), false)
-        const t0 = Date.now()
-        while (Date.now() - t0 < 30000) {
-          await refresh()
-          if (isHermesActionSettled('restart', gatewayState)) break
-          await new Promise(r => setTimeout(r, 1500))
+        const settled = await waitForGatewayAction('restart', refresh, () => gatewayState, 60000)
+        if (!settled) {
+          showGwMsg(t('engine.gatewayRestartPending'), false)
         }
       } catch (e) {
         showGwMsg(String(e).replace(/^Error:\s*/, ''), true)
@@ -528,7 +584,7 @@ export function render() {
     })
     // Open panel card
     el.querySelector('.hm-dash-open-panel')?.addEventListener('click', () => { window.location.hash = '#/h/chat' })
-    // Open Hermes native dashboard in system browser
+    // Open Hermes native dashboard in native standalone window
     // 流程：Probe → 没起就 auto-start → start 失败再看是否依赖缺失走安装流程
     el.querySelector('.hm-dash-open-native')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget
@@ -539,15 +595,15 @@ export function render() {
       btn.textContent = t('engine.dashNativePanelChecking')
 
       const tryOpen = async (port) => {
-        const url = href.replace(/:9119(\/?$)/, ':' + port + '$1')
-        await openExternalUrl(url)
+        const url = replacePortInUrl(href, port)
+        await openGatewayPanelUrl(url)
       }
 
-      // 共用：调用 hermesDashboardStart，带"首次启动"提示，端口起来后开浏览器
-      // 返回 { ok, kind?, port, log_tail? } —— ok=true 时已经打开浏览器
+      // 共用：调用 hermesDashboardStart，带“首次启动”提示，端口起来后打开本地面板
+      // 返回 { ok, kind?, port, log_tail? } —— ok=true 时表示本地面板已成功拉起
       const startAndOpen = async () => {
         btn.textContent = t('engine.dashNativePanelStarting')
-        // 首次启动可能慢（Hermes 会跑 npm build 构建前端），给用户一个 toast 安抚
+        // 首次启动可能较慢（Hermes 会跑 npm build 构建前端），先给用户一个提示
         let firstHintTimer = null
         const showFirstHint = async () => {
           const { toast } = await import('../../../components/toast.js')
@@ -556,12 +612,12 @@ export function render() {
         firstHintTimer = setTimeout(showFirstHint, 5000)
         try {
           const result = await api.hermesDashboardStart().catch((err) => ({
-            started: false, kind: 'spawn_failed', port: 9119,
+            started: false, kind: 'spawn_failed', port: info?.gatewayPort || gatewayState?.port || 8642,
             log_tail: String(err?.message || err),
           }))
           if (result?.started) {
             try {
-              await tryOpen(result.port || 9119)
+              await tryOpen(result.port || info?.gatewayPort || gatewayState?.port || 8642)
               return { ok: true, ...result }
             } catch (err) {
               const { toast } = await import('../../../components/toast.js')
@@ -576,18 +632,18 @@ export function render() {
       }
 
       try {
-        const probe = await api.hermesDashboardProbe().catch(() => ({ running: false, port: 9119 }))
+        const probe = await api.hermesDashboardProbe().catch(() => ({ running: false, port: info?.gatewayPort || gatewayState?.port || 8642 }))
         if (probe?.running) {
-          await tryOpen(probe.port || 9119)
+          await tryOpen(probe.port || info?.gatewayPort || gatewayState?.port || 8642)
           return
         }
 
-        // 自动启动 Dashboard
+        // 自动启动本地面板服务
         const startResult = await startAndOpen()
         if (startResult.ok) return
 
         // 启动失败，按 kind 分发
-        const port = startResult.port || probe?.port || 9119
+        const port = startResult.port || probe?.port || info?.gatewayPort || gatewayState?.port || 8642
         const { toast } = await import('../../../components/toast.js')
 
         if (startResult.kind === 'timeout') {
@@ -620,7 +676,7 @@ export function render() {
             ],
           })
           m.querySelector('#hm-dash-issue-link')?.addEventListener('click', async () => {
-            try { await openExternalUrl('https://github.com/NousResearch/hermes-agent/issues/5246') }
+            try { await openGatewayPanelUrl('https://github.com/NousResearch/hermes-agent/issues/5246') }
             catch {}
           })
           return
@@ -729,7 +785,7 @@ export function render() {
             }
           }
 
-          // 安装成功 → 自动启动 dashboard 并打开浏览器，省去用户跑命令的步骤
+          // 安装成功 → 自动启动 dashboard 并打开浏览器，省去用户手动补装后再回来打开面板的步骤
           if (installOk) {
             um.appendLog('')
             um.appendLog('▶ ' + t('engine.dashNativePanelStarting'))
@@ -738,7 +794,7 @@ export function render() {
               log_tail: String(err?.message || err),
             }))
             if (startRes?.started) {
-              um.appendLog('✓ Dashboard @ 127.0.0.1:' + (startRes.port || port))
+              um.appendLog('✓ Dashboard @ ' + replacePortInUrl(href, startRes.port || port))
               try {
                 await tryOpen(startRes.port || port)
               } catch (err) {
@@ -762,6 +818,9 @@ export function render() {
     el.querySelectorAll('.hm-preset-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         formBaseUrl = btn.dataset.url
+        const provider = hermesProviders.find(p => p.id === btn.dataset.key)
+        if (provider?.models?.length && !formModel) formModel = provider.models[0]
+        cfgMsg = `<span style="color:var(--success)">${t('engine.dashPresetApplied', { provider: btn.textContent.trim() })}</span>`
         draw()
       })
     })
@@ -786,6 +845,8 @@ export function render() {
       }
     })
     // Save model config
+    el.querySelector('.hm-import-openclaw-model')?.addEventListener('click', importOpenClawModel)
+    el.querySelector('.hm-import-openclaw-persona')?.addEventListener('click', importOpenClawPersona)
     el.querySelector('.hm-save-model')?.addEventListener('click', doSaveModel)
     // --- 连接目标 ---
     el.querySelector('.hm-detect-env')?.addEventListener('click', doDetectEnv)
@@ -858,6 +919,48 @@ export function render() {
       try { hermesConfig = await api.hermesReadConfig() } catch (_) {}
     } catch (e) {
       cfgMsg = `<span style="color:var(--error)">✗ ${String(e).replace(/^Error:\s*/, '')}</span>`
+    } finally {
+      modelBusy = false; draw()
+    }
+  }
+
+  async function importOpenClawModel() {
+    modelBusy = true; cfgMsg = ''; draw()
+    try {
+      const config = await api.readOpenclawConfig()
+      const { providerId, modelId, provider } = findOpenClawPrimaryProvider(config)
+      if (!provider) throw new Error(t('engine.dashImportOpenClawMissingModel'))
+      formBaseUrl = provider.baseUrl || ''
+      formApiKey = provider.apiKey || ''
+      formModel = modelId || ''
+      const providerMeta = hermesProviders.find(p => p.id === providerId)
+      const providerName = providerMeta?.name || providerId || 'OpenClaw'
+      await api.configureHermes(providerId || 'custom', formApiKey, formModel, formBaseUrl || null)
+      cfgMsg = `<span style="color:var(--success)">${t('engine.dashImportOpenClawModelOk', { provider: providerName, model: formModel || '—' })}</span>`
+      await refresh()
+    } catch (e) {
+      cfgMsg = `<span style="color:var(--error)">${String(e).replace(/^Error:\s*/, '')}</span>`
+    } finally {
+      modelBusy = false; draw()
+    }
+  }
+
+  async function importOpenClawPersona() {
+    modelBusy = true; cfgMsg = ''; draw()
+    try {
+      const config = await api.readOpenclawConfig()
+      const defaults = config?.agents?.defaults || {}
+      const identity = defaults?.identity || {}
+      const lines = []
+      if (identity.name) lines.push(`name: ${identity.name}`)
+      if (identity.emoji) lines.push(`emoji: ${identity.emoji}`)
+      if (defaults.instructions) lines.push(`instructions: ${String(defaults.instructions).replace(/\r/g, ' ')}`)
+      if (!lines.length) throw new Error(t('engine.dashImportOpenClawMissingPersona'))
+      await api.hermesMemoryWrite('profile', lines.join('\n'))
+      cfgMsg = `<span style="color:var(--success)">${t('engine.dashImportOpenClawPersonaOk')}</span>`
+      toast(t('engine.dashImportOpenClawPersonaOk'), 'success')
+    } catch (e) {
+      cfgMsg = `<span style="color:var(--error)">${String(e).replace(/^Error:\s*/, '')}</span>`
     } finally {
       modelBusy = false; draw()
     }

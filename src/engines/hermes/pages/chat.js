@@ -1,17 +1,17 @@
 /**
- * Hermes Chat — editorial luxury re-write (Phase 4).
+ * Hermes Chat — 高级聊天面板（Phase 4）。
  *
- * Layout matches the official `hermes-web-ui`'s ChatPanel:
+ * 布局对齐 `hermes-web-ui` 的 ChatPanel：
  *   ┌────────────────┬──────────────────────────────────────────────┐
  *   │ SessionList    │ Header: title · source · new-chat button     │
  *   │ (groups +      ├──────────────────────────────────────────────┤
- *   │  pinned +      │ MessageList (user / assistant / tool)         │
+ *   │  pinned +      │ MessageList (user / assistant / tool)        │
  *   │  live badge)   │                                              │
  *   │                ├──────────────────────────────────────────────┤
- *   │                │ ChatInput (textarea + slash menu + send)      │
+ *   │                │ ChatInput (textarea + slash menu + send)     │
  *   └────────────────┴──────────────────────────────────────────────┘
  *
- * State lives in `chat-store.js`; this module only does DOM + events.
+ * 状态存放在 `chat-store.js`；本模块只负责 DOM 与事件交互。
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
@@ -253,7 +253,7 @@ function sanitizeMarkdownUrl(url) {
   return '#'
 }
 
-/** Minimal Markdown → HTML (supports fenced code, bold/italic, headings, lists, links). */
+/** 最小 Markdown → HTML（支持围栏代码、粗体/斜体、标题、列表、链接）。 */
 function mdToHtml(text) {
   if (!text) return ''
   const blocks = []
@@ -298,7 +298,7 @@ function renderMarkdownCached(text) {
   return html
 }
 
-/** Pretty-print JSON-ish tool payload; fallback to raw string. */
+/** 将类 JSON 的工具输出美化显示；失败时回退为原始字符串。 */
 function prettyJson(val) {
   if (val == null || val === '') return ''
   if (typeof val === 'string') {
@@ -326,7 +326,7 @@ function sessionDisplayTitle(s) {
   return s.title || t('engine.chatNewSession')
 }
 
-/** Compact token formatter — `1234567 → "1.2M"`, `12345 → "12.3k"`, `42 → "42"`. */
+/** 紧凑 Token 格式化：`1234567 → "1.2M"`、`12345 → "12.3k"`、`42 → "42"`。 */
 function formatTokens(n) {
   if (!Number.isFinite(n) || n <= 0) return '0'
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
@@ -334,7 +334,7 @@ function formatTokens(n) {
   return String(Math.round(n))
 }
 
-/** USD cost formatter — `0.0042 → "$0.0042"`, `0.51 → "$0.51"`, `12.3 → "$12.30"`. */
+/** USD 成本格式化：`0.0042 → "$0.0042"`、`0.51 → "$0.51"`、`12.3 → "$12.30"`。 */
 function formatCost(usd) {
   if (typeof usd !== 'number' || !Number.isFinite(usd) || usd <= 0) return ''
   if (usd < 0.01) return '$' + usd.toFixed(4)

@@ -1,18 +1,15 @@
 /**
  * Hermes ~/.hermes/.env 高级编辑器
  *
- * Managed keys (provider API keys, base URLs, GATEWAY_ALLOW_ALL_USERS,
- * API_SERVER_KEY) are hidden — those are surfaced on the setup page.
+ * 仪表盘统一托管的变量（provider API Key、Base URL、GATEWAY_ALLOW_ALL_USERS、
+ * API_SERVER_KEY）不会在此页直接编辑。
  *
- * Users can add/edit/delete custom env vars (TAVILY_API_KEY, HTTP_PROXY,
- * SKILL_*, etc.) which Hermes will pick up on Gateway restart.
+ * 本页仅用于增删改自定义环境变量，例如 TAVILY_API_KEY、HTTP_PROXY、
+ * SKILL_* 等；修改后需重启 Gateway 才会生效。
  */
 import { api } from '../../../lib/tauri-api.js'
 import { toast } from '../../../components/toast.js'
-
-// NOTE: i18n keys for this page are not yet wired up in src/locales; using
-// inline Chinese copy (with occasional English fallback) for now. When the
-// translation module lands, replace these literals with `t('hermesEnv.*')`.
+import { t } from '../../../lib/i18n.js'
 
 const ICONS = {
   back: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>`,
@@ -42,11 +39,11 @@ export function render() {
         <div class="hm-hero-title">
           <div class="hm-hero-eyebrow">
             <a href="#/h/dashboard" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-              ${ICONS.back} back to dashboard
+              ${ICONS.back} ${t('engine.envEditorBack')}
             </a>
           </div>
-          <h1 class="hm-hero-h1">.env editor</h1>
-          <div class="hm-hero-sub">custom environment variables · ~/.hermes/.env</div>
+          <h1 class="hm-hero-h1">${t('engine.envEditorTitle')}</h1>
+          <div class="hm-hero-sub">${t('engine.envEditorSubtitle')}</div>
         </div>
       </div>
 
@@ -54,17 +51,7 @@ export function render() {
       <div class="hm-panel" style="margin-bottom:18px">
         <div class="hm-panel-body hm-panel-body--tight">
           <div style="font-family:var(--hm-font-serif);font-style:italic;font-size:13px;color:var(--hm-text-tertiary);line-height:1.75">
-            以下变量由 屠戮：可视化管理面板 在仪表盘「模型配置」中托管：
-            <code class="hm-code">OPENAI_API_KEY</code>
-            <code class="hm-code">ANTHROPIC_API_KEY</code>
-            <code class="hm-code">DEEPSEEK_API_KEY</code>
-            等 provider 密钥及 base URL，以及
-            <code class="hm-code">GATEWAY_ALLOW_ALL_USERS</code>
-            <code class="hm-code">API_SERVER_KEY</code>。
-            请通过仪表盘修改这些项——本页仅管理你的自定义变量（如
-            <code class="hm-code">TAVILY_API_KEY</code>、
-            <code class="hm-code">HTTP_PROXY</code>、
-            skills 自定义变量等）。
+            ${t('engine.envEditorManagedNotice')}
           </div>
         </div>
       </div>
@@ -74,7 +61,7 @@ export function render() {
         <div class="hm-panel-header">
           <div class="hm-panel-title">
             <svg class="hm-panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-            custom.env
+            ${t('engine.envEditorFileName')}
           </div>
           <div class="hm-panel-actions">
             <span class="hm-muted" id="env-row-count"></span>
@@ -83,8 +70,8 @@ export function render() {
         <div class="hm-panel-body hm-panel-body--none">
           <div id="env-list"></div>
           <div id="env-empty" style="display:none;padding:32px 28px;text-align:center">
-            <div style="font-family:var(--hm-font-serif);font-style:italic;font-size:14px;color:var(--hm-text-tertiary);margin-bottom:6px">还没有自定义变量</div>
-            <div class="hm-muted">点击下方“添加变量”创建第一项</div>
+            <div style="font-family:var(--hm-font-serif);font-style:italic;font-size:14px;color:var(--hm-text-tertiary);margin-bottom:6px">${t('engine.envEditorEmptyTitle')}</div>
+            <div class="hm-muted">${t('engine.envEditorEmptyDesc')}</div>
           </div>
           <div id="env-error" style="display:none;margin:14px 28px;padding:10px 14px;background:var(--hm-error-soft);border-radius:var(--hm-radius-sm);color:var(--hm-error);font-family:var(--hm-font-mono);font-size:12px"></div>
         </div>
@@ -100,7 +87,7 @@ export function render() {
     // update count badge in panel header
     const countEl = el.querySelector('#env-row-count')
     if (countEl) {
-      countEl.textContent = loading ? '' : (rows.length ? `${rows.length} 个变量` : '')
+      countEl.textContent = loading ? '' : (rows.length ? t('engine.envEditorCount', { count: rows.length }) : '')
     }
 
     if (loading) {
@@ -126,9 +113,9 @@ export function render() {
     // Table-style header
     const header = `
       <div style="display:grid;grid-template-columns:1fr 2fr 148px;gap:14px;padding:14px 28px;font-family:var(--hm-font-serif);font-style:italic;font-size:12px;color:var(--hm-text-tertiary);background:var(--hm-surface-0);border-bottom:1px solid var(--hm-border)">
-        <div>变量名</div>
-        <div>变量值</div>
-        <div style="text-align:right">操作</div>
+        <div>${t('engine.envEditorKey')}</div>
+        <div>${t('engine.envEditorValue')}</div>
+        <div style="text-align:right">${t('engine.envEditorActions')}</div>
       </div>
     `
 
@@ -139,8 +126,8 @@ export function render() {
             <input type="text" class="hm-input env-key-input" ${row.isNew ? '' : 'readonly'} value="${esc(row.key)}" placeholder="EXAMPLE_KEY" style="height:32px;font-size:12px">
             <input type="text" class="hm-input env-value-input" value="${esc(row.draftValue)}" placeholder="value..." style="height:32px;font-size:12px">
             <div style="display:flex;gap:6px;justify-content:flex-end">
-              <button class="hm-btn hm-btn--cta hm-btn--sm env-save-btn" title="保存">${ICONS.save}</button>
-              <button class="hm-btn hm-btn--sm env-cancel-btn" title="取消">${ICONS.cancel}</button>
+              <button class="hm-btn hm-btn--cta hm-btn--sm env-save-btn" title="${t('engine.memorySave')}">${ICONS.save}</button>
+              <button class="hm-btn hm-btn--sm env-cancel-btn" title="${t('engine.memoryCancel')}">${ICONS.cancel}</button>
             </div>
           </div>
         `
@@ -150,9 +137,9 @@ export function render() {
           <code class="hm-code" style="background:transparent;border:none;padding:0;font-size:12px;color:var(--hm-text-primary);word-break:break-all">${esc(row.key)}</code>
           <code class="hm-code" style="background:transparent;border:none;padding:0;font-size:12px;color:var(--hm-text-tertiary);word-break:break-all">${esc(row.revealed ? row.value : maskValue(row.value))}</code>
           <div style="display:flex;gap:6px;justify-content:flex-end">
-            <button class="hm-btn hm-btn--icon env-reveal-btn" title="${row.revealed ? '隐藏' : '明文'}">${ICONS.eye}</button>
-            <button class="hm-btn hm-btn--icon env-edit-btn" title="编辑">${ICONS.edit}</button>
-            <button class="hm-btn hm-btn--icon env-delete-btn" title="删除" style="color:var(--hm-error)">${ICONS.trash}</button>
+            <button class="hm-btn hm-btn--icon env-reveal-btn" title="${row.revealed ? t('engine.envEditorHide') : t('engine.envEditorReveal')}">${ICONS.eye}</button>
+            <button class="hm-btn hm-btn--icon env-edit-btn" title="${t('engine.memoryEdit')}">${ICONS.edit}</button>
+            <button class="hm-btn hm-btn--icon env-delete-btn" title="${t('engine.chatDeleteShort')}" style="color:var(--hm-error)">${ICONS.trash}</button>
           </div>
         </div>
       `
@@ -171,10 +158,10 @@ export function render() {
     const footer = document.createElement('div')
     footer.style.cssText = 'padding:18px 28px;border-top:1px solid var(--hm-border);display:flex;gap:10px;align-items:center'
     footer.innerHTML = hasAddRow
-      ? '<span class="hm-muted">正在编辑新变量…</span>'
-      : `<button class="hm-btn hm-btn--cta env-add-btn">${ICONS.plus} 添加变量</button>
+      ? `<span class="hm-muted">${t('engine.envEditorAdding')}</span>`
+      : `<button class="hm-btn hm-btn--cta env-add-btn">${ICONS.plus} ${t('engine.envEditorAdd')}</button>
          <span class="hm-spacer"></span>
-         <span class="hm-muted">修改将在下次重启 Gateway 后生效</span>`
+         <span class="hm-muted">${t('engine.envEditorRestartHint')}</span>`
     // Remove existing footer
     const old = el.querySelector('.env-footer')
     if (old) old.remove()
@@ -232,11 +219,11 @@ export function render() {
         const newKey = (keyInput?.value || '').trim()
         const newValue = valueInput?.value || ''
         if (!newKey) {
-          toast('变量名不能为空', 'warning')
+          toast(t('engine.envEditorKeyRequired'), 'warning')
           return
         }
         if (!/^[A-Z0-9_]+$/i.test(newKey)) {
-          toast('变量名只能包含字母、数字和下划线', 'warning')
+          toast(t('engine.envEditorKeyInvalid'), 'warning')
           return
         }
         try {
@@ -246,18 +233,18 @@ export function render() {
           row.editing = false
           row.isNew = false
           row.draftValue = ''
-          toast('已保存', 'success')
+          toast(t('engine.envEditorSaved'), 'success')
           renderList()
         } catch (err) {
           toast(String(err).replace(/^Error:\s*/, ''), 'error')
         }
       })
       rowEl.querySelector('.env-delete-btn')?.addEventListener('click', async () => {
-        if (!confirm(`确定删除 ${row.key} 吗？`)) return
+        if (!confirm(`${t('engine.envEditorDeleteConfirm')} ${row.key}？`)) return
         try {
           await api.hermesEnvDelete(row.key)
           rows.splice(idx, 1)
-          toast('已删除', 'success')
+          toast(t('engine.envEditorDeleted'), 'success')
           renderList()
         } catch (err) {
           toast(String(err).replace(/^Error:\s*/, ''), 'error')

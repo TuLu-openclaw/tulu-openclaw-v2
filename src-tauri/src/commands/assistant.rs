@@ -959,6 +959,37 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
     Ok("ok".into())
 }
 
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
+
+    const WINDOW_LABEL: &str = "global_builtin_window";
+    const TARGET_URL: &str = "https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific";
+
+    if let Some(existing) = app.get_webview_window(WINDOW_LABEL) {
+        let _ = existing.show();
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        let _ = existing.navigate(TARGET_URL.parse().map_err(|e| format!("URL解析失败: {}", e))?);
+        return Ok("focus".into());
+    }
+
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::External(TARGET_URL.parse().map_err(|e| format!("URL解析失败: {}", e))?))
+        .title("全球内置")
+        .inner_size(1280.0, 840.0)
+        .min_inner_size(960.0, 640.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建全球内置窗口失败: {}", e))?;
+
+    Ok("ok".into())
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {

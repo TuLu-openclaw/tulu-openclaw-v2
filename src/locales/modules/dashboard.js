@@ -28,7 +28,7 @@ export default {
   baseServices: _('基础服务', 'Services', '基礎服務', '基本サービス', '기본 서비스', 'Dịch vụ cơ bản', 'Servicios base', 'Serviços base', 'Базовые сервисы', 'Services de base', 'Basisdienste'),
   controlUI: _('Control UI', 'Control UI'),
   controlUIDesc: _('OpenClaw 原生面板', 'OpenClaw native panel', '', 'OpenClaw ネイティブパネル', 'OpenClaw 네이티브 패널'),
-  controlUIClick: _('点击打开浏览器', 'Click to open in browser', '点擊開啟瀏覽器', 'ブラウザで開く', '브라우저에서 열기'),
+  controlUIClick: _('点击打开本地面板', 'Click to open local panel', '點擊開啟本機面板', 'ローカルパネルを開く', '로컬 패널 열기'),
   controlUINotRunning: _('Gateway 未运行', 'Gateway not running', 'Gateway 未執行', 'Gateway 未実行', 'Gateway 미실행'),
   restartGw: _('重启 Gateway', 'Restart Gateway', '重啟 Gateway', 'Gateway 再起動', 'Gateway 재시작', 'Khởi động lại Gateway', 'Reiniciar Gateway', 'Reiniciar Gateway', 'Перезапустить Gateway', 'Redémarrer Gateway', 'Gateway neustarten'),
   checkUpdate: _('检查更新', 'Check Updates', '檢查更新', '更新確認', '업데이트 확인', 'Kiểm tra cập nhật', 'Buscar actualizaciones', 'Verificar atualizações', 'Проверить обновления', 'Vérifier les mises à jour', 'Updates prüfen'),

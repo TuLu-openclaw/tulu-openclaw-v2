@@ -227,7 +227,7 @@ export function render() {
     const envExists = !!info?.envExists
     const customInputVisible = targetMode === 'custom' || targetMode === 'docker'
     const targetNote = targetMode === 'local'
-      ? `${t('engine.installModeLocal')} · http://127.0.0.1:${port}`
+      ? `${t('engine.installModeLocal')} · 本机 Hermes Gateway（http://127.0.0.1:${port}）`
       : targetMode === 'wsl2'
         ? (envData?.wsl2?.gatewayUrl || t('engine.servicesWslHint'))
         : targetMode === 'docker'

@@ -177,6 +177,7 @@ ${personality}
 2. **Unrecognized key: "mode"** → mode 字段不能放在顶层，必须在 gateway.mode，升级到 v0.4.6+ 自动修复
 3. **fnm 管理的 Node.js 检测不到** → 升级到 v0.4.7+，已支持 FNM_DIR/node-versions 扫描
 4. **models.json 不同步** → 屠戮：可视化管理面板 改了 openclaw.json 但 Gateway 用的 models.json 未更新，重启 Gateway 或执行 openclaw config apply
+4.1 **Gateway 被其他实例占用** → 若面板提示外部实例/冲突，请先核对当前绑定的 OpenClaw CLI、数据目录和运行中的 Gateway owner，再决定接管或切换绑定
 5. **WebSocket 连接失败** → 检查 gateway.controlUi.allowedOrigins 是否包含 ["*"]
 6. **SIGTERM 循环** → com.openclaw.healthcheck 服务异常，禁用: launchctl bootout gui/$(id -u)/com.openclaw.healthcheck
 7. **BOM 导致 JSON 解析失败** → PowerShell Set-Content 会加 BOM，屠戮：可视化管理面板 已自动剥离

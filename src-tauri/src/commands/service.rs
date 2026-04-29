@@ -1528,25 +1528,25 @@ mod platform {
             );
         }
 
-        // 启动前检查端口是否已被占用，防止重复拉起导致端口冲突和内存浪费
         let port = crate::commands::gateway_listen_port();
-        let pre_check_addr: std::net::SocketAddr = format!("127.0.0.1:{port}")
+        let addr: std::net::SocketAddr = format!("127.0.0.1:{port}")
             .parse()
             .map_err(|_| format!("端口 {port} 解析失败"))?;
-        let already_occupied = tokio::task::spawn_blocking(move || {
-            std::net::TcpStream::connect_timeout(
-                &pre_check_addr,
-                std::time::Duration::from_millis(500),
-            )
-            .is_ok()
-        })
-        .await
-        .unwrap_or(false);
-        if already_occupied {
-            return Err(format!(
-                "端口 {} 已被占用，Gateway 可能已在运行中（或其他程序占用了该端口）",
-                port
-            ));
+        let is_port_ready = |socket_addr: std::net::SocketAddr, timeout_ms: u64| async move {
+            tokio::task::spawn_blocking(move || {
+                std::net::TcpStream::connect_timeout(
+                    &socket_addr,
+                    std::time::Duration::from_millis(timeout_ms),
+                )
+                .is_ok()
+            })
+            .await
+            .unwrap_or(false)
+        };
+
+        // 启动前如果端口已可达，优先视为 Gateway 已在运行，避免把“已运行”误判成启动失败
+        if is_port_ready(addr, 500).await {
+            return Ok(());
         }
 
         let output = crate::utils::openclaw_command_async()
@@ -1556,41 +1556,47 @@ mod platform {
             .map_err(|e| format!("执行 openclaw gateway start 失败: {e}"))?;
 
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("openclaw gateway start 失败: {stderr}"));
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if is_port_ready(addr, 500).await {
+                return Ok(());
+            }
+            return Err(if stderr.is_empty() {
+                "openclaw gateway start 失败（未返回 stderr）".to_string()
+            } else {
+                format!("openclaw gateway start 失败: {stderr}")
+            });
         }
 
-        // 等端口就绪（最多 15s）
-        let port = crate::commands::gateway_listen_port();
-        let addr: std::net::SocketAddr = match format!("127.0.0.1:{port}").parse() {
-            Ok(a) => a,
-            Err(_) => return Err(format!("端口 {port} 解析失败")),
-        };
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        // 等端口就绪（最多 45s），避免 Windows 慢启动时被过早误判失败
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
         while std::time::Instant::now() < deadline {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let addr_clone = addr;
-            let connected = tokio::task::spawn_blocking(move || {
-                std::net::TcpStream::connect_timeout(
-                    &addr_clone,
-                    std::time::Duration::from_millis(200),
-                )
-                .is_ok()
-            })
-            .await
-            .unwrap_or(false);
-            if connected {
+            if is_port_ready(addr, 250).await {
                 return Ok(());
             }
         }
 
-        Err(format!(
-            "Gateway 启动超时，请查看 {}",
-            crate::commands::openclaw_dir()
-                .join("logs")
-                .join("gateway.err.log")
-                .display()
-        ))
+        let err_log = crate::commands::openclaw_dir().join("logs").join("gateway.err.log");
+        let tail = std::fs::read_to_string(&err_log)
+            .ok()
+            .map(|content| {
+                content
+                    .lines()
+                    .rev()
+                    .take(20)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default();
+
+        Err(if tail.trim().is_empty() {
+            format!("Gateway 启动超时，请查看 {}", err_log.display())
+        } else {
+            format!("Gateway 启动超时。最近日志：\n{}", tail)
+        })
     }
 
     pub async fn stop_service_impl(_label: &str) -> Result<(), String> {

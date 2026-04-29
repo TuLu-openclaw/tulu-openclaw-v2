@@ -111,7 +111,7 @@
     "baseServices": "基础服务",
     "controlUI": "Control UI",
     "controlUIDesc": "OpenClaw 原生面板",
-    "controlUIClick": "点击打开浏览器",
+    "controlUIClick": "点击打开本地面板",
     "controlUINotRunning": "Gateway 未运行",
     "gatewayReady": "运行中（已就绪）",
     "gatewayReadyMeta": "控制连接与握手均已完成",
