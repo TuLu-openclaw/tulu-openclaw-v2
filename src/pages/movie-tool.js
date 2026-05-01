@@ -2559,9 +2559,67 @@ function pickDirectUrl(url) {
         return
       }
 
-      // 其他页面 → 显示不支持
+      // 其他页面 → 调用 fetch_live_sources 检测视频源
       overlay.remove()
-      openFloatPlayer('无法解析', rawUrl, 'url_input', 'url_input', '无法解析', '', [], 0)
+      const overlay2 = document.createElement('div')
+      overlay2.className = 'tvbox-url-overlay'
+      overlay2.innerHTML = `<div class="tvbox-url-box" style="padding:24px">
+        <div style="color:#a1a1aa;font-size:14px;margin-bottom:12px">正在检测视频源...</div>
+        <div style="color:#6366f1;font-size:13px" id="_detect-status">页面: ${escHtml(rawUrl)}</div>
+        <div id="_detect-results" style="margin-top:16px;max-height:300px;overflow-y:auto"></div>
+        <div style="margin-top:12px">
+          <input id="_manual-m3u8" type="text" placeholder="未检测到？直接输入 m3u8 地址" style="width:100%;padding:10px;border-radius:8px;border:1px solid #333;background:#1a1a2e;color:#e2e8f0;font-family:monospace;font-size:13px;box-sizing:border-box" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="_play-manual" style="flex:1;padding:10px;background:#6366f1;border:none;color:#fff;border-radius:8px;cursor:pointer">播放手动输入</button>
+          <button id="_urlcancel2" style="flex:1;padding:10px;background:#333;border:1px solid #555;color:#fff;border-radius:8px;cursor:pointer">关闭</button>
+        </div>
+      </div>`
+      document.body.appendChild(overlay2)
+
+      overlay2.querySelector('#_urlcancel2').addEventListener('click', () => overlay2.remove())
+      overlay2.querySelector('#_play-manual').addEventListener('click', () => {
+        const m3u8 = overlay2.querySelector('#_manual-m3u8').value.trim()
+        if (!m3u8) return
+        overlay2.remove()
+        openFloatPlayer('直链播放', m3u8, 'url_input', 'url_input', '直链播放', '', [], 0)
+      })
+
+      // 调用 Rust 三层扫描检测视频源
+      try {
+        const { api } = await import('../lib/tauri-api.js')
+        const res = await api.fetchLiveSources(rawUrl)
+        let sources = []
+        try { sources = JSON.parse(res) } catch {}
+        const resultsDiv = overlay2.querySelector('#_detect-results')
+        const statusDiv = overlay2.querySelector('#_detect-status')
+        if (sources && sources.length > 0) {
+          statusDiv.textContent = `检测到 ${sources.length} 个视频源：`
+          statusDiv.style.color = '#22c55e'
+          resultsDiv.innerHTML = sources.map((s, i) => {
+            const url = s.url || s
+            return `<button class="tvbox-crawl-card" data-url="${escHtml(url)}" data-type="${url.includes('.m3u8') ? 'hls' : 'mp4'}" style="display:block;width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;background:#1a1a2e;border:1px solid #333;color:#e2e8f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:monospace;word-break:break-all">
+              ${i + 1}. ${escHtml(url)}
+            </button>`
+          }).join('')
+          resultsDiv.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const url = btn.dataset.url
+              const type = btn.dataset.type
+              overlay2.remove()
+              // 调用独立播放器
+              api.openLivePlayer(JSON.stringify([{ url, type })]))
+            })
+          })
+        } else {
+          statusDiv.textContent = '未检测到视频源，请直接输入 m3u8 地址'
+          statusDiv.style.color = '#f59e0b'
+        }
+      } catch (e) {
+        const statusDiv = overlay2.querySelector('#_detect-status')
+        statusDiv.textContent = '检测失败: ' + e.message + '，请直接输入 m3u8'
+        statusDiv.style.color = '#ef4444'
+      }
     }
 
     overlay.querySelector('#_urlgo').addEventListener('click', () => doUrlParse(inp.value))

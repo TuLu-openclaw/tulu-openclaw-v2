@@ -1060,7 +1060,7 @@ pub async fn fetch_live_sources(url: String) -> Result<String, String> {
 
     // 阶段2: 扫描 script src 并递归抓取 JS 文件
     let re_script = regex::Regex::new(r#"<script[^>]+src=["']([^"']+)["']"#).map_err(|e| format!("正则错误: {}", e))?;
-    let base_url = url::Url::parse(&url).map_err(|e| format!("URL 解析失败: {}", e))?;
+    let base_url = reqwest::Url::parse(&url).map_err(|e| format!("URL 解析失败: {}", e))?;
     for cap in re_script.captures_iter(&body) {
         let src = &cap[1];
         if src.contains("player") || src.contains("video") || src.contains("live") || src.contains("embed") || src.contains("stream") {
