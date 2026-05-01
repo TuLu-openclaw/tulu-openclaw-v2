@@ -3,7 +3,7 @@
  */
 import { api, invalidate } from '../../../lib/tauri-api.js'
 import { t } from '../../../lib/i18n.js'
-import { setUserStopped as setHermesUserStopped, resetAutoRestart as resetHermesAutoRestart, onStateChange as onHermesStateChange } from '../index.js'
+import { onStateChange as onHermesStateChange } from '../index.js'
 
 const HERMES_ACTION_POLL_INTERVAL = 1500
 const HERMES_ACTION_POLL_TIMEOUT = 30000
@@ -471,12 +471,6 @@ export function render() {
     )
     draw()
     try {
-      if (action === 'stop') {
-        setHermesUserStopped(true)
-      } else {
-        setHermesUserStopped(false)
-        resetHermesAutoRestart()
-      }
       const result = await api.hermesGatewayAction(action)
       setPageMessage(result || action, 'success')
 
@@ -580,6 +574,12 @@ export function render() {
   }
 
   function bind() {
+    // 实时监听 Hermes 状态变化，不再依赖纯轮询
+    onHermesStateChange((state) => {
+      gatewayState = state
+      if (!loading) draw()
+    })
+
     el.querySelector('.hm-services-refresh')?.addEventListener('click', () => refresh())
     el.querySelector('.hm-services-start')?.addEventListener('click', () => runGatewayAction('start'))
     el.querySelector('.hm-services-stop')?.addEventListener('click', () => runGatewayAction('stop'))
