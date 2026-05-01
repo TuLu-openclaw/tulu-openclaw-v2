@@ -424,6 +424,7 @@ async function boot() {
   registerRoute('/chat', () => import('./pages/chat.js'))
   registerRoute('/chat-debug', () => import('./pages/chat-debug.js'))
   registerRoute('/services', () => import('./pages/services.js'))
+  registerRoute('/live-player', () => import('./pages/live-player.js'))
   registerRoute('/logs', () => import('./pages/logs.js'))
   registerRoute('/models', () => import('./pages/models.js'))
   registerRoute('/agents', () => import('./pages/agents.js'))

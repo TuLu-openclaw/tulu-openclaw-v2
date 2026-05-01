@@ -1019,3 +1019,129 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
     items.sort();
     Ok(items.join("\n"))
 }
+
+// ---------------------------------------------------------------------------
+// 独立直播播放器窗口
+// ---------------------------------------------------------------------------
+
+/// 从页面 URL 中检测并提取所有可访问的直播/视频源 (m3u8/mp4/hls)
+#[tauri::command]
+pub async fn fetch_live_sources(url: String) -> Result<String, String> {
+    // 使用 reqwest 抓取目标页面，进行三层扫描
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| format!("HTTP 客户端创建失败: {}", e))?;
+
+    let resp = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("请求页面失败: {}", e))?;
+
+    let body = resp.text().await.map_err(|e| format!("读取页面内容失败: {}", e))?;
+    let mut sources = Vec::new();
+
+    // 阶段1: 直接扫描 HTML 中的 m3u8 / mp4 链接
+    let re_m3u8 = regex::Regex::new(r#"[^"]*\.m3u8[^"]*"#).map_err(|e| format!("正则错误: {}", e))?;
+    let re_mp4 = regex::Regex::new(r#"[^"]*\.mp4[^"]*"#).map_err(|e| format!("正则错误: {}", e))?;
+    for cap in re_m3u8.find_iter(&body) {
+        let raw = cap.as_str().trim_matches('"');
+        if !raw.contains("token") && !raw.contains("sign") && raw.starts_with("http") {
+            sources.push(raw.to_string());
+        }
+    }
+    for cap in re_mp4.find_iter(&body) {
+        let raw = cap.as_str().trim_matches('"');
+        if raw.starts_with("http") {
+            sources.push(raw.to_string());
+        }
+    }
+
+    // 阶段2: 扫描 script src 并递归抓取 JS 文件
+    let re_script = regex::Regex::new(r#"<script[^>]+src=["']([^"']+)["']"#).map_err(|e| format!("正则错误: {}", e))?;
+    let base_url = url::Url::parse(&url).map_err(|e| format!("URL 解析失败: {}", e))?;
+    for cap in re_script.captures_iter(&body) {
+        let src = &cap[1];
+        if src.contains("player") || src.contains("video") || src.contains("live") || src.contains("embed") || src.contains("stream") {
+            let js_url = base_url.join(src).map_err(|_| "JS URL 拼接失败")?.to_string();
+            if let Ok(js_resp) = client.get(&js_url).send().await {
+                if let Ok(js_body) = js_resp.text().await {
+                    // 扫描 JS 中的字符串字面量
+                    let re_str = regex::Regex::new(r#"[\"']([^"']{10,500})\.m3u8[^"']{0,50}[\"']"#).unwrap();
+                    for m in re_str.find_iter(&js_body) {
+                        let full = m.as_str();
+                        let trimmed = full.trim_matches(|c| c == '"' || c == '\'');
+                        if trimmed.starts_with("http") {
+                            sources.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 阶段3: 探测常见 m3u8 路径
+    let common_paths = [
+        "/live/live.m3u8",
+        "/live/playlist.m3u8",
+        "/stream/live.m3u8",
+        "/hls/live.m3u8",
+        "/live.m3u8",
+        "/playlist.m3u8",
+        "/live/index.m3u8",
+        "/live/stream.m3u8",
+    ];
+    let domain = format!("{}://{}", base_url.scheme(), base_url.host_str().unwrap_or(""));
+    for path in &common_paths {
+        let test_url = format!("{}{}", domain, path);
+        if let Ok(resp) = client.get(&test_url).send().await {
+            if resp.status().is_success() {
+                if let Ok(text) = resp.text().await {
+                    if text.starts_with("#EXTM3U") {
+                        sources.push(test_url);
+                    }
+                }
+            }
+        }
+    }
+
+    // 去重
+    sources.sort();
+    sources.dedup();
+    let result: Vec<_> = sources.into_iter().map(|s| serde_json::json!({"url": s})).collect();
+    Ok(serde_json::to_string(&result).map_err(|e| format!("JSON 序列化失败: {}", e))?)
+}
+
+/// 打开独立直播播放器窗口
+#[tauri::command]
+pub async fn open_live_player(app: tauri::AppHandle, sources_json: String) -> Result<String, String> {
+    use tauri::Manager;
+    use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
+
+    const WINDOW_LABEL: &str = "live_player_window";
+
+    // sources_json: JSON 数组字符串，传入播放器页
+    let encoded = urlencoding::encode(&sources_json);
+    let player_url = format!("/live-player?sources={}", encoded);
+
+    if let Some(existing) = app.get_webview_window(WINDOW_LABEL) {
+        let _ = existing.show();
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        return Ok("focus".into());
+    }
+
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::App(player_url.into()))
+        .title("直播播放器")
+        .inner_size(1280.0, 760.0)
+        .min_inner_size(800.0, 480.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+
+    Ok("ok".into())
+}

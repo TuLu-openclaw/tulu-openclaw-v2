@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>全球内置</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; overflow: hidden; }
+#iframe { width: 100vw; height: 100vh; border: none; display: block; }
+#fab {
+  position: fixed; bottom: 24px; right: 24px; z-index: 99999;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none; cursor: pointer; font-size: 24px;
+  box-shadow: 0 4px 20px rgba(99,102,241,.5);
+  display: none; align-items: center; justify-content: center;
+  transition: transform .2s;
+}
+#fab:hover { transform: scale(1.1); }
+#fab.show { display: flex; }
+#panel {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99998;
+  background: rgba(0,0,0,.92); display: none; overflow-y: auto; padding: 20px;
+}
+#panel.open { display: block; }
+.panel-inner { max-width: 800px; margin: 0 auto; background: #111; border: 1px solid #333; border-radius: 16px; padding: 24px; }
+.panel-inner h2 { color: #fff; margin-bottom: 16px; font-size: 18px; }
+.src-item {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; margin-bottom: 8px;
+  background: #1a1a2e; border: 1px solid #333; color: #e2e8f0;
+  border-radius: 8px; cursor: pointer; font-size: 13px; font-family: monospace;
+  word-break: break-all; transition: border-color .2s;
+}
+.src-item:hover { border-color: #6366f1; }
+.src-item.playing { border-color: #22c55e; background: #1a2e1a; }
+.close-btn { margin-top: 16px; width: 100%; padding: 10px; background: #333; border: 1px solid #555; color: #fff; border-radius: 8px; cursor: pointer; }
+.status { color: #a1a1aa; font-size: 13px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<iframe id="iframe" src="https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific"></iframe>
+
+<button id="fab" title="提取视频源">🎬</button>
+
+<div id="panel">
+  <div class="panel-inner">
+    <h2>🎬 视频源提取</h2>
+    <div id="status" class="status">正在从页面提取视频源...</div>
+    <div id="sources"></div>
+    <button class="close-btn" id="close-panel">关闭</button>
+  </div>
+</div>
+
+<script type="module">
+const TARGET = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific';
+const PASSWORD = '2552667173';
+const STORAGE_KEY = 'gb_remembered';
+
+let currentPlayer = null;
+let hlsInstance = null;
+
+function $(id) { return document.getElementById(id) }
+
+async function checkPassword() {
+  let remembered = false;
+  try { remembered = localStorage.getItem(STORAGE_KEY) === '1'; } catch(_) {}
+  if (remembered) return true;
+  const pw = prompt('请输入访问密码：');
+  if (pw === PASSWORD) {
+    try { localStorage.setItem(STORAGE_KEY, '1'); } catch(_) {}
+    return true;
+  }
+  return false;
+}
+
+function esc(v) {
+  return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function detectVideos(win) {
+  const results = [];
+  try {
+    const docs = [win.document];
+    // 扫描主文档
+    docs.forEach(doc => {
+      if (!doc) return;
+      // video 标签
+      doc.querySelectorAll('video').forEach(v => {
+        if (v.src && v.src.startsWith('http')) results.push({ type: v.src.includes('.m3u8') ? 'hls' : 'mp4', url: v.src });
+        v.querySelectorAll('source').forEach(s => { if (s.src) results.push({ type: s.src.includes('.m3u8') ? 'hls' : 'mp4', url: s.src }); });
+      });
+      // source 标签
+      doc.querySelectorAll('source').forEach(s => {
+        if (s.src && s.src.startsWith('http')) results.push({ type: s.src.includes('.m3u8') ? 'hls' : 'mp4', url: s.src });
+      });
+      // m3u8 链接
+      doc.querySelectorAll('[href]').forEach(a => {
+        const u = a.href;
+        if (u.includes('.m3u8') && u.startsWith('http')) results.push({ type: 'hls', url: u });
+      });
+    });
+  } catch(_) {}
+  // 去重
+  const seen = new Set();
+  return results.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true; });
+}
+
+async function openLivePlayer(sources) {
+  try {
+    const { api } = await import('../lib/tauri-api.js');
+    await api.openLivePlayer(JSON.stringify(sources));
+  } catch(e) {
+    alert('打开播放器失败: ' + e.message);
+  }
+}
+
+function showPanel(sources) {
+  const panel = $('panel');
+  const sourcesDiv = $('sources');
+  const status = $('status');
+  panel.classList.add('open');
+
+  if (sources.length === 0) {
+    status.textContent = '未在当前页面检测到视频源，请尝试播放视频后再次提取';
+  } else {
+    status.textContent = `检测到 ${sources.length} 个视频源，点击选择播放`;
+    sourcesDiv.innerHTML = sources.map((s, i) =>
+      `<button class="src-item" data-url="${esc(s.url)}" data-type="${esc(s.type)}">${i+1}. ${esc(s.url)}</button>`
+    ).join('');
+    sourcesDiv.querySelectorAll('.src-item').forEach(btn => {
+      btn.addEventListener('click', () => openLivePlayer([{ url: btn.dataset.url, type: btn.dataset.type }]));
+    });
+  }
+}
+
+async function onFabClick() {
+  const iframe = $('iframe').contentWindow;
+  const sources = detectVideos(iframe);
+  showPanel(sources);
+}
+
+$('fab').addEventListener('click', onFabClick);
+$('close-panel').addEventListener('click', () => $('panel').classList.remove('open'));
+
+// 页面加载后显示按钮
+window.addEventListener('load', () => {
+  setTimeout(() => $('fab').classList.add('show'), 2000);
+});
+</script>
+</body>
+</html>
