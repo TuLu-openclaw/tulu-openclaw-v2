@@ -7,12 +7,12 @@ import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 
 const PREVIEW_PRESETS = {
-  ack: { emoji: '🟡', title: '已收到 ack', desc: '已收到新任务，等待进入处理' },
-  thinking: { emoji: '💭', title: '思考 thinking', desc: '正在分析和组织方案' },
-  tool: { emoji: '🛠️', title: '工具 tool', desc: '正在调用工具或执行外部步骤' },
-  working: { emoji: '🔴', title: '处理中 working', desc: '正在持续处理任务' },
-  done: { emoji: '🟢', title: '完成 done', desc: '任务已处理完成' },
-  idle: { emoji: '🟢', title: '待命 idle', desc: '当前无任务，保持待命' },
+  ack: { emoji: '🟡', title: '已收到', desc: '已收到新任务，等待进入处理' },
+  thinking: { emoji: '💭', title: '思考中', desc: '正在分析和组织方案' },
+  tool: { emoji: '🛠️', title: '工具调用', desc: '正在调用工具或执行外部步骤' },
+  working: { emoji: '🔴', title: '处理中', desc: '正在持续处理任务' },
+  done: { emoji: '🟢', title: '已完成', desc: '任务已处理完成' },
+  idle: { emoji: '🟢', title: '待命', desc: '当前无任务，保持待命' },
 }
 
 function readLiveLobsterState() {
@@ -61,51 +61,51 @@ export default function render(el) {
         <div class="live-preview" id="lobster-live-preview">
           <div class="live-preview-emoji" id="lobster-live-emoji">🟢</div>
           <div class="live-preview-body">
-            <div class="live-preview-title" id="lobster-live-title">待命 idle</div>
+            <div class="live-preview-title" id="lobster-live-title">待命</div>
             <div class="live-preview-desc" id="lobster-live-desc">当前无任务，保持待命</div>
-            <div class="live-preview-meta" id="lobster-live-meta">phase: idle</div>
+            <div class="live-preview-meta" id="lobster-live-meta">状态: 空闲</div>
           </div>
         </div>
         <div class="demo-grid">
           <div class="demo-item">
             <div class="demo-dot" style="background:#8892b0"></div>
             <div class="demo-info">
-              <div class="demo-name">待命 idle</div>
+              <div class="demo-name">待命</div>
               <div class="demo-desc">休息区沙发</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#fbbf24"></div>
             <div class="demo-info">
-              <div class="demo-name">写代码 writing</div>
+              <div class="demo-name">写代码</div>
               <div class="demo-desc">工作区办公桌</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#60a5fa"></div>
             <div class="demo-info">
-              <div class="demo-name">调研 researching</div>
+              <div class="demo-name">调研</div>
               <div class="demo-desc">工作区</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#fbbf24"></div>
             <div class="demo-info">
-              <div class="demo-name">执行 executing</div>
+              <div class="demo-name">执行</div>
               <div class="demo-desc">工作区</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#a78bfa"></div>
             <div class="demo-info">
-              <div class="demo-name">同步 syncing</div>
+              <div class="demo-name">同步</div>
               <div class="demo-desc">工作区</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#f87171"></div>
             <div class="demo-info">
-              <div class="demo-name">报错 error</div>
+              <div class="demo-name">报错</div>
               <div class="demo-desc">Bug 区</div>
             </div>
           </div>
@@ -162,7 +162,7 @@ export default function render(el) {
     const emoji = state.emoji || preset.emoji
     const title = preset.title
     const desc = state.message || preset.desc
-    const meta = `phase: ${phase} · state: ${state.state || 'working'}`
+    const meta = `状态: ${phase} · 阶段: ${state.state || 'working'}`
     const emojiEl = el.querySelector('#lobster-live-emoji')
     const titleEl = el.querySelector('#lobster-live-title')
     const descEl = el.querySelector('#lobster-live-desc')

@@ -1,0 +1,51 @@
+const fs = require('fs');
+const path = 'C:/Users/User/tulu-openclaw-v2/src/pages/movie-tool.js';
+const buf = fs.readFileSync(path);
+
+// Build the search pattern byte by byte
+const searchBytes = [
+  0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20, // 12 spaces
+  0x61,0x70,0x69,0x2e,0x6f,0x70,0x65,0x6e,0x4c,0x69,0x76,0x65,0x50,0x6c,0x61,0x79,0x65,0x72, // api.openLivePlayer
+  0x28, // (
+  0x4a,0x53,0x4f,0x4e,0x2e,0x73,0x74,0x72,0x69,0x6e,0x67,0x69,0x66,0x79, // JSON.stringify
+  0x28, // (
+  0x5b, // [
+  0x7b, // {
+  0x20,0x75,0x72,0x6c, //  url
+  0x2c,0x20, // ,
+  0x74,0x79,0x70,0x65, // type
+  0x20,0x7d,0x5d,0x29,0x29 //  }]
+  // no trailing )
+];
+
+// Find first occurrence
+let found = -1;
+outer:
+for (let i = 0; i <= buf.length - searchBytes.length; i++) {
+  for (let j = 0; j < searchBytes.length; j++) {
+    if (buf[i + j] !== searchBytes[j]) continue outer;
+  }
+  found = i;
+  break;
+}
+
+if (found >= 0) {
+  console.log('Found at byte', found);
+  const newBytes = [
+    ...searchBytes.slice(0, -5), // up to before  }]
+    0x75,0x72,0x6c,0x3a,0x20,0x75,0x72,0x6c, // url: url
+    0x2c,0x20, // ,
+    0x74,0x79,0x70,0x65,0x3a,0x20,0x74,0x79,0x70,0x65, // type: type
+    0x20,0x7d,0x5d,0x29,0x29 //  }]
+  ];
+  console.log('Old bytes length:', searchBytes.length);
+  console.log('New bytes length:', newBytes.length);
+  console.log('Old line:', buf.slice(found, found + searchBytes.length).toString('utf8'));
+  // Verify the full line
+  let lineEnd = found + searchBytes.length;
+  while (lineEnd < buf.length && buf[lineEnd] !== 0x0a) lineEnd++;
+  console.log('Full line:', buf.slice(found, lineEnd).toString('utf8'));
+  console.log('Line ends with CRLF?', buf[lineEnd-1] === 0x0d ? 'yes LFCR' : (buf[lineEnd-1] === 0x0a ? 'yes LF' : 'no crlf'));
+} else {
+  console.log('Not found by byte search');
+}

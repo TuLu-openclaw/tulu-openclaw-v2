@@ -967,17 +967,17 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String,
     use tauri::WebviewWindowBuilder;
 
     const WINDOW_LABEL: &str = "global_builtin_window";
-    const TARGET_URL: &str = "https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific";
+    const LOCAL_PAGE: &str = "global-builtin.html";
 
     if let Some(existing) = app.get_webview_window(WINDOW_LABEL) {
         let _ = existing.show();
         let _ = existing.unminimize();
         let _ = existing.set_focus();
-        let _ = existing.navigate(TARGET_URL.parse().map_err(|e| format!("URL解析失败: {}", e))?);
+        let _ = existing.navigate(WebviewUrl::App(LOCAL_PAGE.into()));
         return Ok("focus".into());
     }
 
-    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::External(TARGET_URL.parse().map_err(|e| format!("URL解析失败: {}", e))?))
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::App(LOCAL_PAGE.into()))
         .title("全球内置")
         .inner_size(1280.0, 840.0)
         .min_inner_size(960.0, 640.0)
