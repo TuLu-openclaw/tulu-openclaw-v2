@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🦞 直播播放器</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0a0a0a; overflow: hidden; font-family: 'Microsoft YaHei', sans-serif; color: #fff; }
+
+    /* 视频容器 */
+    #video-wrap {
+      position: relative; width: 100%; height: 100%;
+    }
+    #video-wrap video {
+      width: 100%; height: 100%; display: block; background: #000;
+    }
+
+    /* 控制栏 */
+    #controls {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(transparent, rgba(0,0,0,0.9));
+      padding: 12px 16px 16px;
+      display: flex; flex-direction: column; gap: 8px;
+      transition: opacity 0.3s;
+    }
+    #controls.hide { opacity: 0; pointer-events: none; }
+    #controls.show { opacity: 1; pointer-events: auto; }
+
+    /* 进度条 */
+    #progress-row { display: flex; align-items: center; gap: 10px; }
+    #time-display { font-size: 12px; color: #ccc; white-space: nowrap; min-width: 90px; }
+    #progress-bar-wrap {
+      flex: 1; height: 6px; background: rgba(255,255,255,0.15);
+      border-radius: 3px; cursor: pointer; position: relative;
+    }
+    #progress-bar { height: 100%; background: #e94560; border-radius: 3px; width: 0%; transition: width 0.1s; }
+    #progress-bar-wrap:hover { height: 10px; }
+    #volume-row { display: flex; align-items: center; gap: 10px; }
+    #volume-icon { font-size: 16px; cursor: pointer; user-select: none; }
+    #volume-slider { width: 80px; accent-color: #e94560; cursor: pointer; }
+
+    /* 按钮行 */
+    #btn-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .ctrl-btn {
+      padding: 6px 14px; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08); color: #fff;
+      border-radius: 6px; cursor: pointer; font-size: 13px;
+      font-family: 'Microsoft YaHei', sans-serif;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .ctrl-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
+    .ctrl-btn.active { background: #e94560; border-color: #e94560; }
+    .ctrl-btn.recording { background: #c00; border-color: #c00; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+
+    #quality-select {
+      background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px; padding: 6px 10px; font-size: 13px;
+      font-family: 'Microsoft YaHei', sans-serif; cursor: pointer;
+    }
+    #quality-select option { background: #1a1a1a; }
+
+    /* 顶部状态 */
+    #top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      background: linear-gradient(rgba(0,0,0,0.8), transparent);
+      padding: 12px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #stream-title { font-size: 14px; color: #ccc; }
+    #stream-status { font-size: 12px; color: #4caf50; }
+    #stream-status.offline { color: #e94560; }
+
+    /* 全屏按钮 */
+    #btn-fullscreen-toggle {
+      background: none; border: 1px solid rgba(255,255,255,0.3);
+      color: #fff; font-size: 13px; padding: 6px 14px;
+      border-radius: 6px; cursor: pointer;
+      font-family: 'Microsoft YaHei', sans-serif;
+    }
+    #btn-fullscreen-toggle:hover { background: rgba(255,255,255,0.1); }
+
+    /* 录屏状态 */
+    #rec-indicator {
+      display: none; align-items: center; gap: 6px;
+      color: #f44; font-size: 13px;
+    }
+    #rec-indicator.show { display: flex; }
+    .rec-dot { width: 10px; height: 10px; background: #f44; border-radius: 50%; animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* 提示消息 */
+    #toast {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.85); color: #fff;
+      padding: 10px 20px; border-radius: 8px; font-size: 13px;
+      pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+
+    /* 加载中 */
+    #loading {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #0a0a0a; flex-direction: column; gap: 16px;
+    }
+    #loading.hide { display: none; }
+    #loading-spinner { font-size: 40px; animation: spin 1s linear infinite; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    #loading-text { color: #888; font-size: 14px; }
+
+    /* 无源提示 */
+    #no-source {
+      position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      background: #0a0a0a; flex-direction: column; gap: 12px;
+    }
+    #no-source.show { display: flex; }
+    #no-source-text { color: #666; font-size: 15px; }
+  </style>
+</head>
+<body>
+
+<div id="video-wrap">
+  <video id="video" autoplay playsinline></video>
+
+  <div id="loading">
+    <div id="loading-spinner">⏳</div>
+    <div id="loading-text">正在连接直播源...</div>
+  </div>
+
+  <div id="no-source">
+    <div id="no-source-text">无可用视频源</div>
+    <button class="ctrl-btn" onclick="location.reload()">刷新</button>
+  </div>
+
+  <div id="top-bar">
+    <div>
+      <div id="stream-title">直播播放器</div>
+      <div id="stream-status">连接中...</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div id="rec-indicator">
+        <div class="rec-dot"></div>录屏中
+      </div>
+      <button id="btn-fullscreen-toggle" onclick="toggleFullscreen()">全屏</button>
+    </div>
+  </div>
+
+  <div id="controls" class="hide">
+    <div id="progress-row">
+      <div id="time-display">00:00 / 00:00</div>
+      <div id="progress-bar-wrap">
+        <div id="progress-bar"></div>
+      </div>
+    </div>
+    <div id="volume-row">
+      <span id="volume-icon" onclick="toggleMute()">🔊</span>
+      <input type="range" id="volume-slider" min="0" max="1" step="0.02" value="1">
+      <span style="font-size:12px;color:#888;" id="volume-val">100%</span>
+    </div>
+    <div id="btn-row">
+      <select id="quality-select"><option value="auto">自动</option></select>
+      <button class="ctrl-btn" id="btn-record">录屏</button>
+      <button class="ctrl-btn" id="btn-screenshot">截图</button>
+      <button class="ctrl-btn" onclick="toggleFullscreen()">全屏</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { api } from '/src/lib/tauri-api.js';
+
+const video = document.getElementById('video');
+const loading = document.getElementById('loading');
+const noSource = document.getElementById('no-source');
+const controls = document.getElementById('controls');
+const streamStatus = document.getElementById('stream-status');
+const progressBar = document.getElementById('progress-bar');
+const timeDisplay = document.getElementById('time-display');
+const volumeIcon = document.getElementById('volume-icon');
+const volumeSlider = document.getElementById('volume-slider');
+const volumeVal = document.getElementById('volume-val');
+const qualitySelect = document.getElementById('quality-select');
+const btnRecord = document.getElementById('btn-record');
+const btnScreenshot = document.getElementById('btn-screenshot');
+const recIndicator = document.getElementById('rec-indicator');
+const toast = document.getElementById('toast');
+
+let hls = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let isMuted = false;
+
+// ── 获取视频源 ──
+function getVideoUrl() {
+  const params = new URLSearchParams(location.search);
+  return params.get('url') || localStorage.getItem('live_current_url') || null;
+}
+
+function getSources() {
+  try {
+    const raw = localStorage.getItem('live_sources');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+// ── 初始化播放器 ──
+function initPlayer(url) {
+  if (hls) { hls.destroy(); hls = null; }
+
+  if (Hls.isSupported()) {
+    hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+      loading.classList.add('hide');
+      buildQualityLevels(data.levels);
+      video.play().catch(() => {});
+    });
+    hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+      const level = hls.levels[data.level];
+      if (level) showToast(`清晰度: ${level.height}p`);
+    });
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) {
+        streamStatus.textContent = '连接失败';
+        streamStatus.classList.add('offline');
+        showToast('播放出错，正在重试...');
+      }
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari native HLS
+    video.src = url;
+    video.addEventListener('loadedmetadata', () => {
+      loading.classList.add('hide');
+      video.play();
+    });
+  } else {
+    loading.classList.add('hide');
+    noSource.classList.add('show');
+  }
+}
+
+// ── 清晰度选择 ──
+function buildQualityLevels(levels) {
+  qualitySelect.innerHTML = '<option value="auto">自动</option>';
+  levels.forEach((l, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${l.height}p`;
+    qualitySelect.appendChild(opt);
+  });
+  qualitySelect.addEventListener('change', () => {
+    const v = qualitySelect.value;
+    if (hls) hls.currentLevel = v === 'auto' ? -1 : parseInt(v);
+  });
+}
+
+// ── 进度更新 ──
+video.addEventListener('timeupdate', () => {
+  if (!video.duration) return;
+  const pct = (video.currentTime / video.duration) * 100;
+  progressBar.style.width = pct + '%';
+  const cur = fmtTime(video.currentTime);
+  const dur = fmtTime(video.duration);
+  timeDisplay.textContent = `${cur} / ${dur}`;
+});
+
+video.addEventListener('progress', () => {
+  if (video.buffered.length > 0) {
+    const end = video.buffered.end(video.buffered.length - 1);
+    // buffered progress shown via different color if needed
+  }
+});
+
+function fmtTime(s) {
+  if (!s || isNaN(s)) return '00:00';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = Math.floor(s % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── 音量控制 ──
+volumeSlider.addEventListener('input', () => {
+  video.volume = parseFloat(volumeSlider.value);
+  volumeVal.textContent = Math.round(video.volume * 100) + '%';
+  isMuted = video.volume === 0;
+  volumeIcon.textContent = isMuted ? '🔇' : '🔊';
+});
+
+function toggleMute() {
+  isMuted = !isMuted;
+  video.muted = isMuted;
+  volumeIcon.textContent = isMuted ? '🔇' : '🔊';
+  if (!isMuted && video.volume === 0) { video.volume = 0.5; volumeSlider.value = 0.5; }
+}
+
+// ── 进度条点击跳转 ──
+document.getElementById('progress-bar-wrap').addEventListener('click', (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const ratio = (e.clientX - rect.left) / rect.width;
+  if (video.duration) video.currentTime = ratio * video.duration;
+});
+
+// ── 全屏 ──
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+    video.webkitRequestFullscreen?.();
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+// ── 录屏 ──
+btnRecord.addEventListener('click', () => {
+  if (!isRecording) startRecording();
+  else stopRecording();
+});
+
+function startRecording() {
+  const stream = video.captureStream ? video.captureStream() : video.srcObject;
+  if (!stream) { showToast('无法获取视频流'); return; }
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9' : 'video/webm';
+  try {
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+  } catch {
+    mediaRecorder = new MediaRecorder(stream);
+  }
+  recordedChunks = [];
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = downloadRecording;
+  mediaRecorder.start();
+  isRecording = true;
+  btnRecord.textContent = '停止录屏';
+  btnRecord.classList.add('recording');
+  recIndicator.classList.add('show');
+  showToast('录屏开始');
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  isRecording = false;
+  btnRecord.textContent = '录屏';
+  btnRecord.classList.remove('recording');
+  recIndicator.classList.remove('show');
+}
+
+function downloadRecording() {
+  if (recordedChunks.length === 0) return;
+  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `录屏_${Date.now()}.webm`; a.click();
+  URL.revokeObjectURL(url);
+  showToast('录屏已保存');
+}
+
+// ── 截图 ──
+btnScreenshot.addEventListener('click', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `截图_${Date.now()}.png`; a.click();
+    URL.revokeObjectURL(url);
+    showToast('截图已保存');
+  });
+});
+
+// ── 控件显示/隐藏 ──
+let controlsTimer = null;
+document.addEventListener('mousemove', () => {
+  controls.classList.add('show');
+  clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(() => {
+    if (!document.fullscreenElement) controls.classList.remove('show');
+  }, 3000);
+});
+
+// ── Toast ──
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// ── 启动 ──
+const url = getVideoUrl();
+const sources = getSources();
+
+if (url) {
+  localStorage.setItem('live_current_url', url);
+  streamStatus.textContent = '正在连接...';
+  initPlayer(url);
+} else if (sources.length > 0) {
+  // 尝试第一个有效源
+  const trySource = (i = 0) => {
+    if (i >= sources.length) {
+      loading.classList.add('hide');
+      noSource.classList.add('show');
+      return;
+    }
+    const src = sources[i];
+    streamStatus.textContent = `尝试源 ${i + 1}/${sources.length}...`;
+    initPlayer(src);
+    setTimeout(() => {
+      if (!video.src && !hls?.media) trySource(i + 1);
+    }, 8000);
+  };
+  trySource();
+} else {
+  loading.classList.add('hide');
+  noSource.classList.add('show');
+}
+
+// 初始显示控制栏一会儿
+controls.classList.add('show');
+setTimeout(() => {
+  if (!document.fullscreenElement) controls.classList.remove('show');
+}, 4000);
+</script>
+</body>
+</html>
