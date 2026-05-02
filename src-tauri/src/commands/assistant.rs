@@ -905,47 +905,11 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
         .as_millis();
     let window_label = format!("lobster_office_{}", ts);
 
-    // lobster-office.html 路径：打包后位于 resources 目录
-    // 用 app.path().resource_path() 获取打包后的资源根目录
-    let resources_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("获取资源路径失败: {}", e))?;
-    // 尝试多种可能的位置，增强兼容性
-    let primary_path = resources_path.join("lobster-office.html");
-    let html_path = if primary_path.exists() {
-        primary_path
-    } else {
-        // 尝试相对于 app exe 所在目录
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_default();
-        let alt = exe_dir.join("resources").join("lobster-office.html");
-        if alt.exists() {
-            alt
-        } else {
-            // 尝试 exe 同级目录（不放在 resources 子目录）
-            let alt2 = exe_dir.join("lobster-office.html");
-            if alt2.exists() {
-                alt2
-            } else {
-                // 回退：直接使用 primary_path
-                primary_path
-            }
-        }
-    };
-    if !html_path.exists() {
-        return Err(format!(
-            "龙虾办公室页面不存在，请重新安装程序（已查找: {}）",
-            html_path.display()
-        ));
-    }
-
+    // 走 frontendDist 内置 HTTP 服务器（与 live-player 相同），路径 /lobster-office
     WebviewWindowBuilder::new(
         &app,
         &window_label,
-        WebviewUrl::App(html_path.to_string_lossy().replace('\\', "/").into()),
+        WebviewUrl::App("/lobster-office".into()),
     )
     .title("🦞 龙虾办公室")
     .inner_size(1024.0, 640.0)
