@@ -544,6 +544,7 @@ export const api = {
   hermesConfigRawRead: () => invoke('hermes_config_raw_read'),
   hermesConfigRawWrite: (yaml) => invoke('hermes_config_raw_write', { yaml }),
   hermesFetchModels: (baseUrl, apiKey, apiType) => invoke('hermes_fetch_models', { baseUrl, apiKey, apiType: apiType || null }),
+  hermesListProviders: () => cachedInvoke('hermes_list_providers', {}, 30000),
   hermesUpdateModel: (model) => invoke('hermes_update_model', { model }),
   hermesDetectEnvironments: () => invoke('hermes_detect_environments'),
   hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url: url || null }),
