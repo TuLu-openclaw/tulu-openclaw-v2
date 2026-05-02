@@ -25,6 +25,17 @@ async function _openGlobalBuiltinInIndependentWindow() {
   }
 }
 
+async function _openStarOfficeWindow() {
+  try {
+    await api.openStarOfficeWindow()
+    toast('已打开星际办公室', 'success')
+    return true
+  } catch (err) {
+    toast(err?.message || '星际办公室窗口打开失败', 'error')
+    return false
+  }
+}
+
 // === 引擎切换器 ===
 function _renderEngineSwitcher() {
   const engines = listEngines()
@@ -96,7 +107,7 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/miaogu-verify', label: '喵咕验证', icon: 'shield' },
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '屠戮影视', icon: 'movie' },
-      { dataAction: 'open-lobster-office', label: '龙虾办公室', icon: 'lobster' },
+      { dataAction: 'open-star-office', label: '龙虾办公室', icon: 'star' },
       { route: '/coming-soon', label: '全球内置', icon: 'lock' },
       { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
     ]
@@ -190,6 +201,7 @@ const ICONS = {
   rocket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>',
     movie: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>',
     lobster: '<svg viewBox="0 0 24 24" fill="none" stroke="#e94560" stroke-width="2"><ellipse cx="12" cy="14" rx="7" ry="5"/><ellipse cx="12" cy="9" rx="4" ry="3"/><circle cx="10" cy="8" r="1" fill="#e94560"/><circle cx="14" cy="8" r="1" fill="#e94560"/><path d="M5 14 Q3 12 4 10" stroke-linecap="round"/><path d="M19 14 Q21 12 20 10" stroke-linecap="round"/><ellipse cx="6" cy="13" rx="2" ry="1.5" fill="#e94560" stroke="#c1122f"/><ellipse cx="18" cy="13" rx="2" ry="1.5" fill="#e94560" stroke="#c1122f"/><path d="M9 5 Q8 3 9 2"/><path d="M15 5 Q16 3 15 2"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
 }
 
 let _delegated = false
@@ -343,6 +355,8 @@ export function renderSidebar(el) {
             navigate('/h/setup')
             renderSidebar(el)
           }
+        } else if (dataAction === 'open-star-office') {
+          _openStarOfficeWindow()
         } else if (route) {
           if (route === GLOBAL_BUILTIN_ROUTE) {
             _openGlobalBuiltinInIndependentWindow()
@@ -458,9 +472,9 @@ export function renderSidebar(el) {
         _closeMobileSidebar()
         return
       }
-
-      if (dataAction === 'open-lobster-office') {
-        api.openLobsterOffice().catch(err => toast('打开龙虾办公室失败: ' + err, 'error'))
+      if (dataAction === 'open-star-office') {
+        _openStarOfficeWindow()
+        _closeMobileSidebar()
         return
       }
 

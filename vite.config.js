@@ -71,6 +71,9 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'lobster-office': path.resolve(__dirname, 'lobster-office.html'),
+        'global-builtin': path.resolve(__dirname, 'src/global-builtin.html'),
+        'live-player': path.resolve(__dirname, 'src/live-player.html'),
+        'star-office': path.resolve(__dirname, 'star-office.html'),
       },
       output: {
         manualChunks(id) {

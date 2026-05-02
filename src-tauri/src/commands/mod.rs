@@ -28,6 +28,7 @@ pub mod proxy;
 pub mod service;
 pub mod skillhub;
 pub mod skills;
+pub mod star_office;
 pub mod tvbox;
 pub mod update;
 

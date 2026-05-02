@@ -369,6 +369,7 @@ export const api = {
   openGlobalBuiltinWindow: () => invoke('open_global_builtin_window'),
   fetchLiveSources: (url) => invoke('fetch_live_sources', { url }),
   openLivePlayer: (sources) => invoke('open_live_player', { sourcesJson: sources }),
+  openStarOfficeWindow: () => invoke('open_star_office_window'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
   setNpmRegistry: (registry) => { invalidate('get_npm_registry'); return invoke('set_npm_registry', { registry }) },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),

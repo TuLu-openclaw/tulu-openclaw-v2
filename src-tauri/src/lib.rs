@@ -184,7 +184,11 @@ pub fn run() {
             assistant::fetch_live_sources,
             assistant::open_live_player,
             #[cfg(target_os = "windows")]
+            assistant::open_live_player,
+            #[cfg(target_os = "windows")]
             assistant::vod_fetch,
+            #[cfg(target_os = "windows")]
+            star_office::open_star_office_window,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,
