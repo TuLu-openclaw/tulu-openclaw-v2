@@ -931,17 +931,15 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String,
     use tauri::WebviewWindowBuilder;
 
     const WINDOW_LABEL: &str = "global_builtin_window";
-    const TARGET_URL: &str = "https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific";
 
     if let Some(existing) = app.get_webview_window(WINDOW_LABEL) {
         let _ = existing.show();
         let _ = existing.unminimize();
         let _ = existing.set_focus();
-        let _ = existing.navigate(TARGET_URL.parse().map_err(|e| format!("URL解析失败: {}", e))?);
         return Ok("focus".into());
     }
 
-    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::External(TARGET_URL.parse().map_err(|e| format!("URL解析失败: {}", e))?))
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::App("/global-builtin".into()))
         .title("全球内置")
         .inner_size(1280.0, 840.0)
         .min_inner_size(960.0, 640.0)
@@ -950,6 +948,44 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String,
         .center()
         .build()
         .map_err(|e| format!("创建全球内置窗口失败: {}", e))?;
+
+    Ok("ok".into())
+}
+
+/// 打开直播播放器独立窗口
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn open_live_player(app: tauri::AppHandle, sources: String) -> Result<String, String> {
+    use tauri::Manager;
+    use tauri::WebviewUrl;
+    use tauri::WebviewWindowBuilder;
+
+    const WINDOW_LABEL: &str = "live_player_window";
+
+    // 先关闭已存在的播放器窗口
+    if let Some(existing) = app.get_webview_window(WINDOW_LABEL) {
+        let _ = existing.close();
+    }
+
+    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::App("/live-player".into()))
+        .title("🦞 直播播放器")
+        .inner_size(1280.0, 760.0)
+        .min_inner_size(800.0, 480.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+
+    // 将视频源列表写入 localStorage，让播放器页面读取
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        let safe_sources = sources.replace('\\', "\\\\").replace("'", "\\'");
+        let js = format!("localStorage.setItem('live_sources', JSON.stringify({})); void 0;", safe_sources);
+        let _ = window.eval(&js);
+    }
+
+    Ok("ok".into())
+}
 
     Ok("ok".into())
 }
