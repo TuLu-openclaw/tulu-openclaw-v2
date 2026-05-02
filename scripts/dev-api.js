@@ -2960,6 +2960,27 @@ function serverCached(key, ttlMs, fn) {
 // === API Handlers ===
 
 const handlers = {
+  // Hermes Gateway 操作（前端按钮调用入口）
+  hermes_gateway_action({ action }) {
+    const { spawnOpenclawSync } = require('./dev-api.js')
+    switch (action) {
+      case 'start':
+        spawnOpenclawSync(['gateway', 'run'], { timeout: 0, windowsHide: true, cwd: require('os').homedir() })
+        return { success: true, message: 'Gateway 启动命令已发送' }
+      case 'stop':
+        spawnOpenclawSync(['gateway', 'stop'], { timeout: 5000, windowsHide: true, cwd: require('os').homedir() })
+        return { success: true, message: 'Gateway 停止命令已发送' }
+      case 'restart':
+        spawnOpenclawSync(['gateway', 'stop'], { timeout: 5000, windowsHide: true, cwd: require('os').homedir() })
+        setTimeout(() => {
+          spawnOpenclawSync(['gateway', 'run'], { timeout: 0, windowsHide: true, cwd: require('os').homedir() })
+        }, 2000)
+        return { success: true, message: 'Gateway 重启命令已发送' }
+      default:
+        throw new Error(`未知操作: ${action}`)
+    }
+  },
+
   // 配置读写
   read_openclaw_config() {
     return readOpenclawConfigRequired()

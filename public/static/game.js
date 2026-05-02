@@ -59,8 +59,7 @@ async function loadMemo() {
   const memoContent = document.getElementById('memo-content');
 
   try {
-    const response = await fetch('/yesterday-memo?t=' + Date.now(), { cache: 'no-store' });
-    const data = await response.json();
+    const response = await window.__TAURI__.core.invoke('get_star_office_yesterday_memo');
 
     if (data.success && data.memo) {
       memoDate.textContent = data.date || '';
@@ -257,11 +256,7 @@ const AREA_POSITIONS = {
 
 // 状态控制栏函数（用于测试）
 function setState(state, detail) {
-  fetch('/set_state', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ state, detail })
-  }).then(() => fetchStatus());
+  window.__TAURI__.core.invoke('set_star_office_state', { newState: state, detail, progress: 0 }).then(() => fetchStatus());
 }
 
 // 初始化：先检测 WebP 支持，再启动游戏
@@ -701,8 +696,7 @@ function normalizeState(s) {
 }
 
 function fetchStatus() {
-  fetch('/status')
-    .then(response => response.json())
+  window.__TAURI__.core.invoke('get_star_office_status')
     .then(data => {
       const nextState = normalizeState(data.state);
       const stateInfo = STATES[nextState] || STATES.idle;
@@ -912,8 +906,7 @@ function showCatBubble() {
 }
 
 function fetchAgents() {
-  fetch('/agents?t=' + Date.now(), { cache: 'no-store' })
-    .then(response => response.json())
+  window.__TAURI__.core.invoke('get_star_office_agents')
     .then(data => {
       if (!Array.isArray(data)) return;
       // 重置位置计数器

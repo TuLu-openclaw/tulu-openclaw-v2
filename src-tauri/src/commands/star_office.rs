@@ -334,10 +334,9 @@ pub fn save_star_office_asset_positions(
     Ok(())
 }
 
-/// 获取昨日备忘录
+/// 获取昨日备忘录（JSON格式，供game.js调用）
 #[tauri::command]
-pub fn get_star_office_yesterday_memo() -> Result<String, String> {
-    // 读取昨日的备忘录文件
+pub fn get_star_office_yesterday_memo() -> Result<serde_json::Value, String> {
     let workspace = dirs::data_local_dir()
         .unwrap_or_default()
         .join("openclaw")
@@ -348,10 +347,18 @@ pub fn get_star_office_yesterday_memo() -> Result<String, String> {
         .unwrap_or_default();
     let memo_path = workspace.join("memory").join(format!("{}.md", yesterday));
     if memo_path.exists() {
-        fs::read_to_string(&memo_path)
-            .map_err(|e| e.to_string())
+        let content = fs::read_to_string(&memo_path).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({
+            "success": true,
+            "memo": content,
+            "date": yesterday
+        }))
     } else {
-        Ok(String::new())
+        Ok(serde_json::json!({
+            "success": false,
+            "memo": "",
+            "date": yesterday
+        }))
     }
 }
 
