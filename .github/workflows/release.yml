@@ -53,6 +53,7 @@ jobs:
 
       - name: Build Tauri app
         run: |
+          $env:CI = "true"
           choco install mingw -y --no-progress --ignore-checksums
           npm run build
           npm run tauri build
@@ -112,6 +113,7 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
           RUSTFLAGS: "-C codegen-units=1"
+          CI: "true"
         run: |
           choco install mingw -y --no-progress --ignore-checksums
           npm run build
@@ -177,7 +179,7 @@ jobs:
           RUSTFLAGS: "-C codegen-units=1"
         run: |
           npm run build
-          npm run tauri build -- --target aarch64-apple-darwin
+          CI=true npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Find DMG
         id: find_dmg
@@ -236,7 +238,7 @@ jobs:
           RUSTFLAGS: "-C codegen-units=1"
         run: |
           npm run build
-          npm run tauri build -- --target x86_64-apple-darwin
+          CI=true npm run tauri build -- --target x86_64-apple-darwin
 
       - name: Find DMG
         id: find_dmg
@@ -303,7 +305,7 @@ jobs:
           RUSTFLAGS: "-C codegen-units=1"
         run: |
           npm run build
-          npm run tauri build
+          CI=true npm run tauri build
 
       - name: Normalize artifact tag
         shell: bash
