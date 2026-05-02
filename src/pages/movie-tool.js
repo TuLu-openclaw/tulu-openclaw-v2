@@ -2381,43 +2381,70 @@ function pickDirectUrl(url) {
 
   function extractFromScript(html, base) {
     const results = []
-    // 预处理：把 JavaScript 转义的 \/ 和 \u 替换成正常字符
     const fixed = html.replace(/\\\//g, '/').replace(/\\u([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    // ── 1. 从 <script> 块中提取 JS 变量赋值的 URL ──────────
-    const varPatterns = [
-      /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
-      /(?:player|video|src|media|videoUrl|video_url|playUrl|play_url)\s*[=:]\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
-      /url\s*:\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/gi,
-    ]
-    const varRe = /(?:var|let|const)\s+\w+\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)["']|player\.src\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)|video\.src\s*=\s*["']([^"']+\.(?:m3u8|mp4)[^"']*)/gi
-    // 通用：寻找包含 m3u8/mp4 的赋值语句或对象属性
+
+    function tryDecode(s) {
+      const cands = []
+      try { const d = decodeURIComponent(s); if (d !== s && /^https?:/.test(d)) cands.push(d) } catch {}
+      try { const d = unescape(s); if (d !== s && /^https?:/.test(d)) cands.push(d) } catch {}
+      try {
+        const b = atob(s.replace(/-/g, '+').replace(/_/g, '/'))
+        try { const d = decodeURIComponent(b); if (/^https?:/.test(d)) cands.push(d) } catch {}
+        if (/^https?:/.test(b)) cands.push(b)
+      } catch {}
+      return cands
+    }
+
+    function addResult(raw) {
+      const url = raw.trim().replace(/[\x00-\x1f\s\"'<>]/g, '').split('?')[0]
+      if (!url.startsWith('http')) return
+      const type = url.includes('.m3u8') ? 'm3u8' : url.includes('.mp4') ? 'mp4' : url.includes('.mpd') ? 'dash' : (url.includes('.m4s') || url.includes('init.mp4')) ? 'm4s' : 'link'
+      if (!['m3u8','mp4','dash','m4s'].includes(type)) return
+      const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4|mpd|m4s).*/i, '')) || type.toUpperCase() + ' 视频'
+      if (!results.some(r => r.url === url)) results.push({ name, url, thumb: '', type })
+    }
+
+    // ── 1. 直接正则 ──────────────────────────────────
+    const directRe = /[\"'](https?:[^\"'\s<>]+(?:\.m3u8|\.mp4|\.mpd|init\.mp4(?:\?[^\"']*)?)[^\"'\s<>]*)[\"']/gi
+    let m
+    while ((m = directRe.exec(fixed)) !== null) addResult(m[1])
+
+    // ── 2. 模板字符串 ───────────────────────────────
+    const btRe = /`([^`]+(?:\.m3u8|\.mp4|\.mpd)[^`]*)/gi
+    while ((m = btRe.exec(fixed)) !== null) addResult(m[1])
+
+    // ── 3. 字符串拼接 ───────────────────────────────
+    const concatRe = /[\"']([^"']*(?:base|src|url|path|stream)[^"']*)[\"']\s*\+\s*[\"']([^+"']*(?:\.m3u8|\.mp4)[^"']*)[\"']/gi
+    let c
+    while ((c = concatRe.exec(fixed)) !== null) addResult(c[1] + c[2])
+
+    // ── 4. script 块 ────────────────────────────────
     const scriptBlocks = fixed.match(/<script[^>]*>[\s\S]*?<\/script>/gi) || []
     scriptBlocks.forEach(block => {
       const lines = block.replace(/<\/script>/i, '').replace(/<script[^>]*>/i, '')
-      const matches = lines.match(/["']([^"']+\.(?:m3u8|mp4)[^"']*)["']/g) || []
-      matches.forEach(raw => {
-        const url = raw.replace(/["' >]/g, '').split('?')[0]
-        if (url.startsWith('http')) {
-          const type = url.includes('.m3u8') ? 'm3u8' : 'mp4'
-          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || (type === 'm3u8' ? 'M3U8' : 'MP4') + ' 视频'
-          results.push({ name, url, thumb: '', type })
-        }
-      })
+      const strRe = /[\"']([^"']+(?:m3u8|mp4|mpd)[^"']*)[\"']/gi
+      let s
+      while ((s = strRe.exec(lines)) !== null) addResult(s[1])
+      const encRe = /(?:encodeURIComponent|decodeURIComponent|escape|unescape|atob)\s*\(\s*[\"']([^"']+)[\"']/gi
+      while ((s = encRe.exec(lines)) !== null) tryDecode(s[1]).forEach(addResult)
+      const evalRe = /(?:eval|Function)\s*\([\s\S]*?[\"']([^"']+(?:m3u8|mp4|mpd)[^"']*)[\"']/gi
+      while ((s = evalRe.exec(lines)) !== null) addResult(s[1])
     })
-    // ── 2. JSON 块中提取 m3u8/mp4 ──────────────────────
+
+    // ── 5. JSON 块 ─────────────────────────────────
     const jsonBlocks = fixed.match(/\{[^{}]{50,50000}\}/g) || []
     jsonBlocks.forEach(block => {
-      const m3u8Matches = block.match(/"(https?:[^"]+\.m3u8[^"]*)"/gi) || []
-      const mp4Matches = block.match(/"(https?:[^"]+\.mp4[^"]*)"/gi) || []
-      ;[...m3u8Matches, ...mp4Matches].forEach(raw => {
-        const url = raw.replace(/["' >]/g, '').split('?')[0]
-        if (url.startsWith('http')) {
-          const type = url.includes('.m3u8') ? 'm3u8' : 'mp4'
-          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || (type === 'm3u8' ? 'M3U8' : 'MP4') + ' 视频'
-          results.push({ name, url, thumb: '', type })
-        }
-      })
+      const all = block.match(/[\"'](https?:[^\"'\s<>]+(?:\.m3u8|\.mp4|\.mpd)[^\"'\s<>]*)[\"']/gi) || []
+      all.forEach(raw => addResult(raw.replace(/[\"'\s]/g, '')))
     })
+
+    // ── 6. iframe src ─────────────────────────────
+    const iframeRe = /<iframe[^>]+src=[\"']([^"']+)[\"']/gi
+    while ((m = iframeRe.exec(fixed)) !== null) {
+      const src = m[1]
+      if (/player|video|live|embed|stream/i.test(src) && /\.(?:m3u8|mp4)/i.test(src)) addResult(src)
+    }
+
     return results
   }
 

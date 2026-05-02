@@ -147,6 +147,12 @@ export function render() {
   let targetMode = 'local'
   let customUrl = ''
   let gatewayState = null
+  let modelConfigOpen = false
+  let modelConfigBusy = false
+  let cfgProvider = ''
+  let cfgApiKey = ''
+  let cfgModel = ''
+  let cfgBaseUrl = ''
 
   function syncCustomInput() {
     const input = el.querySelector('#hm-services-custom-url')
@@ -303,7 +309,45 @@ export function render() {
             <div class="hm-stack" style="margin-top:14px">
               <a class="hm-btn hm-btn--ghost hm-btn--sm" href="#/h/config">${esc(t('engine.servicesOpenConfig'))}</a>
               <a class="hm-btn hm-btn--ghost hm-btn--sm" href="#/h/env">${esc(t('engine.servicesOpenEnv'))}</a>
+              <button class="hm-btn hm-btn--cta hm-btn--sm hm-services-open-model-cfg" ${actionBusy || modelConfigBusy ? 'disabled' : ''}>${esc(modelConfigOpen ? '收起' : '设置模型')}</button>
             </div>
+            ${modelConfigOpen ? `
+            <div class="hm-model-cfg" style="margin-top:16px;border-top:1px solid var(--hm-border);padding-top:16px">
+              <div style="margin-bottom:12px;color:var(--text-secondary);font-size:13px">设置模型配置（provider + API Key）</div>
+              <div style="display:grid;gap:10px">
+                <label class="hm-field">
+                  <span class="hm-field-label">Provider</span>
+                  <select id="hm-model-cfg-provider" class="hm-input" style="width:100%">
+                    <option value="">— 选择 Provider —</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="ollama">Ollama（本地）</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="zai">智谱 GLM</option>
+                    <option value="qwen">阿里通义</option>
+                    <option value="minimax">MiniMax</option>
+                    <option value=" moonshot">Moonshot</option>
+                    <option value="custom">自定义（仅填 Base URL）</option>
+                  </select>
+                </label>
+                <label class="hm-field">
+                  <span class="hm-field-label">API Key</span>
+                  <input id="hm-model-cfg-apikey" class="hm-input" type="password" placeholder="sk-..." style="width:100%" value="${esc(cfgApiKey)}" />
+                </label>
+                <label class="hm-field">
+                  <span class="hm-field-label">模型名称（可选）</span>
+                  <input id="hm-model-cfg-model" class="hm-input" type="text" placeholder="如 gpt-4o、claude-3-5-sonnet" style="width:100%" value="${esc(cfgModel)}" />
+                </label>
+                <label class="hm-field">
+                  <span class="hm-field-label">Base URL（可选）</span>
+                  <input id="hm-model-cfg-baseurl" class="hm-input" type="text" placeholder="https://api.openai.com/v1" style="width:100%" value="${esc(cfgBaseUrl)}" />
+                </label>
+                <div style="color:var(--text-secondary);font-size:12px;margin-top:4px">提示：Provider 选择后，系统自动写入 ~/.hermes/.env 和 config.yaml</div>
+                <button class="hm-btn hm-btn--cta hm-btn--sm hm-model-cfg-save" ${modelConfigBusy ? 'disabled' : ''} style="align-self:flex-end">${esc(modelConfigBusy ? '保存中...' : '保存配置')}</button>
+              </div>
+            </div>` : ''}
           </div>
         </section>
       </div>
@@ -601,6 +645,43 @@ export function render() {
     el.querySelector('.hm-services-upgrade')?.addEventListener('click', () => runMaintenance('upgrade'))
     el.querySelector('.hm-services-uninstall')?.addEventListener('click', () => runMaintenance('uninstall'))
     el.querySelector('.hm-services-uninstall-clean')?.addEventListener('click', () => runMaintenance('uninstall-clean'))
+    el.querySelector('.hm-services-open-model-cfg')?.addEventListener('click', () => {
+      modelConfigOpen = !modelConfigOpen
+      if (modelConfigOpen) {
+        cfgProvider = config?.provider || ''
+        cfgApiKey = ''
+        cfgModel = config?.model || ''
+        cfgBaseUrl = config?.base_url || ''
+      }
+      draw()
+    })
+    el.querySelector('.hm-model-cfg-save')?.addEventListener('click', async () => {
+      if (modelConfigBusy) return
+      const prov = el.querySelector('#hm-model-cfg-provider')?.value || ''
+      const apiKey = el.querySelector('#hm-model-cfg-apikey')?.value || ''
+      const model = el.querySelector('#hm-model-cfg-model')?.value || ''
+      const baseUrl = el.querySelector('#hm-model-cfg-baseurl')?.value || ''
+      if (!prov) {
+        setPageMessage('请选择 Provider', 'error'); draw(); return
+      }
+      if (!apiKey && prov !== 'ollama' && prov !== 'custom') {
+        setPageMessage('请输入 API Key', 'error'); draw(); return
+      }
+      modelConfigBusy = true
+      setPageMessage('正在保存模型配置...', 'muted')
+      draw()
+      try {
+        const result = await api.configureHermes(prov, apiKey, model || null, baseUrl || null)
+        setPageMessage('模型配置已保存: ' + result, 'success')
+        modelConfigOpen = false
+        await refresh(false)
+      } catch (err) {
+        setPageMessage('保存失败: ' + stripError(err), 'error')
+      } finally {
+        modelConfigBusy = false
+        draw()
+      }
+    })
   }
 
   const offGatewayState = onHermesStateChange((state) => {
