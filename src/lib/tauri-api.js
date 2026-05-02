@@ -367,6 +367,7 @@ export const api = {
   uninstallGateway: () => invoke('uninstall_gateway'),
   openLobsterOffice: () => invoke('open_lobster_office'),
   openGlobalBuiltinWindow: () => invoke('open_global_builtin_window'),
+  fetchLiveSources: (url) => invoke('fetch_live_sources', { url }, 30000),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
   setNpmRegistry: (registry) => { invalidate('get_npm_registry'); return invoke('set_npm_registry', { registry }) },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),

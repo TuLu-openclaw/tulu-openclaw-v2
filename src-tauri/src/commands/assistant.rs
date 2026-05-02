@@ -959,6 +959,113 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
     Ok("ok".into())
 }
 
+// ---------------------------------------------------------------------------
+// fetch_live_sources — 扫描网页提取 m3u8 视频源
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
+    use regex::Regex;
+
+    if url.trim().is_empty() {
+        return Err("URL 不能为空".into());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let html = resp.text().await.map_err(|e| format!("读取页面失败: {e}"))?;
+    let mut sources: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    let re_m3u8 = Regex::new(r#"(?i)(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)"#).unwrap();
+    let re_quote = Regex::new(r#"(?i)["']([^"']*\.m3u8[^"']*)["']"#).unwrap();
+
+    // 扫描 HTML 中的 m3u8 链接
+    for cap in re_m3u8.captures_iter(&html) {
+        if let Some(m) = cap.get(1) {
+            let u = m.as_str().to_string();
+            if seen.insert(u.clone()) { sources.push(u); }
+        }
+    }
+    for cap in re_quote.captures_iter(&html) {
+        if let Some(m) = cap.get(1) {
+            let u = m.as_str().to_string();
+            if seen.insert(u.clone()) { sources.push(u); }
+        }
+    }
+
+    // 扫描同源 JS 文件中的 m3u8 链接
+    let re_script = Regex::new(r#"(?i)<script[^>]+src=["']([^"']+\.js[^"']*)["']"#).unwrap();
+    let base_url = url::Url::parse(&url).ok();
+    let script_urls: Vec<String> = re_script.captures_iter(&html)
+        .filter_map(|c| c.get(1).map(|m| {
+            let src = m.as_str();
+            if src.starts_with("http") {
+                src.to_string()
+            } else if let Some(ref base) = base_url {
+                base.join(src).map(|u| u.to_string()).unwrap_or_default()
+            } else {
+                String::new()
+            }
+        }))
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    for script_url in script_urls.into_iter().take(10) {
+        if let Ok(script_resp) = client.get(&script_url).send().await {
+            if let Ok(script_text) = script_resp.text().await {
+                for cap in re_m3u8.captures_iter(&script_text) {
+                    if let Some(m) = cap.get(1) {
+                        let u = m.as_str().to_string();
+                        if seen.insert(u.clone()) { sources.push(u); }
+                    }
+                }
+            }
+        }
+    }
+
+    // 探测常见 m3u8 路径
+    if sources.is_empty() {
+        if let Some(ref base) = base_url {
+            let origin = base.origin().ascii_serialization();
+            let candidates = [
+                "/live/live.m3u8", "/live/stream.m3u8", "/stream.m3u8",
+                "/live.m3u8", "/index.m3u8", "/hls/stream.m3u8",
+                "/video/live.m3u8", "/play/live.m3u8",
+            ];
+            for path in &candidates {
+                let probe_url = format!("{origin}{path}");
+                if let Ok(probe_resp) = client.get(&probe_url).send().await {
+                    if probe_resp.status().is_success() {
+                        if let Ok(body) = probe_resp.text().await {
+                            if body.contains("#EXTM3U") {
+                                if seen.insert(probe_url.clone()) { sources.push(probe_url); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(sources)
+}
+
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String, String> {

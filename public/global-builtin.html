@@ -8,7 +8,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsoft YaHei', sans-serif; }
 
-/* 密码遮罩 - 覆盖全屏 */
+/* 密码遮罩 */
 #auth-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -23,9 +23,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsof
   opacity: 0;
   pointer-events: none;
 }
-.auth-box {
-  text-align: center;
-}
+.auth-box { text-align: center; }
 .auth-input {
   width: 280px;
   padding: 14px 20px;
@@ -39,9 +37,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsof
   letter-spacing: 4px;
   transition: border-color 0.2s;
 }
-.auth-input:focus {
-  border-color: #555;
-}
+.auth-input:focus { border-color: #555; }
 .auth-input.error {
   border-color: #e74c3c;
   animation: shake 0.3s;
@@ -50,6 +46,50 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsof
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-6px); }
   75% { transform: translateX(6px); }
+}
+
+/* 全屏悬浮按钮 */
+#fullscreen-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 888888;
+  display: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(231, 76, 60, 0.5);
+  transition: transform 0.2s, box-shadow 0.2s;
+  font-size: 24px;
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+}
+#fullscreen-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 28px rgba(231, 76, 60, 0.7);
+}
+#fullscreen-btn:active {
+  transform: scale(0.95);
+}
+
+/* 加载提示 */
+#toast {
+  position: fixed;
+  bottom: 90px;
+  right: 24px;
+  z-index: 888889;
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  display: none;
+  max-width: 300px;
+  word-break: break-all;
 }
 
 /* 内容区域 */
@@ -69,6 +109,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsof
   </div>
 </div>
 
+<button id="fullscreen-btn" title="全屏播放">▶</button>
+<div id="toast"></div>
+
 <iframe id="content-frame" src="about:blank"></iframe>
 
 <script>
@@ -76,14 +119,27 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsof
   const overlay = document.getElementById('auth-overlay');
   const input = document.getElementById('pwd-input');
   const frame = document.getElementById('content-frame');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
+  const toast = document.getElementById('toast');
   const TARGET = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific';
   const PWD = '2552667173';
+  let currentUrl = TARGET;
 
+  // 显示提示
+  function showToast(msg, duration = 4000) {
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => { toast.style.display = 'none'; }, duration);
+  }
+
+  // 密码验证
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       if (input.value === PWD) {
         overlay.classList.add('hidden');
         frame.style.display = 'block';
+        fullscreenBtn.style.display = 'flex';
         frame.src = TARGET;
         setTimeout(() => overlay.remove(), 500);
       } else {
@@ -91,6 +147,58 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsof
         input.value = '';
         setTimeout(() => input.classList.remove('error'), 400);
       }
+    }
+  });
+
+  // iframe 加载完成后记录当前URL
+  frame.addEventListener('load', function() {
+    try {
+      // 跨域保护：只有同源才能访问
+      if (frame.contentWindow.location.href !== 'about:blank') {
+        currentUrl = frame.contentWindow.location.href;
+      }
+    } catch (_) {
+      // 跨域 iframe 无法访问其 location
+    }
+  });
+
+  // 全屏按钮：提取视频URL并打开播放器
+  fullscreenBtn.addEventListener('click', async function() {
+    fullscreenBtn.disabled = true;
+    fullscreenBtn.textContent = '⏳';
+    showToast('正在提取视频链接...');
+
+    try {
+      // 调用Rust后端扫描页面提取m3u8
+      const sources = await api.fetchLiveSources(currentUrl);
+
+      if (sources && sources.length > 0) {
+        // 取第一个m3u8链接
+        const videoUrl = sources[0];
+        showToast('找到视频源，正在打开播放器...');
+
+        // 打开独立播放器
+        await api.openPlayerWindow(videoUrl, '全屏播放', 0, '', '', '', '', '');
+      } else {
+        showToast('未检测到视频源，请尝试在页面上点击播放按钮后再试', 6000);
+      }
+    } catch (err) {
+      console.error('提取视频失败:', err);
+      showToast('提取失败: ' + (err.message || String(err)), 6000);
+    } finally {
+      fullscreenBtn.disabled = false;
+      fullscreenBtn.textContent = '▶';
+    }
+  });
+
+  // 监听来自iframe内部的消息（视频URL主动推送）
+  window.addEventListener('message', function(e) {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'STRIPCAM_VIDEO_URL' && e.data.url) {
+      showToast('检测到视频源，正在打开播放器...');
+      api.openPlayerWindow(e.data.url, '全屏播放', 0, '', '', '', '', '', '').catch(err => {
+        showToast('打开播放器失败: ' + String(err));
+      });
     }
   });
 })();
