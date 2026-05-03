@@ -1046,7 +1046,7 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
 
     // 扫描同源 JS 文件中的 m3u8 链接
     let re_script = Regex::new(r#"(?i)<script[^>]+src=["']([^"']+\.js[^"']*)["']"#).unwrap();
-    let base_url = url::Url::parse(&url).ok();
+    let base_url = reqwest::Url::parse(&url).ok();
     let script_urls: Vec<String> = re_script.captures_iter(&html)
         .filter_map(|c| c.get(1).map(|m| {
             let src = m.as_str();
