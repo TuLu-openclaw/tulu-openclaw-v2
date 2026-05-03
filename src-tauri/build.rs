@@ -8,8 +8,16 @@ fn main() {
         .join("resources")
         .join("Star-Office-UI-master");
 
-    println!("cargo:warning=Star-Office-UI src: {} (exists: {})", src.display(), src.exists());
-    println!("cargo:warning=Star-Office-UI dst: {} (exists: {})", dst.display(), dst.exists());
+    println!(
+        "cargo:warning=Star-Office-UI src: {} (exists: {})",
+        src.display(),
+        src.exists()
+    );
+    println!(
+        "cargo:warning=Star-Office-UI dst: {} (exists: {})",
+        dst.display(),
+        dst.exists()
+    );
 
     if src.exists() {
         if !dst.exists() {

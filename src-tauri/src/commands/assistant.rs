@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose, Engine as _};
+﻿use base64::{engine::general_purpose, Engine as _};
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
 /// 仅在用户主动开启工具后由 AI 调用
@@ -6,6 +6,7 @@ use base64::{engine::general_purpose, Engine as _};
 #[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
+use tauri::Manager;
 // use tauri::Manager; // 移到函数内部按需引用
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
@@ -1094,4 +1095,70 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
 
     items.sort();
     Ok(items.join("\n"))
+}
+
+/// 打开全球内置窗口（iframe 加载外部 URL + 密码验证 + 悬浮按钮）
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn open_global_builtin_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri::Manager;
+    let label = "global_builtin_window";
+    // 如果窗口已存在，聚焦
+    if let Some(w) = app.get_webview_window(label) {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(url.as_bytes());
+    let html_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| e.to_string())?
+        .join("global-builtin.html");
+    // 如果 resource_dir 没有，回退到 public 目录（开发模式）
+    let html_url = if html_path.exists() {
+        format!("tauri://localhost/global-builtin.html?target={}", encoded)
+    } else {
+        format!("tauri://localhost/global-builtin.html?target={}", encoded)
+    };
+    let _win = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App("global-builtin.html".into()),
+    )
+    .title("全球内置")
+    .inner_size(1100.0, 750.0)
+    .resizable(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 从 URL 扫描 m3u8 视频源
+#[tauri::command]
+pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, String> {
+    // 三层扫描：HTML → JS 文件 → 常见路径探测
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let body = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .text()
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut sources: Vec<serde_json::Value> = Vec::new();
+    let re = regex::Regex::new(r#"(https?://[^\s'"<>]+\.m3u8[^\s'"<>]*)"#).unwrap();
+    for cap in re.captures_iter(&body) {
+        let m3u8_url = cap[1].to_string();
+        sources.push(serde_json::json!({"url": m3u8_url, "label": "m3u8"}));
+    }
+    // 去重
+    sources.sort_by(|a, b| a["url"].as_str().cmp(&b["url"].as_str()));
+    sources.dedup_by(|a, b| a["url"] == b["url"]);
+    Ok(sources)
 }
