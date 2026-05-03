@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Global Builtin Overlay</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { 
+  width: 100%; height: 100%; 
+  background: transparent; 
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+#btn {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+  border: 3px solid white;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  -webkit-app-region: no-drag;
+  transition: transform 0.15s, box-shadow 0.15s;
+  user-select: none;
+}
+#btn:hover {
+  transform: scale(1.15);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+#btn:active {
+  transform: scale(0.95);
+}
+#btn.loading {
+  animation: spin 1s linear infinite;
+  pointer-events: none;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+#tooltip {
+  position: fixed;
+  left: 60px; top: 5px;
+  background: rgba(0,0,0,0.85);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: system-ui, sans-serif;
+  white-space: nowrap;
+  display: none;
+  z-index: 9999;
+  max-width: 300px;
+  word-break: break-all;
+}
+#tooltip.show { display: block; }
+#result {
+  position: fixed;
+  left: 60px; top: 40px;
+  background: rgba(0,0,0,0.9);
+  color: #00ff88;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  display: none;
+  max-width: 400px;
+  z-index: 9999;
+  border: 1px solid #00ff88;
+}
+#result.show { display: block; }
+</style>
+</head>
+<body>
+<button id="btn" title="提取播放链接">🎬</button>
+<div id="tooltip">点击提取 m3u8 链接</div>
+<div id="result"></div>
+<script type="module">
+const btn = document.getElementById('btn');
+const tooltip = document.getElementById('tooltip');
+const result = document.getElementById('result');
+
+let mainLabel = 'global_builtin_main';
+
+// 显示提示
+tooltip.classList.add('show');
+setTimeout(() => tooltip.classList.remove('show'), 3000);
+
+// 监听主窗口就绪事件
+window.__TAURI__.event.listen('main_window_ready', (event) => {
+  mainLabel = event.payload.main_label;
+  console.log('[Overlay] 主窗口已就绪:', mainLabel);
+});
+
+// 提取按钮点击
+btn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  btn.classList.add('loading');
+  btn.textContent = '⏳';
+  tooltip.classList.remove('show');
+  result.classList.remove('show');
+  
+  try {
+    // 通过 invoke 调用 Rust 后端获取页面 m3u8
+    const { invoke } = window.__TAURI__.core;
+    const sources = await invoke('fetch_live_sources', { url: '' });
+    
+    btn.classList.remove('loading');
+    btn.textContent = '🎬';
+    
+    if (sources && sources.length > 0) {
+      result.textContent = '找到: ' + sources.map(s => s.url).join('\n');
+      result.classList.add('show');
+      // 自动打开第一个链接
+      if (sources[0].url) {
+        await invoke('open_live_player', { sources: sources });
+      }
+    } else {
+      result.textContent = '未找到 m3u8 链接';
+      result.classList.add('show');
+    }
+  } catch(e) {
+    btn.classList.remove('loading');
+    btn.textContent = '🎬';
+    result.textContent = '提取失败: ' + String(e);
+    result.classList.add('show');
+  }
+});
+
+// 悬浮显示提示
+document.addEventListener('mouseover', () => tooltip.classList.add('show'));
+document.addEventListener('mouseout', () => tooltip.classList.remove('show'));
+</script>
+</body>
+</html>

@@ -1114,44 +1114,56 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
 }
 
 /// 全球内置 HTML 内容（编译时嵌入）
-const GLOBAL_BUILTIN_HTML: &str = include_str!("../../../public/global-builtin.html");
 
-/// 打开全球内置窗口（iframe 加载外部 URL + 密码验证 + 悬浮按钮）
+/// 全球内置窗口：直接加载外部 URL（full browser speed）
+///
+/// 架构：
+/// - 主窗口：直接用 WebviewUrl::External 加载目标 URL（full browser speed）
+/// - 悬浮提取按钮：通过前端的 openGlobalBuiltinWindow 调用 Rust fetch_live_sources
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn open_global_builtin_window(
     app: tauri::AppHandle,
     url: Option<String>,
 ) -> Result<(), String> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+    let target_url = url.unwrap_or_else(|| "https://zh.stripcam.xxx/top/girls/curr".to_string());
+
+    // 清理非法 URL
+    if target_url.starts_with("data:") || target_url.starts_with("file:") {
+        return Err("禁止加载此类 URL".to_string());
+    }
+
     let label = "global_builtin_window";
-    if let Some(w) = app.get_webview_window(label) {
-        let _ = w.show();
-        let _ = w.set_focus();
+
+    // 如果已存在，直接显示并聚焦
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.show();
+        let _ = window.set_focus();
         return Ok(());
     }
-    let target_url = url.unwrap_or_else(|| {
-        "https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific".to_string()
-    });
-    let encoded_target =
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(target_url.as_bytes());
-    let html_with_param = GLOBAL_BUILTIN_HTML.replace("{{TARGET_URL}}", &encoded_target);
-    // 写入临时文件，用 file:// URL 加载（WebviewUrl::External 不支持 data: URL）
-    let tmp_dir = std::env::temp_dir().join("tulu_openclaw");
-    std::fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
-    let tmp_file = tmp_dir.join("global-builtin.html");
-    std::fs::write(&tmp_file, &html_with_param).map_err(|e| e.to_string())?;
-    let path_str = tmp_file.to_string_lossy().replace('\\', "/");
-    let file_url = format!("file:///{}", path_str);
-    let _win = tauri::WebviewWindowBuilder::new(
+
+    // 创建主窗口（直接加载外部 URL，full browser speed + fully clickable）
+    let _win = WebviewWindowBuilder::new(
         &app,
         label,
-        tauri::WebviewUrl::External(file_url.parse().unwrap()),
+        WebviewUrl::External(
+            target_url
+                .parse()
+                .map_err(|e: url::ParseError| e.to_string())?,
+        ),
     )
     .title("全球内置")
-    .inner_size(1100.0, 750.0)
+    .inner_size(1200.0, 800.0)
+    .center()
+    .decorations(true)
     .resizable(true)
+    .visible(true)
+    .focused(true)
     .build()
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("创建窗口失败: {}", e))?;
+
     Ok(())
 }
 

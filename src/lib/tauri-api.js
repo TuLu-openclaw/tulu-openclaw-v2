@@ -368,6 +368,7 @@ export const api = {
   openLobsterOffice: () => invoke('open_lobster_office'),
   openGlobalBuiltinWindow: () => invoke('open_global_builtin_window'),
   fetchLiveSources: (url) => invoke('fetch_live_sources', { url }, 30000),
+  fetchPageM3u8: (url) => invoke('fetch_page_m3u8', { url }),
   updateOfficeState: (state, detail) => invoke('update_office_state', { state, detail }),
   syncOpenclawToOffice: () => invoke('sync_openclaw_to_office'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
