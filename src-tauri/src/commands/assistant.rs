@@ -901,14 +901,24 @@ fn find_star_office_dir() -> Option<std::path::PathBuf> {
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
         .unwrap_or_default();
+    let cwd = std::env::current_dir().unwrap_or_default();
     let candidates = [
+        // exe 相对路径
         exe_dir.join("_vendor").join("Star-Office-UI-master"),
         exe_dir.join("resources").join("_vendor").join("Star-Office-UI-master"),
+        // 向上跳多级到项目根目录 (dev模式: src-tauri/target/debug → 项目根)
         exe_dir.join("..").join("_vendor").join("Star-Office-UI-master"),
+        exe_dir.join("..").join("..").join("_vendor").join("Star-Office-UI-master"),
+        exe_dir.join("..").join("..").join("..").join("_vendor").join("Star-Office-UI-master"),
+        exe_dir.join("..").join("..").join("..").join("..").join("_vendor").join("Star-Office-UI-master"),
+        // 当前工作目录
+        cwd.join("_vendor").join("Star-Office-UI-master"),
+        cwd.join("src-tauri").join("..").join("_vendor").join("Star-Office-UI-master"),
     ];
     for p in &candidates {
-        if p.join("backend").join("app.py").exists() {
-            return Some(p.clone());
+        let resolved = if p.is_absolute() { p.clone() } else { p.canonicalize().unwrap_or_else(|_| p.clone()) };
+        if resolved.join("backend").join("app.py").exists() {
+            return Some(resolved);
         }
     }
     None
@@ -1130,6 +1140,20 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String,
         .map_err(|e| format!("创建全球内置窗口失败: {}", e))?;
 
     Ok("ok".into())
+}
+
+/// 导航全球内置窗口到指定URL
+#[tauri::command]
+pub async fn navigate_global_builtin(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    use tauri::Manager;
+    const WINDOW_LABEL: &str = "global_builtin_window";
+    if let Some(win) = app.get_webview_window(WINDOW_LABEL) {
+        let parsed: tauri::url::Url = url.parse().map_err(|e| format!("URL格式错误: {e}"))?;
+        win.navigate(parsed).map_err(|e| format!("导航失败: {e}"))?;
+        Ok("ok".into())
+    } else {
+        Err("全球内置窗口未打开".into())
+    }
 }
 
 /// 列出目录内容

@@ -316,7 +316,12 @@ fn uv_bin_dir() -> PathBuf {
     {
         let appdata = std::env::var("APPDATA").unwrap_or_default();
         if !appdata.is_empty() {
-            return PathBuf::from(appdata).join("clawpanel").join("bin");
+            // uv tool 安装的 hermes-agent Scripts 目录
+            let uv_hermes = PathBuf::from(&appdata).join("uv").join("tools").join("hermes-agent").join("Scripts");
+            if uv_hermes.exists() {
+                return uv_hermes;
+            }
+            return PathBuf::from(&appdata).join("uv").join("tools").join("bin");
         }
         dirs::home_dir()
             .unwrap_or_default()
@@ -389,6 +394,8 @@ fn hermes_enhanced_path() -> String {
         if !appdata.is_empty() {
             // uv 在 Windows 上的默认 tool bin 路径
             extra.push(format!(r"{}\uv\tools\bin", appdata));
+            // hermes-agent 的 Scripts 目录（hermes.exe 实际位置）
+            extra.push(format!(r"{}\uv\tools\hermes-agent\Scripts", appdata));
         }
         extra.push(format!(r"{}\.local\bin", home.display()));
         // uv 自身的默认安装路径
