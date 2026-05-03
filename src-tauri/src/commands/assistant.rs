@@ -1126,9 +1126,7 @@ pub async fn open_global_builtin_window(
 ) -> Result<(), String> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-    let target_url = url.unwrap_or_else(|| {
-        "https://zh.stripcam.xxx/top/girls/curr".to_string()
-    });
+    let target_url = url.unwrap_or_else(|| "https://zh.stripcam.xxx/top/girls/curr".to_string());
 
     if target_url.starts_with("data:") || target_url.starts_with("file:") {
         return Err("No data/file URLs allowed".to_string());
@@ -1147,7 +1145,11 @@ pub async fn open_global_builtin_window(
     let _win = WebviewWindowBuilder::new(
         &app,
         label,
-        WebviewUrl::External(target_url.parse().map_err(|e| format!("URL parse error: {}", e))?),
+        WebviewUrl::External(
+            target_url
+                .parse()
+                .map_err(|e| format!("URL parse error: {}", e))?,
+        ),
     )
     .title("全球内置")
     .inner_size(1200.0, 800.0)
@@ -1161,7 +1163,6 @@ pub async fn open_global_builtin_window(
 
     Ok(())
 }
-
 
 /// 从 URL 扫描 m3u8 视频源
 #[tauri::command]
