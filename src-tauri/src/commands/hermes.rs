@@ -220,6 +220,7 @@ async fn do_restart_gateway() -> Result<(), String> {
     cmd.args(["gateway", "run"])
         .current_dir(&home)
         .env("PATH", &enhanced)
+        .env("PYTHONIOENCODING", "utf-8")
         .stdin(std::process::Stdio::null())
         .stdout(log_file)
         .stderr(log_err);
@@ -2162,6 +2163,7 @@ pub async fn hermes_gateway_action(
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
+                    .env("PYTHONIOENCODING", "utf-8")
                     .stdin(std::process::Stdio::null())
                     .stdout(log_file)
                     .stderr(log_err)
@@ -2247,6 +2249,7 @@ pub async fn hermes_gateway_action(
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
+                    .env("PYTHONIOENCODING", "utf-8")
                     .stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());

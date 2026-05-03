@@ -85,10 +85,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
   font-size: 18px; opacity: 0.4; pointer-events: none;
 }
-.auth-hint {
-  font-size: 12px; color: rgba(255,255,255,0.25);
-  margin-top: 4px;
-}
 .enter-hint {
   display: inline-block; margin-top: 16px;
   padding: 8px 20px;
@@ -100,23 +96,45 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* ===== 全屏悬浮按钮 ===== */
-#fullscreen-btn {
-  position: fixed; bottom: 28px; right: 28px;
-  z-index: 888888; display: none;
-  width: 56px; height: 56px; border-radius: 50%;
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  border: none; cursor: pointer;
-  box-shadow: 0 4px 24px rgba(239,68,68,0.4);
-  transition: all 0.2s ease;
-  font-size: 22px; color: #fff;
-  align-items: center; justify-content: center;
+/* ===== iframe 容器 ===== */
+#content-frame {
+  width: 100%; height: 100%; border: none;
+  display: none;
 }
-#fullscreen-btn:hover { transform: scale(1.1); box-shadow: 0 6px 32px rgba(239,68,68,0.6); }
-#fullscreen-btn:active { transform: scale(0.95); }
-#fullscreen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* ===== Toast 提示 ===== */
+/* ===== 悬浮操作栏 ===== */
+#float-bar {
+  position: fixed; bottom: 24px; right: 24px;
+  z-index: 888888; display: none;
+  flex-direction: column; gap: 10px;
+  align-items: flex-end;
+}
+.float-btn {
+  width: 52px; height: 52px; border-radius: 50%;
+  border: none; cursor: pointer;
+  font-size: 20px; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+.float-btn:hover { transform: scale(1.12); }
+.float-btn:active { transform: scale(0.95); }
+.float-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+#btn-extract {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 4px 24px rgba(239,68,68,0.4);
+}
+#btn-extract:hover { box-shadow: 0 6px 32px rgba(239,68,68,0.6); }
+#btn-refresh {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  box-shadow: 0 4px 24px rgba(59,130,246,0.4);
+}
+#btn-fullscreen {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 4px 24px rgba(16,185,129,0.4);
+}
+
+/* ===== Toast ===== */
 #toast {
   position: fixed; bottom: 96px; right: 28px;
   z-index: 888889;
@@ -124,9 +142,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   border: 1px solid rgba(255,255,255,0.1);
   color: #fff; padding: 14px 22px;
   border-radius: 12px; font-size: 14px;
-  display: none; max-width: 320px;
+  display: none; max-width: 360px;
   backdrop-filter: blur(12px);
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  word-break: break-all;
 }
 </style>
 </head>
@@ -135,52 +154,64 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
 <!-- 密码验证遮罩 -->
 <div id="auth-overlay">
   <div class="auth-container">
-    <div class="auth-icon">🔐</div>
+    <div class="auth-icon">&#x1f510;</div>
     <div class="auth-title">安全验证</div>
     <div class="auth-subtitle">请输入访问密码以继续</div>
     <div class="input-wrapper">
-      <span class="input-icon">🔑</span>
+      <span class="input-icon">&#x1f511;</span>
       <input type="password" class="auth-input" id="pwd-input" placeholder="输入密码" autofocus>
     </div>
     <div class="enter-hint">按 Enter 确认</div>
   </div>
 </div>
 
-<!-- 全屏悬浮按钮 -->
-<button id="fullscreen-btn" title="提取视频并全屏播放">▶</button>
+<!-- iframe 加载外部页面 -->
+<iframe id="content-frame" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"></iframe>
+
+<!-- 悬浮操作栏 -->
+<div id="float-bar">
+  <button class="float-btn" id="btn-extract" title="提取视频链接">&#x25b6;</button>
+  <button class="float-btn" id="btn-refresh" title="刷新页面">&#x21bb;</button>
+  <button class="float-btn" id="btn-fullscreen" title="全屏 iframe">&#x26f6;</button>
+</div>
 <div id="toast"></div>
 
 <script>
 (function() {
-  const overlay = document.getElementById('auth-overlay');
-  const input = document.getElementById('pwd-input');
-  const fullscreenBtn = document.getElementById('fullscreen-btn');
-  const toast = document.getElementById('toast');
-  const TARGET = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific';
-  const PWD = '2552667173';
+  var overlay = document.getElementById('auth-overlay');
+  var input = document.getElementById('pwd-input');
+  var frame = document.getElementById('content-frame');
+  var floatBar = document.getElementById('float-bar');
+  var btnExtract = document.getElementById('btn-extract');
+  var btnRefresh = document.getElementById('btn-refresh');
+  var btnFullscreen = document.getElementById('btn-fullscreen');
+  var toastEl = document.getElementById('toast');
+  var TARGET = 'https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific';
+  var PWD = '2552667173';
+  var verified = false;
 
   function showToast(msg, duration) {
     duration = duration || 4000;
-    toast.textContent = msg;
-    toast.style.display = 'block';
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(function() { toast.style.display = 'none'; }, duration);
+    showToast._t = setTimeout(function() { toastEl.style.display = 'none'; }, duration);
   }
 
-  // 密码验证 → 导航 webview 到目标URL
+  function unlock() {
+    overlay.classList.add('hidden');
+    frame.style.display = 'block';
+    frame.src = TARGET;
+    floatBar.style.display = 'flex';
+    verified = true;
+    setTimeout(function() { overlay.remove(); }, 600);
+  }
+
+  // 密码验证
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       if (input.value === PWD) {
-        overlay.classList.add('hidden');
-        fullscreenBtn.style.display = 'flex';
-        // 导航 webview 到目标 URL
-        if (window.__TAURI__ && window.__TAURI__.core) {
-          window.__TAURI__.core.invoke('navigate_global_builtin', { url: TARGET });
-        } else {
-          // 回退：直接跳转
-          window.location.href = TARGET;
-        }
-        setTimeout(function() { overlay.remove(); }, 600);
+        unlock();
       } else {
         input.classList.add('error');
         input.value = '';
@@ -189,27 +220,42 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
     }
   });
 
-  // 全屏按钮：调用 Rust 后端提取 m3u8
-  fullscreenBtn.addEventListener('click', async function() {
-    fullscreenBtn.disabled = true;
-    fullscreenBtn.textContent = '⏳';
+  // 提取视频链接
+  btnExtract.addEventListener('click', async function() {
+    btnExtract.disabled = true;
+    btnExtract.textContent = '\u23f3';
     showToast('正在扫描页面提取视频链接...');
     try {
-      var sources = await window.__TAURI__.core.invoke('fetch_live_sources', { url: window.location.href });
+      var currentUrl = frame.contentWindow ? frame.src : TARGET;
+      var sources = await window.__TAURI__.core.invoke('fetch_live_sources', { url: currentUrl });
       if (sources && sources.length > 0) {
         showToast('找到 ' + sources.length + ' 个视频源，正在打开播放器...');
-        await window.__TAURI__.core.invoke('open_player_window', {
-          url: sources[0], title: '全屏播放', resume: 0,
-          allEps: '', allUrls: '', playbackCtx: '', pic: ''
-        });
+        await window.__TAURI__.core.invoke('open_live_player', { sources: sources });
       } else {
         showToast('未检测到视频源，请先在页面上点击播放按钮', 6000);
       }
     } catch (err) {
       showToast('提取失败: ' + String(err), 6000);
     } finally {
-      fullscreenBtn.disabled = false;
-      fullscreenBtn.textContent = '▶';
+      btnExtract.disabled = false;
+      btnExtract.textContent = '\u25b6';
+    }
+  });
+
+  // 刷新
+  btnRefresh.addEventListener('click', function() {
+    if (frame.src) {
+      frame.src = frame.src;
+      showToast('页面已刷新');
+    }
+  });
+
+  // 全屏 iframe
+  btnFullscreen.addEventListener('click', function() {
+    if (frame.requestFullscreen) {
+      frame.requestFullscreen();
+    } else if (frame.webkitRequestFullscreen) {
+      frame.webkitRequestFullscreen();
     }
   });
 })();

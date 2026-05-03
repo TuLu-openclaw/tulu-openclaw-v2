@@ -895,31 +895,23 @@ fn urlencoding_encode(s: &str) -> String {
 /// Star-Office-UI 后端进程 PID
 static STAR_OFFICE_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-/// 查找 Star-Office-UI-master 目录
-fn find_star_office_dir() -> Option<std::path::PathBuf> {
+/// 查找 Star-Office-UI-master 目录（优先 resource_dir，回退多级路径）
+fn find_star_office_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    // 1. 优先从 Tauri resource_dir 查找（打包后的正确路径）
+    if let Ok(res_dir) = app.path().resource_dir() {
+        let candidate = res_dir.join("Star-Office-UI-master");
+        if candidate.join("backend").join("app.py").exists() {
+            return Some(candidate);
+        }
+    }
+    // 2. 开发模式：exe 在 src-tauri/target/debug/，需要往上跳到项目根
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
         .unwrap_or_default();
-    let cwd = std::env::current_dir().unwrap_or_default();
-    let candidates = [
-        // exe 相对路径
-        exe_dir.join("_vendor").join("Star-Office-UI-master"),
-        exe_dir
-            .join("resources")
-            .join("_vendor")
-            .join("Star-Office-UI-master"),
-        // 向上跳多级到项目根目录 (dev模式: src-tauri/target/debug → 项目根)
+    let dev_candidates = [
         exe_dir
             .join("..")
-            .join("_vendor")
-            .join("Star-Office-UI-master"),
-        exe_dir
-            .join("..")
-            .join("..")
-            .join("_vendor")
-            .join("Star-Office-UI-master"),
-        exe_dir
             .join("..")
             .join("..")
             .join("..")
@@ -928,23 +920,12 @@ fn find_star_office_dir() -> Option<std::path::PathBuf> {
         exe_dir
             .join("..")
             .join("..")
-            .join("..")
-            .join("..")
-            .join("_vendor")
-            .join("Star-Office-UI-master"),
-        // 当前工作目录
-        cwd.join("_vendor").join("Star-Office-UI-master"),
-        cwd.join("src-tauri")
             .join("..")
             .join("_vendor")
             .join("Star-Office-UI-master"),
     ];
-    for p in &candidates {
-        let resolved = if p.is_absolute() {
-            p.clone()
-        } else {
-            p.canonicalize().unwrap_or_else(|_| p.clone())
-        };
+    for p in &dev_candidates {
+        let resolved = p.canonicalize().unwrap_or_else(|_| p.clone());
         if resolved.join("backend").join("app.py").exists() {
             return Some(resolved);
         }
@@ -953,14 +934,33 @@ fn find_star_office_dir() -> Option<std::path::PathBuf> {
 }
 
 /// 启动 Star-Office-UI Python 后端
-async fn start_star_office_backend() -> Result<u16, String> {
+async fn start_star_office_backend(app: &tauri::AppHandle) -> Result<u16, String> {
     let port: u16 = 19000;
     let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    // 检查后端是否已在运行
     if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
         return Ok(port);
     }
-    let office_dir =
-        find_star_office_dir().ok_or_else(|| "未找到 Star-Office-UI-master 目录".to_string())?;
+    let office_dir = find_star_office_dir(app).ok_or_else(|| {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_default();
+        let res_dir = app.path().resource_dir().unwrap_or_default();
+        format!(
+            "未找到 Star-Office-UI-master 目录。\n已查找:\n- {} (resource_dir)\n- {} (exe 上级)",
+            res_dir.join("Star-Office-UI-master").display(),
+            exe_dir
+                .join("..")
+                .join("..")
+                .join("..")
+                .join("..")
+                .join("_vendor")
+                .join("Star-Office-UI-master")
+                .display()
+        )
+    })?;
+    // 确保 state.json 存在
     let state_file = office_dir.join("state.json");
     if !state_file.exists() {
         let sample = office_dir.join("state.sample.json");
@@ -969,7 +969,7 @@ async fn start_star_office_backend() -> Result<u16, String> {
         } else {
             let _ = std::fs::write(
                 &state_file,
-                "{\"state\":\"idle\",\"detail\":\"待命中\",\"progress\":0}",
+                r#"{"state":"idle","detail":"待命中","progress":0}"#,
             );
         }
     }
@@ -977,6 +977,7 @@ async fn start_star_office_backend() -> Result<u16, String> {
     if !agents_file.exists() {
         let _ = std::fs::write(&agents_file, "{}");
     }
+    // 检测 Python
     let python_candidates = ["python3", "python", "py"];
     let mut python_cmd = None;
     for cmd in &python_candidates {
@@ -989,7 +990,20 @@ async fn start_star_office_backend() -> Result<u16, String> {
             break;
         }
     }
-    let python = python_cmd.ok_or_else(|| "未找到 Python，请先安装 Python 3.10+".to_string())?;
+    let python = python_cmd
+        .ok_or_else(|| "未找到 Python，请先安装 Python 3.10+ 并添加到 PATH".to_string())?;
+    // 安装依赖（如果 requirements.txt 存在）
+    let req_file = office_dir.join("backend").join("requirements.txt");
+    if req_file.exists() {
+        let mut install = std::process::Command::new(&python);
+        install
+            .args(["-m", "pip", "install", "-q", "-r", "requirements.txt"])
+            .current_dir(&office_dir);
+        #[cfg(target_os = "windows")]
+        install.creation_flags(0x08000000);
+        let _ = install.output();
+    }
+    // 启动后端
     let log_path = office_dir.join("backend-run.log");
     let log_file = std::fs::File::create(&log_path).map_err(|e| format!("创建日志失败: {e}"))?;
     let log_err = log_file
@@ -1008,6 +1022,7 @@ async fn start_star_office_backend() -> Result<u16, String> {
         .spawn()
         .map_err(|e| format!("启动 Star-Office 后端失败: {e}"))?;
     STAR_OFFICE_PID.store(child.id(), std::sync::atomic::Ordering::SeqCst);
+    // 等待后端就绪
     for _ in 0..30 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300))
@@ -1016,28 +1031,30 @@ async fn start_star_office_backend() -> Result<u16, String> {
             return Ok(port);
         }
     }
-    Err("Star-Office 后端启动超时".into())
+    Err("Star-Office 后端启动超时（15秒），请检查 Python 环境和 backend-run.log".into())
 }
 
-/// 打开龙虾办公室独立窗口（Star-Office-UI 版本）
+/// 打开龙虾办公室独立窗口
 #[tauri::command]
 pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::WebviewUrl;
     use tauri::WebviewWindowBuilder;
-    let port = start_star_office_backend().await?;
+
+    let port = start_star_office_backend(&app).await?;
     let url = format!("http://127.0.0.1:{port}");
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
     let window_label = format!("lobster_office_{}", ts);
+
     WebviewWindowBuilder::new(
         &app,
         &window_label,
         WebviewUrl::External(url.parse().unwrap()),
     )
-    .title("🦞 龙虾办公室")
+    .title("龙虾办公室")
     .inner_size(1280.0, 800.0)
     .min_inner_size(960.0, 640.0)
     .resizable(true)
@@ -1045,178 +1062,8 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
     .center()
     .build()
     .map_err(|e| format!("创建龙虾办公室窗口失败: {}", e))?;
-    Ok("ok".into())
-}
-
-// ---------------------------------------------------------------------------
-// fetch_live_sources — 扫描网页提取 m3u8 视频源
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
-    use regex::Regex;
-
-    if url.trim().is_empty() {
-        return Err("URL 不能为空".into());
-    }
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-        .build()
-        .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
-
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
-    }
-
-    let html = resp
-        .text()
-        .await
-        .map_err(|e| format!("读取页面失败: {e}"))?;
-    let mut sources: Vec<String> = Vec::new();
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-    let re_m3u8 = Regex::new(r#"(?i)(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)"#).unwrap();
-    let re_quote = Regex::new(r#"(?i)["']([^"']*\.m3u8[^"']*)["']"#).unwrap();
-
-    // 扫描 HTML 中的 m3u8 链接
-    for cap in re_m3u8.captures_iter(&html) {
-        if let Some(m) = cap.get(1) {
-            let u = m.as_str().to_string();
-            if seen.insert(u.clone()) {
-                sources.push(u);
-            }
-        }
-    }
-    for cap in re_quote.captures_iter(&html) {
-        if let Some(m) = cap.get(1) {
-            let u = m.as_str().to_string();
-            if seen.insert(u.clone()) {
-                sources.push(u);
-            }
-        }
-    }
-
-    // 扫描同源 JS 文件中的 m3u8 链接
-    let re_script = Regex::new(r#"(?i)<script[^>]+src=["']([^"']+\.js[^"']*)["']"#).unwrap();
-    let base_url = reqwest::Url::parse(&url).ok();
-    let script_urls: Vec<String> = re_script
-        .captures_iter(&html)
-        .filter_map(|c| {
-            c.get(1).map(|m| {
-                let src = m.as_str();
-                if src.starts_with("http") {
-                    src.to_string()
-                } else if let Some(ref base) = base_url {
-                    base.join(src).map(|u| u.to_string()).unwrap_or_default()
-                } else {
-                    String::new()
-                }
-            })
-        })
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    for script_url in script_urls.into_iter().take(10) {
-        if let Ok(script_resp) = client.get(&script_url).send().await {
-            if let Ok(script_text) = script_resp.text().await {
-                for cap in re_m3u8.captures_iter(&script_text) {
-                    if let Some(m) = cap.get(1) {
-                        let u = m.as_str().to_string();
-                        if seen.insert(u.clone()) {
-                            sources.push(u);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // 探测常见 m3u8 路径
-    if sources.is_empty() {
-        if let Some(ref base) = base_url {
-            let origin = base.origin().ascii_serialization();
-            let candidates = [
-                "/live/live.m3u8",
-                "/live/stream.m3u8",
-                "/stream.m3u8",
-                "/live.m3u8",
-                "/index.m3u8",
-                "/hls/stream.m3u8",
-                "/video/live.m3u8",
-                "/play/live.m3u8",
-            ];
-            for path in &candidates {
-                let probe_url = format!("{origin}{path}");
-                if let Ok(probe_resp) = client.get(&probe_url).send().await {
-                    if probe_resp.status().is_success() {
-                        if let Ok(body) = probe_resp.text().await {
-                            if body.contains("#EXTM3U") {
-                                if seen.insert(probe_url.clone()) {
-                                    sources.push(probe_url);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(sources)
-}
-
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String, String> {
-    use tauri::Manager;
-    use tauri::WebviewUrl;
-    use tauri::WebviewWindowBuilder;
-
-    const WINDOW_LABEL: &str = "global_builtin_window";
-    const LOCAL_PAGE: &str = "global-builtin.html";
-
-    if let Some(existing) = app.get_webview_window(WINDOW_LABEL) {
-        let _ = existing.show();
-        let _ = existing.unminimize();
-        let _ = existing.set_focus();
-        let _ = existing.navigate(format!("app://localhost/{LOCAL_PAGE}").parse().unwrap());
-        return Ok("focus".into());
-    }
-
-    WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::App(LOCAL_PAGE.into()))
-        .title("全球内置")
-        .inner_size(1280.0, 840.0)
-        .min_inner_size(960.0, 640.0)
-        .resizable(true)
-        .decorations(true)
-        .center()
-        .build()
-        .map_err(|e| format!("创建全球内置窗口失败: {}", e))?;
 
     Ok("ok".into())
-}
-
-/// 导航全球内置窗口到指定URL
-#[tauri::command]
-pub async fn navigate_global_builtin(app: tauri::AppHandle, url: String) -> Result<String, String> {
-    use tauri::Manager;
-    const WINDOW_LABEL: &str = "global_builtin_window";
-    if let Some(win) = app.get_webview_window(WINDOW_LABEL) {
-        let parsed: reqwest::Url = url.parse().map_err(|e| format!("URL格式错误: {e}"))?;
-        win.navigate(parsed).map_err(|e| format!("导航失败: {e}"))?;
-        Ok("ok".into())
-    } else {
-        Err("全球内置窗口未打开".into())
-    }
 }
 
 /// 列出目录内容
