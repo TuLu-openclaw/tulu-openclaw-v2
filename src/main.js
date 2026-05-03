@@ -1077,6 +1077,15 @@ function startUpdateChecker() {
   setTimeout(checkGlobalUpdate, 5000)
   // 之后每 30 分钟检查一次
   _updateCheckTimer = setInterval(checkGlobalUpdate, UPDATE_CHECK_INTERVAL)
+
+  // 龙虾办公室状态同步（每30秒）
+  if (isTauri) {
+    setInterval(() => {
+      api.syncOpenclawToOffice().catch(() => {})
+    }, 30000)
+    // 启动时立即同步一次
+    api.syncOpenclawToOffice().catch(() => {})
+  }
 }
 
 // 启动：先检查后端 → 认证 → 加载应用

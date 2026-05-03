@@ -100,6 +100,69 @@ join_lock = threading.Lock()
 _bg_tasks = {}  # task_id -> {"status": "pending"|"done"|"error", "result": ..., "error": ..., "created_at": ...}
 _bg_tasks_lock = threading.Lock()
 
+# === OpenClaw Gateway 状态轮询 ===
+OPENCLAW_GATEWAY_URL = os.getenv("OPENCLAW_GATEWAY_URL", "http://127.0.0.1:18789")
+OPENCLAW_POLL_INTERVAL = int(os.getenv("OPENCLAW_POLL_INTERVAL", "10"))  # 秒
+_openclaw_last_state = None  # 缓存上次状态，避免频繁写文件
+
+def _poll_openclaw_status():
+    """后台线程：定期读取 OpenClaw 状态文件，自动更新 state.json"""
+    global _openclaw_last_state
+    # OpenClaw Tauri 应用会写入此文件
+    openclaw_state_file = os.path.join(OPENCLAW_WORKSPACE, "openclaw-office-state.json")
+    while True:
+        try:
+            if os.path.exists(openclaw_state_file):
+                with open(openclaw_state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                
+                gateway_online = data.get("gateway_online", False)
+                hermes_online = data.get("hermes_online", False)
+                openclaw_online = data.get("openclaw_online", False)
+                
+                # 映射到 Star-Office-UI 状态
+                if not openclaw_online and not gateway_online:
+                    new_state = "idle"
+                    detail = "OpenClaw 离线"
+                elif gateway_online and hermes_online:
+                    new_state = "writing"
+                    detail = "OpenClaw + Hermes 运行中"
+                elif gateway_online:
+                    new_state = "executing"
+                    detail = "OpenClaw Gateway 运行中"
+                else:
+                    new_state = "idle"
+                    detail = "待命中"
+                
+                if _openclaw_last_state != new_state:
+                    _openclaw_last_state = new_state
+                    _write_office_state(new_state, detail)
+                    print(f"[OpenClaw Sync] 状态更新: {new_state} - {detail}")
+        except Exception as e:
+            print(f"[OpenClaw Sync] 读取状态失败: {e}")
+        import time
+        time.sleep(OPENCLAW_POLL_INTERVAL)
+
+def _write_office_state(state, detail):
+    """写入 state.json"""
+    try:
+        state_data = {}
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                state_data = json.load(f)
+        state_data["state"] = state
+        state_data["detail"] = detail
+        state_data["updated_at"] = datetime.now().isoformat()
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[OpenClaw Sync] 写入 state.json 失败: {e}")
+
+# 启动 OpenClaw 状态轮询线程
+_openclaw_poll_thread = threading.Thread(target=_poll_openclaw_status, daemon=True)
+_openclaw_poll_thread.start()
+print(f"[OpenClaw Sync] 状态轮询已启动，间隔 {OPENCLAW_POLL_INTERVAL}s，目标 {OPENCLAW_GATEWAY_URL}")
+
 # Generate a version timestamp once at server startup for cache busting
 VERSION_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 ASSET_DRAWER_PASS_DEFAULT = os.getenv("ASSET_DRAWER_PASS", "1234")
