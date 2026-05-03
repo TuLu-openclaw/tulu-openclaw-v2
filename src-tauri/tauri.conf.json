@@ -36,7 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [{"from": "resources/Star-Office-UI-master", "to": "Star-Office-UI-master"}],
+    "resources": ["resources/Star-Office-UI-master/*", "resources/Star-Office-UI-master/**/*"],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",
