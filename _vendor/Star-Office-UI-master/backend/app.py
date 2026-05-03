@@ -108,40 +108,80 @@ _openclaw_last_state = None  # 缓存上次状态，避免频繁写文件
 def _poll_openclaw_status():
     """后台线程：定期读取 OpenClaw 状态文件，自动更新 state.json"""
     global _openclaw_last_state
-    # OpenClaw Tauri 应用会写入此文件
+    # OpenClaw Tauri 应用写入的状态文件路径
     openclaw_state_file = os.path.join(OPENCLAW_WORKSPACE, "openclaw-office-state.json")
+    # 也检查 appdata 路径（Windows）
+    appdata = os.environ.get("APPDATA", "")
+    appdata_state = os.path.join(appdata, "TuLuOpenClaw_v2", "openclaw-office-state.json") if appdata else ""
+    
     while True:
         try:
+            state_file = None
+            # 优先检查 workspace 路径
             if os.path.exists(openclaw_state_file):
-                with open(openclaw_state_file, "r", encoding="utf-8") as f:
+                state_file = openclaw_state_file
+            # 回退到 appdata 路径
+            elif appdata_state and os.path.exists(appdata_state):
+                state_file = appdata_state
+            
+            if state_file:
+                with open(state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 
+                # 读取 OpenClaw 写入的状态
+                oc_state = data.get("state", "idle")
+                oc_detail = data.get("detail", "")
                 gateway_online = data.get("gateway_online", False)
                 hermes_online = data.get("hermes_online", False)
-                openclaw_online = data.get("openclaw_online", False)
+                services = data.get("services", {})
                 
                 # 映射到 Star-Office-UI 状态
-                if not openclaw_online and not gateway_online:
-                    new_state = "idle"
-                    detail = "OpenClaw 离线"
-                elif gateway_online and hermes_online:
-                    new_state = "writing"
-                    detail = "OpenClaw + Hermes 运行中"
-                elif gateway_online:
-                    new_state = "executing"
-                    detail = "OpenClaw Gateway 运行中"
+                # 如果 OpenClaw 已经指定了状态，直接使用
+                if oc_state in VALID_AGENT_STATES:
+                    new_state = oc_state
+                    detail = oc_detail or _get_state_detail(new_state, gateway_online, hermes_online)
                 else:
-                    new_state = "idle"
-                    detail = "待命中"
+                    # 根据服务状态推断
+                    new_state, detail = _infer_state(gateway_online, hermes_online, services)
                 
-                if _openclaw_last_state != new_state:
-                    _openclaw_last_state = new_state
+                if _openclaw_last_state != (new_state, detail):
+                    _openclaw_last_state = (new_state, detail)
                     _write_office_state(new_state, detail)
-                    print(f"[OpenClaw Sync] 状态更新: {new_state} - {detail}")
+                    print(f"[OpenClaw Sync] {new_state}: {detail}")
+            else:
+                # 状态文件不存在，OpenClaw 未启动
+                if _openclaw_last_state != ("idle", "OpenClaw 未启动"):
+                    _openclaw_last_state = ("idle", "OpenClaw 未启动")
+                    _write_office_state("idle", "OpenClaw 未启动")
+                    print("[OpenClaw Sync] OpenClaw 未启动")
         except Exception as e:
-            print(f"[OpenClaw Sync] 读取状态失败: {e}")
+            print(f"[OpenClaw Sync] 错误: {e}")
         import time
         time.sleep(OPENCLAW_POLL_INTERVAL)
+
+def _get_state_detail(state, gateway_online, hermes_online):
+    """根据状态返回描述文本"""
+    details = {
+        "idle": "待命中" if gateway_online else "OpenClaw 离线",
+        "writing": "处理消息中...",
+        "researching": "思考中...",
+        "executing": "执行任务中...",
+        "syncing": "同步数据中...",
+        "error": "出现问题",
+        "receiving": "收到新消息",
+        "replying": "回复中...",
+    }
+    return details.get(state, "运行中")
+
+def _infer_state(gateway_online, hermes_online, services):
+    """根据服务状态推断办公室状态"""
+    if not gateway_online:
+        return "idle", "OpenClaw 离线"
+    if gateway_online and hermes_online:
+        return "writing", "OpenClaw + Hermes 运行中"
+    if gateway_online:
+        return "executing", "OpenClaw Gateway 运行中"
+    return "idle", "待命中"
 
 def _write_office_state(state, detail):
     """写入 state.json"""
@@ -153,6 +193,7 @@ def _write_office_state(state, detail):
         state_data["state"] = state
         state_data["detail"] = detail
         state_data["updated_at"] = datetime.now().isoformat()
+        state_data["source"] = "openclaw-sync"
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state_data, f, ensure_ascii=False, indent=2)
     except Exception as e:

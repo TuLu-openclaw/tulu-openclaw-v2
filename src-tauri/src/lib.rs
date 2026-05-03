@@ -64,6 +64,7 @@ pub fn run() {
         .setup(|app| {
             service::start_backend_guardian(app.handle().clone());
             tray::setup_tray(app.handle())?;
+            assistant::start_office_sync(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
