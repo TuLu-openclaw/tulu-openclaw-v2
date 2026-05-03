@@ -905,18 +905,46 @@ fn find_star_office_dir() -> Option<std::path::PathBuf> {
     let candidates = [
         // exe 相对路径
         exe_dir.join("_vendor").join("Star-Office-UI-master"),
-        exe_dir.join("resources").join("_vendor").join("Star-Office-UI-master"),
+        exe_dir
+            .join("resources")
+            .join("_vendor")
+            .join("Star-Office-UI-master"),
         // 向上跳多级到项目根目录 (dev模式: src-tauri/target/debug → 项目根)
-        exe_dir.join("..").join("_vendor").join("Star-Office-UI-master"),
-        exe_dir.join("..").join("..").join("_vendor").join("Star-Office-UI-master"),
-        exe_dir.join("..").join("..").join("..").join("_vendor").join("Star-Office-UI-master"),
-        exe_dir.join("..").join("..").join("..").join("..").join("_vendor").join("Star-Office-UI-master"),
+        exe_dir
+            .join("..")
+            .join("_vendor")
+            .join("Star-Office-UI-master"),
+        exe_dir
+            .join("..")
+            .join("..")
+            .join("_vendor")
+            .join("Star-Office-UI-master"),
+        exe_dir
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("_vendor")
+            .join("Star-Office-UI-master"),
+        exe_dir
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("_vendor")
+            .join("Star-Office-UI-master"),
         // 当前工作目录
         cwd.join("_vendor").join("Star-Office-UI-master"),
-        cwd.join("src-tauri").join("..").join("_vendor").join("Star-Office-UI-master"),
+        cwd.join("src-tauri")
+            .join("..")
+            .join("_vendor")
+            .join("Star-Office-UI-master"),
     ];
     for p in &candidates {
-        let resolved = if p.is_absolute() { p.clone() } else { p.canonicalize().unwrap_or_else(|_| p.clone()) };
+        let resolved = if p.is_absolute() {
+            p.clone()
+        } else {
+            p.canonicalize().unwrap_or_else(|_| p.clone())
+        };
         if resolved.join("backend").join("app.py").exists() {
             return Some(resolved);
         }
@@ -931,15 +959,18 @@ async fn start_star_office_backend() -> Result<u16, String> {
     if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
         return Ok(port);
     }
-    let office_dir = find_star_office_dir()
-        .ok_or_else(|| "未找到 Star-Office-UI-master 目录".to_string())?;
+    let office_dir =
+        find_star_office_dir().ok_or_else(|| "未找到 Star-Office-UI-master 目录".to_string())?;
     let state_file = office_dir.join("state.json");
     if !state_file.exists() {
         let sample = office_dir.join("state.sample.json");
         if sample.exists() {
             let _ = std::fs::copy(&sample, &state_file);
         } else {
-            let _ = std::fs::write(&state_file, "{\"state\":\"idle\",\"detail\":\"待命中\",\"progress\":0}");
+            let _ = std::fs::write(
+                &state_file,
+                "{\"state\":\"idle\",\"detail\":\"待命中\",\"progress\":0}",
+            );
         }
     }
     let agents_file = office_dir.join("agents-state.json");
@@ -961,7 +992,9 @@ async fn start_star_office_backend() -> Result<u16, String> {
     let python = python_cmd.ok_or_else(|| "未找到 Python，请先安装 Python 3.10+".to_string())?;
     let log_path = office_dir.join("backend-run.log");
     let log_file = std::fs::File::create(&log_path).map_err(|e| format!("创建日志失败: {e}"))?;
-    let log_err = log_file.try_clone().map_err(|e| format!("克隆日志失败: {e}"))?;
+    let log_err = log_file
+        .try_clone()
+        .map_err(|e| format!("克隆日志失败: {e}"))?;
     let mut cmd = std::process::Command::new(&python);
     cmd.args(["backend/app.py"])
         .current_dir(&office_dir)
@@ -971,11 +1004,15 @@ async fn start_star_office_backend() -> Result<u16, String> {
         .env("STAR_BACKEND_PORT", port.to_string());
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);
-    let child = cmd.spawn().map_err(|e| format!("启动 Star-Office 后端失败: {e}"))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("启动 Star-Office 后端失败: {e}"))?;
     STAR_OFFICE_PID.store(child.id(), std::sync::atomic::Ordering::SeqCst);
     for _ in 0..30 {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
+        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300))
+            .is_ok()
+        {
             return Ok(port);
         }
     }
@@ -985,22 +1022,29 @@ async fn start_star_office_backend() -> Result<u16, String> {
 /// 打开龙虾办公室独立窗口（Star-Office-UI 版本）
 #[tauri::command]
 pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::WebviewUrl;
     use tauri::WebviewWindowBuilder;
-    use std::time::{SystemTime, UNIX_EPOCH};
     let port = start_star_office_backend().await?;
     let url = format!("http://127.0.0.1:{port}");
-    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
     let window_label = format!("lobster_office_{}", ts);
-    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(url.parse().unwrap()))
-        .title("🦞 龙虾办公室")
-        .inner_size(1280.0, 800.0)
-        .min_inner_size(960.0, 640.0)
-        .resizable(true)
-        .decorations(true)
-        .center()
-        .build()
-        .map_err(|e| format!("创建龙虾办公室窗口失败: {}", e))?;
+    WebviewWindowBuilder::new(
+        &app,
+        &window_label,
+        WebviewUrl::External(url.parse().unwrap()),
+    )
+    .title("🦞 龙虾办公室")
+    .inner_size(1280.0, 800.0)
+    .min_inner_size(960.0, 640.0)
+    .resizable(true)
+    .decorations(true)
+    .center()
+    .build()
+    .map_err(|e| format!("创建龙虾办公室窗口失败: {}", e))?;
     Ok("ok".into())
 }
 
@@ -1033,7 +1077,10 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
         return Err(format!("HTTP {}", resp.status()));
     }
 
-    let html = resp.text().await.map_err(|e| format!("读取页面失败: {e}"))?;
+    let html = resp
+        .text()
+        .await
+        .map_err(|e| format!("读取页面失败: {e}"))?;
     let mut sources: Vec<String> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -1044,30 +1091,37 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
     for cap in re_m3u8.captures_iter(&html) {
         if let Some(m) = cap.get(1) {
             let u = m.as_str().to_string();
-            if seen.insert(u.clone()) { sources.push(u); }
+            if seen.insert(u.clone()) {
+                sources.push(u);
+            }
         }
     }
     for cap in re_quote.captures_iter(&html) {
         if let Some(m) = cap.get(1) {
             let u = m.as_str().to_string();
-            if seen.insert(u.clone()) { sources.push(u); }
+            if seen.insert(u.clone()) {
+                sources.push(u);
+            }
         }
     }
 
     // 扫描同源 JS 文件中的 m3u8 链接
     let re_script = Regex::new(r#"(?i)<script[^>]+src=["']([^"']+\.js[^"']*)["']"#).unwrap();
     let base_url = reqwest::Url::parse(&url).ok();
-    let script_urls: Vec<String> = re_script.captures_iter(&html)
-        .filter_map(|c| c.get(1).map(|m| {
-            let src = m.as_str();
-            if src.starts_with("http") {
-                src.to_string()
-            } else if let Some(ref base) = base_url {
-                base.join(src).map(|u| u.to_string()).unwrap_or_default()
-            } else {
-                String::new()
-            }
-        }))
+    let script_urls: Vec<String> = re_script
+        .captures_iter(&html)
+        .filter_map(|c| {
+            c.get(1).map(|m| {
+                let src = m.as_str();
+                if src.starts_with("http") {
+                    src.to_string()
+                } else if let Some(ref base) = base_url {
+                    base.join(src).map(|u| u.to_string()).unwrap_or_default()
+                } else {
+                    String::new()
+                }
+            })
+        })
         .filter(|s| !s.is_empty())
         .collect();
 
@@ -1077,7 +1131,9 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
                 for cap in re_m3u8.captures_iter(&script_text) {
                     if let Some(m) = cap.get(1) {
                         let u = m.as_str().to_string();
-                        if seen.insert(u.clone()) { sources.push(u); }
+                        if seen.insert(u.clone()) {
+                            sources.push(u);
+                        }
                     }
                 }
             }
@@ -1089,9 +1145,14 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
         if let Some(ref base) = base_url {
             let origin = base.origin().ascii_serialization();
             let candidates = [
-                "/live/live.m3u8", "/live/stream.m3u8", "/stream.m3u8",
-                "/live.m3u8", "/index.m3u8", "/hls/stream.m3u8",
-                "/video/live.m3u8", "/play/live.m3u8",
+                "/live/live.m3u8",
+                "/live/stream.m3u8",
+                "/stream.m3u8",
+                "/live.m3u8",
+                "/index.m3u8",
+                "/hls/stream.m3u8",
+                "/video/live.m3u8",
+                "/play/live.m3u8",
             ];
             for path in &candidates {
                 let probe_url = format!("{origin}{path}");
@@ -1099,7 +1160,9 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<String>, String> {
                     if probe_resp.status().is_success() {
                         if let Ok(body) = probe_resp.text().await {
                             if body.contains("#EXTM3U") {
-                                if seen.insert(probe_url.clone()) { sources.push(probe_url); }
+                                if seen.insert(probe_url.clone()) {
+                                    sources.push(probe_url);
+                                }
                             }
                         }
                     }

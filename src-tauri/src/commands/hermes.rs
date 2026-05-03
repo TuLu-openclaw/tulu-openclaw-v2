@@ -317,7 +317,11 @@ fn uv_bin_dir() -> PathBuf {
         let appdata = std::env::var("APPDATA").unwrap_or_default();
         if !appdata.is_empty() {
             // uv tool 安装的 hermes-agent Scripts 目录
-            let uv_hermes = PathBuf::from(&appdata).join("uv").join("tools").join("hermes-agent").join("Scripts");
+            let uv_hermes = PathBuf::from(&appdata)
+                .join("uv")
+                .join("tools")
+                .join("hermes-agent")
+                .join("Scripts");
             if uv_hermes.exists() {
                 return uv_hermes;
             }

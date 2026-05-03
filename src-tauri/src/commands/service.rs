@@ -1576,7 +1576,9 @@ mod platform {
             }
         }
 
-        let err_log = crate::commands::openclaw_dir().join("logs").join("gateway.err.log");
+        let err_log = crate::commands::openclaw_dir()
+            .join("logs")
+            .join("gateway.err.log");
         let tail = std::fs::read_to_string(&err_log)
             .ok()
             .map(|content| {
