@@ -1117,13 +1117,16 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle, url: String) -> R
         "data:text/html;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(html_with_param.as_bytes())
     );
-    let _win =
-        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App(data_url.into()))
-            .title("全球内置")
-            .inner_size(1100.0, 750.0)
-            .resizable(true)
-            .build()
-            .map_err(|e| e.to_string())?;
+    let _win = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::External(data_url.parse().unwrap()),
+    )
+    .title("全球内置")
+    .inner_size(1100.0, 750.0)
+    .resizable(true)
+    .build()
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
