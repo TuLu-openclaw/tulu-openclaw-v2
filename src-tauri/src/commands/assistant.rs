@@ -931,6 +931,22 @@ fn find_star_office_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
             return Some(resolved);
         }
     }
+    // 3. 同时检查 resource_dir/resources/Star-Office-UI-master（Tauri 可能保留 resources/ 前缀）
+    if let Ok(res_dir) = app.path().resource_dir() {
+        let candidate = res_dir.join("resources").join("Star-Office-UI-master");
+        if candidate.join("backend").join("app.py").exists() {
+            return Some(candidate);
+        }
+    }
+    // 4. 安装目录下的 Star-Office-UI-master（NSIS 自定义安装路径）
+    let install_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_default();
+    let install_candidate = install_dir.join("Star-Office-UI-master");
+    if install_candidate.join("backend").join("app.py").exists() {
+        return Some(install_candidate);
+    }
     None
 }
 
@@ -1103,7 +1119,10 @@ const GLOBAL_BUILTIN_HTML: &str = include_str!("../../../public/global-builtin.h
 /// 打开全球内置窗口（iframe 加载外部 URL + 密码验证 + 悬浮按钮）
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn open_global_builtin_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+pub async fn open_global_builtin_window(
+    app: tauri::AppHandle,
+    url: Option<String>,
+) -> Result<(), String> {
     let label = "global_builtin_window";
     if let Some(w) = app.get_webview_window(label) {
         let _ = w.show();
@@ -1111,7 +1130,11 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle, url: String) -> R
         return Ok(());
     }
     // 用 data URL 加载嵌入的 HTML
-    let encoded_target = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(url.as_bytes());
+    let target_url = url.unwrap_or_else(|| {
+        "https://zh.stripcam.xxx/top/girls/current-month-asia-and-pacific".to_string()
+    });
+    let encoded_target =
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(target_url.as_bytes());
     let html_with_param = GLOBAL_BUILTIN_HTML.replace("{{TARGET_URL}}", &encoded_target);
     let data_url = format!(
         "data:text/html;base64,{}",

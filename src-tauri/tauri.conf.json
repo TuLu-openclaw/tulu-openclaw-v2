@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
   "productName": "TuLuOpenClaw_v2",
   "version": "3.0.1",
@@ -36,7 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/Star-Office-UI-master/*", "resources/Star-Office-UI-master/**/*"],
+    "resources": [{"from": "resources/Star-Office-UI-master", "to": "Star-Office-UI-master"}],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",
