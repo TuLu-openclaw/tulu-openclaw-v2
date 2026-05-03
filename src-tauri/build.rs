@@ -1,5 +1,4 @@
 fn main() {
-    // 复制 Star-Office-UI 到 resources 目录（打包时包含）
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let src = std::path::Path::new(&manifest_dir)
         .join("..")
@@ -8,9 +7,23 @@ fn main() {
     let dst = std::path::Path::new(&manifest_dir)
         .join("resources")
         .join("Star-Office-UI-master");
-    if src.exists() && !dst.exists() {
-        copy_dir_recursive(&src, &dst).ok();
+
+    println!("cargo:warning=Star-Office-UI src: {} (exists: {})", src.display(), src.exists());
+    println!("cargo:warning=Star-Office-UI dst: {} (exists: {})", dst.display(), dst.exists());
+
+    if src.exists() {
+        if !dst.exists() {
+            match copy_dir_recursive(&src, &dst) {
+                Ok(()) => println!("cargo:warning=Star-Office-UI copied OK"),
+                Err(e) => println!("cargo:warning=Star-Office-UI copy FAILED: {}", e),
+            }
+        } else {
+            println!("cargo:warning=Star-Office-UI dst already exists, skipping copy");
+        }
+    } else {
+        println!("cargo:warning=Star-Office-UI src NOT FOUND");
     }
+
     tauri_build::build()
 }
 
