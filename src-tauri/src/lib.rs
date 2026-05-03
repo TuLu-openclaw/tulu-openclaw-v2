@@ -181,7 +181,8 @@ pub fn run() {
             assistant::open_lobster_office,
             #[cfg(target_os = "windows")]
             assistant::open_global_builtin_window,
-            navigate_global_builtin,
+            #[cfg(target_os = "windows")]
+            assistant::navigate_global_builtin,
             assistant::fetch_live_sources,
             #[cfg(target_os = "windows")]
             assistant::vod_fetch,

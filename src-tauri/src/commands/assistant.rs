@@ -1211,7 +1211,7 @@ pub async fn navigate_global_builtin(app: tauri::AppHandle, url: String) -> Resu
     use tauri::Manager;
     const WINDOW_LABEL: &str = "global_builtin_window";
     if let Some(win) = app.get_webview_window(WINDOW_LABEL) {
-        let parsed: tauri::url::Url = url.parse().map_err(|e| format!("URL格式错误: {e}"))?;
+        let parsed: reqwest::Url = url.parse().map_err(|e| format!("URL格式错误: {e}"))?;
         win.navigate(parsed).map_err(|e| format!("导航失败: {e}"))?;
         Ok("ok".into())
     } else {
