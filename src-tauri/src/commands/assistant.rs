@@ -1,4 +1,4 @@
-﻿use base64::{engine::general_purpose, Engine as _};
+use base64::{engine::general_purpose, Engine as _};
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
 /// 仅在用户主动开启工具后由 AI 调用
@@ -1097,40 +1097,33 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
     Ok(items.join("\n"))
 }
 
+/// 全球内置 HTML 内容（编译时嵌入）
+const GLOBAL_BUILTIN_HTML: &str = include_str!("../../../public/global-builtin.html");
+
 /// 打开全球内置窗口（iframe 加载外部 URL + 密码验证 + 悬浮按钮）
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn open_global_builtin_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    use tauri::Manager;
     let label = "global_builtin_window";
-    // 如果窗口已存在，聚焦
     if let Some(w) = app.get_webview_window(label) {
         let _ = w.show();
         let _ = w.set_focus();
         return Ok(());
     }
-    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(url.as_bytes());
-    let html_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?
-        .join("global-builtin.html");
-    // 如果 resource_dir 没有，回退到 public 目录（开发模式）
-    let html_url = if html_path.exists() {
-        format!("tauri://localhost/global-builtin.html?target={}", encoded)
-    } else {
-        format!("tauri://localhost/global-builtin.html?target={}", encoded)
-    };
-    let _win = tauri::WebviewWindowBuilder::new(
-        &app,
-        label,
-        tauri::WebviewUrl::App("global-builtin.html".into()),
-    )
-    .title("全球内置")
-    .inner_size(1100.0, 750.0)
-    .resizable(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    // 用 data URL 加载嵌入的 HTML
+    let encoded_target = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(url.as_bytes());
+    let html_with_param = GLOBAL_BUILTIN_HTML.replace("{{TARGET_URL}}", &encoded_target);
+    let data_url = format!(
+        "data:text/html;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(html_with_param.as_bytes())
+    );
+    let _win =
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App(data_url.into()))
+            .title("全球内置")
+            .inner_size(1100.0, 750.0)
+            .resizable(true)
+            .build()
+            .map_err(|e| e.to_string())?;
     Ok(())
 }
 
