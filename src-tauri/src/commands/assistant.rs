@@ -892,70 +892,105 @@ fn urlencoding_encode(s: &str) -> String {
     r
 }
 
-/// 打开龙虾办公室独立窗口
+/// Star-Office-UI 后端进程 PID
+static STAR_OFFICE_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// 查找 Star-Office-UI-master 目录
+fn find_star_office_dir() -> Option<std::path::PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_default();
+    let candidates = [
+        exe_dir.join("_vendor").join("Star-Office-UI-master"),
+        exe_dir.join("resources").join("_vendor").join("Star-Office-UI-master"),
+        exe_dir.join("..").join("_vendor").join("Star-Office-UI-master"),
+    ];
+    for p in &candidates {
+        if p.join("backend").join("app.py").exists() {
+            return Some(p.clone());
+        }
+    }
+    None
+}
+
+/// 启动 Star-Office-UI Python 后端
+async fn start_star_office_backend() -> Result<u16, String> {
+    let port: u16 = 19000;
+    let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
+        return Ok(port);
+    }
+    let office_dir = find_star_office_dir()
+        .ok_or_else(|| "未找到 Star-Office-UI-master 目录".to_string())?;
+    let state_file = office_dir.join("state.json");
+    if !state_file.exists() {
+        let sample = office_dir.join("state.sample.json");
+        if sample.exists() {
+            let _ = std::fs::copy(&sample, &state_file);
+        } else {
+            let _ = std::fs::write(&state_file, "{\"state\":\"idle\",\"detail\":\"待命中\",\"progress\":0}");
+        }
+    }
+    let agents_file = office_dir.join("agents-state.json");
+    if !agents_file.exists() {
+        let _ = std::fs::write(&agents_file, "{}");
+    }
+    let python_candidates = ["python3", "python", "py"];
+    let mut python_cmd = None;
+    for cmd in &python_candidates {
+        let mut check = std::process::Command::new(cmd);
+        check.args(["--version"]);
+        #[cfg(target_os = "windows")]
+        check.creation_flags(0x08000000);
+        if check.output().map(|o| o.status.success()).unwrap_or(false) {
+            python_cmd = Some(cmd.to_string());
+            break;
+        }
+    }
+    let python = python_cmd.ok_or_else(|| "未找到 Python，请先安装 Python 3.10+".to_string())?;
+    let log_path = office_dir.join("backend-run.log");
+    let log_file = std::fs::File::create(&log_path).map_err(|e| format!("创建日志失败: {e}"))?;
+    let log_err = log_file.try_clone().map_err(|e| format!("克隆日志失败: {e}"))?;
+    let mut cmd = std::process::Command::new(&python);
+    cmd.args(["backend/app.py"])
+        .current_dir(&office_dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(log_file)
+        .stderr(log_err)
+        .env("STAR_BACKEND_PORT", port.to_string());
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+    let child = cmd.spawn().map_err(|e| format!("启动 Star-Office 后端失败: {e}"))?;
+    STAR_OFFICE_PID.store(child.id(), std::sync::atomic::Ordering::SeqCst);
+    for _ in 0..30 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
+            return Ok(port);
+        }
+    }
+    Err("Star-Office 后端启动超时".into())
+}
+
+/// 打开龙虾办公室独立窗口（Star-Office-UI 版本）
 #[tauri::command]
 pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String> {
-    use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::WebviewUrl;
     use tauri::WebviewWindowBuilder;
-
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let port = start_star_office_backend().await?;
+    let url = format!("http://127.0.0.1:{port}");
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
     let window_label = format!("lobster_office_{}", ts);
-
-    // lobster-office.html 路径：打包后位于 resources 目录
-    // 用 app.path().resource_path() 获取打包后的资源根目录
-    let resources_path = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("获取资源路径失败: {}", e))?;
-    // 尝试多种可能的位置，增强兼容性
-    let primary_path = resources_path.join("lobster-office.html");
-    let html_path = if primary_path.exists() {
-        primary_path
-    } else {
-        // 尝试相对于 app exe 所在目录
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_default();
-        let alt = exe_dir.join("resources").join("lobster-office.html");
-        if alt.exists() {
-            alt
-        } else {
-            // 尝试 exe 同级目录（不放在 resources 子目录）
-            let alt2 = exe_dir.join("lobster-office.html");
-            if alt2.exists() {
-                alt2
-            } else {
-                // 回退：直接使用 primary_path
-                primary_path
-            }
-        }
-    };
-    if !html_path.exists() {
-        return Err(format!(
-            "龙虾办公室页面不存在，请重新安装程序（已查找: {}）",
-            html_path.display()
-        ));
-    }
-
-    WebviewWindowBuilder::new(
-        &app,
-        &window_label,
-        WebviewUrl::App(html_path.to_string_lossy().replace('\\', "/").into()),
-    )
-    .title("🦞 龙虾办公室")
-    .inner_size(1024.0, 640.0)
-    .min_inner_size(800.0, 520.0)
-    .resizable(true)
-    .decorations(true)
-    .center()
-    .build()
-    .map_err(|e| format!("创建龙虾办公室窗口失败: {}", e))?;
-
+    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(url.parse().unwrap()))
+        .title("🦞 龙虾办公室")
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(960.0, 640.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建龙虾办公室窗口失败: {}", e))?;
     Ok("ok".into())
 }
 
