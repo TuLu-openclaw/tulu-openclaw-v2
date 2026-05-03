@@ -182,6 +182,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::open_global_builtin_window,
             assistant::fetch_live_sources,
+            assistant::update_office_state,
             #[cfg(target_os = "windows")]
             assistant::vod_fetch,
             // 数据目录 & 图片存储
