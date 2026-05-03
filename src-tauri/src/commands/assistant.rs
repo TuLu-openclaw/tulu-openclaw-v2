@@ -1115,7 +1115,7 @@ pub async fn open_global_builtin_window(app: tauri::AppHandle) -> Result<String,
         let _ = existing.show();
         let _ = existing.unminimize();
         let _ = existing.set_focus();
-        let _ = existing.navigate(WebviewUrl::App(LOCAL_PAGE.into()));
+        let _ = existing.navigate(format!("app://localhost/{LOCAL_PAGE}").parse().unwrap());
         return Ok("focus".into());
     }
 
