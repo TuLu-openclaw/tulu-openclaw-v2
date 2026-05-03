@@ -1303,7 +1303,7 @@ pub async fn sync_openclaw_to_office(app: tauri::AppHandle) -> Result<(), String
 
     for svc in &services {
         let name_lower = svc.label.to_lowercase();
-        let is_online = svc.status == "running" || svc.status == "online";
+        let is_online = svc.running;
         if name_lower.contains("gateway") {
             status["gateway_online"] = serde_json::Value::Bool(is_online);
         }
