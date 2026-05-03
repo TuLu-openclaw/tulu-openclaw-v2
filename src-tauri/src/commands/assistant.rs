@@ -1114,12 +1114,10 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
 }
 
 /// 全球内置 HTML 内容（编译时嵌入）
+const GLOBAL_BUILTIN_HTML: &str = include_str!("../../../public/global-builtin.html");
 
-/// 全球内置窗口：直接加载外部 URL（full browser speed）
-///
-/// 架构：
-/// - 主窗口：直接用 WebviewUrl::External 加载目标 URL（full browser speed）
-/// - 悬浮提取按钮：通过前端的 openGlobalBuiltinWindow 调用 Rust fetch_live_sources
+/// Global built-in window: load external URL directly (full browser speed + fully clickable)
+/// Floating button overlay for m3u8 extraction via webview.eval()
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn open_global_builtin_window(
@@ -1128,31 +1126,28 @@ pub async fn open_global_builtin_window(
 ) -> Result<(), String> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-    let target_url = url.unwrap_or_else(|| "https://zh.stripcam.xxx/top/girls/curr".to_string());
+    let target_url = url.unwrap_or_else(|| {
+        "https://zh.stripcam.xxx/top/girls/curr".to_string()
+    });
 
-    // 清理非法 URL
     if target_url.starts_with("data:") || target_url.starts_with("file:") {
-        return Err("禁止加载此类 URL".to_string());
+        return Err("No data/file URLs allowed".to_string());
     }
 
     let label = "global_builtin_window";
 
-    // 如果已存在，直接显示并聚焦
+    // If window exists, just show and focus
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.set_focus();
         return Ok(());
     }
 
-    // 创建主窗口（直接加载外部 URL，full browser speed + fully clickable）
+    // Main window: direct External URL = full browser speed + fully interactive
     let _win = WebviewWindowBuilder::new(
         &app,
         label,
-        WebviewUrl::External(
-            target_url
-                .parse()
-                .map_err(|e: url::ParseError| e.to_string())?,
-        ),
+        WebviewUrl::External(target_url.parse().map_err(|e| format!("URL parse error: {}", e))?),
     )
     .title("全球内置")
     .inner_size(1200.0, 800.0)
@@ -1162,10 +1157,11 @@ pub async fn open_global_builtin_window(
     .visible(true)
     .focused(true)
     .build()
-    .map_err(|e| format!("创建窗口失败: {}", e))?;
+    .map_err(|e| format!("Failed to create window: {}", e))?;
 
     Ok(())
 }
+
 
 /// 从 URL 扫描 m3u8 视频源
 #[tauri::command]

@@ -1,59 +1,51 @@
 {
-    "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
-    "productName": "TuLuOpenClaw_v2",
-    "version": "3.0.1",
-    "identifier": "ai.openclaw.tulu-openclaw-v2",
-    "build": {
-        "frontendDist": "../dist",
-        "devUrl": "http://localhost:1420",
-        "beforeDevCommand": "npm run dev",
-        "beforeBuildCommand": "npm run build"
-    },
-    "app": {
-        "windows": [
-            {
-                "title": "屠戮OpenClaw",
-                "width": 1100,
-                "height": 700,
-                "minWidth": 800,
-                "minHeight": 500,
-                "decorations": true,
-                "resizable": true
-            }
-        ],
-        "withGlobalTauri": true,
-        "security": {
-            "csp": null
-        }
-    },
-    "bundle": {
-        "active": true,
-        "targets": "all",
-        "icon": [
-            "icons/32x32.png",
-            "icons/128x128.png",
-            "icons/128x128@2x.png",
-            "icons/icon.icns",
-            "icons/icon.ico"
-        ],
-        "resources": [
-            "resources/Star-Office-UI-master/*",
-            "resources/Star-Office-UI-master/**/*",
-            "public/*"
-        ],
-        "windows": {
-            "webviewInstallMode": {
-                "type": "embedBootstrapper",
-                "silent": true
-            },
-            "nsis": {
-                "languages": [
-                    "SimpChinese",
-                    "TradChinese",
-                    "English"
-                ],
-                "displayLanguageSelector": true
-            }
-        }
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "TuLuOpenClaw_v2",
+  "version": "3.0.1",
+  "identifier": "ai.openclaw.tulu-openclaw-v2",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "屠戮OpenClaw",
+        "width": 1100,
+        "height": 700,
+        "minWidth": 800,
+        "minHeight": 500,
+        "decorations": true,
+        "resizable": true
+      }
+    ],
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
     }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["resources/Star-Office-UI-master/*", "resources/Star-Office-UI-master/**/*"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "languages": ["SimpChinese", "TradChinese", "English"],
+        "displayLanguageSelector": true
+      }
+    }
+  }
 }
