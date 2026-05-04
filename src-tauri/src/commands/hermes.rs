@@ -4147,6 +4147,34 @@ pub async fn hermes_skill_write(file_path: String, content: String) -> Result<St
     Ok("ok".into())
 }
 
+/// Delete a skill file or directory. Path must be inside `~/.hermes/skills/`.
+#[tauri::command]
+pub async fn hermes_skill_delete(file_path: String) -> Result<String, String> {
+    let skills_dir = hermes_home().join("skills");
+    let target = skills_dir.join(&file_path);
+
+    let skills_canon = skills_dir
+        .canonicalize()
+        .map_err(|e| format!("Skills dir not accessible: {e}"))?;
+    let target_abs = if target.is_absolute() {
+        target.clone()
+    } else {
+        skills_dir.join(&file_path)
+    };
+    let target_canon = target_abs
+        .canonicalize()
+        .map_err(|e| format!("Path error: {e}"))?;
+    if !target_canon.starts_with(&skills_canon) {
+        return Err("Access denied".into());
+    }
+    if target_abs.is_dir() {
+        std::fs::remove_dir_all(&target_abs).map_err(|e| format!("Failed to delete skill dir: {e}"))?;
+    } else {
+        std::fs::remove_file(&target_abs).map_err(|e| format!("Failed to delete skill file: {e}"))?;
+    }
+    Ok("ok".into())
+}
+
 /// Resolve `memory|user|soul` to its filename inside `~/.hermes/memories/`.
 fn memory_file_name(kind: &str) -> Option<&'static str> {
     match kind {
