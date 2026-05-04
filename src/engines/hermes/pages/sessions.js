@@ -64,9 +64,21 @@ function formatTokens(value) {
 
 function normalizeMessage(m) {
   const raw = m?.content ?? m?.toolResult ?? m?.toolArgs ?? ''
+  let content = typeof raw === 'string' ? raw : JSON.stringify(raw)
+  // Decode URL-encoded content (handle double-encoding gracefully)
+  if (typeof content === 'string') {
+    try {
+      const decoded = decodeURIComponent(content)
+      if (decoded !== content) {
+        content = decoded
+        // Try a second pass in case of double-encoding
+        try { const d2 = decodeURIComponent(content); if (d2 !== content) content = d2 } catch {}
+      }
+    } catch {}
+  }
   return {
     role: m?.role || 'message',
-    content: typeof raw === 'string' ? raw : JSON.stringify(raw),
+    content,
     timestamp: m?.timestamp || m?.created_at || '',
   }
 }
