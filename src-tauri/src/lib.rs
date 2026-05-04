@@ -183,7 +183,6 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::open_global_builtin_window,
             assistant::fetch_live_sources,
-            assistant::fetch_page_m3u8,
             assistant::update_office_state,
             assistant::sync_openclaw_to_office,
             #[cfg(target_os = "windows")]
