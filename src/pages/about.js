@@ -276,6 +276,9 @@ async function loadData(page) {
         <div class="stat-card-header"><span class="stat-card-label">屠戮OpenClaw</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
+        <div style="margin-top:8px">
+          <button class="btn btn-secondary btn-sm" id="btn-check-app-update" style="${btnSm}">${t('about.checkUpdate') || '检查更新'}</button>
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-card-header"><span class="stat-card-label">OpenClaw · ${sourceLabel}</span></div>
@@ -346,6 +349,32 @@ async function loadData(page) {
         } catch (e) {
           cleanup()
           modal.setError(t('about.uninstallFailed') + (e?.message || e))
+        }
+      }
+    }
+
+    // 检查应用更新按钮
+    const checkAppUpdateBtn = cards.querySelector('#btn-check-app-update')
+    if (checkAppUpdateBtn) {
+      checkAppUpdateBtn.onclick = async () => {
+        checkAppUpdateBtn.disabled = true
+        checkAppUpdateBtn.textContent = t('about.checkingUpdate') || '检查中...'
+        try {
+          const { checkAppUpdate } = await import('../components/app-updater.js')
+          const info = await checkAppUpdate(false)
+          if (!info || !info.hasUpdate) {
+            checkAppUpdateBtn.textContent = t('about.upToDate') || '已是最新'
+            setTimeout(() => {
+              checkAppUpdateBtn.disabled = false
+              checkAppUpdateBtn.textContent = t('about.checkUpdate') || '检查更新'
+            }, 2000)
+          } else {
+            checkAppUpdateBtn.textContent = t('about.checkUpdate') || '检查更新'
+            checkAppUpdateBtn.disabled = false
+          }
+        } catch (e) {
+          checkAppUpdateBtn.textContent = t('about.checkUpdate') || '检查更新'
+          checkAppUpdateBtn.disabled = false
         }
       }
     }

@@ -2338,5 +2338,20 @@
     "memoryLoading": "Loading memory...",
     "memoryNotes": "Notes",
     "memoryProfile": "Profile"
+  },
+  "updater": {
+    "title": "New Version Available",
+    "noUpdate": "You are already on the latest version",
+    "checkFailed": "Failed to check for updates",
+    "downloading": "Downloading...",
+    "downloadDone": "Download complete!",
+    "downloadFailed": "Download failed",
+    "install": "Install & Restart",
+    "installing": "Installing...",
+    "installFailed": "Installation failed",
+    "later": "Later",
+    "close": "Close",
+    "retry": "Retry",
+    "viewRelease": "View Release"
   }
 }

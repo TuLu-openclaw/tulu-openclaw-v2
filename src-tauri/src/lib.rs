@@ -268,6 +268,9 @@ pub fn run() {
             update::download_frontend_update,
             update::rollback_frontend_update,
             update::get_update_status,
+            update::check_app_update,
+            update::download_app_update,
+            update::launch_installer_and_exit,
             // TVBox 框架接口
             tvbox::tvbox_req,
             tvbox::tvbox_md5,

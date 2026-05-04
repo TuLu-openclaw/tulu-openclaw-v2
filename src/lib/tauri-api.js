@@ -526,6 +526,11 @@ export const api = {
   rollbackFrontendUpdate: () => invoke('rollback_frontend_update'),
   getUpdateStatus: () => invoke('get_update_status'),
 
+  // 应用更新（GitHub Release）
+  checkAppUpdate: () => invoke('check_app_update'),
+  downloadAppUpdate: (url, filename) => invoke('download_app_update', { url, filename }),
+  launchInstallerAndExit: (installerPath) => invoke('launch_installer_and_exit', { installerPath }),
+
   // 数据目录 & 图片存储
   ensureDataDir: () => invoke('assistant_ensure_data_dir'),
   saveImage: (id, data) => invoke('assistant_save_image', { id, data }),

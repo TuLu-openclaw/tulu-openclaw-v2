@@ -196,6 +196,204 @@ fn version_gt(left: &str, right: &str) -> bool {
     version_ge(left, right) && !version_ge(right, left)
 }
 
+/// GitHub 仓库信息
+const GITHUB_OWNER: &str = "TuLu-openclaw";
+const GITHUB_REPO: &str = "tulu-openclaw-v2";
+
+/// 检查 GitHub Release 是否有新版本
+#[tauri::command]
+pub async fn check_app_update() -> Result<Value, String> {
+    let client = super::build_http_client(std::time::Duration::from_secs(15), Some("屠戮OpenClaw"))
+        .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+
+    let url = format!(
+        "https://api.github.com/repos/{owner}/{repo}/releases/latest",
+        owner = GITHUB_OWNER,
+        repo = GITHUB_REPO
+    );
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("请求 GitHub 失败: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("GitHub API 返回 {}: {}", status, body));
+    }
+
+    let release: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("解析 GitHub 响应失败: {e}"))?;
+
+    let tag = release
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let latest_version = tag.trim_start_matches('v');
+    let current_version = env!("CARGO_PKG_VERSION");
+    let has_update = !latest_version.is_empty() && version_gt(latest_version, current_version);
+
+    // 收集所有平台的下载链接
+    let mut assets = Vec::new();
+    if let Some(arr) = release.get("assets").and_then(|v| v.as_array()) {
+        for asset in arr {
+            let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let download_url = asset
+                .get("browser_download_url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let size = asset.get("size").and_then(|v| v.as_i64()).unwrap_or(0);
+            if !download_url.is_empty() {
+                assets.push(serde_json::json!({
+                    "name": name,
+                    "url": download_url,
+                    "size": size
+                }));
+            }
+        }
+    }
+
+    // 匹配当前平台的最佳安装包
+    let platform_asset = find_platform_asset(&assets);
+
+    let release_notes = release
+        .get("body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let published_at = release
+        .get("published_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(serde_json::json!({
+        "hasUpdate": has_update,
+        "currentVersion": current_version,
+        "latestVersion": latest_version,
+        "tagName": tag,
+        "releaseNotes": release_notes,
+        "publishedAt": published_at,
+        "assets": assets,
+        "platformAsset": platform_asset,
+        "htmlUrl": release.get("html_url").and_then(|v| v.as_str()).unwrap_or("")
+    }))
+}
+
+/// 根据当前平台匹配最佳安装包
+fn find_platform_asset(assets: &[Value]) -> Option<Value> {
+    let is_windows = cfg!(target_os = "windows");
+    let is_macos = cfg!(target_os = "macos");
+    let is_linux = cfg!(target_os = "linux");
+    let is_arm = cfg!(target_arch = "aarch64");
+
+    for asset in assets {
+        let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+        if is_windows && name.ends_with("-setup.exe") {
+            if is_arm && name.contains("arm64") {
+                return Some(asset.clone());
+            } else if !is_arm && !name.contains("arm64") {
+                return Some(asset.clone());
+            }
+        }
+        if is_macos && name.ends_with(".dmg") {
+            if is_arm && name.contains("arm64") {
+                return Some(asset.clone());
+            } else if !is_arm && name.contains("intel") {
+                return Some(asset.clone());
+            }
+        }
+        if is_linux && (name.ends_with(".appimage") || name.ends_with(".deb")) {
+            return Some(asset.clone());
+        }
+    }
+    None
+}
+
+/// 下载应用安装包到临时目录
+#[tauri::command]
+pub async fn download_app_update(url: String, filename: String) -> Result<Value, String> {
+    let client =
+        super::build_http_client(std::time::Duration::from_secs(600), Some("屠戮OpenClaw"))
+            .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("下载失败: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("下载失败: HTTP {}", resp.status()));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取数据失败: {e}"))?;
+
+    // 保存到临时目录
+    let temp_dir = std::env::temp_dir().join("tulu-openclaw-update");
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("创建临时目录失败: {e}"))?;
+    let file_path = temp_dir.join(&filename);
+    fs::write(&file_path, &bytes).map_err(|e| format!("写入文件失败: {e}"))?;
+
+    Ok(serde_json::json!({
+        "success": true,
+        "path": file_path.to_string_lossy(),
+        "size": bytes.len()
+    }))
+}
+
+/// 启动安装包并退出当前应用
+#[tauri::command]
+pub async fn launch_installer_and_exit(app: tauri::AppHandle, installer_path: String) -> Result<(), String> {
+    let path = std::path::Path::new(&installer_path);
+    if !path.exists() {
+        return Err(format!("安装包不存在: {}", installer_path));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        Command::new(path)
+            .arg("/S") // NSIS 静默安装
+            .spawn()
+            .map_err(|e| format!("启动安装包失败: {e}"))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("启动安装包失败: {e}"))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        Command::new("chmod")
+            .args(["+x", &installer_path])
+            .spawn()
+            .map_err(|e| format!("设置权限失败: {e}"))?;
+        Command::new(path)
+            .spawn()
+            .map_err(|e| format!("启动安装包失败: {e}"))?;
+    }
+
+    // 退出当前应用
+    app.exit(0);
+    Ok(())
+}
+
 /// 根据文件扩展名推断 MIME 类型
 pub fn mime_from_path(path: &str) -> &'static str {
     match path.rsplit('.').next().unwrap_or("") {

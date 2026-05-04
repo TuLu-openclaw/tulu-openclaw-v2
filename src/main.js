@@ -1073,10 +1073,27 @@ sudo systemctl restart 屠戮OpenClaw</pre>
 }
 
 function startUpdateChecker() {
-  // 启动后 5 秒检查一次
+  // 启动后 5 秒检查一次前端热更新
   setTimeout(checkGlobalUpdate, 5000)
   // 之后每 30 分钟检查一次
   _updateCheckTimer = setInterval(checkGlobalUpdate, UPDATE_CHECK_INTERVAL)
+
+  // 启动后 10 秒检查一次应用更新（GitHub Release）
+  if (isTauri) {
+    setTimeout(async () => {
+      try {
+        const { checkAppUpdate } = await import('./components/app-updater.js')
+        await checkAppUpdate(true)
+      } catch {}
+    }, 10000)
+    // 之后每 2 小时检查一次
+    setInterval(async () => {
+      try {
+        const { checkAppUpdate } = await import('./components/app-updater.js')
+        await checkAppUpdate(true)
+      } catch {}
+    }, 7200000)
+  }
 
   // 龙虾办公室状态同步（每30秒）
   if (isTauri) {
