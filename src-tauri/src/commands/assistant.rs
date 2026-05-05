@@ -1132,25 +1132,19 @@ pub async fn open_global_builtin_window(
         return Err("No data/file URLs allowed".to_string());
     }
 
-    let main_label = "global_builtin_window";
-    let overlay_label = "global_builtin_overlay";
+    let label = "global_builtin_window";
 
-    // If main window exists, just show and focus
-    if let Some(window) = app.get_webview_window(main_label) {
+    // If window exists, just show and focus
+    if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.set_focus();
-        // Also show overlay
-        if let Some(overlay) = app.get_webview_window(overlay_label) {
-            let _ = overlay.show();
-            let _ = overlay.set_always_on_top(true);
-        }
         return Ok(());
     }
 
-    // Main window: direct External URL = full browser speed + fully interactive
-    let main_win = WebviewWindowBuilder::new(
+    // Single window: direct External URL = fully interactive like a real browser
+    let win = WebviewWindowBuilder::new(
         &app,
-        main_label,
+        label,
         WebviewUrl::External(
             target_url
                 .parse()
@@ -1165,30 +1159,56 @@ pub async fn open_global_builtin_window(
     .visible(true)
     .focused(true)
     .build()
-    .map_err(|e| format!("Failed to create main window: {}", e))?;
+    .map_err(|e| format!("Failed to create window: {}", e))?;
 
-    // Overlay window: transparent, always-on-top, with floating extract button
-    // Uses local HTML with the floating button + password UI
-    let overlay_url = format!(
-        "global-builtin-overlay.html?url={}",
-        urlencoding::encode(&target_url)
-    );
-    let overlay_win =
-        WebviewWindowBuilder::new(&app, overlay_label, WebviewUrl::App(overlay_url.into()))
-            .title("全球内置 - 控制栏")
-            .inner_size(1200.0, 800.0)
-            .position(0.0, 0.0)
-            .decorations(false)
-            .resizable(false)
-            .transparent(true)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .visible(true)
-            .build()
-            .map_err(|e| format!("Failed to create overlay window: {}", e))?;
+    // Inject floating extract button via JS eval after page loads
+    // Button lives in the page DOM → can access window.location.href (current URL)
+    // On page navigation button is lost → re-inject on each page load
+    let app_handle = app.clone();
+    let inject_js = include_str!("../../../public/global-builtin-inject.js").to_string();
 
-    // Sync overlay position with main window
-    // Note: The overlay is transparent except for the floating buttons
+    // Initial injection after delay
+    let ah1 = app_handle.clone();
+    let inj1 = inject_js.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        if let Some(w) = ah1.get_webview_window("global_builtin_window") {
+            let _ = w.eval(&inj1);
+        }
+    });
+
+    // Re-inject on navigation (every 3s check if button exists, re-inject if not)
+    let ah2 = app_handle.clone();
+    let inj2 = inject_js.clone();
+    std::thread::spawn(move || {
+        for _ in 0..200 {
+            // ~10 min
+            std::thread::sleep(std::time::Duration::from_millis(3000));
+            if let Some(w) = ah2.get_webview_window("global_builtin_window") {
+                let check = "if (!window.__tulu_injected) { window.__tulu_needs_reinject = true; }";
+                let _ = w.eval(check);
+            } else {
+                break; // Window closed
+            }
+        }
+    });
+
+    // Periodic re-inject via Rust eval (simpler: just re-inject every 3s)
+    let ah3 = app_handle.clone();
+    let inj3 = inject_js.clone();
+    std::thread::spawn(move || {
+        for _ in 0..200 {
+            std::thread::sleep(std::time::Duration::from_millis(3000));
+            if let Some(w) = ah3.get_webview_window("global_builtin_window") {
+                // Reset guard flag so re-injection works
+                let reset = "window.__tulu_injected = false;";
+                let _ = w.eval(reset);
+                let _ = w.eval(&inj3);
+            } else {
+                break;
+            }
+        }
+    });
 
     Ok(())
 }
