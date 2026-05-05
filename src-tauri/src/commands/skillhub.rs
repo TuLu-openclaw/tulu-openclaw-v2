@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const COS_BASE: &str = "https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com";
-const API_BASE: &str = "https://lightmake.site/api/v1";
+const API_BASE: &str = "https://clawhub.ai/api/v1";
 const INDEX_TTL: Duration = Duration::from_secs(600); // 10 分钟缓存
 
 // ── 数据结构 ──────────────────────────────────────────────

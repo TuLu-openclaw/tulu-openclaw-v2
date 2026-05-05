@@ -638,6 +638,103 @@ fn current_platform_key() -> &'static str {
 // check_hermes — 检测 Hermes Agent 安装状态
 // ---------------------------------------------------------------------------
 
+/// hermes_auto_configure — 从 OpenClaw Settings 读取已配置模型，写入 Hermes .env + config.yaml
+pub fn hermes_auto_configure() -> Result<String, String> {
+    use super::config as oc_cfg;
+    use super::hermes_providers;
+
+    let home = hermes_home();
+    let _ = std::fs::create_dir_all(&home);
+
+    let oc = oc_cfg::read_openclaw_config()
+        .map_err(|e| format!("读取 OpenClaw 配置失败: {}", e))?;
+
+    let api_key = oc.get("apiKey").and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty() && !s.contains("your-key") && !s.contains("xxx"))
+        .map(String::from)
+        .or_else(|| oc.get("providers").and_then(|v| v.as_object())
+            .and_then(|obj| obj.values().next())
+            .and_then(|p| p.get("apiKey")).and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty() && !s.contains("your-key"))
+            .map(String::from))
+        .ok_or("OpenClaw Settings 未找到 API Key")?;
+
+    let model = oc.get("model").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from)
+        .or_else(|| oc.get("defaultModel").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from))
+        .or_else(|| oc.get("providers").and_then(|v| v.as_object())
+            .and_then(|obj| obj.values().next())
+            .and_then(|p| p.get("model")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from))
+        .ok_or("OpenClaw Settings 未找到模型名称")?;
+
+    let base = oc.get("baseUrl").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from)
+        .or_else(|| oc.get("providers").and_then(|v| v.as_object())
+            .and_then(|obj| obj.values().next())
+            .and_then(|p| p.get("baseUrl")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from))
+        .unwrap_or_default();
+
+    let prov = if base.contains("openai") || model.to_lowercase().contains("gpt") {
+        "openai"
+    } else if base.contains("anthropic") || model.to_lowercase().contains("claude") {
+        "anthropic"
+    } else if base.contains("deepseek") || model.to_lowercase().contains("deepseek") {
+        "deepseek"
+    } else if base.contains("google") || model.to_lowercase().contains("gemini") {
+        "gemini"
+    } else if base.contains("groq") || model.to_lowercase().contains("groq") {
+        "groq"
+    } else if base.contains("ollama") || base.contains("localhost") {
+        "ollama"
+    } else {
+        "custom"
+    };
+
+    let key_env = hermes_providers::primary_api_key_env(prov).unwrap_or("OPENAI_API_KEY");
+    let managed_keys = hermes_providers::all_managed_env_keys();
+
+    let config_path = home.join("config.yaml");
+    let base_line = if base.is_empty() { String::new() } else { format!("  base_url: {}
+", base) };
+    let prov_line = if prov == "custom" { String::new() } else { format!("  provider: {}
+", prov) };
+    let cfg = if config_path.exists() {
+        let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
+        merge_hermes_config_yaml(&existing, &model, &base_line, &prov_line)
+    } else {
+        format!(r#"model:
+  default: {model}
+{prov_line}{base_line}platform_toolsets:
+  api_server:
+    - hermes-api-server
+terminal:
+  backend: local
+platforms:
+  api_server:
+    enabled: true
+"#)
+    };
+    let _ = std::fs::write(&config_path, &cfg);
+
+    let mut pairs = vec![
+        ("GATEWAY_ALLOW_ALL_USERS".into(), "true".into()),
+        ("API_SERVER_KEY".into(), "clawpanel-local".into()),
+        (key_env.to_string(), api_key),
+    ];
+    if !base.is_empty() {
+        pairs.push(("OPENAI_BASE_URL".into(), base.clone()));
+    }
+    let env_path = home.join(".env");
+    let env_c = if env_path.exists() {
+        let existing = std::fs::read_to_string(&env_path).unwrap_or_default();
+        merge_env_file(&existing, &managed_keys, &pairs)
+    } else {
+        pairs.iter().map(|(k, v)| format!("{}={}
+", k, v)).collect()
+    };
+    let _ = std::fs::write(&env_path, &env_c);
+
+    Ok(format!("provider={} model={} base={}", prov, model, base))
+}
+
 #[tauri::command]
 pub fn check_hermes() -> Result<Value, String> {
     let enhanced = hermes_enhanced_path();
@@ -801,6 +898,26 @@ pub fn check_hermes() -> Result<Value, String> {
             }
         }
     }
+
+    // Auto-configure Hermes from OpenClaw Settings when Hermes .env has no API key yet
+    if !provider_configured {
+        match hermes_auto_configure() {
+            Ok(msg) => {
+                eprintln!("[check_hermes] Auto-configured from OpenClaw: {}", msg);
+                provider_configured = true;
+                if let Some(start) = msg.find("provider=") {
+                    let rest = &msg[start+9..];
+                    if let Some(end) = rest.find(' ') {
+                        configured_provider = rest[..end].to_string();
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[check_hermes] Auto-configure skipped/failed: {}", e);
+            }
+        }
+    }
+
     // 也检查 config.yaml 中的 provider 字段
     if let Ok(config_content) = std::fs::read_to_string(home.join("config.yaml")) {
         for line in config_content.lines() {
