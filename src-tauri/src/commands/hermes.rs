@@ -640,6 +640,7 @@ fn current_platform_key() -> &'static str {
 
 #[tauri::command]
 pub fn check_hermes() -> Result<Value, String> {
+    use super::hermes_providers;
     let enhanced = hermes_enhanced_path();
     let mut result = serde_json::Map::new();
     let home = hermes_home();
@@ -770,23 +771,11 @@ pub fn check_hermes() -> Result<Value, String> {
     let mut provider_configured = false;
     let mut configured_provider = String::new();
     if let Ok(env_content) = std::fs::read_to_string(home.join(".env")) {
-        // 检查常见 API key 变量
-        let key_vars = [
-            "OPENAI_API_KEY",
-            "ANTHROPIC_API_KEY",
-            "DEEPSEEK_API_KEY",
-            "OPENROUTER_API_KEY",
-            "GEMINI_API_KEY",
-            "GROQ_API_KEY",
-            "MISTRAL_API_KEY",
-            "COHERE_API_KEY",
-            "QWEN_API_KEY",
-            "AZURE_OPENAI_API_KEY",
-            "OLLAMA_API_KEY",
-        ];
+        // 使用 hermes_providers::all_managed_env_keys() 获取完整列表，避免遗漏
+        let managed_keys: Vec<&str> = hermes_providers::all_managed_env_keys();
         for line in env_content.lines() {
             let trimmed = line.trim();
-            for var in &key_vars {
+            for var in &managed_keys {
                 if trimmed.starts_with(var) && trimmed.contains('=') {
                     let val = trimmed.splitn(2, '=').nth(1).unwrap_or("").trim();
                     if !val.is_empty() && val != "sk-xxx" && val != "your-key-here" {
