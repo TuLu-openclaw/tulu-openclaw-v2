@@ -534,6 +534,7 @@ export const api = {
 
   // Hermes Agent 管理
   checkHermes: () => cachedInvoke('check_hermes', {}, 30000),
+  checkHermesUpdate: () => invoke('check_hermes_update'),
   checkPython: () => cachedInvoke('check_python', {}, 60000),
   installHermes: (method = 'uv-tool', extras = []) => { invalidate('check_hermes'); return invoke('install_hermes', { method, extras }) },
   configureHermes: (provider, apiKey, model, baseUrl) => { invalidate('check_hermes'); return invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null }) },

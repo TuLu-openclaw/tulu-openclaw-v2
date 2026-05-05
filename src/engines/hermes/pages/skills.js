@@ -114,6 +114,13 @@ export function render() {
   let toolsetsRaw = ''         // raw stdout, kept for fallback display when parsing fails
   let toolsetsLoading = true
 
+  // Hub (在线技能市场) state
+  let hubMode = false           // true = show hub, false = show local
+  let hubQuery = ''
+  let hubResults = []           // [{ slug, displayName, summary, version, downloads, stars }]
+  let hubLoading = false
+  let hubInstalling = new Set() // slugs currently being installed
+
   // ============================================================ loaders
 
   async function loadSkills() {
@@ -184,6 +191,95 @@ export function render() {
       toolsetsLoading = false
       draw()
     }
+  }
+
+  // ============================================================ Hub (在线技能市场)
+
+  async function loadHubResults() {
+    if (!hubQuery.trim()) { hubResults = []; draw(); return }
+    hubLoading = true
+    draw()
+    try {
+      const results = await api.skillhubSearch(hubQuery.trim(), 25)
+      hubResults = Array.isArray(results) ? results : []
+    } catch (e) {
+      console.error('Hub search failed:', e)
+      hubResults = []
+      toast(t('engine.skillsHubSearchFailed') + ': ' + (e?.message || e), 'error')
+    } finally {
+      hubLoading = false
+      draw()
+    }
+  }
+
+  async function installHubSkill(slug) {
+    if (hubInstalling.has(slug)) return
+    hubInstalling.add(slug)
+    draw()
+    try {
+      await api.skillhubInstall(slug)
+      toast(t('engine.skillsHubInstalled', { slug }), 'success')
+      // Reload local skills after install
+      await loadSkills()
+    } catch (e) {
+      console.error('Hub install failed:', e)
+      toast(t('engine.skillsHubInstallFailed') + ': ' + (e?.message || e), 'error')
+    } finally {
+      hubInstalling.delete(slug)
+      draw()
+    }
+  }
+
+  function renderHubResult(item) {
+    const isInstalling = hubInstalling.has(item.slug)
+    const name = item.displayName || item.name || item.slug
+    const desc = item.summary || item.description || ''
+    return `
+      <div class="hm-hub-result-card">
+        <div class="hm-hub-result-info">
+          <div class="hm-hub-result-name">${escHtml(name)}</div>
+          ${desc ? `<div class="hm-hub-result-desc">${escHtml(desc)}</div>` : ''}
+          <div class="hm-hub-result-meta">
+            ${item.version ? `<span class="hm-hub-badge">v${escHtml(item.version)}</span>` : ''}
+            ${item.downloads ? `<span class="hm-hub-badge">⬇ ${item.downloads}</span>` : ''}
+            ${item.stars ? `<span class="hm-hub-badge">⭐ ${item.stars}</span>` : ''}
+          </div>
+        </div>
+        <button class="hm-btn hm-btn--cta hm-btn--sm hm-hub-install-btn"
+                data-install-slug="${escHtml(item.slug)}"
+                ${isInstalling ? 'disabled' : ''}>
+          ${isInstalling ? '⏳' : '⬇ ' + t('engine.skillsHubInstall')}
+        </button>
+      </div>
+    `
+  }
+
+  function renderHub() {
+    return `
+      <div class="hm-hub-panel">
+        <div class="hm-hub-search">
+          <input type="text" id="hm-hub-query" class="hm-hub-input"
+                 placeholder="${t('engine.skillsHubSearchPlaceholder')}" value="${escHtml(hubQuery)}">
+          <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-hub-search-btn">${t('engine.skillsHubSearch')}</button>
+        </div>
+        <div class="hm-hub-results">
+          ${hubLoading ? `
+            <div class="hm-hub-loading">
+              <div class="hm-skel" style="height:60px;margin-bottom:10px"></div>
+              <div class="hm-skel" style="height:60px;margin-bottom:10px"></div>
+              <div class="hm-skel" style="height:60px"></div>
+            </div>
+          ` : ''}
+          ${!hubLoading && hubResults.length === 0 && hubQuery ? `
+            <div class="hm-hub-empty">${t('engine.skillsHubNoResults')}</div>
+          ` : ''}
+          ${!hubLoading && hubResults.length === 0 && !hubQuery ? `
+            <div class="hm-hub-empty">${t('engine.skillsHubHint')}</div>
+          ` : ''}
+          ${!hubLoading ? hubResults.map(renderHubResult).join('') : ''}
+        </div>
+      </div>
+    `
   }
 
   async function loadDetail(skill) {
@@ -328,13 +424,20 @@ export function render() {
     const filtered = filteredCategories()
     return `
       <aside class="hm-skills-sidebar">
-        <div class="hm-skills-sidebar-search">
-          <span class="hm-skills-search-icon">${ICONS.search}</span>
-          <input type="text" id="hm-skills-search" class="hm-skills-search-input"
-                 placeholder="${t('engine.skillsSearch')}" value="${escHtml(searchQuery)}">
+        <div class="hm-skills-sidebar-tabs">
+          <button class="hm-skills-tab ${!hubMode ? 'is-active' : ''}" id="hm-skills-tab-local">${t('engine.skillsLocalTab')}</button>
+          <button class="hm-skills-tab ${hubMode ? 'is-active' : ''}" id="hm-skills-tab-hub">${t('engine.skillsHubTab')}</button>
         </div>
+        ${!hubMode ? `
+          <div class="hm-skills-sidebar-search">
+            <span class="hm-skills-search-icon">${ICONS.search}</span>
+            <input type="text" id="hm-skills-search" class="hm-skills-search-input"
+                   placeholder="${t('engine.skillsSearch')}" value="${escHtml(searchQuery)}">
+          </div>
+        ` : ''}
         <div class="hm-skills-sidebar-scroll">
-          ${loading ? `
+          ${hubMode ? renderHub() : ''}
+          ${!hubMode && loading ? `
             <div class="hm-skills-loading">
               <div class="hm-skel" style="height:18px;width:60%;margin-bottom:10px"></div>
               <div class="hm-skel" style="height:14px;width:85%;margin-bottom:6px"></div>
@@ -342,12 +445,12 @@ export function render() {
               <div class="hm-skel" style="height:14px;width:90%"></div>
             </div>
           ` : ''}
-          ${!loading && filtered.length === 0 ? `
+          ${!hubMode && !loading && filtered.length === 0 ? `
             <div class="hm-skills-empty">
               ${searchQuery ? t('engine.skillsNoMatch') : t('engine.skillsEmpty')}
             </div>
           ` : ''}
-          ${!loading ? filtered.map(renderCategory).join('') : ''}
+          ${!hubMode && !loading ? filtered.map(renderCategory).join('') : ''}
         </div>
       </aside>
     `
@@ -612,6 +715,17 @@ export function render() {
 
     el.querySelectorAll('.hm-skills-file-chip').forEach(chip => {
       chip.addEventListener('click', () => openFile(chip.dataset.file))
+    })
+
+    // Hub event listeners
+    el.querySelector('#hm-skills-tab-local')?.addEventListener('click', () => { hubMode = false; draw() })
+    el.querySelector('#hm-skills-tab-hub')?.addEventListener('click', () => { hubMode = true; draw() })
+    el.querySelector('#hm-hub-query')?.addEventListener('input', (e) => { hubQuery = e.target.value })
+    el.querySelector('#hm-hub-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadHubResults() })
+    el.querySelector('#hm-hub-search-btn')?.addEventListener('click', loadHubResults)
+    el.querySelector('.hm-hub-results')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-install-slug]')
+      if (btn) installHubSkill(btn.dataset.installSlug)
     })
   }
 

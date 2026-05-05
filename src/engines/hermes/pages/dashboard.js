@@ -144,6 +144,8 @@ export function render() {
   let showDropdown = false  // 模型下拉是否展开
   let envDetecting = false  // 环境探测中
   let envData = null        // { wsl2: {...}, docker: {...} }
+  let updateChecking = false
+  let updateInfo = null     // { installed, latest, updateAvailable, releaseUrl, changelog }
   let connectMode = 'local' // local | wsl2 | docker | custom
   let customGwUrl = ''      // 自定义 Gateway URL
   let connectMsg = ''       // 连接区消息
@@ -304,7 +306,13 @@ export function render() {
         <div class="hm-kpi">
           <div class="hm-kpi-label">${t('engine.dashVersion')}</div>
           <div class="hm-kpi-value">v${version}</div>
-          <div class="hm-kpi-foot"><span class="hm-badge hm-badge--accent">uv-tool</span></div>
+          <div class="hm-kpi-foot">
+            <span class="hm-badge hm-badge--accent">uv-tool</span>
+            <button class="hm-btn hm-btn--ghost hm-btn--sm hm-check-update" style="margin-left:6px;font-size:10px" title="${t('engine.dashCheckUpdate')}">
+              ${updateChecking ? '⏳' : '🔄'} ${updateChecking ? t('engine.dashCheckingUpdate') : t('engine.dashCheckUpdate')}
+            </button>
+            ${updateInfo?.updateAvailable ? `<span class="hm-badge hm-badge--warning" style="margin-left:4px;cursor:pointer" title="${esc(updateInfo?.releaseUrl || '')}">⬆ ${t('engine.dashUpdateAvailable')}</span>` : ''}
+          </div>
         </div>
         <div class="hm-kpi">
           <div class="hm-kpi-label">${t('engine.dashApiEndpoint')}</div>
@@ -850,6 +858,7 @@ export function render() {
     el.querySelector('.hm-save-model')?.addEventListener('click', doSaveModel)
     // --- 连接目标 ---
     el.querySelector('.hm-detect-env')?.addEventListener('click', doDetectEnv)
+    el.querySelector('.hm-check-update')?.addEventListener('click', doCheckUpdate)
     el.querySelectorAll('.hm-connect-mode').forEach(btn => {
       btn.addEventListener('click', () => {
         connectMode = btn.dataset.mode
@@ -974,6 +983,22 @@ export function render() {
       connectMsg = `<span style="color:var(--error)">${t('engine.envDetectFailed')}: ${String(e).replace(/^Error:\s*/, '')}</span>`
     }
     envDetecting = false; draw()
+  }
+
+  async function doCheckUpdate() {
+    if (updateChecking) return
+    updateChecking = true; draw()
+    try {
+      updateInfo = await api.checkHermesUpdate()
+      if (updateInfo?.updateAvailable) {
+        toast(t('engine.dashUpdateAvailable') + ': v' + updateInfo.latest, 'info')
+      } else {
+        toast(t('engine.dashUpToDate'), 'success')
+      }
+    } catch (e) {
+      toast(t('engine.dashUpdateCheckFailed') + ': ' + (e?.message || e), 'error')
+    }
+    updateChecking = false; draw()
   }
 
   async function doApplyConnect() {

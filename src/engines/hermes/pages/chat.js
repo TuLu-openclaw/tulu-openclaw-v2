@@ -541,6 +541,8 @@ export function render() {
   }
 
   // --- initial session load + model meta ---
+  let providerConfigured = false
+  let configuredProvider = ''
   Promise.allSettled([
     store.loadSessions(),
     store.loadProfiles(),
@@ -549,6 +551,8 @@ export function render() {
     const info = results[2]?.status === 'fulfilled' ? results[2].value : null
     gwOnline = !!info?.gatewayRunning
     currentModel = info?.model || ''
+    providerConfigured = !!info?.providerConfigured
+    configuredProvider = info?.configuredProvider || ''
     scheduleDraw()
   })
 
@@ -1099,6 +1103,10 @@ export function render() {
         ${renderSidebar()}
         <section class="hm-chat-main">
           ${renderHeader()}
+          ${!providerConfigured ? `<div class="hm-chat-provider-warning" style="background:linear-gradient(135deg,#ff6b35,#ff4444);color:#fff;padding:10px 16px;font-size:13px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">⚠️</span>
+            <span>未配置推理 Provider — 请到「设置」页面配置 API Key，或编辑 ~/.hermes/.env</span>
+          </div>` : ''}
           <div class="hm-chat-messages" id="hm-chat-messages">
             ${renderMessages()}
           </div>
@@ -1740,6 +1748,30 @@ export function render() {
   async function handleSend() {
     const text = inputValue.trim()
     if (!text || store.state.streaming) return
+
+    // 检查 provider 是否已配置
+    if (!providerConfigured) {
+      // 重新检测
+      try {
+        const info = await api.checkHermes()
+        providerConfigured = !!info?.providerConfigured
+        configuredProvider = info?.configuredProvider || ''
+      } catch {}
+      if (!providerConfigured) {
+        store.state.messages = store.state.messages || []
+        const s = store.activeSession()
+        if (s) {
+          s.messages.push({
+            id: Date.now().toString(36),
+            role: 'system',
+            content: `⚠️ 未配置推理 Provider。请先到「设置」页面配置 API Key（如 OPENAI_API_KEY、DEEPSEEK_API_KEY 等），或在 ~/.hermes/.env 中手动设置。`,
+            timestamp: Date.now(),
+          })
+          draw()
+        }
+        return
+      }
+    }
     try {
       window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: text ? `收到 Hermes 任务：${text.slice(0, 32)}` : '收到 Hermes 任务' } }))
     } catch {}
