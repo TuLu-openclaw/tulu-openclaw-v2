@@ -3135,6 +3135,76 @@ pub async fn hermes_agent_run(
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Music Search — 后端代理（绕过 CORS）
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn music_search(query: String) -> Result<Vec<serde_json::Value>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let search_url = format!(
+        "https://music.163.com/api/search/get?s={}&type=1&limit=20&offset=0",
+        urlencoding::encode(&query)
+    );
+
+    let resp = client
+        .get(&search_url)
+        .header("Referer", "https://music.163.com")
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+
+    let data: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Parse error: {e}"))?;
+
+    let songs: Vec<&serde_json::Value> = data
+        .pointer("/result/songs")
+        .and_then(|s| s.as_array())
+        .map_or(vec![], |arr| arr.iter().collect::<Vec<_>>());
+
+    let results: Vec<serde_json::Value> = songs
+        .iter()
+        .map(|s| {
+            let artists = s
+                .pointer("/artists")
+                .and_then(|a| a.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|a| a.get("name").and_then(|n| n.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
+                .unwrap_or_default();
+            serde_json::json!({
+                "id": s.get("id"),
+                "name": s.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                "artist": artists,
+                "album": s.pointer("/album/name").and_then(|v| v.as_str()).unwrap_or(""),
+                "duration": s.get("duration").and_then(|v| v.as_i64()).unwrap_or(0),
+                "platform": "netease",
+                "cover": s
+                    .pointer("/album/picUrl")
+                    .and_then(|v| v.as_str())
+                    .map(|u| format!("{}?param=300y300", u))
+                    .unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    Ok(results)
+}
+
 // Hermes Sessions / Logs / Skills / Memory — 文件系统 + CLI 命令
 // ---------------------------------------------------------------------------
 

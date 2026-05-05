@@ -593,11 +593,13 @@ window.addEventListener('lobster-work-end', () => {
       onGatewayChange((running) => {
         if (running) {
           autoConnectWebSocket()
-          // 正向时机：社区引导已禁用
-          // setTimeout(tryShowEngagement, 5000)
         } else {
           wsClient.disconnect()
         }
+        // 通知龙虾办公室：Gateway 状态变化（实时联动）
+        window.dispatchEvent(new CustomEvent(running ? 'lobster-work-start' : 'lobster-work-end', {
+          detail: { state: running ? 'syncing' : 'idle', message: running ? 'Gateway 已连接' : 'Gateway 已断开', phase: running ? 'syncing' : 'idle' }
+        }))
       })
 
       // 守护放弃时，弹出恢复选项

@@ -543,6 +543,8 @@ export const api = {
   hermesGatewayAction: (action) => { invalidate('check_hermes'); return invoke('hermes_gateway_action', { action }, action === 'start' || action === 'restart' ? 60000 : 15000) },
   hermesHealthCheck: () => invoke('hermes_health_check'),
   hermesApiProxy: (method, path, body, headers) => invoke('hermes_api_proxy', { method, path, body: body || null, headers: headers || null }),
+  musicSearch: (q) => invoke('music_search', { query: q }),
+  musicSearchNetease: (q, limit) => invoke('music_search_netease', { query: q, limit: limit || 20 }),
   hermesAgentRun: (input, sessionId, conversationHistory, instructions) => invoke('hermes_agent_run', { input, sessionId: sessionId || null, conversationHistory: conversationHistory || null, instructions: instructions || null }, 330000),
   hermesProfilesList: () => invoke('hermes_profiles_list', {}).catch(() => ({ profiles: [], active: 'default' })),
   hermesProfileUse: (name) => invoke('hermes_profile_use', { name }).catch(() => true),

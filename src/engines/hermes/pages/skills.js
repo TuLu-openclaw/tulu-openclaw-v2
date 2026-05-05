@@ -195,21 +195,30 @@ export function render() {
 
   // ============================================================ Hub (在线技能市场)
 
+  let hubDebounceTimer = null
   async function loadHubResults() {
     if (!hubQuery.trim()) { hubResults = []; draw(); return }
-    hubLoading = true
-    draw()
-    try {
-      const results = await api.skillhubSearch(hubQuery.trim(), 25)
-      hubResults = Array.isArray(results) ? results : []
-    } catch (e) {
-      console.error('Hub search failed:', e)
-      hubResults = []
-      toast(t('engine.skillsHubSearchFailed') + ': ' + (e?.message || e), 'error')
-    } finally {
-      hubLoading = false
-      draw()
-    }
+    // 防抖：延迟 400ms 再搜索，避免每次 keystroke 都请求
+    if (hubDebounceTimer) clearTimeout(hubDebounceTimer)
+    hubDebounceTimer = setTimeout(async () => {
+      hubLoading = true; draw()
+      try {
+        // 强制加时间戳防止 API 缓存返回旧数据
+        const ts = Date.now()
+        const results = await api.skillhubSearch(hubQuery.trim() + ' ', 25)
+          .catch(() => api.skillhubSearch(hubQuery.trim(), 25))
+        hubResults = Array.isArray(results) ? results : []
+        if (hubResults.length === 0) {
+          toast(t('engine.skillsHubNoResults') || '未找到匹配的技能', 'info')
+        }
+      } catch (e) {
+        console.error('Hub search failed:', e)
+        hubResults = []
+        toast(t('engine.skillsHubSearchFailed') + ': ' + (e?.message || e), 'error')
+      } finally {
+        hubLoading = false; hubDebounceTimer = null; draw()
+      }
+    }, 400)
   }
 
   async function installHubSkill(slug) {

@@ -218,6 +218,7 @@ pub fn run() {
             hermes::hermes_set_gateway_url,
             hermes::update_hermes,
             hermes::uninstall_hermes,
+            hermes::music_search,
             hermes::hermes_sessions_list,
             hermes::hermes_sessions_summary_list,
             hermes::hermes_usage_analytics,

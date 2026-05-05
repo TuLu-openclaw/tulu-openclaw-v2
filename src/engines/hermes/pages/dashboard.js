@@ -145,6 +145,7 @@ export function render() {
   let envDetecting = false  // 环境探测中
   let envData = null        // { wsl2: {...}, docker: {...} }
   let updateChecking = false
+  let updateBannerVisible = false  // 是否显示版本更新横幅
   let updateInfo = null     // { installed, latest, updateAvailable, releaseUrl, changelog }
   let connectMode = 'local' // local | wsl2 | docker | custom
   let customGwUrl = ''      // 自定义 Gateway URL
@@ -287,6 +288,14 @@ export function render() {
           <button class="hm-btn hm-btn--icon hm-dash-refresh" title="${t('engine.dashRefresh')}">${ICONS.refresh}</button>
         </div>
       </div>
+
+      ${updateBannerVisible ? `
+      <div id="update-banner" style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
+        <span style="font-size:20px">🚀</span>
+        <span style="flex:1">发现新版本 v${updateInfo?.latest || '?'}（当前 v${updateInfo?.current || '?'}）</span>
+        <button id="hm-update-now-btn" style="padding:6px 18px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600">立即更新</button>
+        <button id="hm-update-dismiss-btn" style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,0.25);border-radius:6px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:13px">稍后</button>
+      </div>` : ''}
 
       <!-- KPI grid: 5 cards with tone indicators -->
       <div class="hm-kpi-grid">
@@ -859,6 +868,12 @@ export function render() {
     // --- 连接目标 ---
     el.querySelector('.hm-detect-env')?.addEventListener('click', doDetectEnv)
     el.querySelector('.hm-check-update')?.addEventListener('click', doCheckUpdate)
+    document.querySelector('#hm-update-now-btn')?.addEventListener('click', () => {
+      window.open('https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest', '_blank')
+    })
+    document.querySelector('#hm-update-dismiss-btn')?.addEventListener('click', () => {
+      updateBannerVisible = false; updateInfo = null; draw()
+    })
     el.querySelectorAll('.hm-connect-mode').forEach(btn => {
       btn.addEventListener('click', () => {
         connectMode = btn.dataset.mode
@@ -918,7 +933,13 @@ export function render() {
     if (!formModel) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configModelRequired')}</span>`; draw(); return }
 
     const matched = inferProviderByBaseUrl(hermesProviders, formBaseUrl)
+    // 验证 provider 是否为 Hermes 已知提供商，防止用户输入无效 provider 名称（如"小风车"）
     const provider = matched?.id || 'custom'
+    const knownProviderIds = hermesProviders.map(p => p.id)
+    if (provider !== 'custom' && !knownProviderIds.includes(provider)) {
+      cfgMsg = `<span style="color:var(--error)">✗ 未知提供商 '${provider}'，请从下拉列表选择支持的提供商</span>`
+      draw(); return
+    }
 
     modelBusy = true; cfgMsg = ''; draw()
     try {

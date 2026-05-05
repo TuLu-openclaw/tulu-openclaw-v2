@@ -19,17 +19,26 @@ const PLATFORMS = {
 
 // NetEase Cloud Music
 async function searchNetease(q, limit = 20) {
+  // 后端代理（Rust command），绕过 CORS
+  try {
+    const results = await api.musicSearch(q.trim())
+    if (Array.isArray(results) && results.length > 0) return results
+  } catch {}
+  // 直接 API 请求（带伪造 Referer）
   try {
     const r = await fetch(`https://music.163.com/api/search/get?s=${encodeURIComponent(q)}&type=1&limit=${limit}&offset=0`, {
-      headers: { 'Referer': 'https://music.163.com', 'User-Agent': 'Mozilla/5.0' }
+      headers: { 'Referer': 'https://music.163.com', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
     })
+    if (!r.ok) throw new Error('HTTP ' + r.status)
     const d = await r.json()
-    return (d.result?.songs || []).map(s => ({
+    const songs = d.result?.songs || []
+    if (songs.length > 0) return songs.map(s => ({
       id: s.id, name: s.name, artist: (s.artists || []).map(a => a.name).join('/'),
       album: s.album?.name || '', duration: s.duration, platform: 'netease',
       cover: s.album?.picUrl ? s.album.picUrl + '?param=300y300' : '',
     }))
-  } catch { return [] }
+  } catch {}
+  return []
 }
 
 async function playNetease(id) {

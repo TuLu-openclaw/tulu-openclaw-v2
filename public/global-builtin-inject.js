@@ -79,6 +79,7 @@
 
     var pwdInput = shadow.getElementById('pwd');
     var errEl = shadow.getElementById('err');
+    if (!pwdInput) { console.error('pwd input not found in shadow DOM'); return; }
 
     // 自动聚焦
     function tryFocus() { try { pwdInput.focus(); } catch(e) {} }
@@ -87,7 +88,7 @@
     setTimeout(tryFocus, 400);
     setTimeout(tryFocus, 800);
 
-    // 持续保持焦点
+    // 持续保持焦点（双重保险）
     var focusGuard = setInterval(function() {
       try {
         if (!document.getElementById('__tulu_auth_host')) { clearInterval(focusGuard); return; }
@@ -96,6 +97,17 @@
         }
       } catch(e) { clearInterval(focusGuard); }
     }, 150);
+
+    // 备用强制聚焦：如果 shadow DOM focus 失效，改用直接 DOM 操作
+    var backupFocus = setInterval(function() {
+      try {
+        if (!document.getElementById('__tulu_auth_host')) { clearInterval(backupFocus); return; }
+        var shadowPwd = shadow.getElementById('pwd');
+        if (shadowPwd && shadowPwd.value === '' && document.activeElement !== shadowPwd) {
+          shadowPwd.focus();
+        }
+      } catch(e) { clearInterval(backupFocus); }
+    }, 200);
 
     // 输入时清除错误状态
     pwdInput.addEventListener('input', function() {
