@@ -772,10 +772,17 @@ pub fn check_hermes() -> Result<Value, String> {
     if let Ok(env_content) = std::fs::read_to_string(home.join(".env")) {
         // 检查常见 API key 变量
         let key_vars = [
-            "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
-            "OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY",
-            "MISTRAL_API_KEY", "COHERE_API_KEY", "QWEN_API_KEY",
-            "AZURE_OPENAI_API_KEY", "OLLAMA_API_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "OPENROUTER_API_KEY",
+            "GEMINI_API_KEY",
+            "GROQ_API_KEY",
+            "MISTRAL_API_KEY",
+            "COHERE_API_KEY",
+            "QWEN_API_KEY",
+            "AZURE_OPENAI_API_KEY",
+            "OLLAMA_API_KEY",
         ];
         for line in env_content.lines() {
             let trimmed = line.trim();
@@ -789,7 +796,9 @@ pub fn check_hermes() -> Result<Value, String> {
                     }
                 }
             }
-            if provider_configured { break; }
+            if provider_configured {
+                break;
+            }
         }
     }
     // 也检查 config.yaml 中的 provider 字段
@@ -804,8 +813,14 @@ pub fn check_hermes() -> Result<Value, String> {
             }
         }
     }
-    result.insert("providerConfigured".into(), Value::Bool(provider_configured));
-    result.insert("configuredProvider".into(), Value::String(configured_provider));
+    result.insert(
+        "providerConfigured".into(),
+        Value::Bool(provider_configured),
+    );
+    result.insert(
+        "configuredProvider".into(),
+        Value::String(configured_provider),
+    );
 
     Ok(Value::Object(result))
 }
@@ -832,7 +847,8 @@ pub async fn check_hermes_update() -> Result<Value, String> {
     let client = super::build_http_client(std::time::Duration::from_secs(10), Some("ClawPanel"))
         .map_err(|e| format!("HTTP client error: {e}"))?;
     let url = "https://api.github.com/repos/NousResearch/hermes-agent/releases/latest";
-    let resp = client.get(url)
+    let resp = client
+        .get(url)
         .header("User-Agent", "ClawPanel")
         .send()
         .await
@@ -840,7 +856,10 @@ pub async fn check_hermes_update() -> Result<Value, String> {
     if !resp.status().is_success() {
         return Err(format!("GitHub API HTTP {}", resp.status()));
     }
-    let release: Value = resp.json().await.map_err(|e| format!("JSON parse error: {e}"))?;
+    let release: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("JSON parse error: {e}"))?;
 
     let latest_tag = release["tag_name"].as_str().unwrap_or("").to_string();
     let latest_name = release["name"].as_str().unwrap_or("").to_string();
@@ -851,7 +870,8 @@ pub async fn check_hermes_update() -> Result<Value, String> {
     let latest_version = latest_tag.trim_start_matches('v').to_string();
 
     // 3. 比较版本
-    let update_available = !local_version.is_empty() && !latest_version.is_empty() && local_version != latest_version;
+    let update_available =
+        !local_version.is_empty() && !latest_version.is_empty() && local_version != latest_version;
 
     let mut result = serde_json::Map::new();
     result.insert("installed".into(), Value::String(local_version));
@@ -862,7 +882,11 @@ pub async fn check_hermes_update() -> Result<Value, String> {
     result.insert("updateAvailable".into(), Value::Bool(update_available));
     result.insert("releaseUrl".into(), Value::String(html_url));
     // 只取前 500 字符的 changelog
-    let short_body = if body.len() > 500 { &body[..500] } else { &body };
+    let short_body = if body.len() > 500 {
+        &body[..500]
+    } else {
+        &body
+    };
     result.insert("changelog".into(), Value::String(short_body.to_string()));
 
     Ok(Value::Object(result))

@@ -1401,7 +1401,10 @@ pub async fn sync_openclaw_to_office(app: tauri::AppHandle) -> Result<(), String
 
 /// open_live_player — 打开独立直播播放器窗口
 #[tauri::command]
-pub async fn open_live_player(app: tauri::AppHandle, sources: Vec<serde_json::Value>) -> Result<(), String> {
+pub async fn open_live_player(
+    app: tauri::AppHandle,
+    sources: Vec<serde_json::Value>,
+) -> Result<(), String> {
     use tauri::WebviewUrl;
 
     let sources_json = serde_json::to_string(&sources).unwrap_or_else(|_| "[]".to_string());
