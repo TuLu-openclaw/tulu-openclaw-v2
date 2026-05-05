@@ -1454,7 +1454,7 @@ pub async fn open_live_player(
     app: tauri::AppHandle,
     sources: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-    use tauri::WebviewUrl;
+    use tauri::{Emitter, WebviewUrl};
 
     let sources_json = serde_json::to_string(&sources).unwrap_or_else(|_| "[]".to_string());
     let encoded = urlencoding::encode(&sources_json);
