@@ -1103,9 +1103,10 @@ export function render() {
         ${renderSidebar()}
         <section class="hm-chat-main">
           ${renderHeader()}
-          ${!providerConfigured ? `<div class="hm-chat-provider-warning" style="background:linear-gradient(135deg,#ff6b35,#ff4444);color:#fff;padding:10px 16px;font-size:13px;display:flex;align-items:center;gap:8px;">
+          ${!providerConfigured ? `<div class="hm-chat-provider-warning" style="background:linear-gradient(135deg,#ff6b35,#ff4444);color:#fff;padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer;" id="hm-provider-fix">
             <span style="font-size:16px;">⚠️</span>
-            <span>未配置推理 Provider — 请到「设置」页面配置 API Key，或编辑 ~/.hermes/.env</span>
+            <span style="flex:1">未配置推理 Provider — 点击此处自动跳转到「设置」页面配置 API Key</span>
+            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:6px;font-size:12px;">立即配置 →</span>
           </div>` : ''}
           <div class="hm-chat-messages" id="hm-chat-messages">
             ${renderMessages()}
@@ -1182,6 +1183,10 @@ export function render() {
     el.querySelector('#hm-chat-sidebar-backdrop')?.addEventListener('click', () => {
       sidebarOpen = false
       draw()
+    })
+    // Click provider warning → navigate to setup page
+    el.querySelector('#hm-provider-fix')?.addEventListener('click', () => {
+      window.location.hash = '#/h/setup'
     })
     const msgsEl = el.querySelector('#hm-chat-messages')
     msgsEl?.addEventListener('scroll', updateJumpButton)
@@ -1758,17 +1763,8 @@ export function render() {
         configuredProvider = info?.configuredProvider || ''
       } catch {}
       if (!providerConfigured) {
-        store.state.messages = store.state.messages || []
-        const s = store.activeSession()
-        if (s) {
-          s.messages.push({
-            id: Date.now().toString(36),
-            role: 'system',
-            content: `⚠️ 未配置推理 Provider。请先到「设置」页面配置 API Key（如 OPENAI_API_KEY、DEEPSEEK_API_KEY 等），或在 ~/.hermes/.env 中手动设置。`,
-            timestamp: Date.now(),
-          })
-          draw()
-        }
+        // Auto-redirect to setup page to configure provider
+        window.location.hash = '#/h/setup'
         return
       }
     }

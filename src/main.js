@@ -55,7 +55,9 @@ import './style/agents.css'
 import './style/debug.css'
 import './style/assistant.css'
 import './style/ai-drawer.css'
+import './styles/music-player.css'
 import './engines/hermes/style/hermes.css'
+import './engines/hermes/style/skills-hub.css'
 
 // 初始化主题 + 国际化
 initTheme()
@@ -434,6 +436,7 @@ async function boot() {
   registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
+  registerRoute('/music-player', () => import('./pages/music-player.js'))
 // ── 龙虾办公室状态同步 ─────────────────────────────────
 // 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
 const LOBSTER_PHASE_PRESETS = {
