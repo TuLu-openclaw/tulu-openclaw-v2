@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>直播播放器</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 'Microsoft YaHei', sans-serif; background: #0a0a0f; color: #fff; }
+
+/* ===== 布局 ===== */
+.player-layout {
+  display: flex; flex-direction: column; width: 100%; height: 100%;
+}
+
+/* 顶部栏 */
+.player-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0; height: 48px;
+}
+.player-title {
+  font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.9);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%;
+}
+.player-source-tag {
+  font-size: 11px; color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.06);
+  padding: 2px 8px; border-radius: 6px;
+  margin-left: 8px;
+}
+.player-actions {
+  display: flex; gap: 8px; align-items: center;
+}
+.player-btn {
+  padding: 6px 14px; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s ease;
+  display: flex; align-items: center; gap: 5px;
+  font-family: inherit;
+}
+.player-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.player-btn:active { transform: scale(0.96); }
+.player-btn.recording {
+  background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3);
+  color: #ef4444; animation: recPulse 1.5s ease-in-out infinite;
+}
+@keyframes recPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  50% { box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
+}
+.player-btn-close {
+  background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.2);
+  color: #ef4444;
+}
+.player-btn-close:hover { background: rgba(239,68,68,0.2); }
+
+/* 视频区域 */
+.video-container {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: #000; position: relative; overflow: hidden;
+}
+video {
+  width: 100%; height: 100%; object-fit: contain;
+}
+
+/* 底部控制栏 */
+.player-controls {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0; height: 52px;
+}
+.ctrl-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  border: none; cursor: pointer;
+  font-size: 16px; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.06);
+  transition: all 0.15s ease;
+}
+.ctrl-btn:hover { background: rgba(255,255,255,0.12); }
+.ctrl-btn:active { transform: scale(0.92); }
+.volume-slider {
+  width: 80px; accent-color: #6366f1;
+  cursor: pointer;
+}
+.time-display {
+  font-size: 12px; color: rgba(255,255,255,0.5);
+  font-variant-numeric: tabular-nums;
+  min-width: 100px;
+}
+.speed-select {
+  padding: 4px 8px; border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.7); font-size: 12px;
+  cursor: pointer; font-family: inherit;
+  outline: none;
+}
+.speed-select option { background: #1a1a2e; color: #fff; }
+
+/* 状态提示 */
+.status-overlay {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.7); padding: 12px 24px; border-radius: 12px;
+  font-size: 14px; color: rgba(255,255,255,0.7);
+  backdrop-filter: blur(8px);
+  display: none; pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* 截屏闪光 */
+.flash {
+  position: fixed; inset: 0; background: #fff; z-index: 99999;
+  animation: flashAnim 0.3s ease-out forwards; pointer-events: none;
+}
+@keyframes flashAnim { from { opacity: 0.6; } to { opacity: 0; } }
+
+/* 源列表 */
+.source-list {
+  display: flex; gap: 6px; align-items: center;
+  margin-left: 12px;
+}
+.source-btn {
+  padding: 3px 10px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.4); font-size: 11px;
+  cursor: pointer; transition: all 0.15s ease;
+  font-family: inherit;
+}
+.source-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+.source-btn.active {
+  background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3);
+  color: #a5b4fc;
+}
+</style>
+</head>
+<body>
+
+<div class="player-layout">
+  <!-- 顶部栏 -->
+  <div class="player-topbar">
+    <div style="display:flex;align-items:center;min-width:0;">
+      <div class="player-title" id="player-title">直播播放器</div>
+      <span class="player-source-tag" id="source-tag"></span>
+    </div>
+    <div class="player-actions">
+      <div class="source-list" id="source-list"></div>
+      <button class="player-btn" id="btn-screenshot" title="截屏 (Ctrl+Shift+S)">📸 截屏</button>
+      <button class="player-btn" id="btn-record" title="录屏 (Ctrl+Shift+R)">⏺ 录屏</button>
+      <button class="player-btn player-btn-close" id="btn-close" title="关闭播放器">✕</button>
+    </div>
+  </div>
+
+  <!-- 视频区域 -->
+  <div class="video-container">
+    <video id="video" autoplay muted></video>
+    <div class="status-overlay" id="status-overlay"></div>
+  </div>
+
+  <!-- 底部控制栏 -->
+  <div class="player-controls">
+    <button class="ctrl-btn" id="btn-play" title="播放/暂停">▶</button>
+    <button class="ctrl-btn" id="btn-mute" title="静音">🔊</button>
+    <input type="range" class="volume-slider" id="volume-slider" min="0" max="1" step="0.05" value="0.8">
+    <div class="time-display" id="time-display">--:-- / --:--</div>
+    <div style="flex:1"></div>
+    <select class="speed-select" id="speed-select" title="播放倍速">
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+      <option value="1.5">1.5x</option>
+      <option value="2">2x</option>
+      <option value="3">3x</option>
+    </select>
+    <button class="ctrl-btn" id="btn-pip" title="画中画">🖼</button>
+    <button class="ctrl-btn" id="btn-fullscreen" title="全屏">⛶</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ===== 参数解析 =====
+  var params = new URLSearchParams(window.location.search);
+  var sourcesParam = params.get('sources');
+  var sources = [];
+  try { sources = JSON.parse(decodeURIComponent(sourcesParam || '[]')); } catch(e) {}
+
+  var video = document.getElementById('video');
+  var titleEl = document.getElementById('player-title');
+  var sourceTag = document.getElementById('source-tag');
+  var sourceList = document.getElementById('source-list');
+  var statusOverlay = document.getElementById('status-overlay');
+  var btnScreenshot = document.getElementById('btn-screenshot');
+  var btnRecord = document.getElementById('btn-record');
+  var btnClose = document.getElementById('btn-close');
+  var btnPlay = document.getElementById('btn-play');
+  var btnMute = document.getElementById('btn-mute');
+  var volumeSlider = document.getElementById('volume-slider');
+  var timeDisplay = document.getElementById('time-display');
+  var speedSelect = document.getElementById('speed-select');
+  var btnPip = document.getElementById('btn-pip');
+  var btnFullscreen = document.getElementById('btn-fullscreen');
+
+  var hlsInstance = null;
+  var currentSourceIndex = 0;
+  var mediaRecorder = null;
+  var recordedChunks = [];
+  var isRecording = false;
+  var recordingStartTime = 0;
+
+  // ===== 源列表渲染 =====
+  function renderSources() {
+    sourceList.innerHTML = '';
+    sources.forEach(function(s, i) {
+      var btn = document.createElement('button');
+      btn.className = 'source-btn' + (i === currentSourceIndex ? ' active' : '');
+      btn.textContent = '源 ' + (i + 1);
+      btn.title = s.url || s;
+      btn.onclick = function() { switchSource(i); };
+      sourceList.appendChild(btn);
+    });
+    if (sources.length > 0) {
+      sourceTag.textContent = sources.length + ' 个源';
+    }
+  }
+
+  // ===== 播放 =====
+  function loadSource(index) {
+    if (index < 0 || index >= sources.length) return;
+    currentSourceIndex = index;
+    var src = sources[index];
+    var url = typeof src === 'string' ? src : (src.url || '');
+    var type = typeof src === 'string' ? '' : (src.type || '');
+
+    titleEl.textContent = '源 ' + (index + 1) + ' — ' + url.split('/').slice(-2).join('/');
+
+    // 销毁旧 HLS
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+
+    if (url.includes('.m3u8') || type === 'hls' || type === 'm3u8') {
+      if (window.Hls && window.Hls.isSupported()) {
+        hlsInstance = new window.Hls({ enableWorker: true, lowLatencyMode: true });
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, function() {
+          video.play().catch(function() {});
+        });
+        hlsInstance.on(window.Hls.Events.ERROR, function(event, data) {
+          if (data.fatal) {
+            showStatus('播放错误，尝试下一个源...');
+            setTimeout(function() { switchSource((currentSourceIndex + 1) % sources.length); }, 2000);
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play().catch(function() {});
+      }
+    } else {
+      video.src = url;
+      video.play().catch(function() {});
+    }
+
+    renderSources();
+  }
+
+  function switchSource(index) {
+    loadSource(index);
+  }
+
+  // ===== 截屏 =====
+  function takeScreenshot() {
+    // 闪光效果
+    var flash = document.createElement('div');
+    flash.className = 'flash';
+    document.body.appendChild(flash);
+    setTimeout(function() { flash.remove(); }, 400);
+
+    var canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(function(blob) {
+      if (!blob) { showStatus('截屏失败'); return; }
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'screenshot_' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('📸 截屏已保存');
+    }, 'image/png');
+  }
+
+  // ===== 录屏 =====
+  async function startRecording() {
+    try {
+      // 获取视频+音频流
+      var stream = video.captureStream ? video.captureStream() : null;
+      if (!stream) {
+        // Fallback: 用屏幕录制
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { mediaSource: 'screen' },
+          audio: true
+        });
+      }
+
+      recordedChunks = [];
+      var mimeType = 'video/webm;codecs=vp9,opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+      }
+
+      mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+      mediaRecorder.ondataavailable = function(e) {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+      mediaRecorder.onstop = function() {
+        var blob = new Blob(recordedChunks, { type: mimeType });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'recording_' + new Date().toISOString().replace(/[:.]/g, '-') + '.webm';
+        a.click();
+        URL.revokeObjectURL(url);
+        showStatus('⏺ 录屏已保存');
+        isRecording = false;
+        btnRecord.classList.remove('recording');
+        btnRecord.innerHTML = '⏺ 录屏';
+      };
+
+      mediaRecorder.start(1000);
+      isRecording = true;
+      recordingStartTime = Date.now();
+      btnRecord.classList.add('recording');
+      btnRecord.innerHTML = '⏹ 停止';
+      showStatus('⏺ 录屏中...');
+    } catch (err) {
+      showStatus('录屏失败: ' + String(err));
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+  }
+
+  // ===== 状态提示 =====
+  function showStatus(msg) {
+    statusOverlay.textContent = msg;
+    statusOverlay.style.display = 'block';
+    clearTimeout(showStatus._t);
+    showStatus._t = setTimeout(function() {
+      statusOverlay.style.display = 'none';
+    }, 3000);
+  }
+
+  // ===== 控制栏 =====
+  btnPlay.addEventListener('click', function() {
+    if (video.paused) { video.play(); } else { video.pause(); }
+  });
+  video.addEventListener('play', function() { btnPlay.textContent = '⏸'; });
+  video.addEventListener('pause', function() { btnPlay.textContent = '▶'; });
+
+  btnMute.addEventListener('click', function() {
+    video.muted = !video.muted;
+    btnMute.textContent = video.muted ? '🔇' : '🔊';
+  });
+
+  volumeSlider.addEventListener('input', function() {
+    video.volume = parseFloat(volumeSlider.value);
+    video.muted = false;
+    btnMute.textContent = video.volume === 0 ? '🔇' : '🔊';
+  });
+
+  speedSelect.addEventListener('change', function() {
+    video.playbackRate = parseFloat(speedSelect.value);
+  });
+
+  btnPip.addEventListener('click', function() {
+    if (document.pictureInPictureElement) {
+      document.exitPictureInPicture();
+    } else if (video.requestPictureInPicture) {
+      video.requestPictureInPicture();
+    }
+  });
+
+  btnFullscreen.addEventListener('click', function() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  });
+
+  // 时间显示
+  function updateTime() {
+    var cur = video.currentTime;
+    var dur = video.duration;
+    if (isNaN(dur) || !isFinite(dur)) {
+      timeDisplay.textContent = formatTime(cur) + ' / 直播';
+    } else {
+      timeDisplay.textContent = formatTime(cur) + ' / ' + formatTime(dur);
+    }
+  }
+  function formatTime(s) {
+    if (isNaN(s)) return '--:--';
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+  video.addEventListener('timeupdate', updateTime);
+
+  // 快捷键
+  document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'S') { e.preventDefault(); takeScreenshot(); }
+    if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+      e.preventDefault();
+      if (isRecording) stopRecording(); else startRecording();
+    }
+    if (e.key === ' ' && e.target === document.body) { e.preventDefault(); btnPlay.click(); }
+    if (e.key === 'f' || e.key === 'F') { btnFullscreen.click(); }
+  });
+
+  btnScreenshot.addEventListener('click', takeScreenshot);
+  btnRecord.addEventListener('click', function() {
+    if (isRecording) stopRecording(); else startRecording();
+  });
+  btnClose.addEventListener('click', function() {
+    if (isRecording) stopRecording();
+    if (hlsInstance) hlsInstance.destroy();
+    window.close();
+  });
+
+  // ===== 初始化 =====
+  renderSources();
+  if (sources.length > 0) {
+    loadSource(0);
+  } else {
+    titleEl.textContent = '无视频源';
+    showStatus('未提供视频源');
+  }
+})();
+</script>
+<!-- hls.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</body>
+</html>

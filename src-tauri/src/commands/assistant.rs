@@ -1398,3 +1398,34 @@ fn find_star_office_state_file(app: &tauri::AppHandle) -> Result<std::path::Path
 pub async fn sync_openclaw_to_office(app: tauri::AppHandle) -> Result<(), String> {
     sync_office_state(&app)
 }
+
+/// open_live_player — 打开独立直播播放器窗口
+#[tauri::command]
+pub async fn open_live_player(app: tauri::AppHandle, sources: Vec<serde_json::Value>) -> Result<(), String> {
+    use tauri::WebviewUrl;
+
+    let sources_json = serde_json::to_string(&sources).unwrap_or_else(|_| "[]".to_string());
+    let encoded = urlencoding::encode(&sources_json);
+    let player_url = format!("live-player.html?sources={}", encoded);
+
+    if let Some(_w) = app.get_webview_window("live_player_window") {
+        let _ = app.emit("live-player-sources", &sources);
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "live_player_window",
+        WebviewUrl::App(player_url.into()),
+    )
+    .title("直播播放器")
+    .inner_size(1280.0, 720.0)
+    .min_inner_size(640.0, 360.0)
+    .resizable(true)
+    .decorations(true)
+    .always_on_top(false)
+    .build()
+    .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+
+    Ok(())
+}

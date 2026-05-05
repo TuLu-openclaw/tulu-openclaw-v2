@@ -20,7 +20,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
 }
 #auth-overlay.hidden { opacity: 0; transform: scale(1.1); pointer-events: none; }
 
-/* Animated gradient orbs */
 .auth-bg {
   position: absolute; inset: 0; overflow: hidden; pointer-events: none;
 }
@@ -50,7 +49,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   75% { transform: translate(40px, 20px) scale(1.05); }
 }
 
-/* Grid lines */
 .auth-grid {
   position: absolute; inset: 0; pointer-events: none;
   background-image:
@@ -60,7 +58,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black, transparent);
 }
 
-/* Auth container */
 .auth-container {
   position: relative; z-index: 1;
   text-align: center; padding: 56px 48px;
@@ -68,10 +65,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 28px;
   backdrop-filter: blur(24px);
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.05),
-    0 32px 64px rgba(0,0,0,0.5),
-    inset 0 1px 0 rgba(255,255,255,0.06);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 32px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
   animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   max-width: 420px; width: 90%;
 }
@@ -80,7 +74,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Glowing ring */
 .auth-ring {
   width: 88px; height: 88px; margin: 0 auto 28px;
   border-radius: 50%;
@@ -93,14 +86,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   content: ''; position: absolute; inset: 3px;
   border-radius: 50%; background: #0a0a1a;
 }
-.auth-ring-inner {
-  position: relative; z-index: 1;
-  font-size: 36px; line-height: 1;
-}
-@keyframes ringSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+.auth-ring-inner { position: relative; z-index: 1; font-size: 36px; line-height: 1; }
+@keyframes ringSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .auth-title {
   font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 8px;
@@ -108,15 +95,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   background: linear-gradient(135deg, #fff, rgba(255,255,255,0.7));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
-.auth-subtitle {
-  font-size: 14px; color: rgba(255,255,255,0.35); margin-bottom: 36px;
-  letter-spacing: 0.02em;
-}
+.auth-subtitle { font-size: 14px; color: rgba(255,255,255,0.35); margin-bottom: 36px; letter-spacing: 0.02em; }
 
-/* Input */
-.input-group {
-  position: relative; margin-bottom: 24px;
-}
+.input-group { position: relative; margin-bottom: 24px; }
 .auth-input {
   width: 100%; padding: 16px 20px 16px 52px;
   font-size: 18px; font-family: 'JetBrains Mono', 'Inter', monospace;
@@ -126,9 +107,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   letter-spacing: 6px; text-align: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.auth-input::placeholder {
-  color: rgba(255,255,255,0.15); letter-spacing: 2px; font-size: 14px;
-}
+.auth-input::placeholder { color: rgba(255,255,255,0.15); letter-spacing: 2px; font-size: 14px; }
 .auth-input:focus {
   border-color: rgba(99,102,241,0.5);
   background: rgba(255,255,255,0.08);
@@ -147,27 +126,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   60% { transform: translateX(6px); }
   75% { transform: translateX(-3px); }
 }
-.input-icon {
-  position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
-  font-size: 20px; opacity: 0.3; pointer-events: none;
-}
+.input-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); font-size: 20px; opacity: 0.3; pointer-events: none; }
 
-/* Status dot */
-.auth-status {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-top: 20px; font-size: 12px; color: rgba(255,255,255,0.25);
-}
-.status-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: rgba(255,255,255,0.15);
-  animation: dotPulse 2s ease-in-out infinite;
-}
-@keyframes dotPulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
-}
+.auth-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 20px; font-size: 12px; color: rgba(255,255,255,0.25); }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); animation: dotPulse 2s ease-in-out infinite; }
+@keyframes dotPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 
-/* Enter hint */
 .enter-hint {
   display: inline-flex; align-items: center; gap: 6px;
   margin-top: 16px; padding: 6px 16px;
@@ -185,7 +149,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ===== iframe 容器 ===== */
+/* ===== iframe 容器（无 sandbox，像真浏览器一样） ===== */
 #content-frame {
   width: 100%; height: 100%; border: none;
   display: none;
@@ -206,51 +170,23 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 16px rgba(0,0,0,0.3);
   backdrop-filter: blur(12px);
+  position: relative;
 }
 .float-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
 .float-btn:active { transform: translateY(0) scale(0.95); }
 .float-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 #btn-extract {
   background: linear-gradient(135deg, #ef4444, #dc2626);
+  width: 56px; height: 56px; border-radius: 50%;
+  font-size: 22px;
+  animation: pulseExtract 2s ease-in-out infinite;
 }
-#btn-speed {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+@keyframes pulseExtract {
+  0%, 100% { box-shadow: 0 4px 16px rgba(239,68,68,0.3); }
+  50% { box-shadow: 0 4px 32px rgba(239,68,68,0.6); }
 }
-#btn-refresh {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-}
-#btn-fullscreen {
-  background: linear-gradient(135deg, #10b981, #059669);
-}
-
-/* Speed popup */
-#speed-popup {
-  position: fixed; bottom: 90px; right: 28px;
-  z-index: 888889; display: none;
-  background: rgba(15,15,25,0.95);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px; padding: 16px;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
-}
-.speed-title {
-  font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 12px;
-  text-transform: uppercase; letter-spacing: 1px;
-}
-.speed-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-}
-.speed-btn {
-  padding: 8px 12px; border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px; background: rgba(255,255,255,0.03);
-  color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 500;
-  cursor: pointer; transition: all 0.15s ease;
-}
-.speed-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
-.speed-btn.active {
-  background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4);
-  color: #a5b4fc;
-}
+#btn-refresh { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+#btn-fullscreen { background: linear-gradient(135deg, #10b981, #059669); }
 
 /* ===== Toast ===== */
 #toast {
@@ -295,28 +231,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   </div>
 </div>
 
-<!-- iframe 加载外部页面 -->
-<iframe id="content-frame" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals"></iframe>
+<!-- iframe 加载外部页面（无 sandbox 限制，像真浏览器一样可点击任何内容） -->
+<iframe id="content-frame" allow="autoplay; fullscreen; picture-in-picture; encrypted-media"></iframe>
 
 <!-- 悬浮操作栏 -->
 <div id="float-bar">
-  <button class="float-btn" id="btn-extract" title="提取视频链接">▶</button>
-  <button class="float-btn" id="btn-speed" title="视频倍速">⚡</button>
+  <button class="float-btn" id="btn-extract" title="提取视频链接并播放">▶</button>
   <button class="float-btn" id="btn-refresh" title="刷新页面">↻</button>
   <button class="float-btn" id="btn-fullscreen" title="全屏">⛶</button>
-</div>
-<div id="speed-popup">
-  <div class="speed-title">播放倍速</div>
-  <div class="speed-grid">
-    <button class="speed-btn" data-speed="0.5">0.5x</button>
-    <button class="speed-btn" data-speed="1">1x</button>
-    <button class="speed-btn active" data-speed="1.5">1.5x</button>
-    <button class="speed-btn" data-speed="2">2x</button>
-    <button class="speed-btn" data-speed="3">3x</button>
-    <button class="speed-btn" data-speed="4">4x</button>
-    <button class="speed-btn" data-speed="6">6x</button>
-    <button class="speed-btn" data-speed="10">10x</button>
-  </div>
 </div>
 <div id="toast"></div>
 
@@ -327,16 +249,12 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   var frame = document.getElementById('content-frame');
   var floatBar = document.getElementById('float-bar');
   var btnExtract = document.getElementById('btn-extract');
-  var btnSpeed = document.getElementById('btn-speed');
   var btnRefresh = document.getElementById('btn-refresh');
   var btnFullscreen = document.getElementById('btn-fullscreen');
-  var speedPopup = document.getElementById('speed-popup');
   var toastEl = document.getElementById('toast');
   var TARGET = atob('{{TARGET_URL}}');
   var PWD = '2552667173';
   var verified = false;
-  var currentSpeed = 1.5;
-  var speedTimer = null;
 
   function showToast(msg, duration) {
     duration = duration || 4000;
@@ -352,8 +270,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
     frame.src = TARGET;
     floatBar.style.display = 'flex';
     verified = true;
-    // Start speed injection loop
-    startSpeedInjection();
     setTimeout(function() { overlay.remove(); }, 700);
   }
 
@@ -371,75 +287,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
     }
   });
 
-  // ===== 视频提速注入 =====
-  function injectSpeed(speed) {
-    try {
-      var doc = frame.contentDocument || frame.contentWindow.document;
-      if (!doc) return;
-      var videos = doc.querySelectorAll('video');
-      videos.forEach(function(v) {
-        v.playbackRate = speed;
-        // For HLS.js: try to set via hls instance
-        if (v.hls) {
-          v.hls.destroy();
-          // Re-create with playback level
-        }
-      });
-      // Also try to find HLS.js instances globally
-      if (frame.contentWindow.Hls) {
-        // HLS.js doesn't support playbackRate directly,
-        // but we can use the video element's rate
-      }
-      if (videos.length > 0) {
-        // Success
-      }
-    } catch (e) {
-      // Cross-origin - try postMessage
-      try {
-        frame.contentWindow.postMessage({
-          type: 'SET_PLAYBACK_RATE',
-          rate: speed
-        }, '*');
-      } catch (e2) {}
-    }
-  }
-
-  function startSpeedInjection() {
-    if (speedTimer) clearInterval(speedTimer);
-    speedTimer = setInterval(function() {
-      if (!verified) return;
-      injectSpeed(currentSpeed);
-    }, 3000);
-  }
-
-  // Speed popup
-  btnSpeed.addEventListener('click', function() {
-    speedPopup.style.display = speedPopup.style.display === 'none' ? 'block' : 'none';
-  });
-
-  document.querySelectorAll('.speed-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      currentSpeed = parseFloat(btn.dataset.speed);
-      document.querySelectorAll('.speed-btn').forEach(function(b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      injectSpeed(currentSpeed);
-      showToast('播放倍速: ' + currentSpeed + 'x');
-      speedPopup.style.display = 'none';
-    });
-  });
-
-  // Close speed popup on outside click
-  document.addEventListener('click', function(e) {
-    if (!e.target.closest('#speed-popup') && !e.target.closest('#btn-speed')) {
-      speedPopup.style.display = 'none';
-    }
-  });
-
-  // 提取视频链接
+  // 提取视频链接 → 打开独立播放器（含截屏+录屏）
   btnExtract.addEventListener('click', async function() {
     btnExtract.disabled = true;
-    btnExtract.textContent = '⏳';
-    showToast('正在扫描页面提取视频链接...');
+    btnExtract.innerHTML = '⏳';
+    showToast('正在深度扫描页面，提取视频链接...');
     try {
       var currentUrl = frame.contentWindow ? frame.src : TARGET;
       var sources = await window.__TAURI__.core.invoke('fetch_live_sources', { url: currentUrl });
@@ -453,7 +305,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
       showToast('提取失败: ' + String(err), 6000);
     } finally {
       btnExtract.disabled = false;
-      btnExtract.textContent = '▶';
+      btnExtract.innerHTML = '▶';
     }
   });
 
@@ -472,40 +324,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
     } else if (frame.webkitRequestFullscreen) {
       frame.webkitRequestFullscreen();
     }
-  });
-
-  // Inject speed control script into iframe on load
-  frame.addEventListener('load', function() {
-    try {
-      var doc = frame.contentDocument || frame.contentWindow.document;
-      if (!doc) return;
-      var script = doc.createElement('script');
-      script.textContent = '(' + function() {
-        window.addEventListener('message', function(e) {
-          if (e.data && e.data.type === 'SET_PLAYBACK_RATE') {
-            document.querySelectorAll('video').forEach(function(v) {
-              v.playbackRate = e.data.rate;
-            });
-          }
-        });
-        // Intercept HLS.js to apply speed
-        var origCreateObjectURL = URL.createObjectURL;
-        // Monitor for video elements
-        var observer = new MutationObserver(function(mutations) {
-          mutations.forEach(function(m) {
-            m.addedNodes.forEach(function(node) {
-              if (node.tagName === 'VIDEO') {
-                // Apply default speed
-              }
-            });
-          });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-      } + ')();';
-      doc.head.appendChild(script);
-    } catch (e) {}
-    // Apply speed after load
-    setTimeout(function() { injectSpeed(currentSpeed); }, 1000);
   });
 })();
 </script>
