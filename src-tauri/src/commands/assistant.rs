@@ -1132,19 +1132,25 @@ pub async fn open_global_builtin_window(
         return Err("No data/file URLs allowed".to_string());
     }
 
-    let label = "global_builtin_window";
+    let main_label = "global_builtin_window";
+    let overlay_label = "global_builtin_overlay";
 
-    // If window exists, just show and focus
-    if let Some(window) = app.get_webview_window(label) {
+    // If main window exists, just show and focus
+    if let Some(window) = app.get_webview_window(main_label) {
         let _ = window.show();
         let _ = window.set_focus();
+        // Also show overlay
+        if let Some(overlay) = app.get_webview_window(overlay_label) {
+            let _ = overlay.show();
+            let _ = overlay.set_always_on_top(true);
+        }
         return Ok(());
     }
 
     // Main window: direct External URL = full browser speed + fully interactive
-    let _win = WebviewWindowBuilder::new(
+    let main_win = WebviewWindowBuilder::new(
         &app,
-        label,
+        main_label,
         WebviewUrl::External(
             target_url
                 .parse()
@@ -1159,7 +1165,30 @@ pub async fn open_global_builtin_window(
     .visible(true)
     .focused(true)
     .build()
-    .map_err(|e| format!("Failed to create window: {}", e))?;
+    .map_err(|e| format!("Failed to create main window: {}", e))?;
+
+    // Overlay window: transparent, always-on-top, with floating extract button
+    // Uses local HTML with the floating button + password UI
+    let overlay_url = format!(
+        "global-builtin-overlay.html?url={}",
+        urlencoding::encode(&target_url)
+    );
+    let overlay_win =
+        WebviewWindowBuilder::new(&app, overlay_label, WebviewUrl::App(overlay_url.into()))
+            .title("全球内置 - 控制栏")
+            .inner_size(1200.0, 800.0)
+            .position(0.0, 0.0)
+            .decorations(false)
+            .resizable(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(true)
+            .build()
+            .map_err(|e| format!("Failed to create overlay window: {}", e))?;
+
+    // Sync overlay position with main window
+    // Note: The overlay is transparent except for the floating buttons
 
     Ok(())
 }
@@ -1431,4 +1460,29 @@ pub async fn open_live_player(
     .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
 
     Ok(())
+}
+
+/// navigate_window — 导航指定窗口到新 URL
+#[tauri::command]
+pub async fn navigate_window(
+    app: tauri::AppHandle,
+    label: String,
+    url: String,
+) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(win) = app.get_webview_window(&label) {
+        win.eval(&format!(
+            "window.location.href = '{}';",
+            url.replace("'", "\\'")
+        ))
+        .map_err(|e| format!("Navigate failed: {}", e))?;
+    }
+    Ok(())
+}
+
+/// get_window_by_label — 检查窗口是否存在
+#[tauri::command]
+pub async fn get_window_by_label(app: tauri::AppHandle, label: String) -> Result<bool, String> {
+    use tauri::Manager;
+    Ok(app.get_webview_window(&label).is_some())
 }

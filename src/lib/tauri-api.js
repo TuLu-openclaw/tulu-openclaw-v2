@@ -495,6 +495,7 @@ export const api = {
   skillhubSearch: (query, limit) => invoke('skillhub_search', { query, limit }),
   skillhubIndex: () => invoke('skillhub_index'),
   skillhubInstall: (slug) => invoke('skillhub_install', { slug }),
+  hermesSkillhubInstall: (slug) => invoke('hermes_skillhub_install', { slug }),
 
   // 实例管理
   instanceList: () => cachedInvoke('instance_list', {}, 10000),

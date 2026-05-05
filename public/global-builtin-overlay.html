@@ -1,138 +1,251 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>Global Builtin Overlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全球内置 - 控制栏</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { 
-  width: 100%; height: 100%; 
-  background: transparent; 
-  overflow: hidden;
-  -webkit-app-region: drag;
-}
-#btn {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-  border: 3px solid white;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 20px;
-  -webkit-app-region: no-drag;
-  transition: transform 0.15s, box-shadow 0.15s;
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: transparent;
+  font-family: 'Inter', 'Microsoft YaHei', sans-serif;
   user-select: none;
 }
-#btn:hover {
-  transform: scale(1.15);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+
+/* ===== 密码验证遮罩 ===== */
+#auth-overlay {
+  position: fixed; inset: 0;
+  background: rgba(5,5,16,0.95);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999999;
+  transition: opacity 0.5s ease;
 }
-#btn:active {
-  transform: scale(0.95);
+#auth-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.auth-container {
+  text-align: center; padding: 48px 40px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 32px 64px rgba(0,0,0,0.5);
+  animation: cardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 400px; width: 90%;
 }
-#btn.loading {
-  animation: spin 1s linear infinite;
-  pointer-events: none;
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.auth-ring {
+  width: 72px; height: 72px; margin: 0 auto 24px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #6366f1, #8b5cf6, #ec4899, #f43f5e, #f59e0b, #6366f1);
+  display: flex; align-items: center; justify-content: center;
+  animation: ringSpin 4s linear infinite;
+  position: relative;
 }
-#tooltip {
-  position: fixed;
-  left: 60px; top: 5px;
-  background: rgba(0,0,0,0.85);
-  color: white;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: system-ui, sans-serif;
-  white-space: nowrap;
+.auth-ring::before { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: rgba(5,5,16,0.95); }
+.auth-ring-inner { position: relative; z-index: 1; font-size: 28px; }
+@keyframes ringSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.auth-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.auth-subtitle { font-size: 13px; color: rgba(255,255,255,0.35); margin-bottom: 28px; }
+.auth-input {
+  width: 100%; padding: 14px 16px;
+  font-size: 16px; font-family: 'JetBrains Mono', monospace;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px; color: #fff; outline: none;
+  letter-spacing: 5px; text-align: center;
+  transition: all 0.3s ease;
+}
+.auth-input::placeholder { color: rgba(255,255,255,0.15); letter-spacing: 2px; font-size: 13px; }
+.auth-input:focus {
+  border-color: rgba(99,102,241,0.5);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+}
+.auth-input.error {
+  border-color: rgba(239,68,68,0.6);
+  animation: shake 0.4s ease;
+}
+@keyframes shake {
+  0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)}
+}
+.auth-hint { margin-top: 14px; font-size: 11px; color: rgba(255,255,255,0.2); }
+
+/* ===== 悬浮按钮 ===== */
+#float-bar {
+  position: fixed; bottom: 32px; right: 32px;
+  z-index: 888888;
   display: none;
-  z-index: 9999;
-  max-width: 300px;
+  flex-direction: column; gap: 12px;
+  align-items: flex-end;
+}
+.float-btn {
+  width: 52px; height: 52px; border-radius: 16px;
+  border: none; cursor: pointer;
+  font-size: 20px; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  backdrop-filter: blur(12px);
+}
+.float-btn:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 8px 28px rgba(0,0,0,0.5); }
+.float-btn:active { transform: translateY(0) scale(0.95); }
+.float-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+#btn-extract {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  font-size: 24px;
+  animation: pulseBtn 2s ease-in-out infinite;
+}
+@keyframes pulseBtn {
+  0%,100%{box-shadow:0 4px 20px rgba(239,68,68,0.3)} 50%{box-shadow:0 4px 36px rgba(239,68,68,0.6)}
+}
+#btn-refresh { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+#btn-fullscreen { background: linear-gradient(135deg, #10b981, #059669); }
+
+/* ===== Toast ===== */
+#toast {
+  position: fixed; bottom: 110px; right: 32px;
+  z-index: 888889;
+  background: rgba(15,15,25,0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #fff; padding: 12px 20px;
+  border-radius: 12px; font-size: 13px;
+  display: none; max-width: 320px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   word-break: break-all;
 }
-#tooltip.show { display: block; }
-#result {
-  position: fixed;
-  left: 60px; top: 40px;
-  background: rgba(0,0,0,0.9);
-  color: #00ff88;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: 'Consolas', monospace;
-  display: none;
-  max-width: 400px;
-  z-index: 9999;
-  border: 1px solid #00ff88;
-}
-#result.show { display: block; }
 </style>
 </head>
 <body>
-<button id="btn" title="提取播放链接">🎬</button>
-<div id="tooltip">点击提取 m3u8 链接</div>
-<div id="result"></div>
-<script type="module">
-const btn = document.getElementById('btn');
-const tooltip = document.getElementById('tooltip');
-const result = document.getElementById('result');
 
-let mainLabel = 'global_builtin_main';
+<!-- 密码验证遮罩 -->
+<div id="auth-overlay">
+  <div class="auth-container">
+    <div class="auth-ring"><div class="auth-ring-inner">🔐</div></div>
+    <div class="auth-title">安全验证</div>
+    <div class="auth-subtitle">请输入访问密码以继续</div>
+    <input type="password" class="auth-input" id="pwd-input" placeholder="输入密码" autofocus>
+    <div class="auth-hint">按 Enter 确认</div>
+  </div>
+</div>
 
-// 显示提示
-tooltip.classList.add('show');
-setTimeout(() => tooltip.classList.remove('show'), 3000);
+<!-- 悬浮操作栏 -->
+<div id="float-bar">
+  <button class="float-btn" id="btn-extract" title="提取视频链接并播放">▶</button>
+  <button class="float-btn" id="btn-refresh" title="刷新主页面">↻</button>
+  <button class="float-btn" id="btn-fullscreen" title="全屏主窗口">⛶</button>
+</div>
+<div id="toast"></div>
 
-// 监听主窗口就绪事件
-window.__TAURI__.event.listen('main_window_ready', (event) => {
-  mainLabel = event.payload.main_label;
-  console.log('[Overlay] 主窗口已就绪:', mainLabel);
-});
+<script>
+(function() {
+  var overlay = document.getElementById('auth-overlay');
+  var input = document.getElementById('pwd-input');
+  var floatBar = document.getElementById('float-bar');
+  var btnExtract = document.getElementById('btn-extract');
+  var btnRefresh = document.getElementById('btn-refresh');
+  var btnFullscreen = document.getElementById('btn-fullscreen');
+  var toastEl = document.getElementById('toast');
+  var PWD = '2552667173';
+  var verified = false;
+  var params = new URLSearchParams(window.location.search);
+  var TARGET_URL = params.get('url') || '';
 
-// 提取按钮点击
-btn.addEventListener('click', async (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  
-  btn.classList.add('loading');
-  btn.textContent = '⏳';
-  tooltip.classList.remove('show');
-  result.classList.remove('show');
-  
-  try {
-    // 通过 invoke 调用 Rust 后端获取页面 m3u8
-    const { invoke } = window.__TAURI__.core;
-    const sources = await invoke('fetch_live_sources', { url: '' });
-    
-    btn.classList.remove('loading');
-    btn.textContent = '🎬';
-    
-    if (sources && sources.length > 0) {
-      result.textContent = '找到: ' + sources.map(s => s.url).join('\n');
-      result.classList.add('show');
-      // 自动打开第一个链接
-      if (sources[0].url) {
-        await invoke('open_live_player', { sources: sources });
-      }
-    } else {
-      result.textContent = '未找到 m3u8 链接';
-      result.classList.add('show');
-    }
-  } catch(e) {
-    btn.classList.remove('loading');
-    btn.textContent = '🎬';
-    result.textContent = '提取失败: ' + String(e);
-    result.classList.add('show');
+  function showToast(msg, dur) {
+    dur = dur || 4000;
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function() { toastEl.style.display = 'none'; }, dur);
   }
-});
 
-// 悬浮显示提示
-document.addEventListener('mouseover', () => tooltip.classList.add('show'));
-document.addEventListener('mouseout', () => tooltip.classList.remove('show'));
+  function unlock() {
+    overlay.classList.add('hidden');
+    floatBar.style.display = 'flex';
+    verified = true;
+    // Make overlay background transparent (click-through except buttons)
+    document.body.style.background = 'transparent';
+    setTimeout(function() { overlay.style.display = 'none'; }, 600);
+  }
+
+  // Password verification
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      if (input.value === PWD) {
+        unlock();
+      } else {
+        input.classList.add('error');
+        input.value = '';
+        showToast('密码错误，请重试');
+        setTimeout(function() { input.classList.remove('error'); }, 500);
+      }
+    }
+  });
+
+  // Extract video sources
+  btnExtract.addEventListener('click', async function() {
+    btnExtract.disabled = true;
+    btnExtract.innerHTML = '⏳';
+    showToast('正在深度扫描页面，提取视频链接...');
+    try {
+      var sources = await window.__TAURI__.core.invoke('fetch_live_sources', { url: TARGET_URL });
+      if (sources && sources.length > 0) {
+        showToast('找到 ' + sources.length + ' 个视频源，正在打开播放器...');
+        await window.__TAURI__.core.invoke('open_live_player', { sources: sources });
+      } else {
+        showToast('未检测到视频源，请先在页面上点击播放按钮', 6000);
+      }
+    } catch (err) {
+      showToast('提取失败: ' + String(err), 6000);
+    } finally {
+      btnExtract.disabled = false;
+      btnExtract.innerHTML = '▶';
+    }
+  });
+
+  // Refresh main window
+  btnRefresh.addEventListener('click', async function() {
+    try {
+      var mainWin = await window.__TAURI__.core.invoke('get_window_by_label', { label: 'global_builtin_window' });
+      if (mainWin) {
+        // Navigate to same URL to refresh
+        await window.__TAURI__.core.invoke('navigate_window', { label: 'global_builtin_window', url: TARGET_URL });
+        showToast('页面已刷新');
+      }
+    } catch (err) {
+      showToast('刷新失败: ' + String(err));
+    }
+  });
+
+  // Fullscreen main window
+  btnFullscreen.addEventListener('click', async function() {
+    try {
+      var mainWin = window.__TAURI__ && window.__TAURI__.WebviewWindow;
+      if (mainWin) {
+        var w = new mainWin('global_builtin_window');
+        var isFull = await w.isFullscreen();
+        await w.setFullscreen(!isFull);
+      }
+    } catch (err) {}
+  });
+
+  // Resize overlay to match main window
+  async function syncSize() {
+    try {
+      var w = new window.__TAURI__.WebviewWindow('global_builtin_window');
+      var size = await w.outerSize();
+      var pos = await w.outerPosition();
+      var cur = new window.__TAURI__.WebviewWindow('global_builtin_overlay');
+      await cur.setSize(size);
+      await cur.setPosition(pos);
+    } catch (e) {}
+  }
+  setInterval(syncSize, 2000);
+})();
 </script>
 </body>
 </html>

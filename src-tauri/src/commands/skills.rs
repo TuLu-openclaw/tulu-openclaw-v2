@@ -137,6 +137,23 @@ pub async fn skillhub_install(slug: String) -> Result<Value, String> {
     }))
 }
 
+/// hermes_skillhub_install — 安装技能到 Hermes 目录 (~/.hermes/skills/)
+#[tauri::command]
+pub async fn hermes_skillhub_install(slug: String) -> Result<Value, String> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let skills_dir = home.join(".hermes").join("skills");
+    if !skills_dir.exists() {
+        std::fs::create_dir_all(&skills_dir)
+            .map_err(|e| format!("创建 Hermes skills 目录失败: {e}"))?;
+    }
+    let installed_path = super::skillhub::install(&slug, &skills_dir).await?;
+    Ok(serde_json::json!({
+        "success": true,
+        "slug": slug,
+        "path": installed_path.to_string_lossy(),
+    }))
+}
+
 /// 卸载 Skill（删除 ~/.openclaw/skills/<name>/ 目录）
 #[tauri::command]
 pub async fn skills_uninstall(name: String) -> Result<Value, String> {

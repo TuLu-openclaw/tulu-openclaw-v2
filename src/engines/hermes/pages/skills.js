@@ -217,7 +217,7 @@ export function render() {
     hubInstalling.add(slug)
     draw()
     try {
-      await api.skillhubInstall(slug)
+      await api.hermesSkillhubInstall(slug)
       toast(t('engine.skillsHubInstalled', { slug }), 'success')
       // Reload local skills after install
       await loadSkills()

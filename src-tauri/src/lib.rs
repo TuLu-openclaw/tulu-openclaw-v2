@@ -184,6 +184,8 @@ pub fn run() {
             assistant::open_global_builtin_window,
             assistant::fetch_live_sources,
             assistant::open_live_player,
+            assistant::navigate_window,
+            assistant::get_window_by_label,
             assistant::update_office_state,
             assistant::sync_openclaw_to_office,
             #[cfg(target_os = "windows")]
@@ -264,6 +266,7 @@ pub fn run() {
             skills::skillhub_search,
             skills::skillhub_index,
             skills::skillhub_install,
+            skills::hermes_skillhub_install,
             hermes::check_hermes_update,
             // 前端热更新
             update::check_frontend_update,
