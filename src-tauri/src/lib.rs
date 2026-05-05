@@ -228,6 +228,7 @@ pub fn run() {
             hermes::hermes_profile_use,
             hermes::hermes_logs_list,
             hermes::hermes_logs_read,
+            hermes::hermes_logs_download,
             hermes::hermes_skills_list,
             hermes::hermes_skill_detail,
             hermes::hermes_skill_toggle,
@@ -235,6 +236,10 @@ pub fn run() {
             hermes::hermes_skill_write,
             hermes::hermes_memory_read,
             hermes::hermes_memory_write,
+            hermes::hermes_memory_read_all,
+            hermes::hermes_dashboard_probe,
+            hermes::hermes_dashboard_start,
+            hermes::hermes_dashboard_stop,
             // 消息渠道管理
             messaging::read_platform_config,
             messaging::save_messaging_platform,
