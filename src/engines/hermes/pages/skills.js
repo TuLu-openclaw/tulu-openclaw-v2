@@ -198,16 +198,28 @@ export function render() {
   let hubDebounceTimer = null
   async function loadHubResults() {
     if (!hubQuery.trim()) { hubResults = []; draw(); return }
-    // 防抖：延迟 400ms 再搜索，避免每次 keystroke 都请求
     if (hubDebounceTimer) clearTimeout(hubDebounceTimer)
     hubDebounceTimer = setTimeout(async () => {
       hubLoading = true; draw()
       try {
-        // 强制加时间戳防止 API 缓存返回旧数据
-        const ts = Date.now()
-        const results = await api.skillhubSearch(hubQuery.trim() + ' ', 25)
-          .catch(() => api.skillhubSearch(hubQuery.trim(), 25))
-        hubResults = Array.isArray(results) ? results : []
+        // 直接 fetch clawhub.ai API，避免 Rust 层转发
+        const q = encodeURIComponent(hubQuery.trim())
+        const url = `https://clawhub.ai/api/v1/skills?q=${q}&limit=25&_=${Date.now()}`
+        let data = null
+        try {
+          const r = await fetch(url, {
+            headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+            cache: 'no-store',
+          })
+          if (r.ok) data = await r.json()
+        } catch (e) { console.warn('clawhub fetch failed', e) }
+
+        // Fallback: 通过 Rust 后端代理（如果前端 fetch 失败）
+        if (!data || !Array.isArray(data)) {
+          try { data = await api.skillhubSearch(hubQuery.trim(), 25) } catch (_) {}
+        }
+
+        hubResults = Array.isArray(data) ? data : []
         if (hubResults.length === 0) {
           toast(t('engine.skillsHubNoResults') || '未找到匹配的技能', 'info')
         }

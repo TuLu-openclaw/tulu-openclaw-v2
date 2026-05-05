@@ -17,6 +17,22 @@ const PLATFORMS = {
   migu: { name: '咪咕', icon: '🎤', color: '#ff2d51', search: searchMigu, play: playMigu },
 }
 
+// ============================================================
+// 默认推荐歌曲（搜索无结果时显示）
+// ============================================================
+const DEFAULT_RECOMMENDATIONS = [
+  { name: '孤勇者', artist: '陈奕迅', album: '陈奕迅', platform: 'netease', id: 1901371647, cover: '' },
+  { name: '起风了', artist: '买辣椒也用券', album: '起风了', platform: 'netease', id: 1842022081, cover: '' },
+  { name: '漠河舞厅', artist: '柳爽', album: '漠河舞厅', platform: 'netease', id: 1498195650, cover: '' },
+  { name: '稻香', artist: '周杰伦', album: '魔杰座', platform: 'netease', id: 18600163, cover: '' },
+  { name: '晴天', artist: '周杰伦', album: '叶惠美', platform: 'netease', id: 18600102, cover: '' },
+  { name: '告白气球', artist: '周杰伦', album: '周杰伦的床边故事', platform: 'netease', id: 41621589, cover: '' },
+  { name: '七里香', artist: '周杰伦', album: '七里香', platform: 'netease', id: 18600116, cover: '' },
+  { name: '简单爱', artist: '周杰伦', album: '范特西', platform: 'netease', id: 185960, cover: '' },
+  { name: '夜曲', artist: '周杰伦', album: '十一月的萧邦', platform: 'netease', id: 18600131, cover: '' },
+  { name: '青花瓷', artist: '周杰伦', album: '我很忙', platform: 'netease', id: 18600135, cover: '' },
+]
+
 // NetEase Cloud Music
 async function searchNetease(q, limit = 20) {
   // 后端代理（Rust command），绕过 CORS
@@ -146,6 +162,34 @@ async function fetchLyrics(song) {
 }
 
 // ===== 全网聚合搜索 =====
+
+// 播放推荐歌曲（使用默认推荐列表，绕过搜索）
+async function playRecSong(idx) {
+  const song = DEFAULT_RECOMMENDATIONS[idx]
+  if (!song) return
+  // 将推荐歌曲临时加入 results
+  results = [song]
+  currentSong = song
+  const p = PLATFORMS[song.platform]
+  try {
+    currentUrl = await p.play(song.id)
+    if (!audioEl) {
+      audioEl = new Audio()
+      audioEl.addEventListener('timeupdate', updateProgress)
+      audioEl.addEventListener('ended', () => { playing = false; draw() })
+      audioEl.addEventListener('error', () => toast('播放失败，请尝试其他歌曲', 'error'))
+    }
+    audioEl.src = currentUrl
+    audioEl.play()
+    playing = true
+    lyrics = await fetchLyrics(song)
+    draw()
+    toast(`正在播放: ${song.name} - ${song.artist}`)
+  } catch (e) {
+    toast('播放失败: ' + (e?.message || e), 'error')
+  }
+}
+
 async function searchAll(q) {
   const results = await Promise.allSettled(
     Object.entries(PLATFORMS).map(([key, p]) => p.search(q, 8))
@@ -208,13 +252,7 @@ export default function MusicPlayerPage() {
           <div class="mp-results">
             ${loading ? '<div class="mp-loading"><div class="mp-spinner"></div>搜索中...</div>' : ''}
             ${!loading && results.length === 0 && query ? '<div class="mp-empty">未找到相关歌曲</div>' : ''}
-            ${!loading && results.length === 0 && !query ? `
-              <div class="mp-welcome">
-                <div class="mp-welcome-icon">🎵</div>
-                <div class="mp-welcome-title">搜索你想听的音乐</div>
-                <div class="mp-welcome-desc">支持网易云、QQ音乐、酷狗、酷我、咪咕五大平台聚合搜索</div>
-              </div>
-            ` : ''}
+            ${!loading && results.length === 0 && !query ? renderRecommendations() : ''}
             ${!loading ? results.map((s, i) => renderSong(s, i)).join('') : ''}
           </div>
 
@@ -224,6 +262,53 @@ export default function MusicPlayerPage() {
     `
     bindEvents()
   }
+
+  function renderRecommendations() {
+    return `
+      <div class="mp-recommendations">
+        <div class="mp-rec-header">🔥 热门推荐</div>
+        <div class="mp-rec-grid">
+          ${DEFAULT_RECOMMENDATIONS.map((s, i) => `
+            <div class="mp-rec-card" data-rec-idx="${i}">
+              <div class="mp-rec-cover">${s.cover ? `<img src="${esc(s.cover)}" alt="">` : '<div class="mp-rec-placeholder">🎵</div>'}</div>
+              <div class="mp-rec-info">
+                <div class="mp-rec-name">${esc(s.name)}</div>
+                <div class="mp-rec-artist">${esc(s.artist)}</div>
+              </div>
+              <button class="mp-rec-play" data-rec-idx="${i}">▶</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `
+  }
+
+  async function playRecSong(recIdx) {
+    const song = DEFAULT_RECOMMENDATIONS[recIdx]
+    if (!song) return
+    results = [song]
+    currentSong = song
+    const p = PLATFORMS[song.platform]
+    try {
+      currentUrl = await p.play(song.id)
+      if (!audioEl) {
+        audioEl = new Audio()
+        audioEl.addEventListener('timeupdate', updateProgress)
+        audioEl.addEventListener('ended', () => { playing = false; draw() })
+        audioEl.addEventListener('error', () => toast('播放失败', 'error'))
+      }
+      audioEl.src = currentUrl
+      audioEl.play()
+      playing = true
+      lyrics = await fetchLyrics(song)
+      draw()
+      toast(`正在播放: ${song.name} - ${song.artist}`)
+    } catch (e) {
+      toast('播放失败: ' + (e?.message || e), 'error')
+    }
+  }
+
+
 
   function renderSong(song, idx) {
     const isActive = currentSong && currentSong.id === song.id && currentSong.platform === song.platform
@@ -291,6 +376,11 @@ export default function MusicPlayerPage() {
     el.querySelector('#mp-toggle')?.addEventListener('click', togglePlay)
     el.querySelector('#mp-download')?.addEventListener('click', () => {
       if (currentSong) downloadSong(results.indexOf(currentSong))
+    })
+    // 推荐歌曲点击播放
+    el.querySelector('.mp-results')?.addEventListener('click', e => {
+      const btn = e.target.closest('.mp-rec-play')
+      if (btn) playRecSong(parseInt(btn.dataset.recIdx))
     })
   }
 

@@ -960,16 +960,34 @@ export function render() {
       const config = await api.readOpenclawConfig()
       const { providerId, modelId, provider } = findOpenClawPrimaryProvider(config)
       if (!provider) throw new Error(t('engine.dashImportOpenClawMissingModel'))
-      formBaseUrl = provider.baseUrl || ''
+
+      // 从 provider 配置获取完整信息
       formApiKey = provider.apiKey || ''
+      formBaseUrl = provider.baseUrl || ''
+
+      // modelId 已经是去掉 nickname 后的真实模型名（如 MiniMax-M2.7-highspeed）
+      // 但要确保：如果 primary 是 "nickname/model" 格式，modelId才是实际模型名
       formModel = modelId || ''
-      const providerMeta = hermesProviders.find(p => p.id === providerId)
-      const providerName = providerMeta?.name || providerId || 'OpenClaw'
-      await api.configureHermes(providerId || 'custom', formApiKey, formModel, formBaseUrl || null)
-      cfgMsg = `<span style="color:var(--success)">${t('engine.dashImportOpenClawModelOk', { provider: providerName, model: formModel || '—' })}</span>`
+
+      // providerId 从 baseUrl 推断，而不是直接用 OpenClaw 的 provider key
+      const matched = formBaseUrl ? inferProviderByBaseUrl(hermesProviders, formBaseUrl) : null
+      const effectiveProviderId = matched?.id || 'custom'
+
+      // 校验 provider 有效性（防止用户输入无效 provider 名称）
+      const knownIds = hermesProviders.map(p => p.id)
+      if (effectiveProviderId !== 'custom' && !knownIds.includes(effectiveProviderId)) {
+        cfgMsg = `<span style="color:var(--error)">✗ 未知提供商 '${effectiveProviderId}'，请先在 Hermes 设置中添加该 Provider</span>`
+        modelBusy = false; draw(); return
+      }
+
+      const providerMeta = hermesProviders.find(p => p.id === effectiveProviderId)
+      const providerName = providerMeta?.name || effectiveProviderId || 'custom'
+
+      await api.configureHermes(effectiveProviderId, formApiKey, formModel, formBaseUrl || null)
+      cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.dashImportOpenClawModelOk', { provider: providerName, model: formModel || '—' })}</span>`
       await refresh()
     } catch (e) {
-      cfgMsg = `<span style="color:var(--error)">${String(e).replace(/^Error:\s*/, '')}</span>`
+      cfgMsg = `<span style="color:var(--error)">✗ ${String(e).replace(/^Error:\s*/, '')}</span>`
     } finally {
       modelBusy = false; draw()
     }
