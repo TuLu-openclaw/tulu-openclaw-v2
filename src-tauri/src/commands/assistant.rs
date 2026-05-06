@@ -1510,7 +1510,7 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
         seen: &mut std::collections::HashSet<String>,
     ) {
         let u = u.trim();
-        if u.is_empty() || u.len() > 2048 {
+        if u.is_empty() || u.len() > 4096 {
             return;
         }
         if !u.starts_with("http") {
@@ -1523,56 +1523,291 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
         results.push(serde_json::json!({ "url": u, "from": src }));
     }
 
-    fn scan_text(
-        text: &str,
-        src: &str,
-        results: &mut Vec<serde_json::Value>,
-        seen: &mut std::collections::HashSet<String>,
-    ) {
-        if let Ok(re) = regex::Regex::new(r#"https?://[^"'<\s\\]+\.m3u8[^\s"'<>\)\\]*"#) {
-            for m in re.find_iter(text) {
-                add_url(m.as_str(), src, results, seen);
-            }
-        }
-        if let Ok(re) = regex::Regex::new(r#""(https?://[^"]+\.m3u8[^"]*)""#) {
-            for c in re.captures_iter(text) {
-                if let Some(v) = c.get(1) {
-                    add_url(v.as_str(), src, results, seen);
-                }
-            }
-        }
-        if let Ok(re) = regex::Regex::new(r#"'+(https?://[^']+\.m3u8[^']*)'+"#) {
-            for c in re.captures_iter(text) {
-                if let Some(v) = c.get(1) {
-                    add_url(v.as_str(), src, results, seen);
-                }
-            }
-        }
-    }
-
     fn url_decode_str(s: &str) -> String {
         urlencoding::decode(s)
             .map(|r| r.into_owned())
             .unwrap_or_else(|_| s.to_string())
     }
 
-    fn try_decode_str(
+    /// 深度解码：URL解码 + base64解码（递归，最多3层）
+    fn deep_decode(
         s: &str,
         src: &str,
         results: &mut Vec<serde_json::Value>,
         seen: &mut std::collections::HashSet<String>,
+        depth: usize,
     ) {
-        let decoded = url_decode_str(s);
-        if decoded != s {
-            scan_text(&decoded, &format!("{} (url-decode)", src), results, seen);
+        if depth == 0 || s.is_empty() {
+            return;
         }
-        if let Ok(bytes) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, s) {
-            if let Ok(s2) = String::from_utf8(bytes) {
-                scan_text(&s2, &format!("{} (base64)", src), results, seen);
-                if s2 != decoded {
-                    try_decode_str(&s2, &format!("{} (base64^2)", src), results, seen);
+        let url_decoded = url_decode_str(s);
+        if url_decoded != s {
+            scan_text(
+                &url_decoded,
+                &format!("{} (url-decode)", src),
+                results,
+                seen,
+            );
+            if depth > 1 {
+                deep_decode(
+                    &url_decoded,
+                    &format!("{} (url-decode^2)", src),
+                    results,
+                    seen,
+                    depth - 1,
+                );
+            }
+        }
+        if s.len() >= 16 {
+            if let Ok(bytes) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, s)
+            {
+                if let Ok(s2) = String::from_utf8(bytes) {
+                    if s2.len() > 4 && is_printable(&s2) {
+                        scan_text(&s2, &format!("{} (base64)", src), results, seen);
+                        deep_decode(
+                            &s2,
+                            &format!("{} (base64-deep)", src),
+                            results,
+                            seen,
+                            depth - 1,
+                        );
+                    }
                 }
             }
+        }
+    }
+
+    fn is_printable(s: &str) -> bool {
+        s.chars()
+            .filter(|c| c.is_control() && *c != '\n' && *c != '\r' && *c != '\t')
+            .count()
+            < s.len() / 4
+    }
+
+    /// 扫描文本中的视频 URL（增强版：query string解码 + 多格式 + RTMP）
+    fn scan_text(
+        text: &str,
+        src: &str,
+        results: &mut Vec<serde_json::Value>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        // 1. m3u8 URL
+        if let Ok(re) = regex::Regex::new(r#"https?://[^"'\s<>\\]+\.m3u8[^"'\s<>\\]*"#) {
+            for m in re.find_iter(text) {
+                add_url(m.as_str(), src, results, seen);
+            }
+        }
+        // 2. 双引号包裹
+        if let Ok(re) = regex::Regex::new(r#""(https?://[^"\\]+\.m3u8[^"\\]*)""#) {
+            for c in re.captures_iter(text) {
+                if let Some(v) = c.get(1) {
+                    add_url(v.as_str(), src, results, seen);
+                }
+            }
+        }
+        // 3. 单引号包裹
+        if let Ok(re) = regex::Regex::new(r#"'+(https?://[^'\\]+\.m3u8[^'\\]*)'+"#) {
+            for c in re.captures_iter(text) {
+                if let Some(v) = c.get(1) {
+                    add_url(v.as_str(), src, results, seen);
+                }
+            }
+        }
+        // 4. mp4/flv/webm 直链
+        if let Ok(re) =
+            regex::Regex::new(r#"https?://[^"'\s<>\\]+\.(?:mp4|flv|webm|ts)[^"'\s<>\\]*"#)
+        {
+            for m in re.find_iter(text) {
+                let u = m.as_str();
+                if u.len() > 20
+                    && !u.contains(".js")
+                    && !u.contains(".css")
+                    && !u.contains(".png")
+                    && !u.contains(".jpg")
+                {
+                    add_url(u, src, results, seen);
+                }
+            }
+        }
+        // 5. Query string 编码的 URL
+        if let Ok(re) = regex::Regex::new(
+            r#"(?:url|src|href|video|stream|link|source|m3u8|file)=(https?%3A[^&"'\s<>]+)"#,
+        ) {
+            for c in re.captures_iter(text) {
+                if let Some(v) = c.get(1) {
+                    let decoded = url_decode_str(v.as_str());
+                    scan_text(&decoded, &format!("{} (query-param)", src), results, seen);
+                }
+            }
+        }
+        // 6. RTMP URL
+        if let Ok(re) = regex::Regex::new(r#"rtmp://[^"'\s<>\\]+"#) {
+            for m in re.find_iter(text) {
+                add_url(m.as_str(), &format!("{} (rtmp)", src), results, seen);
+            }
+        }
+    }
+
+    /// 深度 JS 扫描：字符串提取 + 模式匹配 + 拼接检测 + 配置对象
+    fn scan_js_deep(
+        js: &str,
+        src: &str,
+        results: &mut Vec<serde_json::Value>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        // 1. eval/Function/setTimeout/atob 包裹
+        for pat in &[
+            r#"eval\s*\(\s*["']([^"']+)["']\s*\)"#,
+            r#"Function\s*\(\s*["']([^"']+)["']\s*\)"#,
+            r#"setTimeout\s*\(\s*["']([^"']+)"#,
+            r#"atob\s*\(\s*["']([^"']+)["']\s*\)"#,
+        ] {
+            if let Ok(re) = regex::Regex::new(pat) {
+                for c in re.captures_iter(js) {
+                    if let Some(s_m) = c.get(1) {
+                        let v = s_m.as_str();
+                        scan_text(v, src, results, seen);
+                        deep_decode(v, src, results, seen, 3);
+                    }
+                }
+            }
+        }
+
+        // 2. JSON.parse 解析数组/对象
+        if let Ok(re) = regex::Regex::new(r#"JSON\.parse\s*\(\s*["']([^"']+)["']\s*\)"#) {
+            for c in re.captures_iter(js) {
+                if let Some(s_m) = c.get(1) {
+                    let decoded = url_decode_str(s_m.as_str());
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&decoded) {
+                        extract_urls_from_json(&parsed, src, results, seen);
+                    }
+                }
+            }
+        }
+
+        // 3. 模板字符串
+        if let Ok(re) = regex::Regex::new(r#"``([^`]+)``"#) {
+            for c in re.captures_iter(js) {
+                if let Some(s_m) = c.get(1) {
+                    scan_text(&url_decode_str(s_m.as_str()), src, results, seen);
+                }
+            }
+        }
+
+        // 4. 长 base64 字符串
+        if let Ok(re) = regex::Regex::new(r#"["']([A-Za-z0-9+/=_\-]{40,})["']"#) {
+            for c in re.captures_iter(js) {
+                if let Some(s_m) = c.get(1) {
+                    deep_decode(s_m.as_str(), src, results, seen, 2);
+                }
+            }
+        }
+
+        // 5. 字符串拼接 URL（host + "/live.m3u8"）
+        if let Ok(re) = regex::Regex::new(
+            r#"["'](https?://[^"']+)["']\s*\+\s*["']([^"']*(?:\.m3u8|/live|/stream|/play)[^"']*)["']"#,
+        ) {
+            for c in re.captures_iter(js) {
+                if let (Some(a), Some(b)) = (c.get(1), c.get(2)) {
+                    let url = format!("{}{}", a.as_str(), b.as_str());
+                    add_url(&url, &format!("{} (concat)", src), results, seen);
+                }
+            }
+        }
+
+        // 6. 配置对象中的 URL
+        if let Ok(re) = regex::Regex::new(
+            r#"(?:sources?|src|url|stream|hls|video|file|playurl|streamurl|videoUrl|playUrl)\s*[:=]\s*["'](https?://[^"']+\.m3u8[^"']*)["']"#,
+        ) {
+            for c in re.captures_iter(js) {
+                if let Some(v) = c.get(1) {
+                    add_url(v.as_str(), &format!("{} (config)", src), results, seen);
+                }
+            }
+        }
+
+        // 7. fetch/XMLHttpRequest URL
+        if let Ok(re) = regex::Regex::new(
+            r#"(?:fetch|XMLHttpRequest|axios\.get|axios\.post|\$\.ajax|\$\.get)\s*\(\s*["'](https?://[^"']+)"#,
+        ) {
+            for c in re.captures_iter(js) {
+                if let Some(v) = c.get(1) {
+                    scan_text(v.as_str(), &format!("{} (fetch)", src), results, seen);
+                }
+            }
+        }
+
+        // 8. WebSocket URL
+        if let Ok(re) = regex::Regex::new(r#"wss?://[^"'\s<>\\]+"#) {
+            for m in re.find_iter(js) {
+                add_url(m.as_str(), &format!("{} (ws)", src), results, seen);
+            }
+        }
+
+        // 9. new URL() 构造
+        if let Ok(re) = regex::Regex::new(r#"new\s+URL\s*\(\s*["'](https?://[^"']+)"#) {
+            for c in re.captures_iter(js) {
+                if let Some(v) = c.get(1) {
+                    scan_text(v.as_str(), &format!("{} (new-URL)", src), results, seen);
+                }
+            }
+        }
+
+        // 10. 所有含视频关键词的字符串字面量
+        if let Ok(re) = regex::Regex::new(r#""([^"]{15,})""#) {
+            for c in re.captures_iter(js) {
+                if let Some(v) = c.get(1) {
+                    let s = v.as_str();
+                    if s.contains("m3u8")
+                        || s.contains("/live")
+                        || s.contains("/stream")
+                        || s.contains("/play")
+                    {
+                        scan_text(s, &format!("{} (str-lit)", src), results, seen);
+                        deep_decode(s, &format!("{} (str-lit-deep)", src), results, seen, 2);
+                    }
+                }
+            }
+        }
+        if let Ok(re) = regex::Regex::new(r#"([^']{15,})'"#) {
+            for c in re.captures_iter(js) {
+                if let Some(v) = c.get(1) {
+                    let s = v.as_str();
+                    if s.contains("m3u8")
+                        || s.contains("/live")
+                        || s.contains("/stream")
+                        || s.contains("/play")
+                    {
+                        scan_text(s, &format!("{} (str-lit)", src), results, seen);
+                        deep_decode(s, &format!("{} (str-lit-deep)", src), results, seen, 2);
+                    }
+                }
+            }
+        }
+    }
+
+    /// 从 JSON 值递归提取 URL
+    fn extract_urls_from_json(
+        val: &serde_json::Value,
+        src: &str,
+        results: &mut Vec<serde_json::Value>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
+        match val {
+            serde_json::Value::String(s) => {
+                scan_text(s, src, results, seen);
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    extract_urls_from_json(item, src, results, seen);
+                }
+            }
+            serde_json::Value::Object(map) => {
+                for (_k, v) in map {
+                    extract_urls_from_json(v, src, results, seen);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1689,62 +1924,7 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
                 if let Some(content) = c.get(1) {
                     let script = content.as_str();
                     scan_text(script, &format!("{} (script)", src), results, seen);
-                    scan_js_strings(script, &format!("{} (js)", src), results, seen);
-                }
-            }
-        }
-    }
-
-    fn scan_js_strings(
-        js: &str,
-        src: &str,
-        results: &mut Vec<serde_json::Value>,
-        seen: &mut std::collections::HashSet<String>,
-    ) {
-        for pat in &[
-            r#"eval\s*\(\s*["']([^"']+)["']\s*\)"#,
-            r#"Function\s*\(\s*["']([^"']+)["']\s*\)"#,
-            r#"setTimeout\s*\(\s*["']([^"']+)["']"#,
-            r#"JSON\.parse\s*\(\s*["']([^"']+)["']\s*\)"#,
-            r#"atob\s*\(\s*["']([^"']+)["']\s*\)"#,
-        ] {
-            if let Ok(re) = regex::Regex::new(pat) {
-                for c in re.captures_iter(js) {
-                    if let Some(s_m) = c.get(1) {
-                        let decoded = url_decode_str(s_m.as_str());
-                        scan_text(&decoded, src, results, seen);
-                        try_decode_str(&decoded, src, results, seen);
-                    }
-                }
-            }
-        }
-        if let Ok(re) = regex::Regex::new(r#"`([^`]+)`"#) {
-            for c in re.captures_iter(js) {
-                if let Some(s_m) = c.get(1) {
-                    scan_text(&url_decode_str(s_m.as_str()), src, results, seen);
-                }
-            }
-        }
-        if let Ok(re) = regex::Regex::new(r#""([A-Za-z0-9+/=_\-]{40,})""#) {
-            for c in re.captures_iter(js) {
-                if let Some(s_m) = c.get(1) {
-                    try_decode_str(s_m.as_str(), src, results, seen);
-                }
-            }
-        }
-        if let Ok(re) = regex::Regex::new(r#"JSON\.parse\s*\(\s*["']([^"']+)["']\s*\)"#) {
-            for c in re.captures_iter(js) {
-                if let Some(s_m) = c.get(1) {
-                    let decoded = url_decode_str(s_m.as_str());
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&decoded) {
-                        if let Some(arr) = parsed.as_array() {
-                            for item in arr {
-                                if let Some(s2) = item.as_str() {
-                                    scan_text(s2, src, results, seen);
-                                }
-                            }
-                        }
-                    }
+                    scan_js_deep(script, &format!("{} (js)", src), results, seen);
                 }
             }
         }
@@ -1781,7 +1961,7 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
                             if let Ok(js_text) = resp.text().await {
                                 let this_src = &format!("{} (js:{})", src, js_url);
                                 scan_text(&js_text, this_src, results, seen);
-                                scan_js_strings(&js_text, this_src, results, seen);
+                                scan_js_deep(&js_text, this_src, results, seen);
                             }
                         }
                     }
