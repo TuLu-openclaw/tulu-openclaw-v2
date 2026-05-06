@@ -1465,12 +1465,10 @@ pub async fn save_recording(app: tauri::AppHandle, data: Vec<u8>, default_name: 
     use tauri_plugin_dialog::DialogExt;
 
     let Downloads = dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let default_path = Downloads.join(&default_name);
 
     let file_path = app.dialog()
         .file()
         .set_file_name(&default_name)
-        .set_initial_path(&default_path)
         .add_filter("WebM Video", &["webm"])
         .add_filter("MP4 Video", &["mp4"])
         .add_filter("All Files", &["*"])
@@ -1486,119 +1484,296 @@ pub async fn save_recording(app: tauri::AppHandle, data: Vec<u8>, default_name: 
     }
 }
 
-/// fetch_live_sources/// fetch_live_sources - 三层扫描页面提取所有可播放 m3u8 资源
+
+/// fetch_live_sources - 深度递归扫描：无论资源在任何页任何层都必须扫到
 #[tauri::command]
 pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, String> {
-    // Layer 1: fetch the HTML page, scan for m3u8 in HTML/script text
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    let html = resp.text().await.map_err(|e| e.to_string())?;
-
-    let mut found = std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut results: Vec<serde_json::Value> = Vec::new();
 
-    // Regex for m3u8 URLs
-    let re = regex::Regex::new(r#"https?://[^"'<>\s]+\.m3u8[^"'<>\s]*"#).unwrap();
-    for m in re.find_iter(&html) {
-        let u = m.as_str().to_string();
-        if !found.contains(&u) && u.len() < 2048 {
-            found.insert(u.clone());
-            results.push(serde_json::json!({ "url": u, "type": "html-scan", "from": "page" }));
+    fn add_url(u: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>) {
+        let u = u.trim();
+        if u.is_empty() || u.len() > 2048 { return; }
+        if !u.starts_with("http") { return; }
+        if seen.contains(u) { return; }
+        seen.insert(u.to_string());
+        results.push(serde_json::json!({ "url": u, "from": src }));
+    }
+
+    fn scan_text(text: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>) {
+        if let Ok(re) = regex::Regex::new(r#"https?://[^"'<\s\\]+\.m3u8[^\s"'<>\)\\]*"#) {
+            for m in re.find_iter(text) { add_url(m.as_str(), src, results, seen); }
+        }
+        if let Ok(re) = regex::Regex::new(r#""(https?://[^"]+\.m3u8[^"]*)""#) {
+            for c in re.captures_iter(text) { if let Some(v) = c.get(1) { add_url(v.as_str(), src, results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#"'+(https?://[^']+\.m3u8[^']*)'+"#) {
+            for c in re.captures_iter(text) { if let Some(v) = c.get(1) { add_url(v.as_str(), src, results, seen); } }
         }
     }
 
-    // Layer 2: scan inline scripts for m3u8 patterns
-    let script_re = regex::Regex::new(r#"(?s)<script[^>]*>(.*?)</script>"#).unwrap();
-    for m in script_re.find_iter(&html) {
-        let script = m.get(1).map(|s| s.as_str()).unwrap_or("");
-        // Look for string literals containing m3u8
-        let lit_re = regex::Regex::new(r#""(https?://[^"]+\.m3u8[^"]*)""#).unwrap();
-        for lit in lit_re.find_iter(script) {
-            let u = lit.get(1).map(|s| s.as_str()).unwrap_or("").to_string();
-            if !found.contains(&u) && u.len() < 2048 {
-                found.insert(u.clone());
-                results.push(serde_json::json!({ "url": u, "type": "script-scan", "from": "inline-script" }));
+    fn url_decode_str(s: &str) -> String {
+        urlencoding::decode(s).map(|r| r.into_owned()).unwrap_or_else(|_| s.to_string())
+    }
+
+    fn try_decode_str(s: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>) {
+        let decoded = url_decode_str(s);
+        if decoded != s { scan_text(&decoded, &format!("{} (url-decode)", src), results, seen); }
+        if let Ok(bytes) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, s) {
+            if let Ok(s2) = String::from_utf8(bytes) {
+                scan_text(&s2, &format!("{} (base64)", src), results, seen);
+                if s2 != decoded { try_decode_str(&s2, &format!("{} (base64^2)", src), results, seen); }
             }
         }
-        // Also try base64 decode of suspected strings
-        let b64_re = regex::Regex::new(r#""([A-Za-z0-9+/=]{40,})""#).unwrap();
-        for bm in b64_re.find_iter(script) {
-            if let Ok(decoded) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, bm.get(1).map(|s| s.as_str()).unwrap_or("")) {
-                let s = String::from_utf8_lossy(&decoded);
-                if s.contains(".m3u8") || s.contains(".mp4") {
-                    let url_re = regex::Regex::new(r#"(https?://\S+\.m3u8\S*)"#).unwrap();
-                    for u in url_re.find_iter(&s) {
-                        let url_str = u.as_str().to_string();
-                        if !found.contains(&url_str) && url_str.len() < 2048 {
-                            found.insert(url_str.clone());
-                            results.push(serde_json::json!({ "url": url_str, "type": "base64-decode", "from": "inline-script" }));
+    }
+
+    #[async_recursion::async_recursion]
+    async fn scan_html_recursive(html: &str, base: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>, client: &reqwest::Client, depth: usize) {
+        if depth == 0 { return; }
+        scan_text(html, src, results, seen);
+
+        if let Ok(re) = regex::Regex::new(r#"(?:src|href|data-src|data-url|data-stream|data-href|action|poster)=["']([^"']+)["']"#) {
+            for c in re.captures_iter(html) { if let Some(v) = c.get(1) { scan_text(&url_decode_str(v.as_str()), &format!("{} (attr)", src), results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#"<source[^>]+src=["']([^"']+)["']"#) {
+            for c in re.captures_iter(html) { if let Some(v) = c.get(1) { add_url(v.as_str(), &format!("{} (<source>)", src), results, seen); } }
+        }
+        for tag in &["video", "audio", "iframe", "embed", "object"] {
+            if let Ok(re) = regex::Regex::new(&format!(r#"<{}[^>]+src=["']([^"']+)["']"#, tag)) {
+                for c in re.captures_iter(html) { if let Some(v) = c.get(1) {
+                    let tag_url = v.as_str();
+                    if tag_url.starts_with("http") && !tag_url.contains("youtube") && !tag_url.contains("googlesyndication") {
+                        let this_src = format!("{} (<{}>)", src, tag);
+                        add_url(tag_url, &this_src, results, seen);
+                        if *tag == "iframe" {
+                            if let Ok(resp) = client.get(tag_url).send().await {
+                                if let Ok(iframe_html) = resp.text().await {
+                                    let iframe_src = format!("{} (iframe)", src);
+                                    scan_text(&iframe_html, &iframe_src, results, seen);
+                                    scan_html_recursive(&iframe_html, tag_url, &iframe_src, results, seen, client, depth - 1).await;
+                                }
+                            }
                         }
                     }
+                }}
+            }
+        }
+        if let Ok(re) = regex::Regex::new(r#"data-[a-zA-Z-]+=["']([^"']*m3u8[^"']*)["']"#) {
+            for c in re.captures_iter(html) { if let Some(v) = c.get(1) { scan_text(&url_decode_str(v.as_str()), &format!("{} (data-attr)", src), results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#"(?:onclick|onerror|onload|onplay|onplayback)=["']([^"']+)["']"#) {
+            for c in re.captures_iter(html) { if let Some(v) = c.get(1) { scan_text(&url_decode_str(v.as_str()), &format!("{} (event)", src), results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#"style=["']([^"']*url\([^"']+\)[^"']*)["']"#) {
+            for c in re.captures_iter(html) { if let Some(v) = c.get(1) { scan_text(&url_decode_str(v.as_str()), &format!("{} (style)", src), results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#"(?s)<script[^>]*>(.*?)</script>"#) {
+            for c in re.captures_iter(html) { if let Some(content) = c.get(1) {
+                let script = content.as_str();
+                scan_text(script, &format!("{} (script)", src), results, seen);
+                scan_js_strings(script, &format!("{} (js)", src), results, seen);
+            }}
+        }
+    }
+
+    fn scan_js_strings(js: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>) {
+        for pat in &[r#"eval\s*\(\s*["']([^"']+)["']\s*\)"#, r#"Function\s*\(\s*["']([^"']+)["']\s*\)"#, r#"setTimeout\s*\(\s*["']([^"']+)["']"#, r#"JSON\.parse\s*\(\s*["']([^"']+)["']\s*\)"#, r#"atob\s*\(\s*["']([^"']+)["']\s*\)"#] {
+            if let Ok(re) = regex::Regex::new(pat) {
+                for c in re.captures_iter(js) { if let Some(s_m) = c.get(1) {
+                    let decoded = url_decode_str(s_m.as_str());
+                    scan_text(&decoded, src, results, seen);
+                    try_decode_str(&decoded, src, results, seen);
+                }}
+            }
+        }
+        if let Ok(re) = regex::Regex::new(r#"`([^`]+)`"#) {
+            for c in re.captures_iter(js) { if let Some(s_m) = c.get(1) { scan_text(&url_decode_str(s_m.as_str()), src, results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#""([A-Za-z0-9+/=_\-]{40,})""#) {
+            for c in re.captures_iter(js) { if let Some(s_m) = c.get(1) { try_decode_str(s_m.as_str(), src, results, seen); } }
+        }
+        if let Ok(re) = regex::Regex::new(r#"JSON\.parse\s*\(\s*["']([^"']+)["']\s*\)"#) {
+            for c in re.captures_iter(js) { if let Some(s_m) = c.get(1) {
+                let decoded = url_decode_str(s_m.as_str());
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&decoded) {
+                    if let Some(arr) = parsed.as_array() {
+                        for item in arr { if let Some(s2) = item.as_str() { scan_text(s2, src, results, seen); } }
+                    }
+                }
+            }}
+        }
+    }
+
+    async fn scan_js_files(html: &str, base: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>, client: &reqwest::Client) {
+        if let Ok(re) = regex::Regex::new(r#"<script[^>]+src=["']([^"']+\.js[^"']*)["']"#) {
+            for c in re.captures_iter(html) { if let Some(js_url_m) = c.get(1) {
+                let js_url = js_url_m.as_str();
+                let full_url = if js_url.starts_with("//") {
+                    format!("https:{}", js_url)
+                } else if js_url.starts_with("/") {
+                    url::Url::parse(base).ok().and_then(|b| b.join(js_url).ok()).map(|u| u.to_string()).unwrap_or_else(|| js_url.to_string())
+                } else if js_url.starts_with("http") { js_url.to_string() } else { format!("{}/{}", base.trim_end_matches('/'), js_url) };
+                if full_url.starts_with("http") && !seen.contains(&full_url) {
+                    seen.insert(full_url.clone());
+                    if let Ok(resp) = client.get(&full_url).send().await {
+                        if let Ok(js_text) = resp.text().await {
+                            let this_src = &format!("{} (js:{})", src, js_url);
+                            scan_text(&js_text, this_src, results, seen);
+                            scan_js_strings(&js_text, this_src, results, seen);
+                        }
+                    }
+                }
+            }}
+        }
+    }
+
+    #[async_recursion::async_recursion]
+    async fn scan_iframes(html: &str, base: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>, client: &reqwest::Client, depth: usize) {
+        if depth == 0 { return; }
+        if let Ok(re) = regex::Regex::new(r#"<iframe[^>]+src=["']([^"']+)["']"#) {
+            for c in re.captures_iter(html) { if let Some(iframe_m) = c.get(1) {
+                let iframe_url = iframe_m.as_str();
+                if iframe_url.starts_with("http") && !iframe_url.contains("youtube.com") && !iframe_url.contains("googlesyndication") {
+                    if let Ok(resp) = client.get(iframe_url).send().await {
+                        if let Ok(iframe_html) = resp.text().await {
+                            let this_src = &format!("{} (iframe)", src);
+                            scan_text(&iframe_html, this_src, results, seen);
+                            scan_html_recursive(&iframe_html, iframe_url, this_src, results, seen, client, depth - 1).await;
+                            scan_iframes(&iframe_html, iframe_url, this_src, results, seen, client, depth - 1).await;
+                            scan_js_files(&iframe_html, iframe_url, this_src, results, seen, client).await;
+                        }
+                    }
+                }
+            }}
+        }
+    }
+
+    fn scan_meta(html: &str, src: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>) {
+        if let Ok(re) = regex::Regex::new(r#"<meta[^>]+content=["'][^"']*url=([^"']+)["']"#) {
+            for c in re.captures_iter(html) { if let Some(u) = c.get(1) { scan_text(u.as_str(), &format!("{} (meta)", src), results, seen); } }
+        }
+    }
+
+    async fn probe_paths(base: &str, results: &mut Vec<serde_json::Value>, seen: &mut std::collections::HashSet<String>, client: &reqwest::Client) {
+        let base = base.trim_end_matches('/');
+        let paths = [
+            "/live/live.m3u8","/live.m3u8","/live/stream.m3u8","/live/index.m3u8",
+            "/stream/live.m3u8","/stream/index.m3u8","/stream.m3u8",
+            "/hls/live.m3u8","/hls/index.m3u8","/hls/stream.m3u8","/hls.m3u8",
+            "/playlist.m3u8","/play.m3u8","/index.m3u8",
+            "/api/live.m3u8","/api/stream.m3u8","/api/v1/live.m3u8","/api/v1/stream.m3u8",
+            "/api/hls/live.m3u8","/v1/live.m3u8","/v1/stream.m3u8","/v2/live.m3u8",
+            "/channel/live.m3u8","/channels/live.m3u8","/video/live.m3u8","/videos/live.m3u8",
+            "/player/live.m3u8","/players/live.m3u8","/show/live.m3u8","/shows/live.m3u8",
+            "/broadcast/live.m3u8","/broadcast/stream.m3u8","/events/live.m3u8","/event/live.m3u8",
+            "/live/000001.m3u8","/live/000002.m3u8","/live/000003.m3u8",
+            "/live/000001/index.m3u8","/live/chaturbate.m3u8",
+            "/embed/live.m3u8","/embed/stream.m3u8","/player_embed/live.m3u8",
+            "/embed_player/live.m3u8","/player-embed/live.m3u8",
+            "/cdn/live.m3u8","/cdn/stream.m3u8","/static/live.m3u8","/static/stream.m3u8",
+            "/assets/live.m3u8","/assets/stream.m3u8","/media/live.m3u8","/media/stream.m3u8",
+            "/data/live.m3u8","/files/live.m3u8","/public/live.m3u8","/public/stream.m3u8",
+            "/live.m3u8?token=1","/live.m3u8?_t=1","/live.m3u8?key=abc","/live.m3u8?live=1",
+            "/live/live.m3u8?token=1","/live/stream.m3u8?token=1",
+            "/1/live.m3u8","/2/live.m3u8","/3/live.m3u8","/4/live.m3u8","/5/live.m3u8",
+            "/6/live.m3u8","/7/live.m3u8","/8/live.m3u8","/9/live.m3u8","/10/live.m3u8",
+            "/01/live.m3u8","/02/live.m3u8","/03/live.m3u8","/04/live.m3u8","/05/live.m3u8",
+            "/live/1/index.m3u8","/live/2/index.m3u8","/live/3/index.m3u8",
+            "/live/001/index.m3u8","/live/002/index.m3u8","/live/003/index.m3u8",
+            "/live/play.m3u8","/stream/stream.m3u8","/plist.m3u8","/master.m3u8","/chunklist.m3u8",
+            "/direct/live.m3u8","/direct/stream.m3u8","/proxy/live.m3u8","/proxy/stream.m3u8",
+            "/relay/live.m3u8","/relay/stream.m3u8",
+            "/user/live.m3u8","/users/live.m3u8","/profile/live.m3u8","/account/live.m3u8",
+            "/u/live.m3u8","/p/live.m3u8",
+            "/s/live.m3u8","/l/live.m3u8","/t/live.m3u8","/c/live.m3u8","/m/live.m3u8",
+            "/us/live.m3u8","/eu/live.m3u8","/asia/live.m3u8","/en/live.m3u8","/cn/live.m3u8","/jp/live.m3u8",
+            "/watch/live.m3u8","/view/live.m3u8","/playlive.m3u8","/livestream.m3u8",
+            "/rtmp/live.m3u8","/flash/live.m3u8","/web/live.m3u8","/web/stream.m3u8",
+            "/site/live.m3u8","/sites/live.m3u8","/app/live.m3u8","/apps/live.m3u8",
+            "/content/live.m3u8","/contents/live.m3u8","/streamer/live.m3u8",
+            "/live","/stream","/embed","/player","/watch","/play","/video","/videos",
+        ];
+
+        let mut handles = Vec::new();
+        for path in &paths {
+            let probe = format!("{}{}", base, path);
+            if seen.contains(&probe) { continue; }
+            let client = client.clone();
+            handles.push(tokio::spawn(async move {
+                if let Ok(resp) = client.get(&probe).send().await {
+                    if resp.status().as_u16() == 200 {
+                        if let Some(ct) = resp.headers().get("content-type") {
+                            let ct_str = ct.to_str().unwrap_or("");
+                            if ct_str.contains("mpegurl") || ct_str.contains("apple.mpegurl") || ct_str.contains("audio") {
+                                return Some(probe);
+                            }
+                        }
+                    }
+                }
+                None::<String>
+            }));
+        }
+
+        for handle in handles {
+            if let Ok(Some(probe)) = handle.await {
+                if !seen.contains(&probe) {
+                    seen.insert(probe.clone());
+                    results.push(serde_json::json!({ "url": probe, "from": "path-probe" }));
                 }
             }
         }
     }
 
-    // Layer 3: scan script src files for m3u8
-    let src_re = regex::Regex::new(r#"<script[^>]+src="([^"]+)""#).unwrap();
-    for m in src_re.find_iter(&html) {
-        if let Some(src) = m.get(1) {
-            let src_url = src.as_str();
-            if src_url.starts_with("http") || src_url.starts_with("//") {
-                let full_url = if src_url.starts_with("//") {
-                    format!("https:{}", src_url}")
-                } else {
-                    src_url.to_string()
-                };
-                // Only fetch player-related scripts
-                if full_url.contains("player") || full_url.contains("video") || full_url.contains("live") || full_url.contains("stream") || full_url.contains("hls") || full_url.contains("embed") || full_url.contains("stripcam") {
-                    if let Ok(script_resp) = client.get(&full_url).send().await {
-                        if let Ok(script_text) = script_resp.text().await {
-                            let lit_re = regex::Regex::new(r#""(https?://[^"]+\.m3u8[^"]*)""#).unwrap();
-                            for lit in lit_re.find_iter(&script_text) {
-                                let u = lit.get(1).map(|s| s.as_str()).unwrap_or("").to_string();
-                                if !found.contains(&u) && u.len() < 2048 {
-                                    found.insert(u.clone());
-                                    results.push(serde_json::json!({ "url": u, "type": "js-file-scan", "from": &full_url }));
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let html = resp.text().await.map_err(|e| e.to_string())?;
+
+    scan_html_recursive(&html, &url, "page", &mut results, &mut seen, &client, 3).await;
+    scan_js_files(&html, &url, "page", &mut results, &mut seen, &client).await;
+    scan_iframes(&html, &url, "page", &mut results, &mut seen, &client, 3).await;
+    scan_meta(&html, "page", &mut results, &mut seen);
+    probe_paths(&url, &mut results, &mut seen, &client).await;
+
+    let mut final_results: Vec<serde_json::Value> = Vec::new();
+    let mut final_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for r in &results {
+        if let Some(u) = r.get("url").and_then(|v| v.as_str()) {
+            if !final_seen.contains(u) {
+                final_seen.insert(u.to_string());
+                if let Ok(resp2) = client.get(u).send().await {
+                    if resp2.status().is_redirection() {
+                        if let Some(loc) = resp2.headers().get("location") {
+                            if let Ok(loc_str) = loc.to_str() {
+                                let redirect_url = if loc_str.starts_with("/") {
+                                    url::Url::parse(u).ok().and_then(|b| b.join(loc_str).ok()).map(|j| j.to_string()).unwrap_or_else(|| loc_str.to_string())
+                                } else { loc_str.to_string() };
+                                if redirect_url.contains(".m3u8") && !final_seen.contains(&redirect_url) {
+                                    final_seen.insert(redirect_url.clone());
+                                    let mut new_r = r.clone();
+                                    new_r["url"] = serde_json::json!(redirect_url);
+                                    new_r["from"] = serde_json::json!(format!("{} (redirect)", r["from"]));
+                                    final_results.push(new_r);
+                                    continue;
                                 }
                             }
                         }
                     }
                 }
+                final_results.push(r.clone());
             }
         }
     }
 
-    // Layer 4: probe common m3u8 paths
-    let base_url = url.trim_end_matches('/');
-    let common_paths = [
-        "/live/live.m3u8", "/live.m3u8", "/live.m3u8?token=1",
-        "/hls/live.m3u8", "/stream/live.m3u8", "/playlist.m3u8",
-        "/live/stream.m3u8", "/api/live.m3u8",
-    ];
-    for path in common_paths {
-        let probe_url = format!("{}{}", base_url, path);
-        if !found.contains(&probe_url) {
-            if let Ok(resp) = client.get(&probe_url).send().await {
-                if resp.status().as_u16() == 200 {
-                    if let Ok(ct) = resp.headers().get("content-type").map(|h| h.to_str().unwrap_or("")).unwrap_or("").to_string() {
-                        if ct.contains("mpegurl") || ct.contains("application/vnd.apple.mpegurl") {
-                            found.insert(probe_url.clone());
-                            results.push(serde_json::json!({ "url": probe_url, "type": "path-probe", "from": "common-path" }));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(results)
+    Ok(final_results)
 }
+
+
 
 /// navigate_window
 /// navigate_window — 导航指定窗口到新 URL
