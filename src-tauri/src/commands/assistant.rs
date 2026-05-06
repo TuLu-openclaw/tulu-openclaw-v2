@@ -1169,7 +1169,7 @@ pub async fn open_global_builtin_window(
     eprintln!("[open_global_builtin_window] data_url size: {} bytes", data_url.len());
 
     eprintln!("[open_global_builtin_window] calling WebviewWindowBuilder::new...");
-    let win = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(data_url.into()))
+    let win = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(data_url.parse().map_err(|e| format!("Invalid URL: {}", e))?))
         .title("全球内置")
         .inner_size(1200.0, 800.0)
         .center()
