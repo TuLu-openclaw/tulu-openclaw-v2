@@ -45,6 +45,7 @@
           clearInterval(focusTimer);
           authDiv.remove();
           blockers.forEach(function(evt) { document.removeEventListener(evt, function(){}, true); });
+          injectBar();
           if (window.__tulu_pending_extract) { window.__tulu_pending_extract(); window.__tulu_pending_extract = null; }
         } else {
           errEl.textContent = \'密码错误\'; submitBtn.disabled = false; submitBtn.textContent = \'验证\';
@@ -55,6 +56,7 @@
           clearInterval(focusTimer);
           authDiv.remove();
           blockers.forEach(function(evt) { document.removeEventListener(evt, function(){}, true); });
+          injectBar();
           if (window.__tulu_pending_extract) { window.__tulu_pending_extract(); window.__tulu_pending_extract = null; }
         } else {
           errEl.textContent = \'密码错误\'; submitBtn.disabled = false; submitBtn.textContent = \'验证\';
