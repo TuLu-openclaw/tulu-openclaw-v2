@@ -4,6 +4,12 @@
   "windows": ["main", "global_builtin_window", "live_player_window"],
   "permissions": [
     "core:default",
+    "core:window:allow-create",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-close",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-set-webview-focus",
     "shell:allow-open",
     "autostart:allow-enable",
     "autostart:allow-disable",

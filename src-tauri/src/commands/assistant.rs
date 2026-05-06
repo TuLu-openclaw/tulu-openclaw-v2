@@ -1113,10 +1113,7 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
     Ok(items.join("\n"))
 }
 
-/// 全球内置 HTML 内容（编译时嵌入）
-const GLOBAL_BUILTIN_HTML: &str = include_str!("../../../public/global-builtin.html");
-
-/// Global built-in window: load external URL directly (full browser speed + fully clickable)
+/// Floating button overlay for m3u8 extraction via webview.eval()
 /// Floating button overlay for m3u8 extraction via webview.eval()
 
 #[cfg(target_os = "windows")]
@@ -1132,17 +1129,13 @@ pub async fn open_global_builtin_window(
 
     eprintln!("[open_global_builtin_window] target_url: {}", target_url);
     if target_url.starts_with("data:") || target_url.starts_with("file:") {
-        let err = "No data/file URLs allowed".to_string();
-        eprintln!("[open_global_builtin_window] ERR: {}", err);
-        return Err(err);
+        return Err("No data/file URLs allowed".to_string());
     }
 
     let label = "global_builtin_window";
-    eprintln!("[open_global_builtin_window] label: {}", label);
 
     // If window already exists, show it and navigate to new URL
     if let Some(window) = app.get_webview_window(label) {
-        eprintln!("[open_global_builtin_window] window already exists, showing it");
         let _ = window.show();
         let _ = window.set_focus();
         let nav_js = format!(
@@ -1152,24 +1145,29 @@ pub async fn open_global_builtin_window(
         let _ = window.eval(&nav_js);
         return Ok(());
     }
-    eprintln!("[open_global_builtin_window] building new window...");
 
-    // Build the full HTML with target URL embedded directly
+    // Build the full HTML with target URL embedded
     let auth_html = include_str!("../../../public/global-builtin.html");
-    eprintln!("[open_global_builtin_window] auth_html size: {} bytes", auth_html.len());
     let html_with_url = auth_html.replace(
         "var TARGET = '';",
         &format!("var TARGET = {};", serde_json::json!(&target_url)),
     );
-    eprintln!("[open_global_builtin_window] html_with_url size: {} bytes", html_with_url.len());
 
-    // Wrap in a data: URL for App mode
-    let encoded = urlencoding::encode(&html_with_url);
-    let data_url = format!("data:text/html;charset=utf-8,{}", encoded);
-    eprintln!("[open_global_builtin_window] data_url size: {} bytes", data_url.len());
+    // Write to temp file (avoid data: URL which WebView2 blocks)
+    let temp_dir = std::env::temp_dir().join("tulu_global_builtin");
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let temp_file = temp_dir.join("global-builtin.html");
+    std::fs::write(&temp_file, &html_with_url).map_err(|e| format!("写入临时HTML失败: {}", e))?;
 
-    eprintln!("[open_global_builtin_window] calling WebviewWindowBuilder::new...");
-    let win = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(data_url.parse().map_err(|e| format!("Invalid URL: {}", e))?))
+    let file_url = format!("file:///{}", temp_file.to_string_lossy().replace('\\', "/"));
+    eprintln!("[open_global_builtin_window] file_url: {}", file_url);
+
+    let file_url_parsed: url::Url = file_url
+        .parse()
+        .map_err(|e| format!("Invalid file URL: {}", e))?;
+
+    eprintln!("[open_global_builtin_window] creating window...");
+    let win = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(file_url_parsed))
         .title("全球内置")
         .inner_size(1200.0, 800.0)
         .center()
@@ -1179,17 +1177,19 @@ pub async fn open_global_builtin_window(
         .focused(true)
         .build()
         .map_err(|e| {
-            eprintln!("[open_global_builtin_window] WebviewWindowBuilder ERR: {}", e);
+            eprintln!("[open_global_builtin_window] build ERR: {}", e);
             format!("Failed to create window: {}", e)
         })?;
-    eprintln!("[open_global_builtin_window] window created successfully, label: {}", win.label());
+    eprintln!(
+        "[open_global_builtin_window] window created, label: {}",
+        win.label()
+    );
 
     // Inject floating bar script
-    let app_handle = app.clone();
     let inject_js = include_str!("../../../public/global-builtin-inject.js").to_string();
 
     // Initial injection after auth page loads
-    let ah1 = app_handle.clone();
+    let ah1 = app.clone();
     let inj1 = inject_js.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(1500));
@@ -1199,15 +1199,13 @@ pub async fn open_global_builtin_window(
     });
 
     // Re-inject every 3s so bar survives across navigations
-    let ah2 = app_handle.clone();
-    let inj2 = inject_js.clone();
+    let ah2 = app.clone();
     std::thread::spawn(move || {
         for _ in 0..400 {
             std::thread::sleep(std::time::Duration::from_millis(3000));
             if let Some(w) = ah2.get_webview_window("global_builtin_window") {
-                let reset = "window.__tulu_injected = false;";
-                let _ = w.eval(reset);
-                let _ = w.eval(&inj2);
+                let _ = w.eval("window.__tulu_injected = false;");
+                let _ = w.eval(&inject_js);
             } else {
                 break;
             }

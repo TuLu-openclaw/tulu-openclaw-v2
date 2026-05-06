@@ -38,14 +38,25 @@ export default async function render(container) {
   const openBtn = root.querySelector('#gb-open-btn')
 
   openBtn?.addEventListener('click', async () => {
-    const ok = await openInIndependentWindow()
-    if (ok) toast('已打开全球内置独立窗口', 'success')
-    else toast('打开失败，请检查内置窗口能力或目标站点限制', 'error')
+    try {
+      await api.openGlobalBuiltinWindow()
+      toast('已打开全球内置独立窗口', 'success')
+    } catch (err) {
+      const errDetail = String(err?.message || err || 'unknown')
+      console.error('[global-builtin] open failed:', errDetail)
+      toast('打开失败: ' + errDetail, 'error')
+    }
   })
 
   setTimeout(async () => {
-    const ok = await openInIndependentWindow()
-    if (ok) toast('已自动打开全球内置独立窗口', 'success')
+    try {
+      await api.openGlobalBuiltinWindow()
+      toast('已自动打开全球内置独立窗口', 'success')
+    } catch (err) {
+      const errDetail = String(err?.message || err || 'unknown')
+      console.error('[global-builtin] auto-open failed:', errDetail)
+      toast('自动打开失败: ' + errDetail, 'error')
+    }
   }, 50)
 
   return root
