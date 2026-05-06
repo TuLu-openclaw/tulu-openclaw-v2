@@ -1134,15 +1134,25 @@ pub async fn open_global_builtin_window(
 
     let label = "global_builtin_window";
 
-    // If window already exists, show it and navigate to new URL
+    // If window already exists, show it and reload auth page (每次都要密码验证)
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.set_focus();
-        let nav_js = format!(
-            "(function() {{ var ov = document.getElementById('auth-overlay'); if(ov) ov.style.opacity='0'; setTimeout(function() {{ window.location.href = {}; }}, 400); }})();",
-            serde_json::json!(&target_url)
+        // 重新生成密码验证 HTML 并导航（确保每次都要输入密码）
+        let auth_html = include_str!("../../../public/global-builtin.html");
+        let html_with_url = auth_html.replace(
+            "var TARGET = '';",
+            &format!("var TARGET = {};", serde_json::json!(&target_url)),
         );
-        let _ = window.eval(&nav_js);
+        let temp_dir = std::env::temp_dir().join("tulu_global_builtin");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let temp_file = temp_dir.join("global-builtin.html");
+        let _ = std::fs::write(&temp_file, &html_with_url);
+        let file_url = format!("file:///{}", temp_file.to_string_lossy().replace('\\', "/"));
+        let _ = window.eval(&format!(
+            "window.location.href = {};",
+            serde_json::json!(&file_url)
+        ));
         return Ok(());
     }
 
