@@ -3154,7 +3154,10 @@ pub async fn music_search(query: String) -> Result<Vec<serde_json::Value>, Strin
     let resp = client
         .get(&search_url)
         .header("Referer", "https://music.163.com")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .send()
         .await
         .map_err(|e| format!("Network error: {e}"))?;
@@ -3163,10 +3166,7 @@ pub async fn music_search(query: String) -> Result<Vec<serde_json::Value>, Strin
         return Err(format!("HTTP {}", resp.status()));
     }
 
-    let data: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Parse error: {e}"))?;
+    let data: serde_json::Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
 
     let songs: Vec<&serde_json::Value> = data
         .pointer("/result/songs")
