@@ -1118,8 +1118,10 @@ const GLOBAL_BUILTIN_HTML: &str = include_str!("../../../public/global-builtin.h
 
 /// Global built-in window: load external URL directly (full browser speed + fully clickable)
 /// Floating button overlay for m3u8 extraction via webview.eval()
+
 #[cfg(target_os = "windows")]
 #[tauri::command]
+
 pub async fn open_global_builtin_window(
     app: tauri::AppHandle,
     url: Option<String>,
@@ -1134,76 +1136,72 @@ pub async fn open_global_builtin_window(
 
     let label = "global_builtin_window";
 
-    // If window exists, just show and focus
+    // If window already exists, show it and navigate to new URL
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.set_focus();
+        // Navigate to the new target URL by injecting JS
+        let nav_js = format!(
+            "(function() {{ var ov = document.getElementById('auth-overlay'); if(ov) ov.style.opacity='0'; setTimeout(function() {{ window.location.href = {}; }}, 400); }})();",
+            serde_json::json!(&target_url)
+        );
+        let _ = window.eval(&nav_js);
         return Ok(());
     }
 
-    // Single window: direct External URL = fully interactive like a real browser
+    // Build the full HTML with target URL embedded directly
+    // We inject the target URL into the HTML via simple string replacement
+    let auth_html = include_str!("../../../public/global-builtin.html");
+    let html_with_url = auth_html.replace(
+        "var TARGET = '';",
+        &format!("var TARGET = {};", serde_json::json!(&target_url))
+    );
+
+    // Wrap in a data: URL for App mode
+    let data_url = format!(
+        "data:text/html;charset=utf-8,{}",
+        urlencoding::encode(&html_with_url)
+    );
+
     let win = WebviewWindowBuilder::new(
         &app,
         label,
-        WebviewUrl::External(
-            target_url
-                .parse()
-                .map_err(|e| format!("URL parse error: {}", e))?,
-        ),
+        WebviewUrl::App(data_url.into()),
     )
     .title("全球内置")
     .inner_size(1200.0, 800.0)
     .center()
-    .decorations(true)
     .resizable(true)
+    .decorations(true)
     .visible(true)
     .focused(true)
     .build()
     .map_err(|e| format!("Failed to create window: {}", e))?;
 
-    // Inject floating extract button via JS eval after page loads
-    // Button lives in the page DOM → can access window.location.href (current URL)
-    // On page navigation button is lost → re-inject on each page load
+    // Inject floating bar script
     let app_handle = app.clone();
     let inject_js = include_str!("../../../public/global-builtin-inject.js").to_string();
 
-    // Initial injection after delay
+    // Initial injection after auth page loads
     let ah1 = app_handle.clone();
     let inj1 = inject_js.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(2000));
+        std::thread::sleep(std::time::Duration::from_millis(1500));
         if let Some(w) = ah1.get_webview_window("global_builtin_window") {
             let _ = w.eval(&inj1);
         }
     });
 
-    // Re-inject on navigation (every 3s check if button exists, re-inject if not)
+    // Re-inject every 3s so bar survives across navigations
     let ah2 = app_handle.clone();
     let inj2 = inject_js.clone();
     std::thread::spawn(move || {
-        for _ in 0..200 {
-            // ~10 min
+        for _ in 0..400 {
             std::thread::sleep(std::time::Duration::from_millis(3000));
             if let Some(w) = ah2.get_webview_window("global_builtin_window") {
-                let check = "if (!window.__tulu_injected) { window.__tulu_needs_reinject = true; }";
-                let _ = w.eval(check);
-            } else {
-                break; // Window closed
-            }
-        }
-    });
-
-    // Periodic re-inject via Rust eval (simpler: just re-inject every 3s)
-    let ah3 = app_handle.clone();
-    let inj3 = inject_js.clone();
-    std::thread::spawn(move || {
-        for _ in 0..200 {
-            std::thread::sleep(std::time::Duration::from_millis(3000));
-            if let Some(w) = ah3.get_webview_window("global_builtin_window") {
-                // Reset guard flag so re-injection works
                 let reset = "window.__tulu_injected = false;";
                 let _ = w.eval(reset);
-                let _ = w.eval(&inj3);
+                let _ = w.eval(&inj2);
             } else {
                 break;
             }
@@ -1213,34 +1211,6 @@ pub async fn open_global_builtin_window(
     Ok(())
 }
 
-/// 从 URL 扫描 m3u8 视频源
-#[tauri::command]
-pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, String> {
-    // 三层扫描：HTML → JS 文件 → 常见路径探测
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .build()
-        .map_err(|e| e.to_string())?;
-    let body = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .text()
-        .await
-        .map_err(|e| e.to_string())?;
-    let mut sources: Vec<serde_json::Value> = Vec::new();
-    let re = regex::Regex::new(r#"(https?://[^\s'"<>]+\.m3u8[^\s'"<>]*)"#).unwrap();
-    for cap in re.captures_iter(&body) {
-        let m3u8_url = cap[1].to_string();
-        sources.push(serde_json::json!({"url": m3u8_url, "label": "m3u8"}));
-    }
-    // 去重
-    sources.sort_by(|a, b| a["url"].as_str().cmp(&b["url"].as_str()));
-    sources.dedup_by(|a, b| a["url"] == b["url"]);
-    Ok(sources)
-}
 
 /// 龙虾办公室状态同步 - 后台线程写入状态文件
 ///
@@ -1454,13 +1424,18 @@ pub async fn open_live_player(
     app: tauri::AppHandle,
     sources: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-    use tauri::{Emitter, WebviewUrl};
+    use tauri::{Emitter, Manager, WebviewUrl};
 
     let sources_json = serde_json::to_string(&sources).unwrap_or_else(|_| "[]".to_string());
     let encoded = urlencoding::encode(&sources_json);
     let player_url = format!("live-player.html?sources={}", encoded);
 
-    if let Some(_w) = app.get_webview_window("live_player_window") {
+    // If window exists, navigate it to load new sources
+    if let Some(window) = app.get_webview_window("live_player_window") {
+        let _ = window.eval(&format!(
+            "window.location.href = {};",
+            serde_json::json!(&player_url)
+        ));
         let _ = app.emit("live-player-sources", &sources);
         return Ok(());
     }
@@ -1482,6 +1457,150 @@ pub async fn open_live_player(
     Ok(())
 }
 
+/// navigate_window
+
+/// save_recording - 保存录屏数据到用户指定路径（通过Tauri对话框选择）
+#[tauri::command]
+pub async fn save_recording(app: tauri::AppHandle, data: Vec<u8>, default_name: String) -> Result<String, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let Downloads = dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let default_path = Downloads.join(&default_name);
+
+    let file_path = app.dialog()
+        .file()
+        .set_file_name(&default_name)
+        .set_initial_path(&default_path)
+        .add_filter("WebM Video", &["webm"])
+        .add_filter("MP4 Video", &["mp4"])
+        .add_filter("All Files", &["*"])
+        .blocking_save_file();
+
+    if let Some(path) = file_path {
+        let path_str = path.to_string();
+        std::fs::write(&path_str, &data)
+            .map_err(|e| format!("写入文件失败: {}", e))?;
+        Ok(path_str)
+    } else {
+        Err("用户取消保存".to_string())
+    }
+}
+
+/// fetch_live_sources/// fetch_live_sources - 三层扫描页面提取所有可播放 m3u8 资源
+#[tauri::command]
+pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, String> {
+    // Layer 1: fetch the HTML page, scan for m3u8 in HTML/script text
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let html = resp.text().await.map_err(|e| e.to_string())?;
+
+    let mut found = std::collections::HashSet::new();
+    let mut results: Vec<serde_json::Value> = Vec::new();
+
+    // Regex for m3u8 URLs
+    let re = regex::Regex::new(r#"https?://[^"'<>\s]+\.m3u8[^"'<>\s]*"#).unwrap();
+    for m in re.find_iter(&html) {
+        let u = m.as_str().to_string();
+        if !found.contains(&u) && u.len() < 2048 {
+            found.insert(u.clone());
+            results.push(serde_json::json!({ "url": u, "type": "html-scan", "from": "page" }));
+        }
+    }
+
+    // Layer 2: scan inline scripts for m3u8 patterns
+    let script_re = regex::Regex::new(r#"(?s)<script[^>]*>(.*?)</script>"#).unwrap();
+    for m in script_re.find_iter(&html) {
+        let script = m.get(1).map(|s| s.as_str()).unwrap_or("");
+        // Look for string literals containing m3u8
+        let lit_re = regex::Regex::new(r#""(https?://[^"]+\.m3u8[^"]*)""#).unwrap();
+        for lit in lit_re.find_iter(script) {
+            let u = lit.get(1).map(|s| s.as_str()).unwrap_or("").to_string();
+            if !found.contains(&u) && u.len() < 2048 {
+                found.insert(u.clone());
+                results.push(serde_json::json!({ "url": u, "type": "script-scan", "from": "inline-script" }));
+            }
+        }
+        // Also try base64 decode of suspected strings
+        let b64_re = regex::Regex::new(r#""([A-Za-z0-9+/=]{40,})""#).unwrap();
+        for bm in b64_re.find_iter(script) {
+            if let Ok(decoded) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, bm.get(1).map(|s| s.as_str()).unwrap_or("")) {
+                let s = String::from_utf8_lossy(&decoded);
+                if s.contains(".m3u8") || s.contains(".mp4") {
+                    let url_re = regex::Regex::new(r#"(https?://\S+\.m3u8\S*)"#).unwrap();
+                    for u in url_re.find_iter(&s) {
+                        let url_str = u.as_str().to_string();
+                        if !found.contains(&url_str) && url_str.len() < 2048 {
+                            found.insert(url_str.clone());
+                            results.push(serde_json::json!({ "url": url_str, "type": "base64-decode", "from": "inline-script" }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Layer 3: scan script src files for m3u8
+    let src_re = regex::Regex::new(r#"<script[^>]+src="([^"]+)""#).unwrap();
+    for m in src_re.find_iter(&html) {
+        if let Some(src) = m.get(1) {
+            let src_url = src.as_str();
+            if src_url.starts_with("http") || src_url.starts_with("//") {
+                let full_url = if src_url.starts_with("//") {
+                    format!("https:{}", src_url}")
+                } else {
+                    src_url.to_string()
+                };
+                // Only fetch player-related scripts
+                if full_url.contains("player") || full_url.contains("video") || full_url.contains("live") || full_url.contains("stream") || full_url.contains("hls") || full_url.contains("embed") || full_url.contains("stripcam") {
+                    if let Ok(script_resp) = client.get(&full_url).send().await {
+                        if let Ok(script_text) = script_resp.text().await {
+                            let lit_re = regex::Regex::new(r#""(https?://[^"]+\.m3u8[^"]*)""#).unwrap();
+                            for lit in lit_re.find_iter(&script_text) {
+                                let u = lit.get(1).map(|s| s.as_str()).unwrap_or("").to_string();
+                                if !found.contains(&u) && u.len() < 2048 {
+                                    found.insert(u.clone());
+                                    results.push(serde_json::json!({ "url": u, "type": "js-file-scan", "from": &full_url }));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Layer 4: probe common m3u8 paths
+    let base_url = url.trim_end_matches('/');
+    let common_paths = [
+        "/live/live.m3u8", "/live.m3u8", "/live.m3u8?token=1",
+        "/hls/live.m3u8", "/stream/live.m3u8", "/playlist.m3u8",
+        "/live/stream.m3u8", "/api/live.m3u8",
+    ];
+    for path in common_paths {
+        let probe_url = format!("{}{}", base_url, path);
+        if !found.contains(&probe_url) {
+            if let Ok(resp) = client.get(&probe_url).send().await {
+                if resp.status().as_u16() == 200 {
+                    if let Ok(ct) = resp.headers().get("content-type").map(|h| h.to_str().unwrap_or("")).unwrap_or("").to_string() {
+                        if ct.contains("mpegurl") || ct.contains("application/vnd.apple.mpegurl") {
+                            found.insert(probe_url.clone());
+                            results.push(serde_json::json!({ "url": probe_url, "type": "path-probe", "from": "common-path" }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// navigate_window
 /// navigate_window — 导航指定窗口到新 URL
 #[tauri::command]
 pub async fn navigate_window(

@@ -303,7 +303,16 @@ video {
   }
 
   // ===== 录屏 =====
-  async function startRecording() {
+  async 
+  function fallbackDownload(blob, fileName) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+function startRecording() {
     try {
       // 获取视频+音频流
       var stream = video.captureStream ? video.captureStream() : null;
@@ -328,15 +337,23 @@ video {
       mediaRecorder.ondataavailable = function(e) {
         if (e.data.size > 0) recordedChunks.push(e.data);
       };
-      mediaRecorder.onstop = function() {
+      mediaRecorder.onstop = async function() {
         var blob = new Blob(recordedChunks, { type: mimeType });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'recording_' + new Date().toISOString().replace(/[:.]/g, '-') + '.webm';
-        a.click();
-        URL.revokeObjectURL(url);
-        showStatus('⏺ 录屏已保存');
+        var arr = await blob.arrayBuffer();
+        var bytes = Array.from(new Uint8Array(arr));
+        var defaultName = 'recording_' + new Date().toISOString().replace(/[:.]/g, '-') + '.webm';
+
+        if (window.__TAURI__) {
+          try {
+            var saved = await window.__TAURI__.core.invoke('save_recording', { data: bytes, defaultName: defaultName });
+            showStatus('✔ 录屏已保存: ' + saved);
+          } catch(err) {
+            fallbackDownload(blob, defaultName);
+          }
+        } else {
+          fallbackDownload(blob, defaultName);
+        }
+
         isRecording = false;
         btnRecord.classList.remove('recording');
         btnRecord.innerHTML = '⏺ 录屏';

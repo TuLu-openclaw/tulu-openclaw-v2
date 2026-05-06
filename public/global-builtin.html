@@ -3,28 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>全球内置</title>
+<title>全球内置 - 安全验证</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 'Microsoft YaHei', sans-serif; background: #000; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #050510; }
 
-/* ===== 密码验证遮罩 ===== */
+/* ===== 全屏遮罩 ===== */
 #auth-overlay {
   position: fixed; inset: 0;
   background: #050510;
   display: flex; align-items: center; justify-content: center;
-  z-index: 999999;
+  z-index: 2147483647;
   overflow: hidden;
-  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
-#auth-overlay.hidden { opacity: 0; transform: scale(1.1); pointer-events: none; }
 
-.auth-bg {
-  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
-}
+/* 背景动效 */
+.auth-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .auth-orb {
-  position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4;
+  position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.35;
   animation: orbFloat 8s ease-in-out infinite;
 }
 .auth-orb:nth-child(1) {
@@ -49,6 +45,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   75% { transform: translate(40px, 20px) scale(1.05); }
 }
 
+/* 网格背景 */
 .auth-grid {
   position: absolute; inset: 0; pointer-events: none;
   background-image:
@@ -58,24 +55,26 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black, transparent);
 }
 
+/* 验证卡片 */
 .auth-container {
   position: relative; z-index: 1;
-  text-align: center; padding: 56px 48px;
+  text-align: center; padding: 52px 44px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 28px;
+  border-radius: 24px;
   backdrop-filter: blur(24px);
   box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 32px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
-  animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-  max-width: 420px; width: 90%;
+  animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 400px; width: 90%;
 }
 @keyframes cardIn {
-  from { opacity: 0; transform: translateY(40px) scale(0.95); }
+  from { opacity: 0; transform: translateY(36px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* 旋转光环 */
 .auth-ring {
-  width: 88px; height: 88px; margin: 0 auto 28px;
+  width: 80px; height: 80px; margin: 0 auto 24px;
   border-radius: 50%;
   background: conic-gradient(from 0deg, #6366f1, #8b5cf6, #ec4899, #f43f5e, #f59e0b, #6366f1);
   display: flex; align-items: center; justify-content: center;
@@ -86,126 +85,73 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
   content: ''; position: absolute; inset: 3px;
   border-radius: 50%; background: #0a0a1a;
 }
-.auth-ring-inner { position: relative; z-index: 1; font-size: 36px; line-height: 1; }
+.auth-ring-inner { position: relative; z-index: 1; font-size: 32px; }
 @keyframes ringSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .auth-title {
-  font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 8px;
-  letter-spacing: -0.03em;
+  font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 8px;
+  letter-spacing: -0.02em;
   background: linear-gradient(135deg, #fff, rgba(255,255,255,0.7));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
-.auth-subtitle { font-size: 14px; color: rgba(255,255,255,0.35); margin-bottom: 36px; letter-spacing: 0.02em; }
+.auth-subtitle { font-size: 13px; color: rgba(255,255,255,0.35); margin-bottom: 32px; }
 
-.input-group { position: relative; margin-bottom: 24px; }
+/* 输入框 */
+.input-group { position: relative; margin-bottom: 20px; }
 .auth-input {
-  width: 100%; padding: 16px 20px 16px 52px;
-  font-size: 18px; font-family: 'JetBrains Mono', 'Inter', monospace;
+  width: 100%; padding: 14px 18px 14px 48px;
+  font-size: 17px; font-family: 'Courier New', monospace;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px; color: #fff; outline: none;
-  letter-spacing: 6px; text-align: center;
+  border-radius: 14px; color: #fff; outline: none;
+  letter-spacing: 5px; text-align: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.auth-input::placeholder { color: rgba(255,255,255,0.15); letter-spacing: 2px; font-size: 14px; }
+.auth-input::placeholder { color: rgba(255,255,255,0.15); letter-spacing: 2px; font-size: 13px; }
 .auth-input:focus {
   border-color: rgba(99,102,241,0.5);
   background: rgba(255,255,255,0.08);
-  box-shadow: 0 0 0 4px rgba(99,102,241,0.1), 0 0 24px rgba(99,102,241,0.1);
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.1);
 }
 .auth-input.error {
   border-color: rgba(239,68,68,0.6);
-  box-shadow: 0 0 0 4px rgba(239,68,68,0.1);
-  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 }
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  15% { transform: translateX(-10px); }
-  30% { transform: translateX(10px); }
-  45% { transform: translateX(-6px); }
-  60% { transform: translateX(6px); }
-  75% { transform: translateX(-3px); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
 }
-.input-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); font-size: 20px; opacity: 0.3; pointer-events: none; }
+.input-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 18px; opacity: 0.25; pointer-events: none; }
 
-.auth-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 20px; font-size: 12px; color: rgba(255,255,255,0.25); }
-.status-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.15); animation: dotPulse 2s ease-in-out infinite; }
-@keyframes dotPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+/* 错误提示 */
+.auth-error {
+  margin-top: 8px; font-size: 12px; color: rgba(239,68,68,0.85);
+  min-height: 16px; letter-spacing: 0.02em;
+}
 
+/* 提示文字 */
 .enter-hint {
   display: inline-flex; align-items: center; gap: 6px;
-  margin-top: 16px; padding: 6px 16px;
+  margin-top: 16px; padding: 5px 14px;
   font-size: 11px; color: rgba(255,255,255,0.2);
   background: rgba(255,255,255,0.02);
   border: 1px solid rgba(255,255,255,0.04);
   border-radius: 8px;
-  animation: fadeIn 1s ease 0.8s both;
 }
 .enter-hint kbd {
-  display: inline-block; padding: 1px 6px;
+  display: inline-block; padding: 1px 5px;
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 4px; font-size: 10px; font-family: inherit;
-}
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-/* ===== iframe 容器（无 sandbox，像真浏览器一样） ===== */
-#content-frame {
-  width: 100%; height: 100%; border: none;
-  display: none;
-}
-
-/* ===== 悬浮操作栏 ===== */
-#float-bar {
-  position: fixed; bottom: 28px; right: 28px;
-  z-index: 888888; display: none;
-  flex-direction: column; gap: 12px;
-  align-items: flex-end;
-}
-.float-btn {
-  width: 48px; height: 48px; border-radius: 14px;
-  border: none; cursor: pointer;
-  font-size: 18px; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  backdrop-filter: blur(12px);
-  position: relative;
-}
-.float-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-.float-btn:active { transform: translateY(0) scale(0.95); }
-.float-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-#btn-extract {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  width: 56px; height: 56px; border-radius: 50%;
-  font-size: 22px;
-  animation: pulseExtract 2s ease-in-out infinite;
-}
-@keyframes pulseExtract {
-  0%, 100% { box-shadow: 0 4px 16px rgba(239,68,68,0.3); }
-  50% { box-shadow: 0 4px 32px rgba(239,68,68,0.6); }
-}
-#btn-refresh { background: linear-gradient(135deg, #3b82f6, #2563eb); }
-#btn-fullscreen { background: linear-gradient(135deg, #10b981, #059669); }
-
-/* ===== Toast ===== */
-#toast {
-  position: fixed; bottom: 96px; right: 28px;
-  z-index: 888889;
-  background: rgba(15,15,25,0.95);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #fff; padding: 14px 22px;
-  border-radius: 14px; font-size: 14px;
-  display: none; max-width: 360px;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  word-break: break-all;
+  border-radius: 4px; font-size: 10px;
 }
 </style>
 </head>
 <body>
 
-<!-- 密码验证遮罩 -->
+<!-- 密码验证遮罩（始终置顶，阻挡一切） -->
 <div id="auth-overlay">
   <div class="auth-bg">
     <div class="auth-orb"></div>
@@ -217,113 +163,52 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', 
     <div class="auth-ring">
       <div class="auth-ring-inner">🔐</div>
     </div>
-    <div class="auth-title">安全验证</div>
-    <div class="auth-subtitle">请输入访问密码以继续</div>
+    <div class="auth-title">全球内置</div>
+    <div class="auth-subtitle">输入密码以访问</div>
     <div class="input-group">
       <span class="input-icon">🔑</span>
-      <input type="password" class="auth-input" id="pwd-input" placeholder="输入密码" autofocus>
+      <input type="password" class="auth-input" id="pwd-input" placeholder="输入密码" autocomplete="off" spellcheck="false" autofocus>
     </div>
-    <div class="auth-status">
-      <span class="status-dot"></span>
-      <span>安全加密连接</span>
-    </div>
+    <div class="auth-error" id="auth-error"></div>
     <div class="enter-hint">按 <kbd>Enter</kbd> 确认</div>
   </div>
 </div>
 
-<!-- iframe 加载外部页面（无 sandbox 限制，像真浏览器一样可点击任何内容） -->
-<iframe id="content-frame" allow="autoplay; fullscreen; picture-in-picture; encrypted-media"></iframe>
-
-<!-- 悬浮操作栏 -->
-<div id="float-bar">
-  <button class="float-btn" id="btn-extract" title="提取视频链接并播放">▶</button>
-  <button class="float-btn" id="btn-refresh" title="刷新页面">↻</button>
-  <button class="float-btn" id="btn-fullscreen" title="全屏">⛶</button>
-</div>
-<div id="toast"></div>
-
 <script>
 (function() {
-  var overlay = document.getElementById('auth-overlay');
-  var input = document.getElementById('pwd-input');
-  var frame = document.getElementById('content-frame');
-  var floatBar = document.getElementById('float-bar');
-  var btnExtract = document.getElementById('btn-extract');
-  var btnRefresh = document.getElementById('btn-refresh');
-  var btnFullscreen = document.getElementById('btn-fullscreen');
-  var toastEl = document.getElementById('toast');
-  var TARGET = atob('{{TARGET_URL}}');
+  // 目标 URL 由 Rust 在导航时通过 URL 参数传入
+  // 例如: global-builtin.html?url=https://example.com
+  var params = new URLSearchParams(window.location.search);
+  var TARGET = '';
   var PWD = '2552667173';
-  var verified = false;
 
-  function showToast(msg, duration) {
-    duration = duration || 4000;
-    toastEl.textContent = msg;
-    toastEl.style.display = 'block';
-    clearTimeout(showToast._t);
-    showToast._t = setTimeout(function() { toastEl.style.display = 'none'; }, duration);
+  var input = document.getElementById('pwd-input');
+  var errorEl = document.getElementById('auth-error');
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    input.classList.add('error');
+    setTimeout(function() { input.classList.remove('error'); }, 500);
   }
 
-  function unlock() {
-    overlay.classList.add('hidden');
-    frame.style.display = 'block';
-    frame.src = TARGET;
-    floatBar.style.display = 'flex';
-    verified = true;
-    setTimeout(function() { overlay.remove(); }, 700);
+  function doAuth() {
+    var pwd = input.value;
+    if (!pwd) { showError('请输入密码'); return; }
+    if (pwd !== PWD) { showError('密码错误，请重试'); input.value = ''; return; }
+
+    // 密码正确 → 移除遮罩 → 导航到目标 URL
+    var overlay = document.getElementById('auth-overlay');
+    overlay.style.transition = 'opacity 0.5s ease';
+    overlay.style.opacity = '0';
+    setTimeout(function() {
+      overlay.remove();
+      // 导航到目标 URL（全屏窗口直接加载目标页面，不再用 iframe）
+      window.location.href = TARGET;
+    }, 500);
   }
 
-  // 密码验证
   input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      if (input.value === PWD) {
-        unlock();
-      } else {
-        input.classList.add('error');
-        input.value = '';
-        showToast('密码错误，请重试');
-        setTimeout(function() { input.classList.remove('error'); }, 600);
-      }
-    }
-  });
-
-  // 提取视频链接 → 打开独立播放器（含截屏+录屏）
-  btnExtract.addEventListener('click', async function() {
-    btnExtract.disabled = true;
-    btnExtract.innerHTML = '⏳';
-    showToast('正在深度扫描页面，提取视频链接...');
-    try {
-      var currentUrl = frame.contentWindow ? frame.src : TARGET;
-      var sources = await window.__TAURI__.core.invoke('fetch_live_sources', { url: currentUrl });
-      if (sources && sources.length > 0) {
-        showToast('找到 ' + sources.length + ' 个视频源，正在打开播放器...');
-        await window.__TAURI__.core.invoke('open_live_player', { sources: sources });
-      } else {
-        showToast('未检测到视频源，请先在页面上点击播放按钮', 6000);
-      }
-    } catch (err) {
-      showToast('提取失败: ' + String(err), 6000);
-    } finally {
-      btnExtract.disabled = false;
-      btnExtract.innerHTML = '▶';
-    }
-  });
-
-  // 刷新
-  btnRefresh.addEventListener('click', function() {
-    if (frame.src) {
-      frame.src = frame.src;
-      showToast('页面已刷新');
-    }
-  });
-
-  // 全屏
-  btnFullscreen.addEventListener('click', function() {
-    if (frame.requestFullscreen) {
-      frame.requestFullscreen();
-    } else if (frame.webkitRequestFullscreen) {
-      frame.webkitRequestFullscreen();
-    }
+    if (e.key === 'Enter') doAuth();
   });
 })();
 </script>
