@@ -1,7 +1,7 @@
 {
   "identifier": "default",
   "description": "屠戮OpenClaw 默认权限",
-  "windows": ["main"],
+  "windows": ["main", "global_builtin_window", "live_player_window"],
   "permissions": [
     "core:default",
     "shell:allow-open",
