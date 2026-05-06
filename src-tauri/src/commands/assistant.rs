@@ -1130,17 +1130,21 @@ pub async fn open_global_builtin_window(
 
     let target_url = url.unwrap_or_else(|| "https://zh.stripcam.xxx/top/girls/curr".to_string());
 
+    eprintln!("[open_global_builtin_window] target_url: {}", target_url);
     if target_url.starts_with("data:") || target_url.starts_with("file:") {
-        return Err("No data/file URLs allowed".to_string());
+        let err = "No data/file URLs allowed".to_string();
+        eprintln!("[open_global_builtin_window] ERR: {}", err);
+        return Err(err);
     }
 
     let label = "global_builtin_window";
+    eprintln!("[open_global_builtin_window] label: {}", label);
 
     // If window already exists, show it and navigate to new URL
     if let Some(window) = app.get_webview_window(label) {
+        eprintln!("[open_global_builtin_window] window already exists, showing it");
         let _ = window.show();
         let _ = window.set_focus();
-        // Navigate to the new target URL by injecting JS
         let nav_js = format!(
             "(function() {{ var ov = document.getElementById('auth-overlay'); if(ov) ov.style.opacity='0'; setTimeout(function() {{ window.location.href = {}; }}, 400); }})();",
             serde_json::json!(&target_url)
@@ -1148,21 +1152,23 @@ pub async fn open_global_builtin_window(
         let _ = window.eval(&nav_js);
         return Ok(());
     }
+    eprintln!("[open_global_builtin_window] building new window...");
 
     // Build the full HTML with target URL embedded directly
-    // We inject the target URL into the HTML via simple string replacement
     let auth_html = include_str!("../../../public/global-builtin.html");
+    eprintln!("[open_global_builtin_window] auth_html size: {} bytes", auth_html.len());
     let html_with_url = auth_html.replace(
         "var TARGET = '';",
         &format!("var TARGET = {};", serde_json::json!(&target_url)),
     );
+    eprintln!("[open_global_builtin_window] html_with_url size: {} bytes", html_with_url.len());
 
     // Wrap in a data: URL for App mode
-    let data_url = format!(
-        "data:text/html;charset=utf-8,{}",
-        urlencoding::encode(&html_with_url)
-    );
+    let encoded = urlencoding::encode(&html_with_url);
+    let data_url = format!("data:text/html;charset=utf-8,{}", encoded);
+    eprintln!("[open_global_builtin_window] data_url size: {} bytes", data_url.len());
 
+    eprintln!("[open_global_builtin_window] calling WebviewWindowBuilder::new...");
     let win = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(data_url.into()))
         .title("全球内置")
         .inner_size(1200.0, 800.0)
@@ -1172,7 +1178,11 @@ pub async fn open_global_builtin_window(
         .visible(true)
         .focused(true)
         .build()
-        .map_err(|e| format!("Failed to create window: {}", e))?;
+        .map_err(|e| {
+            eprintln!("[open_global_builtin_window] WebviewWindowBuilder ERR: {}", e);
+            format!("Failed to create window: {}", e)
+        })?;
+    eprintln!("[open_global_builtin_window] window created successfully, label: {}", win.label());
 
     // Inject floating bar script
     let app_handle = app.clone();
