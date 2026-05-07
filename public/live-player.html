@@ -549,56 +549,40 @@ video {
   // ===== 初始化 =====
   function init() {
     renderSources();
+    // ★ 无论 URL 中有没有 sources，都注册事件监听（防竞态）
+    tauriListenSources();
     if (sources.length > 0) {
       loadSource(0);
     } else {
       titleEl.textContent = '等待视频源...';
       showStatus('正在加载视频源...');
-      // 等待 Tauri 事件推送源数据
-      tauriListenSources();
     }
   }
 
   // ★ 监听 Tauri live-player-sources 事件（比 URL 参数更可靠）
   function tauriListenSources() {
-    var receivedOnce = false;
-    // 途一1：通过 __TAURI__ event API
+    // 途一：通过 __TAURI__ event API
     try {
       if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
         window.__TAURI__.event.listen('live-player-sources', function(event) {
-          if (receivedOnce) return;
           var newSources = event.payload;
           if (Array.isArray(newSources) && newSources.length > 0) {
-            receivedOnce = true;
-            sources = newSources;
-            renderSources();
-            loadSource(0);
+            // 如果已经在播放，不覆盖；否则加载新源
+            if (sources.length === 0) {
+              sources = newSources;
+              renderSources();
+              loadSource(0);
+            }
           }
         });
         return;
       }
     } catch(e) {}
-    // 途二2：通过 __TAURI_INTERNALS__ 回调
-    try {
-      var origCallback = window.__TAURI_INTERNALS__?.transformCallback;
-      if (window.__TAURI__ && window.__TAURI__.core) {
-        window.__TAURI__.core.invoke('plugin:event|listen', { event: 'live-player-sources', handler: function(e) {
-          if (receivedOnce) return;
-          var newSources = e.payload;
-          if (Array.isArray(newSources) && newSources.length > 0) {
-            receivedOnce = true;
-            sources = newSources;
-            renderSources();
-            loadSource(0);
-          }
-        }});
-        return;
-      }
-    } catch(e2) {}
-    // 途三3：轮询检查 URL 变化（兜底）
+    // 途二：轮询检查 URL 变化（兜底）
     var retries = 0;
     var pollInterval = setInterval(function() {
       retries++;
+      if (sources.length > 0) { clearInterval(pollInterval); return; }
       var params2 = new URLSearchParams(window.location.search);
       var sp2 = params2.get('sources');
       if (sp2) {
@@ -613,7 +597,7 @@ video {
           }
         } catch(e3) {}
       }
-      if (retries >= 10) {
+      if (retries >= 20) {
         clearInterval(pollInterval);
         titleEl.textContent = '无视频源';
         showStatus('未提供视频源');
