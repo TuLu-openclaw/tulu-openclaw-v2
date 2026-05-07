@@ -226,6 +226,23 @@
     document.querySelectorAll('script').forEach(function(s) {
       extractUrls(s.textContent || '').forEach(function(u) { add(u, 'script'); });
     });
+    // ★ 第3层：Performance API 网络请求拦截
+    try {
+      var perfEntries = performance.getEntriesByType('resource');
+      for (var i = 0; i < perfEntries.length; i++) {
+        var entry = perfEntries[i];
+        var url = entry.name;
+        if (!url) continue;
+        var lower = url.toLowerCase();
+        if (lower.indexOf('.m3u8') !== -1) add(url, 'network.m3u8');
+        else if (lower.indexOf('.mp4') !== -1) add(url, 'network.mp4');
+        else if (lower.indexOf('.mpd') !== -1) add(url, 'network.dash');
+        else if (lower.indexOf('.flv') !== -1) add(url, 'network.flv');
+        else if (lower.indexOf('.m4s') !== -1) add(url, 'network.m4s');
+        else if (lower.indexOf('.ts') !== -1) add(url, 'network.ts');
+      }
+    } catch(e) {}
+    // 全局变量
     try {
       var g = ['videoUrl','playUrl','streamUrl','hlsUrl','m3u8Url','playerUrl','sourceUrl','stream','videoSrc','playSrc'];
       g.forEach(function(n) {

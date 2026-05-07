@@ -654,6 +654,32 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         var ds = f.getAttribute('data-src');
         if (ds) add(ds, 'iframe.data-src', 'iframe');
     });
+    // ★ 第3层：Performance API 网络请求拦截
+    // 捕获页面加载期间的所有 m3u8/mp4/mpd/flv/m4s 网络请求
+    try {
+        var perfEntries = performance.getEntriesByType('resource');
+        for (var i=0; i<perfEntries.length; i++) {
+            var entry = perfEntries[i];
+            var url = entry.name;
+            if (!url) continue;
+            var lower = url.toLowerCase();
+            if (lower.indexOf('.m3u8') !== -1) add(url, entry.initiatorType + '.m3u8', 'network');
+            else if (lower.indexOf('.mp4') !== -1) add(url, entry.initiatorType + '.mp4', 'network');
+            else if (lower.indexOf('.mpd') !== -1) add(url, entry.initiatorType + '.dash', 'network');
+            else if (lower.indexOf('.flv') !== -1) add(url, entry.initiatorType + '.flv', 'network');
+            else if (lower.indexOf('.m4s') !== -1) add(url, entry.initiatorType + '.m4s', 'network');
+            else if (lower.indexOf('.ts') !== -1) add(url, entry.initiatorType + '.ts', 'network');
+        }
+    } catch(e) {}
+    // ★ 拦截 fetch/XHR（运行时动态请求）
+    try {
+        if (window.__fetchUrls) {
+            window.__fetchUrls.forEach(function(u) { add(u, 'fetch', 'network'); });
+        }
+        if (window.__xhrUrls) {
+            window.__xhrUrls.forEach(function(u) { add(u, 'xhr', 'network'); });
+        }
+    } catch(e) {}
     return JSON.stringify(r);
 })()"#;
 
