@@ -1,6 +1,42 @@
-// 悬浮提取按钮注入脚本 v6
+// 悬浮提取按钮注入脚本 v7
 // auth 由 global-builtin.html 处理（每次都要密码验证）
-// 本脚本只负责：注入持久化悬浮按钮 + 嗅探 + 选择播放
+// 本脚本只负责：注入持久化悬浮按钮 + 嗅探（4层全覆盖） + 选择播放
+// ★ 第4层：fetch/XHR/WebSocket 拦截（最早期注入，捕获所有动态请求）
+(function() {
+  if (!window.__tulu_hooked) {
+    window.__tulu_hooked = true;
+    window.__fetchUrls = [];
+    window.__xhrUrls = [];
+    window.__wsUrls = [];
+    try {
+      var _fetch = window.fetch;
+      window.fetch = function() {
+        try { var u = arguments[0]; window.__fetchUrls.push(typeof u === 'string' ? u : (u && u.url) || ''); } catch(e) {}
+        return _fetch.apply(this, arguments);
+      };
+    } catch(e) {}
+    try {
+      var _xhrOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        try { window.__xhrUrls.push(url); } catch(e) {}
+        return _xhrOpen.apply(this, arguments);
+      };
+    } catch(e) {}
+    try {
+      var _WS = window.WebSocket;
+      window.WebSocket = function(url, protocols) {
+        try { window.__wsUrls.push(url); } catch(e) {}
+        if (protocols !== undefined) return new _WS(url, protocols);
+        return new _WS(url);
+      };
+      window.WebSocket.prototype = _WS.prototype;
+      window.WebSocket.CONNECTING = _WS.CONNECTING;
+      window.WebSocket.OPEN = _WS.OPEN;
+      window.WebSocket.CLOSING = _WS.CLOSING;
+      window.WebSocket.CLOSED = _WS.CLOSED;
+    } catch(e) {}
+  }
+})();
 (function() {
   if (window.__tulu_injected) return;
   window.__tulu_injected = true;

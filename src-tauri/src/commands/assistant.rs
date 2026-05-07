@@ -604,9 +604,19 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         .find(|p| std::path::Path::new(p).exists());
     let browser_exe = msedge_exe.copied().unwrap_or("");
 
-    // 用 CDP 的提取脚本
+    // 用 CDP 的提取脚本（含第3层 PerfAPI + 第4层 fetch/XHR/WS 拦截）
     let extract_js = r#"
 (function() {
+    // ★ 第4层：fetch/XHR/WebSocket 拦截
+    if (!window.__tulu_cdp_hooked) {
+      window.__tulu_cdp_hooked = true;
+      window.__fetchUrls = window.__fetchUrls || [];
+      window.__xhrUrls = window.__xhrUrls || [];
+      window.__wsUrls = window.__wsUrls || [];
+      try { var _f=window.fetch; window.fetch=function(){var u=arguments[0];window.__fetchUrls.push(typeof u==='string'?u:(u&&u.url)||'');return _f.apply(this,arguments);}; } catch(e){}
+      try { var _x=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,url){window.__xhrUrls.push(url);return _x.apply(this,arguments);}; } catch(e){}
+      try { var _w=window.WebSocket; window.WebSocket=function(url,p){window.__wsUrls.push(url);return p!==undefined?new _w(url,p):new _w(url);}; window.WebSocket.prototype=_w.prototype; } catch(e){}
+    }
     var r = [];
     var seen = new Set();
     function add(u, n, t) {
@@ -678,6 +688,9 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         }
         if (window.__xhrUrls) {
             window.__xhrUrls.forEach(function(u) { add(u, 'xhr', 'network'); });
+        }
+        if (window.__wsUrls) {
+            window.__wsUrls.forEach(function(u) { add(u, 'ws', 'network'); });
         }
     } catch(e) {}
     return JSON.stringify(r);
