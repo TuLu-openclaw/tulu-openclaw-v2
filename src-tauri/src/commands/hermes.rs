@@ -1614,9 +1614,9 @@ pub async fn configure_hermes(
         Some(url) if !url.trim().is_empty() => format!("  base_url: {}\n", url.trim()),
         _ => String::new(),
     };
-    // Provider 字段：Hermes v0.14+ 的 model_switch 依赖该字段决定 env_var。
-    // `custom` 不写 provider 行，让 Hermes 从 base_url 自动推断。
-    let provider_line = if provider == "custom" || provider.is_empty() {
+    // Provider 字段：Hermes 需要该字段来路由到正确的 provider。
+    // custom provider 也需要写入，否则 Hermes 无法确定使用哪个 provider。
+    let provider_line = if provider.is_empty() {
         String::new()
     } else {
         format!("  provider: {provider}\n")
@@ -2144,7 +2144,7 @@ pub async fn hermes_update_model(
             if !is_indented && !trimmed.is_empty() && !trimmed.starts_with('#') {
                 // 离开 model 区块 —— 先补齐未写入的 provider 行
                 if let Some(pid) = resolved_provider.as_ref() {
-                    if !provider_written && !pid.is_empty() && pid != "custom" {
+                    if !provider_written && !pid.is_empty() {
                         out.push(format!("{default_indent}provider: {pid}"));
                         provider_written = true;
                     }
@@ -2185,7 +2185,7 @@ pub async fn hermes_update_model(
     // 文件末尾还在 model 块里：补 provider 行
     if in_model {
         if let Some(pid) = resolved_provider.as_ref() {
-            if !provider_written && !pid.is_empty() && pid != "custom" {
+            if !provider_written && !pid.is_empty() {
                 out.push(format!("{default_indent}provider: {pid}"));
             }
         }
