@@ -555,32 +555,24 @@ pub async fn assistant_fetch_url(url: String) -> Result<String, String> {
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn fetch_page(url: String) -> Result<String, String> {
-    use std::process::Command;
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
-    let escaped = url.replace("'", "''");
-    let ps = format!(
-        r#"try {{
-            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-            $r = Invoke-WebRequest '{}' -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' -Headers @{{'Accept'='text/html,application/xhtml+xml,*/*'}}
-            $bytes = [System.Text.Encoding]::GetEncoding('UTF-8').GetBytes($r.Content)
-            Write-Output ([System.Text.Encoding]::UTF8.GetString($bytes))
-        }} catch {{
-            Write-Output ('FETCH_ERROR:' + $_.Exception.Message)
- }}"#,
-        escaped
-    );
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
-        .output()
-        .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if !output.status.success() || stdout.contains("FETCH_ERROR:") {
-        return Err(format!("fetch_page failed: {stdout}"));
+    let client = super::build_http_client(
+        std::time::Duration::from_secs(15),
+        Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
+    ).map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+    let resp = client
+        .get(&url)
+        .header("Accept", "text/html,application/xhtml+xml,*/*")
+        .header("Accept-Language", "zh-CN,zh;q=0.9")
+        .send()
+        .await
+        .map_err(|e| format!("fetch_page 请求失败: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("fetch_page HTTP {}", resp.status()));
     }
-    Ok(stdout.trim().to_string())
+    resp.text().await.map_err(|e| format!("fetch_page 读取响应失败: {e}"))
 }
 
 /// 使用 WebView2/Edge 渲染 JS 页面，提取视频 URL（用于 JS 动态渲染站）

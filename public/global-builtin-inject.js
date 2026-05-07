@@ -149,7 +149,7 @@
     var closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&#10005;';
     closeBtn.style.cssText = 'width:32px;height:32px;border:none;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;';
-    closeBtn.onclick = function() { panel.remove(); };
+    closeBtn.onclick = function() { panel.remove(); overlay.remove(); };
     header.appendChild(title);
     header.appendChild(closeBtn);
     panel.appendChild(header);
@@ -182,7 +182,7 @@
       if (src.from || src.type) item.appendChild(fromTag);
 
       item.onclick = function() {
-        panel.remove();
+        panel.remove(); overlay.remove();
         playSource(src, i + 1);
       };
       list.appendChild(item);
@@ -196,7 +196,7 @@
     playAllBtn.textContent = '全部播放';
     playAllBtn.style.cssText = 'padding:8px 16px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.6);border-radius:8px;cursor:pointer;font-size:12px;';
     playAllBtn.onclick = function() {
-      panel.remove();
+      panel.remove(); overlay.remove();
       playAllSources(sources);
     };
     footer.appendChild(playAllBtn);
@@ -286,6 +286,19 @@
       g.forEach(function(n) {
         if (window[n] && typeof window[n] === 'string' && /\.(m3u8|mp4|flv|webm)/i.test(window[n])) add(window[n], 'gvar-'+n);
       });
+      // ★ CMS player_xxxx 变量（如 player_aaaa, MacPlayer 等）
+      for (var key in window) {
+        try {
+          if (!/^player_\w+$/i.test(key)) continue;
+          var pv = window[key];
+          if (!pv || typeof pv !== 'object') continue;
+          var u = pv.url || (pv.vod_data && pv.vod_data.url) || '';
+          if (u && typeof u === 'string' && /\.(m3u8|mp4)/i.test(u)) {
+            u = u.replace(/\\\//g, '/');
+            add(u, 'playerVar-' + key);
+          }
+        } catch(e) {}
+      }
       if (window.dp && window.dp.video && window.dp.video.src) add(window.dp.video.src, 'dplayer');
       if (window.artplayer && window.artplayer.url) add(window.artplayer.url, 'artplayer');
       if (window.APLAYER && window.APLAYER.audio && window.APLAYER.audio.src) add(window.APLAYER.audio.src, 'aplayer');
@@ -296,6 +309,8 @@
   function extractUrls(text) {
     if (!text) return [];
     var urls = [], s = {};
+    // 先还原 JSON 转义的 \/
+    var fixed = text.replace(/\\\//g, '/');
     var pats = [
       /https?:\/\/[^\s"'<>`\\]+\.m3u8[^\s"'<>`\\]*/gi,
       /https?:\/\/[^\s"'<>`\\]+\.mp4[^\s"'<>`\\]*/gi,
