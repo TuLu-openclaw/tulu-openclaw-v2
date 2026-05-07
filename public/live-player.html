@@ -146,6 +146,8 @@ video {
 .quality-group{position:relative;margin-left:8px}
 .quality-btn{padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6);font-size:11px;cursor:pointer;font-family:inherit}
 .quality-btn:hover{background:rgba(255,255,255,0.1);color:#fff}
+.quality-btn.disabled{cursor:default;opacity:0.35}
+.quality-btn.disabled:hover{background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.6)}
 .quality-popup{position:absolute;top:100%;right:0;z-index:9999;margin-top:4px;background:rgba(10,10,20,0.96);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:4px;min-width:100px;display:none;backdrop-filter:blur(12px);box-shadow:0 8px 24px rgba(0,0,0,0.5)}
 .quality-popup.open{display:block}
 .quality-popup button{display:block;width:100%;padding:6px 12px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,0.7);font-size:12px;text-align:left;cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -161,8 +163,8 @@ video {
     <div style="display:flex;align-items:center;min-width:0;">
       <div class="player-title" id="player-title">直播播放器</div>
       <span class="player-source-tag" id="source-tag"></span>
-      <div class="quality-group" id="quality-group" style="display:none">
-        <button class="quality-btn" id="quality-btn">🎥 自动</button>
+      <div class="quality-group" id="quality-group">
+        <button class="quality-btn" id="quality-btn">画质 自动</button>
         <div class="quality-popup" id="quality-popup"></div>
       </div>
     </div>
@@ -238,14 +240,24 @@ video {
   function buildQualityMenu(hls) {
     qualityPopup.innerHTML = '';
     var levels = hls.levels || [];
-    if (levels.length <= 1) { qualityGroup.style.display = 'none'; return; }
-    qualityGroup.style.display = '';
+    if (levels.length <= 1) {
+      // 单码率：显示但不可切换
+      qualityBtn.textContent = '画质 自动';
+      qualityBtn.classList.add('disabled');
+      qualityBtn.onclick = null;
+      return;
+    }
+    qualityBtn.classList.remove('disabled');
+    qualityBtn.onclick = function(e) {
+      e.stopPropagation();
+      qualityPopup.classList.toggle('open');
+    };
     var autoItem = document.createElement('button');
     autoItem.textContent = '自动';
     autoItem.className = 'active';
     autoItem.onclick = function() {
       hls.currentLevel = -1;
-      qualityBtn.textContent = '🎥 自动';
+      qualityBtn.textContent = '画质 自动';
       setQualityActive(autoItem);
       qualityPopup.classList.remove('open');
     };
@@ -255,10 +267,10 @@ video {
       var label = lv.height ? (lv.height + 'p') : ('等级 ' + (i + 1));
       if (lv.bitrate) label += ' ' + Math.round(lv.bitrate / 1000) + 'kbps';
       btn.textContent = label;
-      if (i === hls.currentLevel) { btn.className = 'active'; qualityBtn.textContent = '🎥 ' + (lv.height ? lv.height + 'p' : 'L' + (i + 1)); }
+      if (i === hls.currentLevel) { btn.className = 'active'; qualityBtn.textContent = '画质 ' + (lv.height ? lv.height + 'p' : 'L' + (i + 1)); }
       btn.onclick = function() {
         hls.currentLevel = i;
-        qualityBtn.textContent = '🎥 ' + (lv.height ? lv.height + 'p' : 'L' + (i + 1));
+        qualityBtn.textContent = '画质 ' + (lv.height ? lv.height + 'p' : 'L' + (i + 1));
         setQualityActive(btn);
         qualityPopup.classList.remove('open');
       };
@@ -270,10 +282,6 @@ video {
     for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
     activeBtn.classList.add('active');
   }
-  qualityBtn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    qualityPopup.classList.toggle('open');
-  });
   document.addEventListener('click', function() { qualityPopup.classList.remove('open'); });
 
   // ===== 源列表渲染 =====
