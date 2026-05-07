@@ -1500,6 +1500,9 @@ pub async fn open_live_player(
     .build()
     .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
 
+    // ★ 窗口新建后也 emit 事件，确保 JS 可靠接收源数据
+    let _ = app.emit("live-player-sources", &sources);
+
     Ok(())
 }
 
