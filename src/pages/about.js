@@ -902,6 +902,6 @@ async function checkNewVersion(cards, panelVersion) {
     })
   } catch (e) {
     const meta = el()
-    if (meta) meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.updateCheckFail')}</span>`
+    if (meta) meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span>`
   }
 }
