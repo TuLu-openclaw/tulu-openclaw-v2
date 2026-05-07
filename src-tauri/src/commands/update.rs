@@ -103,6 +103,14 @@ pub async fn download_frontend_update(url: String, expected_hash: String) -> Res
     }
     fs::create_dir_all(&dir).map_err(|e| format!("创建更新目录失败: {e}"))?;
 
+    // 同时保存 ZIP 到桌面（用户可见）
+    let desktop = dirs::desktop_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let zip_name = format!("屠戮OpenClaw_v{}.zip", env!("CARGO_PKG_VERSION"));
+    let desktop_zip = desktop.join(&zip_name);
+    // 写入桌面 ZIP
+    fs::write(&desktop_zip, bytes.as_ref())
+        .map_err(|e| format!("写入桌面 ZIP 失败: {e}"))?;
+
     let cursor = std::io::Cursor::new(bytes.as_ref());
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("解压失败: {e}"))?;
 
@@ -127,10 +135,31 @@ pub async fn download_frontend_update(url: String, expected_hash: String) -> Res
         }
     }
 
+    // 自动打开桌面 ZIP（用户可见）
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(&desktop_zip)
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg(&desktop_zip)
+            .spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open")
+            .arg(&desktop_zip)
+            .spawn();
+    }
+
     Ok(serde_json::json!({
         "success": true,
         "files": archive.len(),
-        "path": dir.to_string_lossy()
+        "path": dir.to_string_lossy(),
+        "desktopZip": desktop_zip.to_string_lossy()
     }))
 }
 

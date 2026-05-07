@@ -650,9 +650,23 @@ async function checkHotUpdate(cards, panelVersion) {
         const btn = meta.querySelector('#btn-hot-download')
         if (btn) { btn.disabled = true; btn.textContent = t('about.downloading') }
         try {
-          await api.downloadFrontendUpdate(manifest.url, manifest.hash || '')
+          const result = await api.downloadFrontendUpdate(manifest.url, manifest.hash || '')
+          const desktopZip = result?.desktopZip || ''
           toast(t('about.downloadDone'), 'success')
-          checkHotUpdate(cards, panelVersion)
+          // 下载完成 → 显示「打开ZIP」和「重载」按钮
+          meta.innerHTML = `
+            <span style="color:var(--success)">${t('about.downloadDone')}</span>
+            ${desktopZip ? `<button class="btn btn-primary btn-sm" id="btn-open-zip" style="padding:2px 8px;font-size:var(--font-size-xs)">📂 ${t('about.openZip')}</button>` : ''}
+            <button class="btn btn-primary btn-sm" id="btn-hot-reload" style="padding:2px 8px;font-size:var(--font-size-xs)">🔄 ${t('about.reloadApp')}</button>
+          `
+          if (desktopZip) {
+            meta.querySelector('#btn-open-zip')?.addEventListener('click', () => {
+              api.openDesktopZip?.(desktopZip) || window.open('file:///' + desktopZip.replace(/\\/g, '/'))
+            })
+          }
+          meta.querySelector('#btn-hot-reload')?.addEventListener('click', () => {
+            window.location.reload()
+          })
         } catch (e) {
           toast(t('about.downloadFailed') + (e.message || e), 'error')
           if (btn) { btn.disabled = false; btn.textContent = t('about.retry') }

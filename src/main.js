@@ -1060,9 +1060,19 @@ sudo systemctl restart 屠戮OpenClaw</pre>
       btn.disabled = true
       btn.textContent = t('about.downloading')
       try {
-        await api.downloadFrontendUpdate(info.manifest?.url || '', info.manifest?.hash || '')
+        const result = await api.downloadFrontendUpdate(info.manifest?.url || '', info.manifest?.hash || '')
         localStorage.setItem('屠戮OpenClaw_hot_update_applied', ver)
-        btn.textContent = t('about.reloadApp')
+        const desktopZip = result?.desktopZip || ''
+        // 下载完成 → 添加「打开ZIP」按钮（ZIP已自动打开）
+        const btnGroup = btn.parentElement
+        if (desktopZip && btnGroup) {
+          const openBtn = document.createElement('button')
+          openBtn.className = 'btn btn-sm'
+          openBtn.textContent = '📂 ' + t('about.openZip')
+          openBtn.onclick = () => window.open('file:///' + desktopZip.replace(/\\/g, '/'))
+          btnGroup.insertBefore(openBtn, btn)
+        }
+        btn.textContent = '🔄 ' + t('about.reloadApp')
         btn.disabled = false
         btn.onclick = () => window.location.reload()
       } catch (e) {
