@@ -529,13 +529,22 @@ video {
   btnClose.addEventListener('click', function() {
     if (isRecording) stopRecording();
     if (hlsInstance) hlsInstance.destroy();
-    // Tauri 窗口用 invoke，浏览器测试用 window.close
-    if (window.__TAURI_INTERNALS__) {
-      window.__TAURI_INTERNALS__.invoke('close_live_player');
-    } else {
-      window.close();
-    }
+    closeWindow();
   });
+
+  // ★ 关闭窗口（三重回退）
+  function closeWindow() {
+    // 1. Tauri v2 API（最可靠）
+    if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+      try { window.__TAURI__.core.invoke('close_live_player'); return; } catch(e) {}
+    }
+    // 2. Tauri 底层 API
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+      try { window.__TAURI_INTERNALS__.invoke('close_live_player'); return; } catch(e) {}
+    }
+    // 3. 浏览器 window.close（仅在 window.open 创建的窗口中有效）
+    try { window.close(); } catch(e) {}
+  }
 
   // ===== 初始化 =====
   function init() {
