@@ -1481,12 +1481,13 @@ pub async fn open_live_player(
     let encoded = urlencoding::encode(&sources_json);
     let player_url = format!("live-player.html?sources={}", encoded);
 
-    // If window exists, navigate it to load new sources
+    // 窗口存在 → 用 navigate 导航加载新源（而非不可靠的 eval）
     if let Some(window) = app.get_webview_window("live_player_window") {
-        let _ = window.eval(&format!(
-            "window.location.href = {};",
-            serde_json::json!(&player_url)
-        ));
+        let _ = window.show();
+        let _ = window.set_focus();
+        if let Ok(parsed) = url::Url::parse(&format!("https://tauri.localhost/{}", player_url)) {
+            let _ = window.navigate(parsed);
+        }
         let _ = app.emit("live-player-sources", &sources);
         return Ok(());
     }
