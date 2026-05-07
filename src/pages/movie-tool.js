@@ -20,8 +20,8 @@ function escHtml(str) {
 }
 
 const VOD_SOURCES = [
-  { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
   { key: 'lzzy',   name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',       type: 'tvbox' },
+  { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
   { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
   { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
 ]

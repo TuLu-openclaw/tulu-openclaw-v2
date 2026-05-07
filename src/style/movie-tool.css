@@ -155,16 +155,13 @@
 /* ── 分类横条 ── */
 .tvbox-catbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 0 16px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
+  padding: 4px 16px;
 }
 
-.tvbox-catbar::-webkit-scrollbar { display: none; }
-.tvbox-catbar-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; padding-right: 2px; }
+.tvbox-catbar-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; padding-right: 6px; line-height: 30px; }
 
 .tvbox-cat-chip {
   background: var(--bg-elevated);
@@ -176,7 +173,11 @@
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
-  flex-shrink: 0;
+  /* 每行最多12个，自动换行 */
+  flex: 0 0 auto;
+  max-width: calc(100% / 12 - 6px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tvbox-cat-chip:hover { border-color: var(--accent); color: var(--accent2); }
