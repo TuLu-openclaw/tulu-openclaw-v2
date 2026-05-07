@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
   "productName": "屠戮OpenClaw",
-  "version": "3.0.1",
+  "version": "3.1.2",
   "identifier": "ai.openclaw.tulu-openclaw-v2",
   "build": {
     "frontendDist": "../dist",
@@ -28,7 +28,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "appimage", "deb", "dmg"],
+    "targets": [
+      "nsis",
+      "appimage",
+      "deb",
+      "dmg"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,14 +41,20 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/Star-Office-UI-master/**/*"],
+    "resources": [
+      "resources/Star-Office-UI-master/**/*"
+    ],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper",
         "silent": true
       },
       "nsis": {
-        "languages": ["SimpChinese", "TradChinese", "English"],
+        "languages": [
+          "SimpChinese",
+          "TradChinese",
+          "English"
+        ],
         "displayLanguageSelector": true
       }
     }
