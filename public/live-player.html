@@ -365,7 +365,6 @@ video {
   }
 
   // ===== 录屏 =====
-  async 
   function fallbackDownload(blob, fileName) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -374,7 +373,7 @@ video {
     a.click();
     URL.revokeObjectURL(url);
   }
-function startRecording() {
+  async function startRecording() {
     try {
       // 获取视频+音频流
       var stream = video.captureStream ? video.captureStream() : null;
@@ -535,7 +534,7 @@ function startRecording() {
   }
 })();
 </script>
-<!-- hls.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<!-- hls.js 本地加载（避免WebView2跟踪防护拦截CDN） -->
+<script src="hls.min.js"></script>
 </body>
 </html>

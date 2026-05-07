@@ -204,10 +204,12 @@
 
     document.body.appendChild(panel);
 
-    // 点击外部关闭
+    // 点击外部关闭（延迟启用防误触）
     var overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;';
-    overlay.onclick = function() { panel.remove(); overlay.remove(); };
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,0.15);';
+    var overlayReady = false
+    setTimeout(function() { overlayReady = true }, 800)
+    overlay.onclick = function() { if (overlayReady) { panel.remove(); overlay.remove(); } };
     document.body.appendChild(overlay);
     panel.addEventListener('click', function(e) { e.stopPropagation(); });
   }

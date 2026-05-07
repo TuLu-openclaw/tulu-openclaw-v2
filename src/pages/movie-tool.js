@@ -2170,19 +2170,27 @@ function pickDirectUrl(url) {
         return found
       }},
       { name: 'CMS播放页JS提取', fn: async () => {
-        // 很多CMS详情页（如ruvodplay/dianxia）通过播放页的JS变量提供视频
-        // 先从详情页HTML中找播放页链接，如 /ruvodplay/77645-1-1.html
-        const playPageMatch = html.match(/href=["'](\/[^"']*\/ruvodplay\/\d+[^"']*)["']/i)
-          || html.match(/href=["'](\/[^"']*\/play\/\d+[^"']*)["']/i)
-          || html.match(/href=["'](\/[^"']*\/vodplay\/\d+[^"']*)["']/i)
-        if (!playPageMatch) return []
-        const playUrl = playPageMatch[1].replace(/[?#].*$/, '')
-        if (!playUrl) return []
-        let base = ''
-        try { base = new URL(url).origin } catch {}
-        const fullPlayUrl = playUrl.startsWith('http') ? playUrl : base + playUrl
-        const playHtml = await crawlFetch(fullPlayUrl).catch(() => '')
-        if (!playHtml) return []
+        // 如果 URL 本身就是播放页（ruvodplay/play/vodplay），直接用当前页HTML提取
+        let playUrl = ''
+        let playHtml = ''
+        const isPlayPage = /(ruvodplay|play|vodplay)\/\d+/i.test(url)
+        if (isPlayPage) {
+          playUrl = url
+          playHtml = html
+        } else {
+          // 从详情页HTML中找播放页链接
+          const playPageMatch = html.match(/href=["'](\/[^"']*\/ruvodplay\/\d+[^"']*)["']/i)
+            || html.match(/href=["'](\/[^"']*\/play\/\d+[^"']*)["']/i)
+            || html.match(/href=["'](\/[^"']*\/vodplay\/\d+[^"']*)["']/i)
+          if (!playPageMatch) return []
+          playUrl = playPageMatch[1].replace(/[?#].*$/, '')
+          if (!playUrl) return []
+          let base = ''
+          try { base = new URL(url).origin } catch {}
+          playUrl = playUrl.startsWith('http') ? playUrl : base + playUrl
+          playHtml = await crawlFetch(playUrl).catch(() => '')
+          if (!playHtml) return []
+        }
         // 把 \/ 替换成 /（JS转义）
         const fixed = playHtml.replace(/\\\//g, '/')
         // 找 var player_aaaa = {...} 或类似JS变量
@@ -2205,7 +2213,7 @@ function pickDirectUrl(url) {
               // 反转义 JS Unicode 转义 \u3a \\u3a → :
               try { videoUrl = JSON.parse('"' + videoUrl + '"') } catch {}
               if (videoUrl && (videoUrl.includes('.m3u8') || videoUrl.includes('.mp4'))) {
-                const name = fullPlayUrl.split('/').pop().replace(/\.html/i, '') || 'CMS视频'
+                const name = playUrl.split('/').pop().replace(/\.html/i, '') || 'CMS视频'
                 found.push({ name, url: videoUrl, thumb, type: videoUrl.includes('.m3u8') ? 'm3u8' : 'mp4' })
               }
             }
