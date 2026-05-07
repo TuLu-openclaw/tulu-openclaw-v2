@@ -186,6 +186,7 @@ pub fn run() {
             assistant::fetch_live_sources,
             assistant::save_recording,
             assistant::open_live_player,
+            assistant::close_live_player,
             assistant::navigate_window,
             assistant::get_window_by_label,
             assistant::update_office_state,

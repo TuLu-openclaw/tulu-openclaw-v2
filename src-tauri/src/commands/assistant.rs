@@ -1498,6 +1498,15 @@ pub async fn open_live_player(
     Ok(())
 }
 
+/// close_live_player — 关闭独立直播播放器窗口
+#[tauri::command]
+pub fn close_live_player(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("live_player_window") {
+        let _ = window.close();
+    }
+    Ok(())
+}
+
 /// navigate_window
 
 /// save_recording - 保存录屏数据到用户指定路径（通过Tauri对话框选择）

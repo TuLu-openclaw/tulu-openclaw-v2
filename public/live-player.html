@@ -529,7 +529,12 @@ video {
   btnClose.addEventListener('click', function() {
     if (isRecording) stopRecording();
     if (hlsInstance) hlsInstance.destroy();
-    window.close();
+    // Tauri 窗口用 invoke，浏览器测试用 window.close
+    if (window.__TAURI_INTERNALS__) {
+      window.__TAURI_INTERNALS__.invoke('close_live_player');
+    } else {
+      window.close();
+    }
   });
 
   // ===== 初始化 =====
