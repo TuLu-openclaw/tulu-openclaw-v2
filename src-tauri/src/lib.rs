@@ -296,10 +296,13 @@ pub fn run() {
             proxy::proxy_url,
         ])
         .on_window_event(|window, event| {
-            // 关闭窗口时最小化到托盘，不退出应用
+            // 关闭窗口时最小化到托盘，不退出应用（仅主窗口）
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // 其他窗口（如 global_builtin_window）正常关闭销毁
             }
         })
         .build(tauri::generate_context!())
