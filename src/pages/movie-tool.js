@@ -272,6 +272,9 @@ const VOD_CATEGORIES = [
   { id: 'short',   name: '短剧' },
 ]
 
+// 自适应分类缓存：{ sourceKey: [{ id: 'movie', name: '电影', typeId: 1 }, ...] }
+let _catCache = {}
+
 const HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'
 const KEY_SEARCH = 'tulu_vod_search'
 const KEY_PLAY   = 'tulu_vod_play'
@@ -283,6 +286,7 @@ let page = 1
 let query = ''
 let tvCache = {}
 const _sourceHealth = {}
+let _currentTypeId = null  // 当前选中分类的 typeId（自适应分类用）
 let playingEp = null
 let _el = null
 let _viewStack = []
@@ -787,17 +791,49 @@ function initApp(el) {
     openPlayerVod(name, epUrl, id, 'vod_history', epName, pic, [epUrl], progress, [])
   }
 
-  function renderCatBar() {
+  // 从源 API 获取自适应分类列表
+  async function fetchSourceCategories(sourceKey) {
+    if (_catCache[sourceKey]) return _catCache[sourceKey]
+    const source = VOD_SOURCES.find(s => s.key === sourceKey)
+    if (!source) return VOD_CATEGORIES.map(c => ({ ...c, typeId: 1 }))
+    try {
+      const json = await fetchJSON(source.api + '?ac=config')
+      if (json?.class && Array.isArray(json.class)) {
+        const cats = json.class.map(cls => ({
+          id: String(cls.type_id || cls.typeId || ''),
+          name: cls.type_name || cls.name || '未命名',
+          typeId: Number(cls.type_id || cls.typeId || 1),
+        })).filter(c => c.typeId > 0)
+        if (cats.length > 0) {
+          _catCache[sourceKey] = cats
+          return cats
+        }
+      }
+    } catch {}
+    // 回退到默认分类（用 typeId=1 试）
+    const fallback = VOD_CATEGORIES.map(c => ({ ...c, typeId: (VOD_TYPE_MAP[sourceKey] || {})[c.id] || 1 }))
+    _catCache[sourceKey] = fallback
+    return fallback
+  }
+
+  async function renderCatBar() {
     const container = el.querySelector('#t-catbar')
-    const cats = VOD_CATEGORIES
-    container.innerHTML = '<span class="tvbox-catbar-label">分类</span>' +
-      cats.map(c => '<button class="tvbox-cat-chip' + (c.id === cat ? ' active' : '') + '" data-id="' + c.id + '">' + c.name + '</button>').join('')
-    container.querySelectorAll('.tvbox-cat-chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        cat = btn.dataset.id
-        page = 1; query = ''; searchInput.value = ''; hideHistory(); _viewStack = []
-        renderCatBar(); renderSrcBar()
-        loadData()
+    const source = VOD_SOURCES[src]
+    let cats = _catCache[source.key] || VOD_CATEGORIES.map(c => ({ ...c, typeId: 1 }))
+    // 异步获取分类（非阻塞，有缓存则直接用）
+    container.innerHTML = '<span class="tvbox-catbar-label">分类</span><span style="color:var(--text-tertiary);font-size:12px">⏳</span>'
+    fetchSourceCategories(source.key).then(freshCats => {
+      cats = freshCats
+      container.innerHTML = '<span class="tvbox-catbar-label">分类</span>' +
+        cats.map(c => '<button class="tvbox-cat-chip' + (String(c.typeId) === String(_currentTypeId) ? ' active' : '') + '" data-typeid="' + c.typeId + '" data-catid="' + c.id + '">' + c.name + '</button>').join('')
+      container.querySelectorAll('.tvbox-cat-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          cat = btn.dataset.catid
+          _currentTypeId = parseInt(btn.dataset.typeid)
+          page = 1; query = ''; searchInput.value = ''; hideHistory(); _viewStack = []
+          renderCatBar(); renderSrcBar()
+          loadData()
+        })
       })
     })
   }
@@ -812,6 +848,8 @@ function initApp(el) {
     container.querySelectorAll('.tvbox-src-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         src = parseInt(btn.dataset.idx)
+        _currentTypeId = null  // 切换源时重置typeId，让新源的分类自适应
+        cat = 'movie'           // 切回默认分类
         page = 1; hideHistory(); renderSrcBar(); loadData()
       })
     })
@@ -842,8 +880,12 @@ function setDebug(msg, detail) {
   async function loadList() {
     const content = el.querySelector('#t-content')
     const source = VOD_SOURCES[src]
-    const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
-    const typeId = typeMap[cat] ?? 1
+    // 自适应分类：优先用当前缓存的 typeId，否则用旧映射
+    let typeId = _currentTypeId
+    if (typeId == null) {
+      const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
+      typeId = typeMap[cat] ?? 1
+    }
     setDebug('加载中...', source.name + ' cat=' + cat + ' typeId=' + typeId)
     let json = { list: [], total: 0 }
     const t0 = Date.now()
