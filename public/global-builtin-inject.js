@@ -280,6 +280,36 @@
         else if (lower.indexOf('.ts') !== -1) add(url, 'network.ts');
       }
     } catch(e) {}
+    // ★ 第4层：fetch/XHR/WebSocket 拦截收集（直播流关键来源）
+    try {
+      if (window.__fetchUrls) {
+        window.__fetchUrls.forEach(function(u) {
+          var lower = (u || '').toLowerCase();
+          if (lower.indexOf('.m3u8') !== -1) add(u, 'fetch.m3u8');
+          else if (lower.indexOf('.mp4') !== -1) add(u, 'fetch.mp4');
+          else if (lower.indexOf('.flv') !== -1) add(u, 'fetch.flv');
+          else if (lower.indexOf('m3u8') !== -1) add(u, 'fetch.m3u8');
+          else if (lower.indexOf('live') !== -1) add(u, 'fetch.live');
+          else if (lower.indexOf('stream') !== -1) add(u, 'fetch.stream');
+        });
+      }
+      if (window.__xhrUrls) {
+        window.__xhrUrls.forEach(function(u) {
+          var lower = (u || '').toLowerCase();
+          if (lower.indexOf('.m3u8') !== -1) add(u, 'xhr.m3u8');
+          else if (lower.indexOf('.mp4') !== -1) add(u, 'xhr.mp4');
+          else if (lower.indexOf('.flv') !== -1) add(u, 'xhr.flv');
+          else if (lower.indexOf('m3u8') !== -1) add(u, 'xhr.m3u8');
+          else if (lower.indexOf('live') !== -1) add(u, 'xhr.live');
+          else if (lower.indexOf('stream') !== -1) add(u, 'xhr.stream');
+        });
+      }
+      if (window.__wsUrls) {
+        window.__wsUrls.forEach(function(u) {
+          if (u && u.length > 5) add(u, 'websocket');
+        });
+      }
+    } catch(e) {}
     // 全局变量
     try {
       var g = ['videoUrl','playUrl','streamUrl','hlsUrl','m3u8Url','playerUrl','sourceUrl','stream','videoSrc','playSrc'];
