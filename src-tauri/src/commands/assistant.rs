@@ -1197,6 +1197,10 @@ pub async fn open_global_builtin_window(
     std::fs::write(&temp_file, &html_with_url).map_err(|e| format!("写入临时HTML失败: {}", e))?;
 
     let file_url = format!("file:///{}", temp_file.to_string_lossy().replace('\\', "/"));
+    // ★ 最早钩子脚本：通过 initialization_script 在页面 JS 之前注入
+    // 确保 fetch/XHR/WebSocket 拦截在页面任何脚本执行前就位
+    let hooks_js = include_str!("../../../public/global-builtin-hooks.js");
+
     eprintln!("[open_global_builtin_window] file_url: {}", file_url);
 
     let file_url_parsed: url::Url = file_url
@@ -1205,6 +1209,7 @@ pub async fn open_global_builtin_window(
 
     eprintln!("[open_global_builtin_window] creating window...");
     let win = WebviewWindowBuilder::new(&app, label, WebviewUrl::External(file_url_parsed))
+        .initialization_script(hooks_js)
         .title("全球内置")
         .inner_size(1200.0, 800.0)
         .center()

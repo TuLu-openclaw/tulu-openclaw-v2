@@ -1,42 +1,6 @@
-// 悬浮提取按钮注入脚本 v7
-// auth 由 global-builtin.html 处理（每次都要密码验证）
-// 本脚本只负责：注入持久化悬浮按钮 + 嗅探（4层全覆盖） + 选择播放
-// ★ 第4层：fetch/XHR/WebSocket 拦截（最早期注入，捕获所有动态请求）
-(function() {
-  if (!window.__tulu_hooked) {
-    window.__tulu_hooked = true;
-    window.__fetchUrls = [];
-    window.__xhrUrls = [];
-    window.__wsUrls = [];
-    try {
-      var _fetch = window.fetch;
-      window.fetch = function() {
-        try { var u = arguments[0]; window.__fetchUrls.push(typeof u === 'string' ? u : (u && u.url) || ''); } catch(e) {}
-        return _fetch.apply(this, arguments);
-      };
-    } catch(e) {}
-    try {
-      var _xhrOpen = XMLHttpRequest.prototype.open;
-      XMLHttpRequest.prototype.open = function(method, url) {
-        try { window.__xhrUrls.push(url); } catch(e) {}
-        return _xhrOpen.apply(this, arguments);
-      };
-    } catch(e) {}
-    try {
-      var _WS = window.WebSocket;
-      window.WebSocket = function(url, protocols) {
-        try { window.__wsUrls.push(url); } catch(e) {}
-        if (protocols !== undefined) return new _WS(url, protocols);
-        return new _WS(url);
-      };
-      window.WebSocket.prototype = _WS.prototype;
-      window.WebSocket.CONNECTING = _WS.CONNECTING;
-      window.WebSocket.OPEN = _WS.OPEN;
-      window.WebSocket.CLOSING = _WS.CLOSING;
-      window.WebSocket.CLOSED = _WS.CLOSED;
-    } catch(e) {}
-  }
-})();
+// 悬浮提取按钮注入脚本 v8
+// 钩子已由 Rust initialization_script 注入（global-builtin-hooks.js）
+// 本脚本只负责：注入持久化悬浮按钮 + 嗅探（4层全覆盖） + 自动播放
 (function() {
   if (window.__tulu_injected) return;
   window.__tulu_injected = true;
@@ -77,11 +41,11 @@
       document.head.appendChild(style);
     }
 
-    // 点击嗅探
+    // 点击嗅探 → 自动播放
     btnMain.onclick = async function() {
       btnMain.disabled = true;
       btnMain.innerHTML = '&#8987;';
-      tuluToast('正在深度扫描页面...');
+      tuluToast('正在深度扫描页面（钩子从页面加载起已就位）...');
       try {
         var domSources = scanPageDOM();
         var rustSources = [];
@@ -92,10 +56,12 @@
         }
         var allSources = mergeSources(domSources, rustSources || []);
         if (allSources.length > 0) {
-          tuluToast('找到 ' + allSources.length + ' 个视频源', 5000);
-          showSourceSelector(allSources);
+          // ★ 将当前正在播放的源排到最优先
+          allSources = prioritizeCurrentSource(allSources);
+          tuluToast('找到 ' + allSources.length + ' 个视频源，自动播放中...', 5000);
+          playAllSources(allSources);
         } else {
-          tuluToast('未检测到视频源，请确认页面上有视频在播放', 10000);
+          tuluToast('未检测到视频源，请确认页面上有直播正在播放', 10000);
         }
       } catch(err) {
         tuluToast('提取失败: ' + String(err), 8000);
@@ -228,12 +194,13 @@
     }
   }
 
-  // ===== 播放全部资源 =====
+  // ===== 播放全部资源（默认第1个=当前播放源） =====
   async function playAllSources(sources) {
-    tuluToast('正在打开播放器...');
+    var first = sources[0];
+    tuluToast('自动播放 ' + sources.length + ' 个视频源' + (first ? '，默认: ' + (first.from || first.type || first.url).substring(0, 40) : ''));
     try {
       await tauriInvoke('open_live_player', { sources: sources });
-      tuluToast('播放器已打开', 5000);
+      tuluToast('播放器已打开，共 ' + sources.length + ' 个源', 5000);
     } catch(e) {
       tuluToast('播放器打开失败: ' + String(e), 8000);
     }
@@ -372,6 +339,48 @@
       if (!s || !s.url || seen[s.url]) return false;
       seen[s.url] = true; return true;
     });
+  }
+
+  // ★ 将当前正在播放的源排到第一位
+  function prioritizeCurrentSource(sources) {
+    // 获取当前播放的 video 元素的 src / currentSrc
+    var curUrl = '';
+    try {
+      var v = document.querySelector('video');
+      if (v) {
+        curUrl = v.currentSrc || v.src || '';
+        // 如果 src 是 blob:，尝试从 srcObject 获取
+        if (/^blob:/.test(curUrl) && v.srcObject && v.srcObject.active) {
+          try {
+            // MediaStream 无直接 URL，跳过
+            curUrl = '';
+          } catch(e) {}
+        }
+      }
+    } catch(e) {}
+
+    // 也检查 Performance API 中最新的 m3u8 请求
+    if (!curUrl) {
+      try {
+        var entries = performance.getEntriesByType('resource');
+        for (var i = entries.length - 1; i >= 0; i--) {
+          if (/\.m3u8/i.test(entries[i].name)) { curUrl = entries[i].name; break; }
+        }
+      } catch(e) {}
+    }
+
+    if (!curUrl) return sources;
+
+    // 找到匹配的源，移到第一位
+    for (var i = 0; i < sources.length; i++) {
+      if (sources[i].url === curUrl || sources[i].url.indexOf(curUrl) !== -1 || curUrl.indexOf(sources[i].url) !== -1) {
+        var match = sources.splice(i, 1)[0];
+        match.type = (match.type || '') + ' ▶当前播放';
+        sources.unshift(match);
+        break;
+      }
+    }
+    return sources;
   }
 
   injectBar();
