@@ -855,7 +855,7 @@ pub async fn open_player_window(
             // 发关闭事件给播放器窗口，player.html 收到后清理视频再自己 close
             use tauri::Emitter;
             let _ = app_for_event.emit_to(
-                format!("{}://*", win_label_emit),
+                &win_label_emit,
                 "player-close-event",
                 serde_json::json!({}),
             );

@@ -21,6 +21,7 @@ function escHtml(str) {
 
 const VOD_SOURCES = [
   { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
+  { key: 'lzzy',   name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',       type: 'tvbox' },
   { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
   { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
 ]
@@ -1978,7 +1979,7 @@ function pickDirectUrl(url) {
         </div>
         <div class="tvbox-crawl-form" style="margin-bottom:8px">
           <input id="t-crawl-url" type="url" placeholder="https://...（粘贴视频页地址，试试看）" />
-          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#e74c3c">▶ 播放</button>
+          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#e74c3c">🔬 深度嗅探</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-secondary)">
@@ -2007,18 +2008,18 @@ function pickDirectUrl(url) {
         return
       }
       btn.disabled = true
-      btn.textContent = autoPlay.checked ? '⏳ 边爬边播...' : '⏳ 爬取中...'
-      showCrawlStatus(autoPlay.checked ? '🚀 正在边爬边播...' : '🔍 正在分析页面结构...', 'loading')
+      btn.textContent = autoPlay.checked ? '⏳ 边嗅边播...' : '⏳ 嗅探中...'
+      showCrawlStatus(autoPlay.checked ? '🚀 正在边嗅边播...' : '🔍 正在深度嗅探页面...', 'loading')
       _crawlResults = []
       const results = await crawlSite(url, autoPlay.checked ? (name, u) => {
         // 第一个可用链接 → 直接播放（独立窗口）
         showCrawlStatus('✅ 找到可用链接，正在播放: ' + name, 'success')
-        btn.disabled = false; btn.textContent = '🔍 爬取'
+        btn.disabled = false; btn.textContent = '🔬 深度嗅探'
         playCrawlVideo(name, u, 0, [], [u])
       } : null)
       _crawlResults = results
       btn.disabled = false
-      btn.textContent = '🔍 爬取'
+      btn.textContent = '🔬 深度嗅探'
       if (!autoPlay.checked || !results.length) renderCrawlResults(results)
     }
 
