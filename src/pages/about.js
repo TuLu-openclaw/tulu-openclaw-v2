@@ -276,6 +276,7 @@ async function loadData(page) {
         <div class="stat-card-header"><span class="stat-card-label">屠戮OpenClaw</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
+        <button class="btn btn-sm" id="btn-manual-check" style="margin-top:8px;font-size:var(--font-size-xs)">🔄 ${t('about.checkUpdate')}</button>
       </div>
       <div class="stat-card">
         <div class="stat-card-header"><span class="stat-card-label">OpenClaw · ${sourceLabel}</span></div>
@@ -310,6 +311,20 @@ async function loadData(page) {
     const applyRecommendedBtn = cards.querySelector('#btn-apply-recommended')
     if (applyRecommendedBtn && version.recommended) {
       applyRecommendedBtn.onclick = () => doInstall(page, aheadOfRecommended ? t('about.rollbackToRecommendedStable') : t('about.switchToRecommendedStable'), version.source, version.recommended)
+    }
+
+    // 手动检查更新按钮
+    const manualCheckBtn = cards.querySelector('#btn-manual-check')
+    if (manualCheckBtn) {
+      manualCheckBtn.onclick = async () => {
+        manualCheckBtn.disabled = true
+        manualCheckBtn.textContent = '⏳ ' + t('about.checkingUpdate')
+        const meta = cards.querySelector('#panel-update-meta')
+        if (meta) meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkingUpdate')}</span>`
+        await checkHotUpdate(cards, panelVersion)
+        manualCheckBtn.disabled = false
+        manualCheckBtn.textContent = '🔄 ' + t('about.checkUpdate')
+      }
     }
 
     // 版本管理 / 安装
