@@ -147,6 +147,9 @@ export function render() {
   let updateChecking = false
   let updateBannerVisible = false  // 是否显示版本更新横幅
   let updateInfo = null     // { installed, latest, updateAvailable, releaseUrl, changelog }
+  let updateInstalling = false
+  let updateProgress = 0
+  let updateLog = ''
   let connectMode = 'local' // local | wsl2 | docker | custom
   let customGwUrl = ''      // 自定义 Gateway URL
   let connectMsg = ''       // 连接区消息
@@ -289,13 +292,32 @@ export function render() {
         </div>
       </div>
 
-      ${updateBannerVisible ? `
+      ${updateInfo?.updateAvailable && !updateInstalling ? `
       <div id="update-banner" style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
         <span style="font-size:20px">🚀</span>
-        <span style="flex:1">发现新版本 v${updateInfo?.latest || '?'}（当前 v${updateInfo?.current || '?'}）</span>
-        <button id="hm-update-now-btn" style="padding:6px 18px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600">立即更新</button>
-        <button id="hm-update-dismiss-btn" style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,0.25);border-radius:6px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:13px">稍后</button>
+        <span style="flex:1">${t('engine.dashUpdateBanner').replace('{current}', updateInfo.installed).replace('{latest}', updateInfo.latest)}</span>
+        <button id="hm-update-now-btn" style="padding:6px 18px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600">⬇ ${t('engine.dashInstallUpdate')}</button>
+        <button id="hm-update-dismiss-btn" style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,0.25);border-radius:6px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:13px">${t('engine.dashDismiss')}</button>
+      </div>
+      ${updateInstalling ? `
+      <div id="update-banner" style="padding:14px 18px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:18px">⏳</span>
+          <span style="flex:1">${t('engine.dashInstalling')}</span>
+          <span style="font-weight:700">${updateProgress}%</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.2);border-radius:4px;height:6px;overflow:hidden">
+          <div style="background:#fff;height:100%;width:${updateProgress}%;transition:width .3s"></div>
+        </div>
+        ${updateLog ? `<div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:6px">${updateLog}</div>` : ''}
       </div>` : ''}
+      ${updateProgress >= 100 && !updateInstalling ? `
+      <div id="update-banner" style="padding:14px 18px;background:linear-gradient(135deg,#059669,#10b981);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
+        <span style="font-size:18px">✅</span>
+        <span style="margin-left:8px">${t('engine.dashInstallSuccess')}</span>
+        <button id="hm-update-dismiss-btn" style="margin-left:auto;padding:6px 14px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;color:#fff;cursor:pointer;font-size:13px">${t('engine.dashDismiss')}</button>
+      </div>` : ''}
+      ` : ''}
 
       <!-- KPI grid: 5 cards with tone indicators -->
       <div class="hm-kpi-grid">
@@ -320,7 +342,7 @@ export function render() {
             <button class="hm-btn hm-btn--ghost hm-btn--sm hm-check-update" style="margin-left:6px;font-size:10px" title="${t('engine.dashCheckUpdate')}">
               ${updateChecking ? '⏳' : '🔄'} ${updateChecking ? t('engine.dashCheckingUpdate') : t('engine.dashCheckUpdate')}
             </button>
-            ${updateInfo?.updateAvailable ? `<span class="hm-badge hm-badge--warning" style="margin-left:4px;cursor:pointer" title="${esc(updateInfo?.releaseUrl || '')}">⬆ ${t('engine.dashUpdateAvailable')}</span>` : ''}
+            ${updateInfo?.updateAvailable && !updateInstalling ? `<span class="hm-badge hm-badge--warning" style="margin-left:4px">⬆ v${updateInfo.latest}</span>` : ''}
           </div>
         </div>
         <div class="hm-kpi">
@@ -868,11 +890,9 @@ export function render() {
     // --- 连接目标 ---
     el.querySelector('.hm-detect-env')?.addEventListener('click', doDetectEnv)
     el.querySelector('.hm-check-update')?.addEventListener('click', doCheckUpdate)
-    document.querySelector('#hm-update-now-btn')?.addEventListener('click', () => {
-      window.open('https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest', '_blank')
-    })
+    document.querySelector('#hm-update-now-btn')?.addEventListener('click', doInstallUpdate)
     document.querySelector('#hm-update-dismiss-btn')?.addEventListener('click', () => {
-      updateBannerVisible = false; updateInfo = null; draw()
+      updateInfo = null; updateProgress = 0; updateLog = ''; updateInstalling = false; draw()
     })
     el.querySelectorAll('.hm-connect-mode').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1029,15 +1049,56 @@ export function render() {
     updateChecking = true; draw()
     try {
       updateInfo = await api.checkHermesUpdate()
-      if (updateInfo?.updateAvailable) {
-        toast(t('engine.dashUpdateAvailable') + ': v' + updateInfo.latest, 'info')
-      } else {
-        toast(t('engine.dashUpToDate'), 'success')
-      }
     } catch (e) {
       toast(t('engine.dashUpdateCheckFailed') + ': ' + (e?.message || e), 'error')
     }
     updateChecking = false; draw()
+  }
+
+  async function doInstallUpdate() {
+    if (updateInstalling) return
+    updateInstalling = true
+    updateProgress = 0
+    updateLog = ''
+    draw()
+
+    // 监听安装事件
+    let listeners = []
+    try {
+      const unsubLog = await listen('hermes-install-log', (e) => {
+        updateLog = String(e.payload)
+        draw()
+      })
+      listeners.push(unsubLog)
+      const unsubProgress = await listen('hermes-install-progress', (e) => {
+        updateProgress = Math.min(Number(e.payload) || 0, 99)
+        draw()
+      })
+      listeners.push(unsubProgress)
+    } catch {}
+
+    try {
+      await api.installHermes('uv-tool', [])
+      updateProgress = 100
+      updateLog = t('engine.dashInstallSuccess')
+      updateInstalling = false
+      draw()
+    } catch (e) {
+      updateProgress = 0
+      updateLog = '❌ ' + (e?.message || String(e))
+      updateInstalling = false
+      draw()
+      toast(t('engine.dashInstallFailed') + ': ' + (e?.message || e), 'error')
+    }
+
+    // 清理监听器
+    listeners.forEach(fn => { try { fn() } catch {} })
+    
+    // 安装成功后重置 updateInfo
+    if (updateProgress >= 100) {
+      updateInfo = null
+      draw()
+    }
   }
 
   async function doApplyConnect() {
