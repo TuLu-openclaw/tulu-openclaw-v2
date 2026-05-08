@@ -23,9 +23,9 @@ fn audit_log(action: &str, detail: &str) {
         .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
 }
 
-/// 屠戮OpenClaw 数据目录（~/.openclaw/屠戮OpenClaw/）
+/// 星枢 数据目录（~/.openclaw/星枢/）
 fn data_dir() -> PathBuf {
-    super::openclaw_dir().join("屠戮OpenClaw")
+    super::openclaw_dir().join("星枢")
 }
 
 /// 确保数据目录及子目录存在，返回目录路径

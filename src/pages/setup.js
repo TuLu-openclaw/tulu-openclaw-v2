@@ -81,7 +81,7 @@ export async function render() {
     <div class="setup-shell">
       <div class="setup-hero">
         <div class="setup-hero-brand">
-          <img src="/images/logo-brand.png" alt="屠戮OpenClaw" class="setup-hero-logo">
+          <img src="/images/logo-brand.png" alt="星枢" class="setup-hero-logo">
           <div class="setup-hero-copy">
             <h1 class="setup-hero-title">${t('setup.headerTitle')}</h1>
             <p class="setup-hero-desc">${t('setup.headerDesc')}</p>
@@ -201,7 +201,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
           <strong>${t('setup.nodeInstalledButNotDetected')}</strong>
           ${isMacPlatform()
             ? `${t('setup.macNodeHint')}<br>
-               <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/屠戮OpenClaw.app</code>`
+               <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/星枢.app</code>`
             : `${t('setup.winNodeHint')}`
           }
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -480,8 +480,8 @@ function renderEnvironmentHint() {
             <div class="setup-help-block">
               <div class="setup-help-label">${t('setup.wslWebHint')}</div>
               <div class="setup-help-copy">${t('setup.wslWebDesc')}</div>
-              <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/屠戮OpenClaw/main/deploy.sh | bash</code>
-              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://gitee.com/QtCodeCreators/屠戮OpenClaw/raw/main/deploy.sh | bash</code></div>
+              <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/星枢/main/deploy.sh | bash</code>
+              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://gitee.com/QtCodeCreators/星枢/raw/main/deploy.sh | bash</code></div>
               <div class="setup-help-copy">${t('setup.wslWebPostDeploy')}</div>
             </div>
           ` : ''}
@@ -489,14 +489,14 @@ function renderEnvironmentHint() {
             <div class="setup-help-label">${t('setup.dockerHint')}</div>
             <div class="setup-help-copy">${t('setup.dockerDesc')}</div>
             <code class="setup-help-code">npm i -g @qingchencloud/openclaw-zh</code>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/屠戮OpenClaw/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/屠戮OpenClaw/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/星枢/main/deploy.sh | bash</code>
+            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/星枢/raw/main/deploy.sh | bash</code></div>
           </div>
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.remoteHint')}</div>
             <div class="setup-help-copy">${t('setup.remoteDesc')}</div>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/屠戮OpenClaw/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/屠戮OpenClaw/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/qingchencloud/星枢/main/deploy.sh | bash</code>
+            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/星枢/raw/main/deploy.sh | bash</code></div>
           </div>
         </div>
       </details>

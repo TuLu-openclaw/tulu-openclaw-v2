@@ -17,9 +17,9 @@ export async function render() {
 
   page.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;gap:16px">
-      <img src="/images/logo-brand.png" alt="屠戮OpenClaw" style="height:48px;width:auto">
+      <img src="/images/logo-brand.png" alt="星枢" style="height:48px;width:auto">
       <div>
-        <h1 class="page-title" style="margin:0">屠戮OpenClaw</h1>
+        <h1 class="page-title" style="margin:0">星枢</h1>
         <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">联系QQ：2552667173</a></p>
       </div>
     </div>
@@ -114,7 +114,7 @@ async function loadHermesData(page) {
 
     cards.innerHTML = `
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">屠戮OpenClaw</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">星枢</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
       </div>
@@ -248,7 +248,7 @@ async function loadData(page) {
       api.checkInstallation(),
     ])
 
-    // 尝试从 Tauri API 获取 屠戮OpenClaw 自身版本号，失败则 fallback
+    // 尝试从 Tauri API 获取 星枢 自身版本号，失败则 fallback
     let panelVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'
     try {
       const { getVersion } = await import('@tauri-apps/api/app')
@@ -273,7 +273,7 @@ async function loadData(page) {
 
     cards.innerHTML = `
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">屠戮OpenClaw</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">星枢</span></div>
         <div class="stat-card-value">${panelVersion}</div>
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
         <button class="btn btn-sm" id="btn-manual-check" style="margin-top:8px;font-size:var(--font-size-xs)">🔄 ${t('about.checkUpdate')}</button>
@@ -644,7 +644,7 @@ async function checkHotUpdate(cards, panelVersion) {
         <span style="color:var(--accent)">${t('about.newVersion')}: v${ver}</span>
         ${changelog ? `<span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${changelog}</span>` : ''}
         <button class="btn btn-primary btn-sm" id="btn-hot-download" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.hotUpdate')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.fullInstaller')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.fullInstaller')}</a>
       `
       meta.querySelector('#btn-hot-download')?.addEventListener('click', async () => {
         const btn = meta.querySelector('#btn-hot-download')
@@ -673,7 +673,7 @@ async function checkHotUpdate(cards, panelVersion) {
         }
       })
     } else if (!info.compatible) {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系QQ：2552667173</span>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系QQ：2552667173</span>`
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
     }
@@ -727,10 +727,10 @@ const PROJECTS = [
     url: 'https://github.com/1186258278/OpenClawChineseTranslation',
   },
   {
-    name: '屠戮OpenClaw',
-    desc: t('about.project屠戮OpenClaw'),
-    url: 'https://github.com/qingchencloud/屠戮OpenClaw',
-    gitee: 'https://gitee.com/QtCodeCreators/屠戮OpenClaw',
+    name: '星枢',
+    desc: t('about.project星枢'),
+    url: 'https://github.com/qingchencloud/星枢',
+    gitee: 'https://gitee.com/QtCodeCreators/星枢',
   },
   {
     name: 'ClawApp',
@@ -803,10 +803,10 @@ function renderContribute(page) {
     <div id="contribute-content" style="display:none">
       <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:12px">${t('about.contributeDesc')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        <a class="btn btn-primary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/屠戮OpenClaw/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
+        <a class="btn btn-primary btn-sm" href="https://github.com/qingchencloud/星枢/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
       </div>
       <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('about.domesticMirrorHint')}</div>
     </div>

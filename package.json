@@ -1,8 +1,8 @@
 {
-  "name": "屠戮OpenClaw",
-  "version": "3.1.3",
+  "name": "星枢",
+  "version": "3.1.4",
   "private": true,
-  "description": "屠戮OpenClaw - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
+  "description": "星枢 - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
   "type": "module",
   "author": "qingchencloud",
   "license": "AGPL-3.0",

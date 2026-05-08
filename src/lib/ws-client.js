@@ -668,5 +668,5 @@ export class WsClient {
 }
 
 const _g = typeof window !== 'undefined' ? window : globalThis
-if (!_g.__屠戮OpenClawWsClient) _g.__屠戮OpenClawWsClient = new WsClient()
-export const wsClient = _g.__屠戮OpenClawWsClient
+if (!_g.__星枢WsClient) _g.__星枢WsClient = new WsClient()
+export const wsClient = _g.__星枢WsClient
