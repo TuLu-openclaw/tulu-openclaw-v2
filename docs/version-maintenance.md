@@ -1,8 +1,8 @@
-# 星枢 版本维护说明
+# 星枢OpenClaw 版本维护说明
 
-这份文档面向 星枢 维护者，说明后续如何维护：
+这份文档面向 星枢OpenClaw 维护者，说明后续如何维护：
 
-- 星枢 自身版本号
+- 星枢OpenClaw 自身版本号
 - OpenClaw 推荐稳定版映射
 - 热更新清单 `latest.json`
 - 桌面端图标资源
@@ -11,14 +11,14 @@
 ## 一、维护入口速查
 
 - **改 OpenClaw 推荐稳定版**：编辑仓库根目录 `openclaw-version-policy.json`
-- **改 星枢 程序版本号**：执行 `npm run version:set 0.x.y`
+- **改 星枢OpenClaw 程序版本号**：执行 `npm run version:set 0.x.y`
 - **改前端热更新清单**：编辑 `docs/update/latest.json`
 - **重生成桌面图标**：执行 `npm run icon:regen`
 - **本地回归**：执行 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`
 
 ## 二、如何调整 OpenClaw 推荐稳定版
 
-星枢 现在使用仓库根目录的 `openclaw-version-policy.json` 作为统一版本策略文件。
+星枢OpenClaw 现在使用仓库根目录的 `openclaw-version-policy.json` 作为统一版本策略文件。
 
 当前结构示例：
 
@@ -46,9 +46,9 @@
 
 改完这个文件后，Rust 后端和 Web dev 后端都会读取同一份策略，前端各页面也会自动显示新的推荐版本和风险提示。
 
-## 三、如何调整 星枢 程序版本号
+## 三、如何调整 星枢OpenClaw 程序版本号
 
-星枢 现在以 `package.json` 作为主版本源，并通过脚本同步到其他文件。
+星枢OpenClaw 现在以 `package.json` 作为主版本源，并通过脚本同步到其他文件。
 
 当前 `0.11.0` 起，版本同步脚本也会一并维护 `package-lock.json`，避免 npm 锁文件版本与程序版本漂移。
 
@@ -84,12 +84,12 @@ npm run version:sync
    - `url`
    - `hash`
    - `releasedAt`
-2. 如果 `latest.json` 落后于当前程序版本，星枢 现在**不会再误报有更新**，但用户也看不到最新发布提示，所以仍然建议及时维护
+2. 如果 `latest.json` 落后于当前程序版本，星枢OpenClaw 现在**不会再误报有更新**，但用户也看不到最新发布提示，所以仍然建议及时维护
 3. 如果热更新资源还没准备好，不要提前把 `latest.json.version` 指到新版本
 
 ## 五、如何重生成桌面图标
 
-星枢 桌面端图标源现在使用 `docs/logo.png`。
+星枢OpenClaw 桌面端图标源现在使用 `docs/logo.png`。
 
 重生成命令：
 
@@ -127,7 +127,7 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 推荐按下面顺序维护：
 
-1. 确认本次要发布的 星枢 版本
+1. 确认本次要发布的 星枢OpenClaw 版本
 2. 执行 `npm run version:set x.y.z`
 3. 如有必要，更新 `openclaw-version-policy.json`
 4. 重新构建前端 / 检查 Rust 编译

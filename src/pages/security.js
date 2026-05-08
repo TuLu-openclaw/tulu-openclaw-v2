@@ -16,7 +16,7 @@ async function getTauriApi() {
 
 async function apiCall(cmd, args = {}) {
   if (isTauri) {
-    // 桌面端：通过 Tauri IPC 读写 星枢.json
+    // 桌面端：通过 Tauri IPC 读写 星枢OpenClaw.json
     const api = await getTauriApi()
     const cfg = await api.readPanelConfig()
 
@@ -35,7 +35,7 @@ async function apiCall(cmd, args = {}) {
       delete cfg.mustChangePassword
       delete cfg.ignoreRisk
       await api.writePanelConfig(cfg)
-      sessionStorage.setItem('星枢_authed', '1')
+      sessionStorage.setItem('星枢OpenClaw_authed', '1')
       return { success: true }
     }
     if (cmd === 'auth_ignore_risk') {
@@ -43,7 +43,7 @@ async function apiCall(cmd, args = {}) {
         delete cfg.accessPassword
         delete cfg.mustChangePassword
         cfg.ignoreRisk = true
-        sessionStorage.removeItem('星枢_authed')
+        sessionStorage.removeItem('星枢OpenClaw_authed')
       } else {
         delete cfg.ignoreRisk
       }
@@ -67,7 +67,7 @@ function checkPasswordStrengthLocal(pw) {
   if (!pw || pw.length < 6) return t('security.pwMin6')
   if (pw.length > 64) return t('security.pwMax64')
   if (/^\d+$/.test(pw)) return t('security.pwNoDigitOnly')
-  const weak = ['123456', '654321', 'password', 'admin', 'qwerty', 'abc123', '111111', '000000', 'letmein', 'welcome', '星枢', 'openclaw']
+  const weak = ['123456', '654321', 'password', 'admin', 'qwerty', 'abc123', '111111', '000000', 'letmein', 'welcome', '星枢OpenClaw', 'openclaw']
   if (weak.includes(pw.toLowerCase())) return t('security.pwTooCommon')
   return null
 }
@@ -243,7 +243,7 @@ function bindSecurityEvents(container, status) {
         msgEl.style.color = 'var(--success)'
         toast(t('security.passwordUpdated'), 'success')
         // 清除默认密码横幅
-        sessionStorage.removeItem('星枢_must_change_pw')
+        sessionStorage.removeItem('星枢OpenClaw_must_change_pw')
         const banner = document.getElementById('pw-change-banner')
         if (banner) banner.remove()
         setTimeout(() => loadStatus(container.closest('.page')), 1000)

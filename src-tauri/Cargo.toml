@@ -2,7 +2,7 @@
 name = "XingShu"
 version = "3.1.4"
 edition = "2021"
-description = "星枢 - OpenClaw 可视化管理面板"
+description = "星枢OpenClaw - OpenClaw 可视化管理面板"
 authors = ["qingchencloud"]
 repository = "https://github.com/qingchencloud/TuLuOpenClaw"
 homepage = "https://github.com/qingchencloud/TuLuOpenClaw"

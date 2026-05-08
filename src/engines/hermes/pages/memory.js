@@ -5,7 +5,7 @@
  *   GET  /api/hermes/memory            → { memory, user, soul, mtimes }
  *   POST /api/hermes/memory            → { section, content }
  *
- * 星枢 calls the equivalent Rust/Web-stub commands (`hermes_memory_read_all`
+ * 星枢OpenClaw calls the equivalent Rust/Web-stub commands (`hermes_memory_read_all`
  * + `hermes_memory_write`) so the page works on Tauri and Web modes.
  *
  * All three files live in `~/.hermes/memories/` and are plain Markdown.

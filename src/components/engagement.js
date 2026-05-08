@@ -13,11 +13,11 @@
 import { t } from '../lib/i18n.js'
 
 const KEYS = {
-  firstOpen: '星枢_first_open',
-  openCount: '星枢_open_count',
-  lastShown: '星枢_engage_shown',
-  never: '星枢_engage_never',
-  todayDismiss: '星枢_engage_today',
+  firstOpen: '星枢OpenClaw_first_open',
+  openCount: '星枢OpenClaw_open_count',
+  lastShown: '星枢OpenClaw_engage_shown',
+  never: '星枢OpenClaw_engage_never',
+  todayDismiss: '星枢OpenClaw_engage_today',
 }
 
 const DAY = 86400000
@@ -88,7 +88,7 @@ export function tryShowEngagement() {
       </div>
 
       <div class="engage-actions-grid">
-        <a class="engage-action-card" href="https://github.com/qingchencloud/星枢" target="_blank" rel="noopener">
+        <a class="engage-action-card" href="https://github.com/qingchencloud/星枢OpenClaw" target="_blank" rel="noopener">
           <div class="engage-action-icon engage-action-star">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="#f59e0b" stroke="#f59e0b" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           </div>

@@ -307,7 +307,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("启动 星枢 失败")
+        .expect("启动 星枢OpenClaw 失败")
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
                 #[cfg(target_os = "windows")]

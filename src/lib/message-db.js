@@ -1,9 +1,9 @@
 /**
  * 本地消息存储 - IndexedDB
- * 从 clawapp 移植，适配 星枢
+ * 从 clawapp 移植，适配 星枢OpenClaw
  */
 
-const DB_NAME = '星枢-messages'
+const DB_NAME = '星枢OpenClaw-messages'
 const DB_VERSION = 1
 const STORE_NAME = 'messages'
 const STORE_SESSIONS = 'sessions'

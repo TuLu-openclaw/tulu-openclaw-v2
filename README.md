@@ -916,7 +916,7 @@ sudo systemctl restart clawpanel  # ?pm2 restart clawpanel
 > 如果遗漏了你的贡献，?[提交 Issue](https://github.com/qingchencloud/clawpanel/issues/new) 告知我们，我们会第一时间补充?
 ## 许可?
 本项目采?[AGPL-3.0](LICENSE) 开源协议。企业如需闭源商用，可联系获取商业授权?
-© 2026 武汉星枢天下网络科技有限公司 | [claw.qt.cool](https://claw.qt.cool)
+© 2026 武汉星枢OpenClaw天下网络科技有限公司 | [claw.qt.cool](https://claw.qt.cool)
 
 <!-- CI-trigger: 20260417-102401 -->
 #   t r i g g e r 

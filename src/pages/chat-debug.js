@@ -1,6 +1,6 @@
 /**
  * 系统诊断页面
- * 全面检测 星枢 各项功能状态，快速定位问题
+ * 全面检测 星枢OpenClaw 各项功能状态，快速定位问题
  */
 import { api, getRequestLogs, clearRequestLogs, isTauriRuntime } from '../lib/tauri-api.js'
 import { wsClient } from '../lib/ws-client.js'

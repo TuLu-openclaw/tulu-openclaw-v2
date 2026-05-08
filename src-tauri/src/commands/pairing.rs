@@ -153,7 +153,7 @@ fn patch_gateway_origins() {
 #[tauri::command]
 pub fn check_pairing_status() -> Result<bool, String> {
     // 读取设备密钥
-    let device_key_path = crate::commands::openclaw_dir().join("星枢-device-key.json");
+    let device_key_path = crate::commands::openclaw_dir().join("星枢OpenClaw-device-key.json");
     if !device_key_path.exists() {
         return Ok(false);
     }

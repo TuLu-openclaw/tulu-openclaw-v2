@@ -1421,7 +1421,7 @@ pub fn validate_openclaw_config() -> Result<Value, String> {
                     // 检查 agents 子字段（上游 schema 只定义 agents.list）
                     if agents_obj.contains_key("profiles") {
                         warnings.push(
-                            "发现 agents.profiles 字段，上游 schema 未定义此字段，星枢 会自动清理"
+                            "发现 agents.profiles 字段，上游 schema 未定义此字段，星枢OpenClaw 会自动清理"
                                 .to_string(),
                         );
                     }
@@ -1488,7 +1488,7 @@ pub fn validate_openclaw_config() -> Result<Value, String> {
         "warnings": warnings,
         "suggestions": if !ui_fields_found.is_empty() || !unknown_fields.is_empty() {
             vec![
-                "UI 专属字段会被 星枢 自动清理，不影响 OpenClaw 运行".to_string(),
+                "UI 专属字段会被 星枢OpenClaw 自动清理，不影响 OpenClaw 运行".to_string(),
                 "未知字段如果是用户手动添加的，请确保符合 OpenClaw schema".to_string(),
                 "如果遇到 'Unrecognized key' 错误，请检查配置文件是否包含 OpenClaw 不支持的字段".to_string(),
             ]
@@ -1712,7 +1712,7 @@ fn has_ui_fields(val: &Value) -> bool {
     false
 }
 
-/// 清理 星枢 内部字段，避免污染 openclaw.json 导致 Gateway 启动失败
+/// 清理 星枢OpenClaw 内部字段，避免污染 openclaw.json 导致 Gateway 启动失败
 /// Issue #89: version info 字段被写入 openclaw.json → Unknown config keys
 /// Issue #127: 增强清理逻辑，保留 OpenClaw 合法的配置字段
 ///
@@ -1726,7 +1726,7 @@ fn has_ui_fields(val: &Value) -> bool {
 /// - models.providers 中每个 model 的测试状态：lastTestAt, latency, testStatus, testError
 fn strip_ui_fields(mut val: Value) -> Value {
     if let Some(obj) = val.as_object_mut() {
-        // 清理根层级 星枢 内部字段（version info 等）
+        // 清理根层级 星枢OpenClaw 内部字段（version info 等）
         // 注意：保留 browser.* 和 agents.list，这些是 OpenClaw 合法的配置字段
         for key in &[
             "current",
@@ -3681,7 +3681,7 @@ async fn upgrade_openclaw_inner(
             let _ = app.emit(
                 "upgrade-log",
                 format!(
-                    "星枢 {} 默认绑定 OpenClaw 稳定版: {}",
+                    "星枢OpenClaw {} 默认绑定 OpenClaw 稳定版: {}",
                     panel_version(),
                     recommended
                 ),
@@ -4605,7 +4605,7 @@ fn is_nvm_active_version(nvm_dir: &str, version_dir: &std::path::Path) -> bool {
     false
 }
 
-/// 保存用户自定义的 Node.js 路径到 ~/.openclaw/星枢.json
+/// 保存用户自定义的 Node.js 路径到 ~/.openclaw/星枢OpenClaw.json
 #[tauri::command]
 pub fn save_custom_node_path(node_dir: String) -> Result<(), String> {
     let config_path = super::panel_config_path();
@@ -4807,7 +4807,7 @@ async fn reload_gateway_via_http() -> Result<String, String> {
         let url = format!("http://127.0.0.1:{}/__api/reload", ctrl_port);
         let client = crate::commands::build_http_client(
             std::time::Duration::from_secs(5),
-            Some("星枢"),
+            Some("星枢OpenClaw"),
         )?;
 
         let mut req = client.post(&url);
@@ -5360,23 +5360,23 @@ pub fn patch_model_vision() -> Result<bool, String> {
     Ok(changed)
 }
 
-/// 检查 星枢 自身是否有新版本（GitHub → Gitee 自动降级）
+/// 检查 星枢OpenClaw 自身是否有新版本（GitHub → Gitee 自动降级）
 #[tauri::command]
 pub async fn check_panel_update() -> Result<Value, String> {
     let client =
-        crate::commands::build_http_client(std::time::Duration::from_secs(8), Some("星枢"))
+        crate::commands::build_http_client(std::time::Duration::from_secs(8), Some("星枢OpenClaw"))
             .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
     // 先尝试 GitHub，失败后降级 Gitee
     let sources = [
         (
-            "https://api.github.com/repos/qingchencloud/星枢/releases/latest",
-            "https://github.com/qingchencloud/星枢/releases",
+            "https://api.github.com/repos/qingchencloud/星枢OpenClaw/releases/latest",
+            "https://github.com/qingchencloud/星枢OpenClaw/releases",
             "github",
         ),
         (
-            "https://gitee.com/api/v5/repos/QtCodeCreators/星枢/releases/latest",
-            "https://gitee.com/QtCodeCreators/星枢/releases",
+            "https://gitee.com/api/v5/repos/QtCodeCreators/星枢OpenClaw/releases/latest",
+            "https://gitee.com/QtCodeCreators/星枢OpenClaw/releases",
             "gitee",
         ),
     ];
@@ -5429,7 +5429,7 @@ pub async fn check_panel_update() -> Result<Value, String> {
     Err(last_err)
 }
 
-// === 面板配置 (星枢.json) ===
+// === 面板配置 (星枢OpenClaw.json) ===
 
 /// 获取当前生效的 OpenClaw 配置目录路径
 #[tauri::command]
@@ -5492,7 +5492,7 @@ pub async fn test_proxy(url: Option<String>) -> Result<Value, String> {
 
     let client = crate::commands::build_http_client(
         std::time::Duration::from_secs(10),
-        Some("星枢"),
+        Some("星枢OpenClaw"),
     )
     .map_err(|e| format!("创建代理客户端失败: {e}"))?;
 

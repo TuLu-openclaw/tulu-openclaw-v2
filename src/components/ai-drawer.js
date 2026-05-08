@@ -9,7 +9,7 @@ import { toast } from './toast.js'
 
 const BOT_ICON = '<svg viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="5" y="8" width="14" height="12" rx="2"/><path d="M9 13h0"/><path d="M15 13h0"/><path d="M10 17h4"/></svg>'
 
-const POS_KEY = '星枢-fab-pos'
+const POS_KEY = '星枢OpenClaw-fab-pos'
 const ENABLE_AI_FAB = true
 
 // ── 页面上下文收集器注册表 ──
@@ -224,7 +224,7 @@ function restorePosition(fab) {
   } catch {}
 }
 
-const HINT_KEY = '星枢-fab-hint-shown'
+const HINT_KEY = '星枢OpenClaw-fab-hint-shown'
 function showDragHintOnce(el) {
   if (!el || localStorage.getItem(HINT_KEY)) return
   const tip = document.createElement('div')

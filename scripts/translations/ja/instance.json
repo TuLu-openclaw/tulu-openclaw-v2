@@ -14,6 +14,6 @@
   "adding": "追加中...",
   "switchedTo": "{name} に切り替えました",
   "current": "現在",
-  "remoteHint": "リモートサーバーで 星枢 (serve.js) が実行されている必要があります。",
+  "remoteHint": "リモートサーバーで 星枢OpenClaw (serve.js) が実行されている必要があります。",
   "example": "例"
 }

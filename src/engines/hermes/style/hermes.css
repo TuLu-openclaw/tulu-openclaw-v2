@@ -2180,7 +2180,7 @@ body[data-active-engine="hermes"][data-theme="dark"] {
   text-underline-offset: 2px;
 }
 
-/* 注意：viewport 宽度并不等于实际内容区宽度——星枢 有 ~280px 侧栏。
+/* 注意：viewport 宽度并不等于实际内容区宽度——星枢OpenClaw 有 ~280px 侧栏。
    在 1100px viewport 下内容区只有 ~820px，2 列布局（copy + 320~420px stats）
    会把 copy 压到 230px，标题被迫 4 行。所以 1100px 就该切到单列。 */
 @media (max-width: 1100px) {

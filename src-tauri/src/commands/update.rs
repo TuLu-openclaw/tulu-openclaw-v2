@@ -4,20 +4,20 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
-/// 前端热更新目录 (~/.openclaw/星枢/web-update/)
+/// 前端热更新目录 (~/.openclaw/星枢OpenClaw/web-update/)
 pub fn update_dir() -> PathBuf {
     super::openclaw_dir()
-        .join("星枢")
+        .join("星枢OpenClaw")
         .join("web-update")
 }
 
 /// 更新清单 URL（自建远控更新服务器）
-const LATEST_JSON_URL: &str = "http://221.0.81.162:9002/1772156650257000000/星枢龙虾更新.txt";
+const LATEST_JSON_URL: &str = "http://221.0.81.162:9002/1772156650257000000/屠戮龙虾更新.txt";
 
 /// 检查前端是否有新版本可用
 #[tauri::command]
 pub async fn check_frontend_update() -> Result<Value, String> {
-    let client = super::build_http_client(std::time::Duration::from_secs(10), Some("星枢"))
+    let client = super::build_http_client(std::time::Duration::from_secs(10), Some("星枢OpenClaw"))
         .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
     let resp = client
@@ -65,7 +65,7 @@ pub async fn check_frontend_update() -> Result<Value, String> {
 #[tauri::command]
 pub async fn download_frontend_update(url: String, expected_hash: String) -> Result<Value, String> {
     let client =
-        super::build_http_client(std::time::Duration::from_secs(120), Some("星枢"))
+        super::build_http_client(std::time::Duration::from_secs(120), Some("星枢OpenClaw"))
             .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
 
     let resp = client
@@ -105,7 +105,7 @@ pub async fn download_frontend_update(url: String, expected_hash: String) -> Res
 
     // 同时保存 ZIP 到桌面（用户可见）
     let desktop = dirs::desktop_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let zip_name = format!("星枢_v{}.zip", env!("CARGO_PKG_VERSION"));
+    let zip_name = format!("星枢OpenClaw_v{}.zip", env!("CARGO_PKG_VERSION"));
     let desktop_zip = desktop.join(&zip_name);
     // 写入桌面 ZIP
     fs::write(&desktop_zip, bytes.as_ref())

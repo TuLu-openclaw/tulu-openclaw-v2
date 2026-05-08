@@ -208,7 +208,7 @@ function _checkMultiInstances(el) {
   }).catch(() => {})
 }
 
-const LS_SIDEBAR_COLLAPSED = '星枢_sidebar_collapsed'
+const LS_SIDEBAR_COLLAPSED = '星枢OpenClaw_sidebar_collapsed'
 
 function _isDesktopSidebarCollapsed() {
   try { return localStorage.getItem(LS_SIDEBAR_COLLAPSED) === '1' } catch { return false }
@@ -235,9 +235,9 @@ export function renderSidebar(el) {
   let html = `
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <img src="/images/logo.png" alt="星枢">
+        <img src="/images/logo.png" alt="星枢OpenClaw">
       </div>
-      <span class="sidebar-title">星枢</span>
+      <span class="sidebar-title">星枢OpenClaw</span>
       <button class="sidebar-collapse-btn" id="btn-sidebar-collapse" title="${t('sidebar.collapse')}">${collapsed ? '»' : '«'}</button>
       <button class="sidebar-close-btn" id="btn-sidebar-close" title="${t('sidebar.closeMenu')}">&times;</button>
     </div>
