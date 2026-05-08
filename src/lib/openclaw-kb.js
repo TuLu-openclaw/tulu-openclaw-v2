@@ -235,7 +235,7 @@ npm install -g openclaw@latest
 - **GPT-AI 网关官网**：https://gpt.qt.cool/
 - **每日签到页**：https://gpt.qt.cool/checkin
 - **用户后台**：https://gpt.qt.cool/user
-- **屠戮导航站**：https://qt.cool/
+- **星枢导航站**：https://qt.cool/
 
 ### 获取密钥
 1. 前往 https://gpt.qt.cool/checkin 每日签到领取免费额度

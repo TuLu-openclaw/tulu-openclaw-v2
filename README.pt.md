@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
+  <img src="public/images/logo-brand.png" width="360" alt="星枢OpenClaw">
 </p>
 
 <p align="center">
@@ -25,10 +25,10 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw Showcase">
+  <img src="docs/feature-showcase.gif" width="800" alt="星枢OpenClaw Showcase">
 </p>
 
-屠戮OpenClaw é um painel de gestão visual para o framework de AI Agent [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Possui um **assistente IA inteligente integrado** que ajuda a instalar o OpenClaw com um clique, diagnosticar configurações automaticamente, resolver problemas e corrigir erros. 8 ferramentas + 4 modos + Q&A interativo — fácil de gerenciar para iniciantes e especialistas.
+星枢OpenClaw é um painel de gestão visual para o framework de AI Agent [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Possui um **assistente IA inteligente integrado** que ajuda a instalar o OpenClaw com um clique, diagnosticar configurações automaticamente, resolver problemas e corrigir erros. 8 ferramentas + 4 modos + Q&A interativo — fácil de gerenciar para iniciantes e especialistas.
 
 > 🌐 **Website**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Download**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 

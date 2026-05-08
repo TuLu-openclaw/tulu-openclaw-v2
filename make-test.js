@@ -3,7 +3,7 @@ const content = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>屠戮影视 - 测试</title>
+<title>星枢影视 - 测试</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto;background:#0f0f23;color:#fff;min-height:100vh}
@@ -29,7 +29,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto;background:#
 </style>
 </head>
 <body>
-<div class="header"><h1>🎬 屠戮影视</h1></div>
+<div class="header"><h1>🎬 星枢影视</h1></div>
 <div class="container">
 <div style="text-align:center">
 <button class="test-btn" id="btnSearch">搜索</button>

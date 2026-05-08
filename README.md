@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
+  <img src="public/images/logo-brand.png" width="360" alt="星枢OpenClaw">
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw 功能全景">
+  <img src="docs/feature-showcase.gif" width="800" alt="星枢OpenClaw 功能全景">
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
   </a>
 </p>
 
-屠戮OpenClaw ?[OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent 框架的可视化管理面板?*内置智能 AI 助手**，帮你一键安?OpenClaw、自动诊断配置、排查问题、修复错误? 大工?+ 4 种模?+ 交互式问答，从新手到老手都能轻松管理?
+星枢OpenClaw ?[OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent 框架的可视化管理面板?*内置智能 AI 助手**，帮你一键安?OpenClaw、自动诊断配置、排查问题、修复错误? 大工?+ 4 种模?+ 交互式问答，从新手到老手都能轻松管理?
 > 🌐 **官网**: [claw.qt.cool](https://claw.qt.cool/)  |  📦 **下载**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
 ### 🎁 晴辰?AI 接口
@@ -53,7 +53,7 @@
 配合 OpenClaw 使用：在 [gpt.qt.cool](https://gpt.qt.cool) 注册并签到领取测试额度，获取 API Key 后，初始?OpenClaw 时选择 **OpenAI Compatible** 提供商，填入地址?Key 即可使用?
 > ⚠️ **合规与责任边?*：本平台仅提供技术测试，禁止用于违法违规、绕过安全机制等用途。违规将限制访问并保留处置权。妥善保?API Key，勿在截?日志/代码库中泄露。具体规则以平台最新政策与页面展示为准?
 ### 🔥 开发板 / 嵌入式设备支?
-屠戮OpenClaw 提供**?Web 版部署模?*（零 GUI 依赖），天然兼容 ARM64 开发板和嵌入式设备?
+星枢OpenClaw 提供**?Web 版部署模?*（零 GUI 依赖），天然兼容 ARM64 开发板和嵌入式设备?
 - **Orange Pi / 树莓?/ RK3588** ?ARM64 板子 ?`npm run serve` 即可运行
 - **Docker ARM64 镜像** ?`docker run ghcr.io/qingchencloud/openclaw:latest` 开箱即?- **Armbian / Debian / Ubuntu Server** ?一键部署脚本自动检测架?- 无需 Rust / Tauri / 图形界面?*只要?Node.js 18+ 就能?*
 
@@ -103,41 +103,41 @@
 
 | 芯片 | 安装?| 说明 |
 |------|--------|------|
-| Apple Silicon (M1/M2/M3/M4) | `屠戮OpenClaw_x.x.x_aarch64.dmg` | 2020 年末及之后的 Mac |
-| Intel | `屠戮OpenClaw_x.x.x_x64.dmg` | 2020 年及之前?Mac |
+| Apple Silicon (M1/M2/M3/M4) | `星枢OpenClaw_x.x.x_aarch64.dmg` | 2020 年末及之后的 Mac |
+| Intel | `星枢OpenClaw_x.x.x_x64.dmg` | 2020 年及之前?Mac |
 
 > 不确定芯片类型？点击左上? ?关于本机，查看「芯片」一栏?
-安装方式：打开 `.dmg` 文件?*先将 屠戮OpenClaw 拖入「应用程序」文件夹**，再双击打开?
+安装方式：打开 `.dmg` 文件?*先将 星枢OpenClaw 拖入「应用程序」文件夹**，再双击打开?
 > **⚠️ 首次打开提示"已损??无法验证开发??* 由于应用未签名，macOS 会拦截。请在终端执行以下命令解除限制：
 >
 > ```bash
-> sudo xattr -rd com.apple.quarantine /Applications/屠戮OpenClaw.app
+> sudo xattr -rd com.apple.quarantine /Applications/星枢OpenClaw.app
 > ```
 >
-> 或者前往「系统设??隐私与安全性」，找到 屠戮OpenClaw 点击「仍要打开」?>
+> 或者前往「系统设??隐私与安全性」，找到 星枢OpenClaw 点击「仍要打开」?>
 > 提示 `No such file`？说明没有拖入应用程序文件夹。请先拖入，或改用：
 > ```bash
-> sudo xattr -rd com.apple.quarantine ~/Downloads/屠戮OpenClaw.app
+> sudo xattr -rd com.apple.quarantine ~/Downloads/星枢OpenClaw.app
 > ```
 
 ### Windows
 
 | 格式 | 安装?| 说明 |
 |------|--------|------|
-| EXE 安装?| `屠戮OpenClaw_x.x.x_x64-setup.exe` | 推荐，双击安?|
-| MSI 安装?| `屠戮OpenClaw_x.x.x_x64_en-US.msi` | 企业部署 / 静默安装 |
+| EXE 安装?| `星枢OpenClaw_x.x.x_x64-setup.exe` | 推荐，双击安?|
+| MSI 安装?| `星枢OpenClaw_x.x.x_x64_en-US.msi` | 企业部署 / 静默安装 |
 
 ### Linux
 
 | 格式 | 安装?| 说明 |
 |------|--------|------|
-| AppImage | `屠戮OpenClaw_x.x.x_amd64.AppImage` | 免安装，`chmod +x` 后直接运?|
-| DEB | `屠戮OpenClaw_x.x.x_amd64.deb` | Debian / Ubuntu：`sudo dpkg -i *.deb` |
-| RPM | `屠戮OpenClaw-x.x.x-1.x86_64.rpm` | Fedora / RHEL：`sudo rpm -i *.rpm` |
+| AppImage | `星枢OpenClaw_x.x.x_amd64.AppImage` | 免安装，`chmod +x` 后直接运?|
+| DEB | `星枢OpenClaw_x.x.x_amd64.deb` | Debian / Ubuntu：`sudo dpkg -i *.deb` |
+| RPM | `星枢OpenClaw-x.x.x-1.x86_64.rpm` | Fedora / RHEL：`sudo rpm -i *.rpm` |
 
 ### Linux 服务器（Web 版）
 
-没有桌面环境？一键部?屠戮OpenClaw Web 版，通过浏览器远程管?OpenClaw?
+没有桌面环境？一键部?星枢OpenClaw Web 版，通过浏览器远程管?OpenClaw?
 ```bash
 curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
 ```
@@ -161,17 +161,17 @@ docker run -d --name clawpanel --restart unless-stopped \
 
 ## 升级面板
 
-屠戮OpenClaw 提供多种升级方式，根据你的安装方式选择对应方案?
+星枢OpenClaw 提供多种升级方式，根据你的安装方式选择对应方案?
 ### macOS / Windows 桌面版升?
 桌面版内?*自动更新机制**，新版本发布后会自动提示升级?
-1. 打开 屠戮OpenClaw，如有新版本会弹出升级提?2. 点击「立即升级」，等待下载完成后自动安装重?3. 也可前往「关于」页面手动检查更?
+1. 打开 星枢OpenClaw，如有新版本会弹出升级提?2. 点击「立即升级」，等待下载完成后自动安装重?3. 也可前往「关于」页面手动检查更?
 > **手动升级**：如果自动更新失败，可前往 [Releases](https://github.com/qingchencloud/clawpanel/releases/latest) 下载最新安装包，覆盖安装即可。数据不会丢失?
 ### Linux 桌面版升?
 | 格式 | 升级命令 |
 |------|----------|
 | AppImage | 下载最?`.AppImage` 文件，替换旧文件，`chmod +x` 后运?|
-| DEB | `sudo dpkg -i 屠戮OpenClaw_最新版本_amd64.deb` |
-| RPM | `sudo rpm -U 屠戮OpenClaw-最新版?1.x86_64.rpm` |
+| DEB | `sudo dpkg -i 星枢OpenClaw_最新版本_amd64.deb` |
+| RPM | `sudo rpm -U 星枢OpenClaw-最新版?1.x86_64.rpm` |
 
 ### Linux Web 版升?
 **方式一：一键升级脚本（推荐?*
@@ -243,7 +243,7 @@ npm run serve  # 重新启动
 ### macOS 桌面版卸?
 ```bash
 # 1. 删除应用
-sudo rm -rf /Applications/屠戮OpenClaw.app
+sudo rm -rf /Applications/星枢OpenClaw.app
 
 # 2. 清理应用数据（可选，删除后配置将丢失?rm -rf ~/Library/Application\ Support/com.clawpanel.app
 rm -rf ~/Library/Caches/com.clawpanel.app
@@ -252,9 +252,9 @@ rm -rf ~/Library/Preferences/com.clawpanel.app.plist
 
 ### Windows 桌面版卸?
 **方式一：通过系统设置**
-1. 打开「设置」→「应用」→「已安装的应用?2. 搜索 **屠戮OpenClaw**，点击「卸载?
+1. 打开「设置」→「应用」→「已安装的应用?2. 搜索 **星枢OpenClaw**，点击「卸载?
 **方式二：通过控制面板**
-1. 打开「控制面板」→「程序」→「卸载程序?2. 找到 **屠戮OpenClaw**，右键「卸载?
+1. 打开「控制面板」→「程序」→「卸载程序?2. 找到 **星枢OpenClaw**，右键「卸载?
 **清理残留数据（可选）**?```powershell
 # 删除应用数据
 Remove-Item -Recurse -Force "$env:APPDATA\com.clawpanel.app"
@@ -266,7 +266,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\com.clawpanel.app"
 |------|----------|
 | AppImage | 直接删除 `.AppImage` 文件即可 |
 | DEB | `sudo dpkg -r clawpanel` |
-| RPM | `sudo rpm -e 屠戮OpenClaw` |
+| RPM | `sudo rpm -e 星枢OpenClaw` |
 
 清理应用数据（可选）?```bash
 rm -rf ~/.local/share/com.clawpanel.app
@@ -334,7 +334,7 @@ docker rmi $(docker images --filter "reference=*clawpanel*" -q) 2>/dev/null
 ## 功能截图
 
 <p align="center">
-  <img src="docs/quick-stats.gif" width="800" alt="屠戮OpenClaw 数据概览">
+  <img src="docs/quick-stats.gif" width="800" alt="星枢OpenClaw 数据概览">
 </p>
 
 <p align="center">
@@ -414,7 +414,7 @@ docker rmi $(docker images --filter "reference=*clawpanel*" -q) 2>/dev/null
 
 ## 🤖 AI 助手亮点
 
-屠戮OpenClaw 内置?AI 助手不只是聊天机器人——它?*直接操作你的系统**，帮你诊断、修复、甚至提?PR?
+星枢OpenClaw 内置?AI 助手不只是聊天机器人——它?*直接操作你的系统**，帮你诊断、修复、甚至提?PR?
 ### 四种操作模式
 
 一键切换，界面颜色随模式变化，清晰感知当前权限状态：
@@ -577,7 +577,7 @@ Web 版功能与桌面版一致，后端通过 `scripts/dev-api.js` 调用本机
 
 ### 1. 初始设置
 
-首次启动 屠戮OpenClaw 会自动进?*初始设置**页面，引导你完成环境检测：
+首次启动 星枢OpenClaw 会自动进?*初始设置**页面，引导你完成环境检测：
 
 - ?**Node.js** ?自动检测，未安装时提供一键安?- ?**Git** ?自动检测并配置 HTTPS 模式（解?SSH 不通问题）
 - ?**OpenClaw** ?一键安装，可选汉化版或原?
@@ -607,7 +607,7 @@ Web 版功能与桌面版一致，后端通过 `scripts/dev-api.js` 调用本机
 Web 版适用?Linux 服务器（无桌面环境），通过浏览器远程管?OpenClaw?
 ### 环境要求
 
-- **Node.js** >= 18（推?22 LTS?- **Git**（用?OpenClaw 依赖安装?- **端口** 1420（屠戮OpenClaw? 18789（Gateway?
+- **Node.js** >= 18（推?22 LTS?- **Git**（用?OpenClaw 依赖安装?- **端口** 1420（星枢OpenClaw? 18789（Gateway?
 ### 一键部?
 ```bash
 curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
@@ -661,7 +661,7 @@ server {
 
 ## 消息渠道配置
 
-屠戮OpenClaw 支持?AI 接入多种即时通讯平台，在「消息渠道」页面统一管理?
+星枢OpenClaw 支持?AI 接入多种即时通讯平台，在「消息渠道」页面统一管理?
 ### 支持的平?
 | 平台 | 类型 | 配置难度 | 说明 |
 |------|------|---------|------|
@@ -674,7 +674,7 @@ server {
 ### 配置步骤（以飞书为例?
 1. 在飞书开放平台创?*企业自建应用**，开?*机器?*能力
 2. 获取 `App ID` ?`App Secret`
-3. ?屠戮OpenClaw「消息渠道」页面选择飞书，填入凭?4. 点击「校验」确认连接，然后「保存?5. Gateway 会自动重载，飞书机器人即刻可?
+3. ?星枢OpenClaw「消息渠道」页面选择飞书，填入凭?4. 点击「校验」确认连接，然后「保存?5. Gateway 会自动重载，飞书机器人即刻可?
 > 📖 详细教程：[飞书接入指南](docs/dingtalk-integration.md) | [钉钉接入指南](docs/dingtalk-integration.md)
 
 ### 注意事项
@@ -692,23 +692,23 @@ server {
 没有苹果开发者签名，macOS Gatekeeper 会拦截。终端执行：
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/屠戮OpenClaw.app
+sudo xattr -rd com.apple.quarantine /Applications/星枢OpenClaw.app
 ```
 
 或前往「系统设??隐私与安全性」点击「仍要打开」?
 ### macOS 检测不?Node.js
 
-?Finder/Dock 启动 屠戮OpenClaw 时，应用?PATH 环境变量可能不包?Node.js 安装路径?
+?Finder/Dock 启动 星枢OpenClaw 时，应用?PATH 环境变量可能不包?Node.js 安装路径?
 **v0.4.1 已修?*：自动补?`/usr/local/bin`、`/opt/homebrew/bin`、`~/.nvm`、`~/.volta` 等常见路径?
-临时解决：从终端启动 屠戮OpenClaw?
+临时解决：从终端启动 星枢OpenClaw?
 ```bash
-open /Applications/屠戮OpenClaw.app
+open /Applications/星枢OpenClaw.app
 ```
 
 ### Windows 安装 OpenClaw ?ENOENT (-4058)
 
 通常是文件权限或 npm 缓存问题?
-1. 以管理员身份运行 屠戮OpenClaw
+1. 以管理员身份运行 星枢OpenClaw
 2. 或打开 PowerShell（管理员）手动安装：
    ```powershell
    npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
@@ -727,14 +727,14 @@ git config --global url."https://github.com/".insteadOf git@github.com:
 
 ### Windows 安装?EPERM (operation not permitted)
 
-文件被其他进程锁定。先关闭 屠戮OpenClaw 和所?Node.js 进程，以管理员身份打开 PowerShell 重装?
+文件被其他进程锁定。先关闭 星枢OpenClaw 和所?Node.js 进程，以管理员身份打开 PowerShell 重装?
 ```powershell
 npm cache clean --force
 npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
 ```
 
 ### 安装?Node.js 检测不到（Windows?
-安装 Node.js 后需?*重启 屠戮OpenClaw**，新?PATH 环境变量才能生效?
+安装 Node.js 后需?*重启 星枢OpenClaw**，新?PATH 环境变量才能生效?
 如果安装在非默认路径（如 `D:\nodejs`、`F:\AI\Node`），请确认该目录已加入系?PATH 环境变量?*v0.4.2+ 已自动扫描常见安装路径?*
 
 ### Gateway 启动失败
@@ -751,9 +751,9 @@ npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.
 如果仍无法解决，查看「日志查看」页面的 Gateway 日志获取详细错误信息?
 ### 模型连接超时 / 测试失败
 
-1. **检?API Key** ?确认 Key 未过期、余额充?2. **检?Base URL** ?不同服务?URL 格式不同，注意结尾不要多 `/v1`（屠戮OpenClaw 会自动处理）
+1. **检?API Key** ?确认 Key 未过期、余额充?2. **检?Base URL** ?不同服务?URL 格式不同，注意结尾不要多 `/v1`（星枢OpenClaw 会自动处理）
 3. **网络问题** ?国内访问 OpenAI 需要代理；DeepSeek / 阿里通义 / Ollama 国内直连
-4. **Ollama 特殊处理** ?URL ?`http://127.0.0.1:11434`（不?`/v1`，屠戮OpenClaw 自动补全?
+4. **Ollama 特殊处理** ?URL ?`http://127.0.0.1:11434`（不?`/v1`，星枢OpenClaw 自动补全?
 ### WebSocket 断连 / 聊天无响?
 1. 确认 Gateway 正在运行（顶部状态栏显示绿色?2. 反向代理需要配?WebSocket 支持（参见上?Nginx 配置?3. 如果使用 HTTPS，WebSocket 需?`wss://` 协议（v0.7.3+ 已自动适配?4. 清除浏览器缓存后刷新页面
 
@@ -782,7 +782,7 @@ sudo systemctl restart clawpanel  # ?pm2 restart clawpanel
 | [cftunnel](https://github.com/qingchencloud/cftunnel) | Cloudflare Tunnel 内网穿透工?|
 
 ## 赞助?
-感谢以下赞助商对 屠戮OpenClaw 项目的支持：
+感谢以下赞助商对 星枢OpenClaw 项目的支持：
 
 <table align="center">
   <tr>
@@ -803,7 +803,7 @@ sudo systemctl restart clawpanel  # ?pm2 restart clawpanel
 欢迎提交 Issue ?Pull Request。贡献流程详?[CONTRIBUTING.md](CONTRIBUTING.md)?
 ## 致谢
 
-屠戮OpenClaw 的成长离不开每一位贡献者的付出。感谢你们让这个项目变得更好?
+星枢OpenClaw 的成长离不开每一位贡献者的付出。感谢你们让这个项目变得更好?
 ### 🛠 代码贡献?
 感谢以下开发者提?Pull Request，直接参与了代码建设?
 <table>
@@ -825,7 +825,7 @@ sudo systemctl restart clawpanel  # ?pm2 restart clawpanel
 </table>
 
 ### 🐛 社区反馈?
-感谢以下用户提交 Issue 报告 Bug 或建议功能，帮助 屠戮OpenClaw 持续改进?
+感谢以下用户提交 Issue 报告 Bug 或建议功能，帮助 星枢OpenClaw 持续改进?
 <a href="https://github.com/asfork"><img src="https://github.com/asfork.png?size=40" width="32" height="32" title="asfork"></a>
 <a href="https://github.com/p1ayer222"><img src="https://github.com/p1ayer222.png?size=40" width="32" height="32" title="p1ayer222"></a>
 <a href="https://github.com/ntescn"><img src="https://github.com/ntescn.png?size=40" width="32" height="32" title="ntescn"></a>
@@ -916,7 +916,7 @@ sudo systemctl restart clawpanel  # ?pm2 restart clawpanel
 > 如果遗漏了你的贡献，?[提交 Issue](https://github.com/qingchencloud/clawpanel/issues/new) 告知我们，我们会第一时间补充?
 ## 许可?
 本项目采?[AGPL-3.0](LICENSE) 开源协议。企业如需闭源商用，可联系获取商业授权?
-© 2026 武汉屠戮天下网络科技有限公司 | [claw.qt.cool](https://claw.qt.cool)
+© 2026 武汉星枢天下网络科技有限公司 | [claw.qt.cool](https://claw.qt.cool)
 
 <!-- CI-trigger: 20260417-102401 -->
 #   t r i g g e r 

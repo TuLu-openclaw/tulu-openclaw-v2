@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
+  <img src="public/images/logo-brand.png" width="360" alt="星枢OpenClaw">
 </p>
 
 <p align="center">
@@ -28,10 +28,10 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw Feature Showcase">
+  <img src="docs/feature-showcase.gif" width="800" alt="星枢OpenClaw Feature Showcase">
 </p>
 
-屠戮OpenClaw is a visual management panel for the [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent framework. It features a **built-in intelligent AI assistant** that helps you install OpenClaw with one click, auto-diagnose configurations, troubleshoot issues, and fix errors. 8 tools + 4 modes + interactive Q&A — easy to manage for beginners and experts alike.
+星枢OpenClaw is a visual management panel for the [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent framework. It features a **built-in intelligent AI assistant** that helps you install OpenClaw with one click, auto-diagnose configurations, troubleshoot issues, and fix errors. 8 tools + 4 modes + interactive Q&A — easy to manage for beginners and experts alike.
 
 > 🌐 **Website**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Download**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
@@ -52,7 +52,7 @@
 
 ### 🔥 Dev Board / Embedded Device Support
 
-屠戮OpenClaw provides a **pure Web deployment mode** (zero GUI dependency), natively compatible with ARM64 boards:
+星枢OpenClaw provides a **pure Web deployment mode** (zero GUI dependency), natively compatible with ARM64 boards:
 
 - **Orange Pi / Raspberry Pi / RK3588** — `npm run serve` to run
 - **Docker ARM64** — `docker run ghcr.io/qingchencloud/openclaw:latest`
@@ -101,25 +101,25 @@ Go to [Releases](https://github.com/qingchencloud/clawpanel/releases/latest) for
 
 | Chip | Installer | Notes |
 |------|-----------|-------|
-| Apple Silicon (M1/M2/M3/M4) | `屠戮OpenClaw_x.x.x_aarch64.dmg` | Macs from late 2020+ |
-| Intel | `屠戮OpenClaw_x.x.x_x64.dmg` | Macs 2020 and earlier |
+| Apple Silicon (M1/M2/M3/M4) | `星枢OpenClaw_x.x.x_aarch64.dmg` | Macs from late 2020+ |
+| Intel | `星枢OpenClaw_x.x.x_x64.dmg` | Macs 2020 and earlier |
 
-> **⚠️ "Damaged" or "unverified developer"?** App is unsigned. Run: `sudo xattr -rd com.apple.quarantine /Applications/屠戮OpenClaw.app`
+> **⚠️ "Damaged" or "unverified developer"?** App is unsigned. Run: `sudo xattr -rd com.apple.quarantine /Applications/星枢OpenClaw.app`
 
 ### Windows
 
 | Format | Installer | Notes |
 |--------|-----------|-------|
-| EXE | `屠戮OpenClaw_x.x.x_x64-setup.exe` | Recommended |
-| MSI | `屠戮OpenClaw_x.x.x_x64_en-US.msi` | Enterprise / silent install |
+| EXE | `星枢OpenClaw_x.x.x_x64-setup.exe` | Recommended |
+| MSI | `星枢OpenClaw_x.x.x_x64_en-US.msi` | Enterprise / silent install |
 
 ### Linux
 
 | Format | Installer | Notes |
 |--------|-----------|-------|
-| AppImage | `屠戮OpenClaw_x.x.x_amd64.AppImage` | No install, `chmod +x` and run |
-| DEB | `屠戮OpenClaw_x.x.x_amd64.deb` | `sudo dpkg -i *.deb` |
-| RPM | `屠戮OpenClaw-x.x.x-1.x86_64.rpm` | `sudo rpm -i *.rpm` |
+| AppImage | `星枢OpenClaw_x.x.x_amd64.AppImage` | No install, `chmod +x` and run |
+| DEB | `星枢OpenClaw_x.x.x_amd64.deb` | `sudo dpkg -i *.deb` |
+| RPM | `星枢OpenClaw-x.x.x-1.x86_64.rpm` | `sudo rpm -i *.rpm` |
 
 ### Linux Server (Web Version)
 
@@ -213,7 +213,7 @@ Issues and Pull Requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 
 ## Acknowledgements
 
-屠戮OpenClaw keeps growing because of every contributor in the community. Thank you for helping make the project better.
+星枢OpenClaw keeps growing because of every contributor in the community. Thank you for helping make the project better.
 
 ### Code Contributors
 
@@ -328,4 +328,4 @@ If you find this project useful, consider supporting us via USDT (BNB Smart Chai
 
 This project is licensed under [AGPL-3.0](LICENSE). For commercial/proprietary use without open-source requirements, contact us for a commercial license.
 
-© 2026 QingchenCloud (武汉屠戮天下网络科技有限公司) | [claw.qt.cool](https://claw.qt.cool)
+© 2026 QingchenCloud (武汉星枢天下网络科技有限公司) | [claw.qt.cool](https://claw.qt.cool)

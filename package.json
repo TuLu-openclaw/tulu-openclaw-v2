@@ -6,13 +6,13 @@
   "type": "module",
   "author": "qingchencloud",
   "license": "AGPL-3.0",
-  "homepage": "https://github.com/qingchencloud/屠戮OpenClaw",
+  "homepage": "https://github.com/TuLu-openclaw/tulu-openclaw-v2OpenClaw",
   "repository": {
     "type": "git",
-    "url": "https://github.com/qingchencloud/屠戮OpenClaw.git"
+    "url": "https://github.com/TuLu-openclaw/tulu-openclaw-v2OpenClaw.git"
   },
   "bugs": {
-    "url": "https://github.com/qingchencloud/屠戮OpenClaw/issues"
+    "url": "https://github.com/TuLu-openclaw/tulu-openclaw-v2OpenClaw/issues"
   },
   "keywords": [
     "openclaw",

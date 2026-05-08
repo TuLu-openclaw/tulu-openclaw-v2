@@ -860,9 +860,9 @@ function renderCompany(page) {
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
       <div style="display:flex;align-items:center;gap:12px">
-        <img src="/images/logo-brand.png" alt="屠戮网络科技" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
+        <img src="/images/logo-brand.png" alt="星枢网络科技" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
         <div>
-          <div style="font-weight:700;font-size:var(--font-size-md)">屠戮网络科技有限公司</div>
+          <div style="font-weight:700;font-size:var(--font-size-md)">星枢网络科技有限公司</div>
           <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">星枢</div>
         </div>
       </div>

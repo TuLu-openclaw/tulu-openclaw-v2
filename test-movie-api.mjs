@@ -1,5 +1,5 @@
 /**
- * 屠戮影视 API 测试脚本
+ * 星枢影视 API 测试脚本
  * 测试 VOD 源 + TV 源 + TVBox JSON 加载
  */
 // 使用 Node.js 内置 fetch（Node 18+）
@@ -117,7 +117,7 @@ async function testTvboxJson(name, url) {
 
 async function main() {
   console.log('========================================');
-  console.log('  屠戮影视 API 测试');
+  console.log('  星枢影视 API 测试');
   console.log('========================================');
 
   // VOD 源测试

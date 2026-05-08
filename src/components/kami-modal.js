@@ -159,7 +159,7 @@ function buildModalHTML(initialKami, showPw, remembered, noticeText) {
 
       '<div style="margin-top:20px;text-align:center">' +
         '<a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener"' +
-          ' style="font-size:11px;color:#555;text-decoration:none">屠戮官方 &middot; 卡密系统</a>' +
+          ' style="font-size:11px;color:#555;text-decoration:none">星枢官方 &middot; 卡密系统</a>' +
       '</div>' +
     '</div>'
 }

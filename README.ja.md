@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo-brand.png" width="360" alt="屠戮OpenClaw">
+  <img src="public/images/logo-brand.png" width="360" alt="星枢OpenClaw">
 </p>
 
 <p align="center">
@@ -25,14 +25,14 @@
 ---
 
 <p align="center">
-  <img src="docs/feature-showcase.gif" width="800" alt="屠戮OpenClaw 機能ショーケース">
+  <img src="docs/feature-showcase.gif" width="800" alt="星枢OpenClaw 機能ショーケース">
 </p>
 
-屠戮OpenClaw は [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent フレームワークのビジュアル管理パネルです。**インテリジェント AI アシスタントを内蔵**し、OpenClaw のワンクリックインストール、設定の自動診断、問題の特定と修復をサポートします。8 つのツール + 4 つのモード + インタラクティブ Q&A で、初心者からエキスパートまで簡単に管理できます。
+星枢OpenClaw は [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent フレームワークのビジュアル管理パネルです。**インテリジェント AI アシスタントを内蔵**し、OpenClaw のワンクリックインストール、設定の自動診断、問題の特定と修復をサポートします。8 つのツール + 4 つのモード + インタラクティブ Q&A で、初心者からエキスパートまで簡単に管理できます。
 
 > 🌐 **ウェブサイト**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **ダウンロード**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
-### 🎁 屠戮クラウド AI API
+### 🎁 星枢クラウド AI API
 
 > 内部技術テストプラットフォーム、一部のユーザーに開放。毎日サインインでクレジット獲得。
 
@@ -82,7 +82,7 @@ AI Agent に情熱を持つ開発者とユーザーのコミュニティ — ぜ
 - **定時タスク** — Cron ベースのスケジュール実行、マルチチャンネル配信
 - **ログビューア** — マルチソースリアルタイムログとキーワード検索
 - **メモリ管理** — メモリファイルの表示/編集、ZIP エクスポート、Agent 切替
-- **屠戮クラウド AI API** — 内部テストプラットフォーム、OpenAI 互換
+- **星枢クラウド AI API** — 内部テストプラットフォーム、OpenAI 互換
 - **拡張ツール** — cftunnel トンネル管理、ClawApp ステータス監視
 - **バージョン情報** — バージョン、コミュニティリンク、関連プロジェクト
 
