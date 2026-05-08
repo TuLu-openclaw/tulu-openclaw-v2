@@ -40,7 +40,7 @@ export default {
   customDirPlaceholder: _('例如 E:\\数据\\AI\\.openclaw', 'e.g. E:\\Data\\AI\\.openclaw', '例如 E:\\資料\\AI\\.openclaw'),
   saveBtn: _('保存', 'Save', '儲存', '保存', '저장', 'Lưu', 'Guardar', 'Salvar', 'Сохранить', 'Enregistrer', 'Speichern'),
   resetDefaultBtn: _('恢复默认', 'Reset Default', '恢復預設', 'デフォルトに戻す', '기본값으로 복원', 'Khôi phục mặc định', 'Restaurar predeterminado', 'Restaurar padrão', 'Восстановить по умолчанию', 'Restaurer les paramètres par défaut', 'Standard wiederherstellen'),
-  aiAssistant: _('屠戮助手', 'AI Assistant', '', 'AI アシスタント', 'AI 어시스턴트', 'Trợ lý AI', 'Asistente IA', 'Assistente IA', 'ИИ-ассистент', 'Assistant IA', 'KI-Assistent'),
+  aiAssistant: _('星枢助手', 'AI Assistant', '', 'AI アシスタント', 'AI 어시스턴트', 'Trợ lý AI', 'Asistente IA', 'Assistente IA', 'ИИ-ассистент', 'Assistant IA', 'KI-Assistent'),
   aiAssistantDesc: _('遇到安装问题？AI 助手可以帮你诊断和解决。配置好模型后，点击这里的按钮', 'Having installation issues? AI Assistant can help diagnose and solve them. After configuring a model, use the buttons here', '遇到安裝問題？AI 助手可以幫你診斷和解決。設定好模型后，點擊這裡的按鈕', 'インストールの問題がありますか？AI アシスタントが診断と解決をお手伝いします。モデル設定後は、ここにあるボタンを使ってください。'),
   aiAssistantDescProblem: _('，当前问题会自动发送给 AI 分析', ', current issues will be auto-sent to AI for analysis', '，目前問題會自動發送给 AI 分析'),
   openAiAssistant: _('打开 AI 助手', 'Open AI Assistant', '開啟 AI 助手', 'AI アシスタントを開く', 'AI 어시스턴트 열기', 'Mở trợ lý AI', 'Abrir asistente IA', 'Abrir assistente IA', 'Открыть ИИ-ассистента', 'Ouvrir l\'assistant IA', 'KI-Assistent öffnen'),

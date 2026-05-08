@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>星枢 - OpenClaw AI Agent 可视化管理面板 | 快速搭建、配置、监控你的 AI 智能体</title>
-  <meta name="description" content="星枢 是 OpenClaw AI Agent 框架的可视化管理面板，基于 Tauri v2 构建的跨平台桌面应用。内置屠戮助手（AI Assistant）支持工具调用（终端执行、文件读写、目录浏览），让 AI 帮你诊断和修复 OpenClaw 配置。支持仪表盘监控、多模型配置（OpenAI/DeepSeek/Kimi/Anthropic）、晴辰云 AI 接口一键接入、消息渠道管理、内置 QQ 机器人、实时 AI 聊天、记忆管理、Agent 管理、网关配置、服务管控、日志查看、内网穿透、系统诊断。一键安装 OpenClaw，快速搭建你的私有 AI Agent，开源免费，支持 Windows/macOS/Linux。支持 11 种语言。">
-  <meta name="keywords" content="星枢, OpenClaw, AI Agent, AI 智能体, 管理面板, 可视化管理, 快速搭建, 一键安装, 桌面应用, 跨平台, Tauri, Tauri v2, Rust, 开源, 免费, LLM, 大语言模型, 多模型, 模型配置, OpenAI, DeepSeek, Kimi, Anthropic, Claude, 晴辰云, 晴辰云 AI 接口, QingchenCloud, 屠戮助手, AI Assistant, 消息渠道, QQ 机器人, Telegram, Discord, 实时聊天, AI 对话, 流式响应, 记忆管理, Agent 管理, 多 Agent, 网关配置, Gateway, 服务管理, 日志查看, 内网穿透, Cloudflare Tunnel, 系统诊断, WebSocket, 仪表盘, 监控, 配置管理, 私有部署, 本地部署, 自托管, AI 工具, AI 平台, 智能体平台, 人工智能, 深度学习, 自然语言处理, NLP, 模型调度, 模型切换, 备选模型, 开箱即用, 零代码, 低代码, admin panel, dashboard, open source AI, self-hosted AI, local AI, AI management, Docker 部署, 开发板, 树莓派, ARM, i18n, 多语言">
+  <meta name="description" content="星枢 是 OpenClaw AI Agent 框架的可视化管理面板，基于 Tauri v2 构建的跨平台桌面应用。内置星枢助手（AI Assistant）支持工具调用（终端执行、文件读写、目录浏览），让 AI 帮你诊断和修复 OpenClaw 配置。支持仪表盘监控、多模型配置（OpenAI/DeepSeek/Kimi/Anthropic）、晴辰云 AI 接口一键接入、消息渠道管理、内置 QQ 机器人、实时 AI 聊天、记忆管理、Agent 管理、网关配置、服务管控、日志查看、内网穿透、系统诊断。一键安装 OpenClaw，快速搭建你的私有 AI Agent，开源免费，支持 Windows/macOS/Linux。支持 11 种语言。">
+  <meta name="keywords" content="星枢, OpenClaw, AI Agent, AI 智能体, 管理面板, 可视化管理, 快速搭建, 一键安装, 桌面应用, 跨平台, Tauri, Tauri v2, Rust, 开源, 免费, LLM, 大语言模型, 多模型, 模型配置, OpenAI, DeepSeek, Kimi, Anthropic, Claude, 晴辰云, 晴辰云 AI 接口, QingchenCloud, 星枢助手, AI Assistant, 消息渠道, QQ 机器人, Telegram, Discord, 实时聊天, AI 对话, 流式响应, 记忆管理, Agent 管理, 多 Agent, 网关配置, Gateway, 服务管理, 日志查看, 内网穿透, Cloudflare Tunnel, 系统诊断, WebSocket, 仪表盘, 监控, 配置管理, 私有部署, 本地部署, 自托管, AI 工具, AI 平台, 智能体平台, 人工智能, 深度学习, 自然语言处理, NLP, 模型调度, 模型切换, 备选模型, 开箱即用, 零代码, 低代码, admin panel, dashboard, open source AI, self-hosted AI, local AI, AI management, Docker 部署, 开发板, 树莓派, ARM, i18n, 多语言">
   <meta name="author" content="晴辰云 QingchenCloud">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <link rel="canonical" href="https://claw.qt.cool/">
   <meta property="og:title" content="星枢 - OpenClaw AI Agent 可视化管理面板 | 快速搭建你的 AI 智能体">
-  <meta property="og:description" content="基于 Tauri v2 的跨平台桌面应用，为 OpenClaw AI Agent 提供可视化管理。内置屠戮助手支持工具调用，晴辰云 AI 接口一键接入，消息渠道管理与内置 QQ 机器人。开源免费，支持 11 种语言。">
+  <meta property="og:description" content="基于 Tauri v2 的跨平台桌面应用，为 OpenClaw AI Agent 提供可视化管理。内置星枢助手支持工具调用，晴辰云 AI 接口一键接入，消息渠道管理与内置 QQ 机器人。开源免费，支持 11 种语言。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://claw.qt.cool/">
   <meta property="og:site_name" content="星枢">
@@ -21,7 +21,7 @@
   <meta property="og:image:alt" content="星枢 仪表盘">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="星枢 - OpenClaw AI Agent 可视化管理面板">
-  <meta name="twitter:description" content="基于 Tauri v2 的跨平台桌面应用。内置屠戮助手与晴辰云 AI 接口，支持消息渠道管理、QQ 机器人、多模型配置与实时 AI 聊天。开源免费。">
+  <meta name="twitter:description" content="基于 Tauri v2 的跨平台桌面应用。内置星枢助手与晴辰云 AI 接口，支持消息渠道管理、QQ 机器人、多模型配置与实时 AI 聊天。开源免费。">
   <meta name="twitter:image" content="https://claw.qt.cool/00.png">
   <link rel="icon" href="./logo.png" type="image/png">
   <script type="application/ld+json">
@@ -31,7 +31,7 @@
     "name": "星枢",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
-    "description": "OpenClaw AI Agent 可视化管理面板，基于 Tauri v2 的跨平台桌面应用。内置屠戮助手支持工具调用，晴辰云 AI 接口一键接入。支持仪表盘监控、多模型配置、消息渠道管理、内置 QQ 机器人、实时 AI 聊天、记忆管理、Agent 管理、网关配置、内网穿透等功能。支持 11 种语言。",
+    "description": "OpenClaw AI Agent 可视化管理面板，基于 Tauri v2 的跨平台桌面应用。内置星枢助手支持工具调用，晴辰云 AI 接口一键接入。支持仪表盘监控、多模型配置、消息渠道管理、内置 QQ 机器人、实时 AI 聊天、记忆管理、Agent 管理、网关配置、内网穿透等功能。支持 11 种语言。",
     "url": "https://claw.qt.cool/",
     "downloadUrl": "https://github.com/qingchencloud/星枢/releases/latest",
     "softwareVersion": "3.1.3",
@@ -47,7 +47,7 @@
       "priceCurrency": "CNY"
     },
     "screenshot": "https://claw.qt.cool/00.png",
-    "keywords": "OpenClaw, AI Agent, 管理面板, Tauri, 跨平台, 开源, 免费, LLM, 多模型, 晴辰云, 屠戮助手, Discord"
+    "keywords": "OpenClaw, AI Agent, 管理面板, Tauri, 跨平台, 开源, 免费, LLM, 多模型, 晴辰云, 星枢助手, Discord"
   }
   </script>
   <style>

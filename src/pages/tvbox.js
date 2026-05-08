@@ -423,7 +423,7 @@ function render() {
   else if (tab==='sources') tabContent = renderSourceManager();
   el.innerHTML =
     '<div class="tvbox-header"><div class="tvbox-header-inner">'+
-    '<div class="tvbox-logo"><div class="tvbox-logo-icon">&#127916;</div>屠戮影视</div>'+
+    '<div class="tvbox-logo"><div class="tvbox-logo-icon">&#127916;</div>星枢影视</div>'+
     '<div class="tvbox-nav">'+renderNav()+'</div>'+
     '</div></div>'+
     '<div class="tvbox-source-bar"><div class="tvbox-source-inner">'+renderSourceBar()+'</div></div>'+

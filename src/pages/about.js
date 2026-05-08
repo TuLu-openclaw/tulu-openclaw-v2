@@ -863,7 +863,7 @@ function renderCompany(page) {
         <img src="/images/logo-brand.png" alt="屠戮网络科技" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
         <div>
           <div style="font-weight:700;font-size:var(--font-size-md)">屠戮网络科技有限公司</div>
-          <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">屠戮 OpenClaw</div>
+          <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">星枢</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:var(--font-size-sm)">
@@ -877,7 +877,7 @@ function renderCompany(page) {
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">
-        屠戮 OpenClaw · 正版授权 · 2.0.0
+        星枢 · 正版授权 · 2.0.0
       </div>
     </div>
   `

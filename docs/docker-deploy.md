@@ -1,8 +1,8 @@
-# 屠戮OpenClaw Docker 部署指南
+# 星枢 Docker 部署指南
 
-本文介绍如何用 Docker 部署 **屠戮OpenClaw Web 版**，通过浏览器远程管理 OpenClaw。
+本文介绍如何用 Docker 部署 **星枢 Web 版**，通过浏览器远程管理 OpenClaw。
 
-> **屠戮OpenClaw** 有 Win/Mac 桌面客户端，但 Linux 没有桌面版。Docker 部署让你在任何有 Docker 的机器上一键跑起 屠戮OpenClaw Web 管理面板。
+> **星枢** 有 Win/Mac 桌面客户端，但 Linux 没有桌面版。Docker 部署让你在任何有 Docker 的机器上一键跑起 星枢 Web 管理面板。
 
 ---
 
@@ -24,7 +24,7 @@
 ## 架构说明
 
 ```
-浏览器 ──HTTP──▶ 屠戮OpenClaw Web 容器 (:1420)
+浏览器 ──HTTP──▶ 星枢 Web 容器 (:1420)
                         │
                         ├── /__api/*   读写 ~/.openclaw/ 配置
                         ├── /ws        WebSocket 代理 → Gateway
@@ -34,7 +34,7 @@
               OpenClaw Gateway (容器内或宿主机, :18789)
 ```
 
-屠戮OpenClaw Web 版 = Vite 开发服务器 + `dev-api.js` 后端中间件，在容器内提供完整管理功能。
+星枢 Web 版 = Vite 开发服务器 + `dev-api.js` 后端中间件，在容器内提供完整管理功能。
 
 ---
 
@@ -131,20 +131,20 @@ CMD ["npm", "run", "serve"]
 docker compose up -d
 ```
 
-这样 屠戮OpenClaw 和 Gateway 共享同一个 `openclaw-data` 卷，屠戮OpenClaw 可以直接管理 Gateway。
+这样 星枢 和 Gateway 共享同一个 `openclaw-data` 卷，星枢 可以直接管理 Gateway。
 
 ---
 
 ## 方式三：自定义 Dockerfile
 
-如果只需要 屠戮OpenClaw Web（Gateway 在宿主机或其他地方运行）：
+如果只需要 星枢 Web（Gateway 在宿主机或其他地方运行）：
 
 ```dockerfile
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# 安装 OpenClaw CLI（屠戮OpenClaw 需要读写配置）
+# 安装 OpenClaw CLI（星枢 需要读写配置）
 RUN npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
 
 WORKDIR /app
@@ -176,7 +176,7 @@ docker run -d \
 
 ### 数据目录
 
-屠戮OpenClaw 的所有数据都存储在 `~/.openclaw/` 目录中：
+星枢 的所有数据都存储在 `~/.openclaw/` 目录中：
 
 | 文件/目录 | 说明 |
 |-----------|------|
@@ -215,11 +215,11 @@ docker exec -it clawpanel openclaw init
 
 ### 场景一：Gateway 在同一个 Compose 中
 
-使用上面的 Compose 配置，屠戮OpenClaw 和 Gateway 共享数据卷，屠戮OpenClaw 自动通过本地回环连接 Gateway。
+使用上面的 Compose 配置，星枢 和 Gateway 共享数据卷，星枢 自动通过本地回环连接 Gateway。
 
 ### 场景二：Gateway 在宿主机
 
-如果 Gateway 运行在宿主机（不在 Docker 中），屠戮OpenClaw 容器需要访问宿主机网络：
+如果 Gateway 运行在宿主机（不在 Docker 中），星枢 容器需要访问宿主机网络：
 
 ```bash
 docker run -d \
@@ -229,11 +229,11 @@ docker run -d \
   clawpanel
 ```
 
-使用 `--network host` 后，容器共享宿主机网络，屠戮OpenClaw 可以直接连接 `127.0.0.1:18789`。
+使用 `--network host` 后，容器共享宿主机网络，星枢 可以直接连接 `127.0.0.1:18789`。
 
 ### 场景三：Gateway 在远程服务器
 
-修改 `openclaw.json` 中的 Gateway 端口配置，或在 屠戮OpenClaw 面板中设置 Gateway 地址。
+修改 `openclaw.json` 中的 Gateway 端口配置，或在 星枢 面板中设置 Gateway 地址。
 
 ---
 
@@ -259,7 +259,7 @@ server {
 }
 ```
 
-> **重要：** 必须配置 WebSocket 升级头，否则 屠戮OpenClaw 无法通过 `/ws` 连接 Gateway。
+> **重要：** 必须配置 WebSocket 升级头，否则 星枢 无法通过 `/ws` 连接 Gateway。
 
 ---
 
@@ -286,7 +286,7 @@ docker stop clawpanel && docker rm clawpanel
 
 ## 更新升级
 
-### 更新 屠戮OpenClaw
+### 更新 星枢
 
 ```bash
 docker exec -it clawpanel bash -c "cd /app && git pull origin main && npm install"
@@ -326,7 +326,7 @@ docker logs clawpanel
 
 **推荐方案（二选一）：**
 
-1. **使用一体镜像（最简单）**：直接用预装了 OpenClaw + Gateway + 屠戮OpenClaw 的一体镜像，不需要在面板里点安装：
+1. **使用一体镜像（最简单）**：直接用预装了 OpenClaw + Gateway + 星枢 的一体镜像，不需要在面板里点安装：
    ```bash
    docker run -d --name openclaw -p 1420:1420 -p 18789:18789 \
      -v openclaw-data:/root/.openclaw \
@@ -340,7 +340,7 @@ docker logs clawpanel
    RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
    # 预装 OpenClaw CLI（使用国内镜像源加速）
    RUN npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
-   # ... 后续 屠戮OpenClaw 安装步骤
+   # ... 后续 星枢 安装步骤
    ```
 
 **临时方案**：如果容器已经在运行，可以手动进入容器安装：
@@ -361,7 +361,7 @@ docker exec -it clawpanel openclaw init
 容器内管理 Gateway 进程需要特殊权限。推荐方案：
 
 1. **Compose 模式**：Gateway 作为独立容器运行，用 `docker compose restart gateway` 管理
-2. **Host 网络模式**：`--network host` 让 屠戮OpenClaw 直接管理宿主机进程
+2. **Host 网络模式**：`--network host` 让 星枢 直接管理宿主机进程
 
 ### Q: 数据会丢失吗？
 

@@ -197,7 +197,7 @@ function showKamiFallbackModal() {
     <div style="background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)">
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
-        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">屠戮授权验证</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">星枢授权验证</div>
         <div style="font-size:12px;color:#666">请输入卡密以继续使用</div>
         <div id="kami-fb-notice" style="margin-top:12px;padding:10px 12px;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px;color:#a5b4fc;line-height:1.6;display:none"></div>
       </div>
@@ -285,7 +285,7 @@ function showLoginOverlay(defaultPw) {
   overlay.innerHTML = `
     <div class="login-card">
       ${_logoSvg}
-      <div class="login-title">屠戮 OpenClaw</div>
+      <div class="login-title">星枢</div>
       <div class="login-desc">${hasDefault
         ? `${t('security.firstLoginHint')}<br><span style="font-size:12px;color:#6366f1;font-weight:600">${t('security.firstLoginChangeHint', { security: securityLabel })}</span>`
         : (isTauri ? t('security.appLocked') : t('security.loginPrompt'))}</div>
@@ -535,7 +535,7 @@ window.addEventListener('lobster-work-end', () => {
     <button class="mobile-hamburger" id="btn-mobile-menu">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
-    <span class="mobile-topbar-title">屠戮 OpenClaw</span>
+    <span class="mobile-topbar-title">星枢</span>
   `
   topbar.querySelector('.mobile-hamburger').addEventListener('click', openMobileSidebar)
   mainCol.prepend(topbar)

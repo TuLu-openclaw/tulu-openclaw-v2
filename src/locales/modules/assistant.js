@@ -14,7 +14,7 @@ export default {
   apiHintGemini: _('Google Gemini 原生接口', 'Google Gemini native API', 'Google Gemini 原生介面'),
   apiBasePlaceholderOpenai: _('https://api.openai.com/v1 或中转站地址', 'https://api.openai.com/v1 or proxy URL', 'https://api.openai.com/v1 或中轉站位址'),
   apiKeyPlaceholderOpenai: _('sk-... 或中转站密钥', 'sk-... or proxy key', 'sk-... 或中轉站金鑰'),
-  defaultName: _('屠戮助手', 'Assistant', '', 'AI アシスタント', 'AI 어시스턴트', 'Trợ lý AI', 'Asistente IA', 'Assistente IA', 'ИИ-ассистент', 'Assistant IA', 'KI-Assistent'),
+  defaultName: _('星枢助手', 'Assistant', '', 'AI アシスタント', 'AI 어시스턴트', 'Trợ lý AI', 'Asistente IA', 'Assistente IA', 'ИИ-ассистент', 'Assistant IA', 'KI-Assistent'),
   defaultPersonality: _('专业、友好、乐于助人', 'Professional, friendly, and helpful', '專業、友好、樂於助人', 'プロフェッショナル、フレンドリー、親切'),
   contextSavedToast: _('已保存诊断上下文，可从侧边栏进入「{assistant}」继续处理', 'Diagnostic context saved. Open "{assistant}" from the sidebar to continue.', '已儲存診斷上下文，可從側邊欄進入「{assistant}」繼續處理', '診断コンテキストを保存しました。サイドバーの「{assistant}」から続けて処理できます。', '진단 컨텍스트를 저장했습니다. 사이드바의 "{assistant}"에서 이어서 처리하세요.', 'Đã lưu ngữ cảnh chẩn đoán. Hãy mở "{assistant}" từ thanh bên để tiếp tục.'),
   dragHint: _('长按可拖动', 'Hold to drag', '長按可拖動', '長押しでドラッグできます', '길게 눌러 드래그', 'Nhấn giữ để kéo'),

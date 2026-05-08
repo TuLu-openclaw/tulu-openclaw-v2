@@ -121,7 +121,7 @@ function buildModalHTML(initialKami, showPw, remembered, noticeText) {
 
       '<div style="text-align:center;margin-bottom:28px">' +
         '<div style="font-size:48px;margin-bottom:12px">&#x1F510;</div>' +
-        '<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">屠戮授权验证</div>' +
+        '<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">星枢授权验证</div>' +
         '<div style="font-size:12px;color:#666">请输入卡密以继续使用</div>' +
       '</div>' +
 

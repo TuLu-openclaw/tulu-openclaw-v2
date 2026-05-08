@@ -1,5 +1,5 @@
 ﻿/**
- * 屠戮影视 - 影视点播 + 电视直播
+ * 星枢影视 - 影视点播 + 电视直播
  * VOD: 多源聚合（暴风/星之尘/天涯/饭太稀/肥猫）
  * TV: 多源直播（繁星/聚浪等M3U源）
  * 基于 TVAPP (youhunwl/TVAPP) 影视仓框架分析
@@ -544,7 +544,7 @@ function initApp(el) {
       <div class="tvbox-brand">
         <div class="tvbox-brand-icon">🎬</div>
         <div>
-          <div class="tvbox-brand-name">屠戮影视</div>
+          <div class="tvbox-brand-name">星枢影视</div>
           <div id="t-debug-status" style="font-size:10px;color:var(--text-muted);margin-top:2px"></div>
         </div>
       </div>
