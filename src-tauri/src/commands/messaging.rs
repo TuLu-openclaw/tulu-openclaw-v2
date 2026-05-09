@@ -2786,17 +2786,42 @@ pub async fn install_channel_plugin(
     }
 
     let _ = app.emit("plugin-log", format!("安装规格: {}", install_spec));
-    let spawn_result = crate::utils::openclaw_command()
-        .args(["plugins", "install", &install_spec])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
+
+    // 改用 npm install 直接安装（更稳定，不依赖 openclaw 命令）
+    let npm_registry = "https://registry.npmmirror.com";
+    let _ = app.emit("plugin-log", format!("使用 npm 全局安装: npm install -g {} --registry {}", install_spec, npm_registry));
+    
+    // 使用和 openclaw_command() 相同的处理方式：设置 PATH + 隐藏窗口
+    let enhanced_path = crate::commands::enhanced_path();
+    
+    #[cfg(target_os = "windows")]
+    let spawn_result = {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/c", &format!("npm install -g {} --registry {}", install_spec, npm_registry)]);
+        cmd.env("PATH", &enhanced_path);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        cmd.spawn()
+    };
+    
+    #[cfg(not(target_os = "windows"))]
+    let spawn_result = {
+        let mut cmd = std::process::Command::new("npm");
+        cmd.args(["install", "-g", &install_spec, "--registry", npm_registry]);
+        cmd.env("PATH", &enhanced_path);
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        cmd.spawn()
+    };
+
     let mut child = match spawn_result {
         Ok(child) => child,
         Err(e) => {
             let _ =
                 cleanup_failed_plugin_install(plugin_id, had_existing_plugin, had_existing_config);
-            return Err(format!("启动 openclaw 失败: {}", e));
+            return Err(format!("启动 npm 失败: {}", e));
         }
     };
 

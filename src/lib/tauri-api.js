@@ -347,6 +347,7 @@ export const api = {
   upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => invoke('upgrade_openclaw', { source, version, method }),
   uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
   installGateway: () => invoke('install_gateway'),
+  installPluginGateway: () => invoke('install_plugin_gateway'),
   uninstallGateway: () => invoke('uninstall_gateway'),
   openLobsterOffice: () => invoke('open_lobster_office'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
@@ -441,6 +442,10 @@ export const api = {
   createBackup: () => { invalidate('list_backups'); return invoke('create_backup') },
   restoreBackup: (name) => invoke('restore_backup', { name }),
   deleteBackup: (name) => { invalidate('list_backups'); return invoke('delete_backup', { name }) },
+
+  // 文件扫描与清理
+  scanOpenclawFiles: () => invoke('scan_openclaw_files'),
+  deleteOpenclawFile: (path, isDirectory) => { invalidate('scan_openclaw_files'); return invoke('delete_openclaw_file', { path, is_directory: isDirectory }) },
 
   // 设备密钥 + Gateway 握手
   createConnectFrame: (nonce, gatewayToken) => invoke('create_connect_frame', { nonce, gatewayToken }),

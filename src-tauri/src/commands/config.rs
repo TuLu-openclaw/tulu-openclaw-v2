@@ -5268,6 +5268,38 @@ pub async fn install_gateway() -> Result<String, String> {
     }
 }
 
+/// 安装插件 Gateway 服务
+#[tauri::command]
+pub async fn install_plugin_gateway() -> Result<String, String> {
+    use crate::utils::openclaw_command_async;
+    let _guardian_pause = GuardianPause::new("install plugin gateway");
+    
+    // 先检测 openclaw CLI 是否可用
+    let cli_check = openclaw_command_async().arg("--version").output().await;
+    match cli_check {
+        Ok(o) if o.status.success() => {}
+        _ => {
+            return Err("openclaw CLI 未安装。请先执行以下命令安装：\n\n\
+                 npm install -g @qingchencloud/openclaw-zh\n\n\
+                 安装完成后再点击此按钮安装插件 Gateway."
+                .into());
+        }
+    }
+    
+    let output = openclaw_command_async()
+        .args(["gateway", "install", "ai.openclaw.plugin-gateway"])
+        .output()
+        .await
+        .map_err(|e| format!("安装失败: {}", e))?;
+
+    if output.status.success() {
+        Ok("插件 Gateway 服务已安装".to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("安装失败: {}", stderr))
+    }
+}
+
 /// 卸载 Gateway 服务
 /// macOS: launchctl bootout + 删除 plist
 /// Windows: 直接 taskkill

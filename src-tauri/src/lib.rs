@@ -97,6 +97,7 @@ pub fn run() {
             config::upgrade_openclaw,
             config::uninstall_openclaw,
             config::install_gateway,
+            config::install_plugin_gateway,
             config::uninstall_gateway,
             config::patch_model_vision,
             config::check_panel_update,
@@ -132,6 +133,9 @@ pub fn run() {
             // 日志
             logs::read_log_tail,
             logs::search_log,
+            // 文件扫描
+            scanner::scan_openclaw_files,
+            scanner::delete_openclaw_file,
             // 记忆文件
             memory::list_memory_files,
             memory::read_memory_file,

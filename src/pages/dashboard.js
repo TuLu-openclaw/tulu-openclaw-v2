@@ -32,6 +32,8 @@ export async function render() {
       <button class="btn btn-secondary" id="btn-restart-gw">${t('dashboard.restartGw')}</button>
       <button class="btn btn-secondary" id="btn-check-update">${t('dashboard.checkUpdate')}</button>
       <button class="btn btn-secondary" id="btn-create-backup">${t('dashboard.createBackup')}</button>
+      <button class="btn btn-secondary" id="btn-scan-files">${t('dashboard.scanFiles')}</button>
+      <button class="btn btn-warning" id="btn-start-plugin-gw">${t('dashboard.startPluginGw')}</button>
     </div>
     <div class="config-section">
       <div class="config-section-title">${t('dashboard.recentLogs')}</div>
@@ -462,6 +464,8 @@ function bindActions(page) {
   const btnRestart = page.querySelector('#btn-restart-gw')
   const btnUpdate = page.querySelector('#btn-check-update')
   const btnCreateBackup = page.querySelector('#btn-create-backup')
+  const btnScanFiles = page.querySelector('#btn-scan-files')
+  const btnStartPluginGw = page.querySelector('#btn-start-plugin-gw')
 
   // Control UI 卡片点击 → 打开 OpenClaw 原生面板（用事件委托，因为卡片是动态渲染的）
   page.addEventListener('click', async (e) => {
@@ -630,8 +634,77 @@ function bindActions(page) {
       btnCreateBackup.textContent = t('dashboard.createBackup')
     }
   })
+
+  // 扫描 OpenClaw 文件
+  btnScanFiles?.addEventListener('click', async () => {
+    btnScanFiles.disabled = true
+    btnScanFiles.innerHTML = t('dashboard.scanning')
+    try {
+      const results = await api.scanOpenclawFiles()
+      // 显示扫描结果（简单列表）
+      let html = '<div class="config-section"><div class="config-section-title">' + t('dashboard.scanResults') + '</div>'
+      for (const r of results) {
+        html += '<div class="stat-card"><strong>' + r.category + '</strong> (' + r.file_count + ' 文件, ' + formatBytes(r.total_size_bytes) + ')<br>'
+        html += '<small>' + r.path + '</small></div>'
+      }
+      html += '</div>'
+      // 插入到 quick-actions 后面
+      const container = page.querySelector('#dashboard-overview-container')
+      if (container) container.innerHTML = html
+      toast(t('dashboard.scanComplete'), 'success')
+    } catch (e) {
+      toast(t('dashboard.scanFail') + ': ' + e, 'error')
+    } finally {
+      btnScanFiles.disabled = false
+      btnScanFiles.textContent = t('dashboard.scanFiles')
+    }
+  })
+
+  // 启动插件 Gateway（自动安装如果不存在）
+  btnStartPluginGw?.addEventListener('click', async () => {
+    btnStartPluginGw.disabled = true
+    btnStartPluginGw.innerHTML = t('dashboard.startingPluginGw')
+    try {
+      const config = await api.readOpenclawConfig()
+      const pluginLabel = config?.gateway?.pluginGateway?.label || 'ai.openclaw.plugin-gateway'
+      
+      // 先尝试启动
+      try {
+        await api.startService(pluginLabel)
+        toast(t('dashboard.pluginGwStarted'), 'success')
+      } catch (startErr) {
+        // 启动失败，尝试安装服务
+        if (String(startErr).includes('not found') || String(startErr).includes('404') || String(startErr).includes('不存在')) {
+          btnStartPluginGw.innerHTML = t('dashboard.installingPluginGw')
+          await api.installPluginGateway()
+          // 安装后重试启动
+          await api.startService(pluginLabel)
+          toast(t('dashboard.pluginGwStarted'), 'success')
+        } else {
+          throw new Error(startErr)
+        }
+      }
+    } catch (e) {
+      toast(t('dashboard.pluginGwStartFail') + ': ' + e, 'error')
+    } finally {
+      btnStartPluginGw.disabled = false
+      btnStartPluginGw.textContent = t('dashboard.startPluginGw')
+    }
+  })
 }
 
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  let size = bytes
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024
+    i++
+  }
+  return size.toFixed(1) + ' ' + units[i]
 }
