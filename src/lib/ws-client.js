@@ -22,12 +22,12 @@ export function uuid() {
 const REQUEST_TIMEOUT = 30000
 const MAX_RECONNECT_DELAY = 60000
 const PING_INTERVAL = 30000
-const CHALLENGE_TIMEOUT = 15000
+const CHALLENGE_TIMEOUT = 8000
 const MAX_RECONNECT_ATTEMPTS = 20
 const HEARTBEAT_TIMEOUT = 90000
 const MESSAGE_CACHE_SIZE = 100
-// Gateway 启动前的初始重连延迟（更长，给 Gateway 充足的重启/初始化时间）
-const INITIAL_RECONNECT_DELAY = 10000
+// Gateway 启动前的初始重连延迟（尽快首连，同时保留重试退避）
+const INITIAL_RECONNECT_DELAY = 3000
 
 export class WsClient {
   constructor() {
@@ -53,6 +53,9 @@ export class WsClient {
     this._wsId = 0
     this._autoPairAttempts = 0
     this._serverVersion = null
+    this._status = 'idle'
+    this._statusDetail = ''
+    this._lastHandshakeAt = null
 
     // 增强状态追踪
     this._lastConnectedAt = null
@@ -99,6 +102,9 @@ export class WsClient {
       intentionalClose: this._intentionalClose,
       url: this._url,
       sessionKey: this._sessionKey,
+      status: this._status,
+      statusDetail: this._statusDetail,
+      lastHandshakeAt: this._lastHandshakeAt,
     }
   }
 
@@ -116,8 +122,10 @@ export class WsClient {
     this._intentionalClose = false
     this._autoPairAttempts = 0
     this._token = token || ''
-    // 自动检测协议：如果页面通过 HTTPS 加载（反代场景），使用 wss://
-    const proto = opts.secure ?? (typeof location !== 'undefined' && location.protocol === 'https:') ? 'wss' : 'ws'
+    const shouldUseSecure = opts.secure ?? (
+      typeof location !== 'undefined' && location.protocol === 'https:'
+    )
+    const proto = shouldUseSecure ? 'wss' : 'ws'
     const nextUrl = `${proto}://${host}/ws?token=${encodeURIComponent(this._token)}`
     if (this._connecting || this._handshaking || this._gatewayReady) {
       if (this._url === nextUrl) return
@@ -163,8 +171,10 @@ export class WsClient {
     this._closeWs()
     this._gatewayReady = false
     this._handshaking = false
+    this._status = '正在连接网关'
+    this._statusDetail = this._url || ''
     this._reconnectState = 'attempting'
-    this._setConnected(false, 'connecting')
+    this._setConnected(false, 'connecting', '正在连接网关...')
     const wsId = ++this._wsId
     let ws
     try { ws = new WebSocket(this._url) } catch { this._scheduleReconnect(); return }
@@ -178,12 +188,16 @@ export class WsClient {
       this._lastConnectedAt = Date.now()
       this._lastMessageAt = Date.now()
       this._startHeartbeat()
-      this._setConnected(true)
+      this._setConnected(true, 'connected', '网关连接已建立，正在等待握手')
       this._startPing()
-      // 等 Gateway 发 connect.challenge，超时则主动发
+      // 优先等待 Gateway 发 connect.challenge；若超时则主动降级发起 connect
+      this._status = '等待握手指令'
+      this._statusDetail = '等待网关下发 connect.challenge'
       this._challengeTimer = setTimeout(() => {
         if (!this._handshaking && !this._gatewayReady) {
-          console.log('[ws] 未收到 challenge，主动发 connect')
+          console.warn('[ws] 等待 challenge 超时，主动发起 connect')
+          this._status = '握手超时，正在主动补发连接'
+          this._statusDetail = '网关未及时返回握手指令，客户端正在主动发起连接'
           this._sendConnectFrame('')
         }
       }, CHALLENGE_TIMEOUT)
@@ -202,7 +216,9 @@ export class WsClient {
       this._connecting = false
       this._clearChallengeTimer()
       if (e.code === 4001 || e.code === 4003 || e.code === 4004) {
-        this._setConnected(false, 'auth_failed', e.reason || 'Token 认证失败')
+        this._status = '认证失败'
+        this._statusDetail = e.reason || '网关令牌校验失败'
+        this._setConnected(false, 'auth_failed', e.reason || '网关令牌校验失败')
         this._intentionalClose = true
         this._flushPending()
         return
@@ -210,17 +226,21 @@ export class WsClient {
       if (e.code === 1008 && !this._intentionalClose) {
         if (this._autoPairAttempts < 1) {
           console.log('[ws] origin not allowed (1008)，尝试自动修复...')
-          this._setConnected(false, 'reconnecting', 'origin not allowed，修复中...')
+          this._status = '正在自动修复连接'
+          this._statusDetail = '检测到来源限制，正在重新配对并重连'
+          this._setConnected(false, 'reconnecting', '来源受限，正在自动修复连接...')
           this._autoPairAndReconnect()
           return
         }
         console.warn('[ws] origin 1008 自动修复已尝试过，显示错误')
-        this._setConnected(false, 'error', e.reason || 'origin not allowed，请点击「修复并重连」')
+        this._status = '连接失败'
+        this._statusDetail = e.reason || '来源受限，请点击修复并重连'
+        this._setConnected(false, 'error', e.reason || '来源受限，请点击“修复并重连”')
         return
       }
+      this._status = '连接已断开'
+      this._statusDetail = e.reason || ''
       this._setConnected(false)
-      this._gatewayReady = false
-      this._handshaking = false
       this._stopPing()
       this._flushPending()
       if (!this._intentionalClose) this._scheduleReconnect()
@@ -228,6 +248,8 @@ export class WsClient {
 
     ws.onerror = (err) => {
       console.error('[ws] WebSocket 错误:', err)
+      this._status = '网关连接异常'
+      this._statusDetail = 'WebSocket 发生异常，请稍后重试'
     }
   }
 
@@ -239,6 +261,8 @@ export class WsClient {
     // 握手阶段：connect.challenge
     if (msg.type === 'event' && msg.event === 'connect.challenge') {
       console.log('[ws] 收到 connect.challenge')
+      this._status = '已收到握手指令'
+      this._statusDetail = '正在生成身份验证信息'
       this._clearChallengeTimer()
       const nonce = msg.payload?.nonce || ''
       this._sendConnectFrame(nonce)
@@ -264,6 +288,8 @@ export class WsClient {
           console.warn('[ws] 自动修复已尝试过，不再重试')
         }
 
+        this._status = '握手失败'
+        this._statusDetail = errMsg
         this._setConnected(false, 'error', errMsg)
         this._readyCallbacks.forEach(fn => {
           try { fn(null, null, { error: true, message: errMsg }) } catch {}
@@ -318,6 +344,8 @@ export class WsClient {
     this._autoPairAttempts++
     try {
       console.log('[ws] 执行自动配对（第', this._autoPairAttempts, '次）...')
+      this._status = '正在自动修复连接'
+      this._statusDetail = `正在执行自动配对（第 ${this._autoPairAttempts} 次）`
       const result = await invoke('auto_pair_device')
       console.log('[ws] 配对结果:', result)
 
@@ -331,31 +359,41 @@ export class WsClient {
 
       // 修复 #160: 不调用 reconnect()（它会重置 _autoPairAttempts 导致无限循环），
       // 而是直接重连一次。如果仍然失败，_autoPairAttempts 不会被重置，不会再次触发自动修复。
-      console.log('[ws] 配对成功，3秒后重新连接...')
+      console.log('[ws] 配对成功，1秒后重新连接...')
       setTimeout(() => {
         if (!this._intentionalClose) {
           this._reconnectAttempts = 0
           this._closeWs()
           this._doConnect()
         }
-      }, 3000)
+      }, 1000)
     } catch (e) {
       console.error('[ws] 自动配对失败:', e)
+      this._status = '自动修复失败'
+      this._statusDetail = `配对失败: ${e}`
       this._setConnected(false, 'error', `配对失败: ${e}`)
     }
   }
 
   async _sendConnectFrame(nonce) {
     this._handshaking = true
+    this._status = nonce ? '正在发送握手信息' : '未收到握手指令，主动发送连接信息'
+    this._statusDetail = nonce ? '正在发送带签名的 connect frame' : '网关未返回 challenge，客户端主动发起连接'
     try {
       const frame = await invoke('create_connect_frame', { nonce, gatewayToken: this._token })
       if (this._ws && this._ws.readyState === WebSocket.OPEN) {
         console.log('[ws] 发送 connect frame')
         this._ws.send(JSON.stringify(frame))
+      } else {
+        this._handshaking = false
+        this._status = '连接已断开'
+        this._statusDetail = 'WebSocket 未处于可发送状态'
       }
     } catch (e) {
       console.error('[ws] 生成 connect frame 失败:', e)
       this._handshaking = false
+      this._status = '握手信息生成失败'
+      this._statusDetail = String(e)
     }
   }
 
@@ -372,10 +410,13 @@ export class WsClient {
       this._sessionKey = `agent:${agentId}:main`
     }
     this._gatewayReady = true
+    this._lastHandshakeAt = Date.now()
+    this._status = '网关连接已就绪'
+    this._statusDetail = this._sessionKey || ''
     this._reconnectState = 'idle'
     this._pendingReconnect = false
     console.log('[ws] Gateway 就绪, sessionKey:', this._sessionKey)
-    this._setConnected(true, 'ready')
+    this._setConnected(true, 'ready', '网关连接已就绪')
     this._readyCallbacks.forEach(fn => {
       try { fn(this._hello, this._sessionKey) } catch (e) {
         console.error('[ws] ready cb error:', e)
@@ -428,6 +469,8 @@ export class WsClient {
       console.warn('[ws] 已达到最大重连次数 (', MAX_RECONNECT_ATTEMPTS, ')，停止自动重连')
       this._reconnectState = 'idle'
       this._pendingReconnect = false
+      this._status = '重连次数过多'
+      this._statusDetail = '已停止自动重连，请手动刷新页面重试'
       this._setConnected(false, 'error', `连接失败，已停止重连。请手动刷新页面重试。`)
       return
     }
@@ -445,6 +488,8 @@ export class WsClient {
     this._reconnectAttempts++
     this._reconnectState = 'scheduled'
     this._pendingReconnect = true
+    this._status = '等待重新连接'
+    this._statusDetail = `第 ${this._reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} 次重连，${Math.round(delay/1000)} 秒后重试`
     this._setConnected(false, 'reconnecting', `重连中 (${this._reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})，${Math.round(delay/1000)}秒后...`)
     console.log(`[ws] 计划重连 (${this._reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})，延迟 ${Math.round(delay/1000)}秒`)
     this._reconnectTimer = setTimeout(() => {

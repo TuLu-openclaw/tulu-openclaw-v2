@@ -661,42 +661,6 @@ async function autoConnectWebSocket() {
     const rawToken = config?.gateway?.auth?.token
     const token = (typeof rawToken === 'string') ? rawToken : ''
 
-    // 启动前先确保设备已配对 + allowedOrigins 已写入，无需用户手动操作
-    let needReload = false
-    try {
-      const pairResult = await api.autoPairDevice()
-      console.log('[main] 设备配对 + origins 已就绪:', pairResult)
-      // 仅在配置实际变更时才需要 reload（dev-api 返回 {changed}，Tauri 返回字符串）
-      if (typeof pairResult === 'object' && pairResult.changed) {
-        needReload = true
-      } else if (typeof pairResult === 'string' && pairResult !== '设备已配对') {
-        needReload = true
-      }
-    } catch (pairErr) {
-      console.warn('[main] autoPairDevice 失败（非致命）:', pairErr)
-    }
-
-    // 确保模型配置包含 vision 支持（input: ["text", "image"]）
-    try {
-      const patched = await api.patchModelVision()
-      if (patched) {
-        console.log('[main] 已为模型添加 vision 支持')
-        needReload = true
-      }
-    } catch (visionErr) {
-      console.warn('[main] patchModelVision 失败（非致命）:', visionErr)
-    }
-
-    // 统一 reload Gateway（配对 origins + vision patch 合并为一次 reload）
-    if (needReload) {
-      try {
-        await api.reloadGateway()
-        console.log('[main] Gateway 已重载')
-      } catch (reloadErr) {
-        console.warn('[main] reloadGateway 失败（非致命）:', reloadErr)
-      }
-    }
-
     let host
     const inst2 = getActiveInstance()
     if (inst2.type !== 'local' && inst2.endpoint) {
@@ -709,8 +673,46 @@ async function autoConnectWebSocket() {
     } else {
       host = isTauriRuntime() ? `127.0.0.1:${port}` : location.host
     }
+
+    // 启动时优先直连，避免被预修复流程阻塞；握手失败后再走 ws-client 内置自动修复
     wsClient.connect(host, token)
     console.log(`[main] WebSocket 连接已启动 -> ${host}`)
+
+    // 非阻塞后台修补：仅用于提升后续稳定性，不阻塞首连速度
+    queueMicrotask(async () => {
+      let needReload = false
+      try {
+        const pairResult = await api.autoPairDevice()
+        console.log('[main] 后台设备配对 + origins 检查完成:', pairResult)
+        if (typeof pairResult === 'object' && pairResult.changed) {
+          needReload = true
+        } else if (typeof pairResult === 'string' && pairResult !== '设备已配对') {
+          needReload = true
+        }
+      } catch (pairErr) {
+        console.warn('[main] autoPairDevice 失败（后台非致命）:', pairErr)
+      }
+
+      try {
+        const patched = await api.patchModelVision()
+        if (patched) {
+          console.log('[main] 已为模型添加 vision 支持')
+          needReload = true
+        }
+      } catch (visionErr) {
+        console.warn('[main] patchModelVision 失败（后台非致命）:', visionErr)
+      }
+
+      if (needReload && !wsClient.gatewayReady) {
+        try {
+          await api.reloadGateway()
+          console.log('[main] Gateway 已后台重载，准备重新连接')
+          wsClient.reconnect()
+        } catch (reloadErr) {
+          console.warn('[main] reloadGateway 失败（后台非致命）:', reloadErr)
+        }
+      }
+    })
   } catch (e) {
     console.error('[main] 自动连接 WebSocket 失败:', e)
   }
@@ -720,12 +722,17 @@ function getGatewayBannerSnapshot(running, foreign = false) {
   const state = getGatewayHealthState()
   const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
   const health = state?.health || 'unknown'
+  const handshakeLabel = wsInfo.gatewayReady ? '已完成' : '未完成'
+  const wsLabel = wsInfo.connected ? '已连接' : '未连接'
+  const reconnectLabel = wsInfo.reconnectState || 'idle'
+  const phase = wsInfo.status || (wsInfo.gatewayReady ? '网关连接已就绪' : wsInfo.connected ? '等待握手' : '尚未连接')
+  const phaseDetail = wsInfo.statusDetail || ''
 
   if (foreign || state?.foreign) {
     return {
       tone: 'warning',
       text: t('dashboard.foreignGatewayBanner'),
-      detail: `状态：外部实例占用 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 重连：${wsInfo.reconnectState || 'idle'}`,
+      detail: `状态：外部实例占用 · WS：${wsLabel} · 阶段：${phase}`,
     }
   }
 
@@ -733,7 +740,7 @@ function getGatewayBannerSnapshot(running, foreign = false) {
     return {
       tone: 'info',
       text: t('dashboard.controlUINotRunning'),
-      detail: `状态：未运行 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 握手：${wsInfo.gatewayReady ? '已完成' : '未完成'}`,
+      detail: `状态：未运行 · WS：${wsLabel} · 握手：${handshakeLabel}`,
     }
   }
 
@@ -741,7 +748,7 @@ function getGatewayBannerSnapshot(running, foreign = false) {
     return {
       tone: 'warning',
       text: 'Gateway 自动恢复中，请稍候。',
-      detail: `状态：自动恢复中 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 重连：${wsInfo.reconnectState || 'idle'}`,
+      detail: `状态：自动恢复中 · 当前阶段：${phase} · 重连：${reconnectLabel}`,
     }
   }
 
@@ -749,20 +756,30 @@ function getGatewayBannerSnapshot(running, foreign = false) {
     return {
       tone: 'warning',
       text: 'Gateway 已启动，但连接尚未完全就绪。',
-      detail: `状态：未完全就绪 · WS：${wsInfo.connected ? '已连接' : '未连接'} · 握手：${wsInfo.gatewayReady ? '已完成' : '未完成'} · 重连：${wsInfo.reconnectState || 'idle'}`,
+      detail: `当前阶段：${phase} · WS：${wsLabel} · 握手：${handshakeLabel}${phaseDetail ? ` · 说明：${phaseDetail}` : ''} · 重连：${reconnectLabel}`,
     }
   }
 
   return {
     tone: 'success',
     text: 'Gateway 正在运行。',
-    detail: `状态：运行中（已就绪） · WS：${wsInfo.connected ? '已连接' : '未连接'} · 握手：${wsInfo.gatewayReady ? '已完成' : '未完成'}`,
+    detail: `状态：运行中（已就绪） · 当前阶段：${phase} · WS：${wsLabel} · 握手：${handshakeLabel}`,
   }
 }
 
 function setupGatewayBanner() {
   const banner = document.getElementById('gw-banner')
   if (!banner) return
+
+  let updateScheduled = false
+  function scheduleUpdate() {
+    if (updateScheduled) return
+    updateScheduled = true
+    setTimeout(() => {
+      updateScheduled = false
+      update(isGatewayRunning(), isGatewayForeign())
+    }, 120)
+  }
 
   async function update(running, foreign = false) {
     const dismissed = sessionStorage.getItem('gw-banner-dismissed') === '1'
@@ -857,19 +874,19 @@ function setupGatewayBanner() {
       }
 
       const t0 = Date.now()
-      while (Date.now() - t0 < 30000) {
+      while (Date.now() - t0 < 45000) {
         try {
           await refreshGatewayStatus().catch(() => {})
           const state = getGatewayHealthState()
           const info = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
-          if (state.running && (state.health === 'running' || (state.health === 'degraded' && info.connected))) {
+          if (state.running && info.gatewayReady) {
             update(true)
             return
           }
         } catch {}
         const sec = Math.floor((Date.now() - t0) / 1000)
         btn.textContent = `${t('dashboard.starting')} ${sec}s`
-        await new Promise(r => setTimeout(r, 1500))
+        await new Promise(r => setTimeout(r, 1000))
       }
 
       let logHint = ''
@@ -891,6 +908,7 @@ function setupGatewayBanner() {
 
   update(isGatewayRunning(), isGatewayForeign())
   onGatewayChange(update)
+  wsClient.onStatusChange(() => scheduleUpdate())
 }
 
 function showGuardianRecovery() {
