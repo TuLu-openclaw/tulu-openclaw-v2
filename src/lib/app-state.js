@@ -11,7 +11,9 @@ import {
 
 const isTauri = !!window.__TAURI_INTERNALS__
 const GATEWAY_POLL_INTERVAL = 15000
-const GATEWAY_OFFLINE_THRESHOLD = 3
+const GATEWAY_FAST_POLL_INTERVAL = 1000
+const GATEWAY_FAST_POLL_WINDOW = 90000
+const GATEWAY_OFFLINE_THRESHOLD = 1
 
 let _openclawReady = false
 let _gatewayRunning = false
@@ -33,6 +35,8 @@ let _autoRestartCount = 0 // 自动重启次数
 let _lastRestartTime = 0  // 上次重启时间
 let _gatewayRunningSince = 0 // Gateway 最近一次进入稳定运行状态的时间
 let _guardianListeners = [] // 守护放弃时的回调
+let _pollTimer = null
+let _fastPollUntil = 0
 
 /** openclaw 是否就绪（CLI 已安装 + 配置文件存在） */
 export function isOpenclawReady() {
@@ -312,13 +316,35 @@ export async function refreshGatewayStatus() {
 }
 
 let _pollTimer = null
-/** 启动 Gateway 状态轮询（每 15 秒检测一次） */
+/** 启动 Gateway 状态轮询（启动/修复窗口内 1 秒轮询，稳定后退回 15 秒） */
 export function startGatewayPoll() {
   if (_pollTimer) return
-  _pollTimer = setInterval(() => refreshGatewayStatus(), GATEWAY_POLL_INTERVAL)
+  const tick = async () => {
+    await refreshGatewayStatus()
+    const desiredInterval = Date.now() < _fastPollUntil ? GATEWAY_FAST_POLL_INTERVAL : GATEWAY_POLL_INTERVAL
+    const currentInterval = _pollTimer?._openclawInterval || 0
+    if (currentInterval !== desiredInterval) {
+      clearInterval(_pollTimer)
+      _pollTimer = null
+      startGatewayPoll()
+    }
+  }
+  const interval = Date.now() < _fastPollUntil ? GATEWAY_FAST_POLL_INTERVAL : GATEWAY_POLL_INTERVAL
+  _pollTimer = setInterval(tick, interval)
+  _pollTimer._openclawInterval = interval
+  tick()
 }
 export function stopGatewayPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
+}
+
+export function boostGatewayPolling(durationMs = GATEWAY_FAST_POLL_WINDOW) {
+  _fastPollUntil = Math.max(_fastPollUntil, Date.now() + durationMs)
+  if (_pollTimer) {
+    clearInterval(_pollTimer)
+    _pollTimer = null
+  }
+  startGatewayPoll()
 }
 
 /** 监听状态变化 */

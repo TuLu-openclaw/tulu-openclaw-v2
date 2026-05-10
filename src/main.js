@@ -8,7 +8,7 @@ if (window._splashTimer) { clearTimeout(window._splashTimer); window._splashTime
 import { registerRoute, initRouter, navigate, setDefaultRoute } from './router.js'
 import { renderSidebar, openMobileSidebar } from './components/sidebar.js'
 import { initTheme } from './lib/theme.js'
-import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, startGatewayPoll, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, getGatewayHealthState, refreshGatewayStatus } from './lib/app-state.js'
+import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, startGatewayPoll, boostGatewayPolling, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, getGatewayHealthState, refreshGatewayStatus } from './lib/app-state.js'
 import { wsClient } from './lib/ws-client.js'
 import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStatusChange } from './lib/tauri-api.js'
 import { version as APP_VERSION } from '../package.json'
@@ -675,6 +675,7 @@ async function autoConnectWebSocket() {
     }
 
     // 启动时优先直连，避免被预修复流程阻塞；握手失败后再走 ws-client 内置自动修复
+    boostGatewayPolling()
     wsClient.connect(host, token)
     console.log(`[main] WebSocket 连接已启动 -> ${host}`)
 
@@ -705,6 +706,7 @@ async function autoConnectWebSocket() {
 
       if (needReload && !wsClient.gatewayReady) {
         try {
+          boostGatewayPolling()
           await api.reloadGateway()
           console.log('[main] Gateway 已后台重载，准备重新连接')
           wsClient.reconnect()
@@ -852,6 +854,7 @@ function setupGatewayBanner() {
       btn.disabled = true
       btn.classList.add('btn-loading')
       btn.textContent = t('dashboard.starting')
+      boostGatewayPolling()
       try {
         await api.startService('ai.openclaw.gateway')
       } catch (err) {
