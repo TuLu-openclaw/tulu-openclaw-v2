@@ -754,6 +754,14 @@ function getGatewayBannerSnapshot(running, foreign = false) {
     }
   }
 
+  if (health === 'starting') {
+    return {
+      tone: 'info',
+      text: 'Gateway 正在初始化，请稍候...',
+      detail: `状态：正在初始化 · 当前阶段：${phase} · WS：${wsLabel} · 握手：${handshakeLabel}`,
+    }
+  }
+
   if (health === 'degraded') {
     return {
       tone: 'warning',

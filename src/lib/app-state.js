@@ -18,9 +18,10 @@ const GATEWAY_OFFLINE_THRESHOLD = 1
 let _openclawReady = false
 let _gatewayRunning = false
 let _gatewayForeign = false
-let _gatewayHealth = 'unknown' // running | degraded | offline | recovering | foreign | unknown
+let _gatewayHealth = 'unknown' // running | degraded | offline | recovering | foreign | starting | unknown
 let _gatewayLastCheckAt = 0
 let _gatewayRecovering = false
+let _gatewayFirstRunningAt = 0 // 首次检测到端口监听但 WS 未就绪的时间戳
 let _gatewayCheckInFlight = false
 let _platform = ''  // 'macos' | 'win32' | ...
 let _deployMode = 'local' // 'local' | 'docker'
@@ -250,7 +251,13 @@ async function _tryAutoRestart() {
 function _deriveGatewayHealth({ ownedRunning, foreignRunning, wsInfo }) {
   if (foreignRunning) return 'foreign'
   if (!ownedRunning) return _gatewayRecovering ? 'recovering' : 'offline'
-  if (wsInfo?.gatewayReady) return 'running'
+  if (wsInfo?.gatewayReady) {
+    _gatewayFirstRunningAt = 0
+    return 'running'
+  }
+  // 端口刚监听成功但 WS 未就绪：120s 内显示"启动中"而非"部分异常"
+  if (_gatewayFirstRunningAt === 0) _gatewayFirstRunningAt = Date.now()
+  if (Date.now() - _gatewayFirstRunningAt < 120000) return 'starting'
   if (wsInfo?.connected || wsInfo?.reconnectState === 'attempting' || wsInfo?.reconnectState === 'scheduled') return 'degraded'
   return 'degraded'
 }
@@ -291,9 +298,11 @@ export async function refreshGatewayStatus() {
           _gwStopCount = 0
           _gatewayHealth = nowHealth
           _gatewayRecovering = false
+          _gatewayFirstRunningAt = 0
           _setGatewayRunning(false, true, nowHealth)
         } else {
           _gwStopCount++
+          _gatewayFirstRunningAt = 0
           _gatewayHealth = _gwStopCount >= GATEWAY_OFFLINE_THRESHOLD ? (_gatewayRecovering ? 'recovering' : 'offline') : 'degraded'
           if (_gwStopCount >= GATEWAY_OFFLINE_THRESHOLD || !_gatewayRunning) {
             _setGatewayRunning(false, false, _gatewayHealth)

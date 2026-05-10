@@ -87,6 +87,7 @@ export class WsClient {
    * 获取连接详细信息，供前端使用
    */
   getConnectionInfo() {
+    const maskedUrl = (this._url || '').replace(/([?&]token=)[^&]+/, '$1***')
     return {
       connected: this._connected,
       gatewayReady: this._gatewayReady,
@@ -100,7 +101,7 @@ export class WsClient {
       missedHeartbeats: this._missedHeartbeats,
       pendingReconnect: this._pendingReconnect,
       intentionalClose: this._intentionalClose,
-      url: this._url,
+      url: maskedUrl,
       sessionKey: this._sessionKey,
       status: this._status,
       statusDetail: this._statusDetail,
@@ -172,7 +173,7 @@ export class WsClient {
     this._gatewayReady = false
     this._handshaking = false
     this._status = '正在连接网关'
-    this._statusDetail = this._url || ''
+    this._statusDetail = (this._url || '').replace(/([?&]token=)[^&]+/, '$1***')
     this._reconnectState = 'attempting'
     this._setConnected(false, 'connecting', '正在连接网关...')
     const wsId = ++this._wsId

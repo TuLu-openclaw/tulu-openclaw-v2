@@ -91,7 +91,7 @@ async function loadDebugInfo(page) {
   const gatewayState = getGatewayHealthState()
   const gatewayHealth = gatewayState?.health || 'unknown'
   const gatewayReady = gatewayHealth === 'running'
-  const gatewayActive = ['running', 'degraded', 'recovering', 'foreign'].includes(gatewayHealth)
+  const gatewayActive = ['running', 'degraded', 'recovering', 'foreign', 'starting'].includes(gatewayHealth)
 
   const info = {
     timestamp: new Date().toLocaleString('zh-CN'),

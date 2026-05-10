@@ -246,18 +246,35 @@ async fn do_restart_gateway() -> Result<(), String> {
         .map_err(|e| format!("启动 hermes gateway run 失败: {e}"))?;
     GW_PID.store(child.id(), Ordering::SeqCst);
 
-    // 4. 等待端口可达（最多 15s）
+    // 4. 等待端口可达 + /health 就绪（最多 120s，Gateway 可能初始化缓慢）
     let port = hermes_gateway_port();
     let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
-    for _ in 0..30 {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let mut port_ready = false;
+    while std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500))
-            .is_ok()
+        if !port_ready
+            && std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500))
+                .is_ok()
         {
-            return Ok(());
+            port_ready = true;
+        }
+        if port_ready {
+            let health_url = format!("http://127.0.0.1:{port}/health");
+            if let Ok(client) = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(2))
+                .build()
+            {
+                if let Ok(resp) = client.get(&health_url).send().await {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return Ok(());
+                    }
+                }
+            }
         }
     }
-    Err("Gateway 重启后端口未就绪".into())
+    Err("Gateway 重启后未就绪".into())
 }
 
 /// 发送 Gateway 状态事件给前端

@@ -33,6 +33,9 @@ function getGatewayUiSnapshot(service) {
   } else if (health === 'recovering') {
     tone = 'loading'
     statusText = t('services.gatewayRecovering')
+  } else if (health === 'starting') {
+    tone = 'loading'
+    statusText = t('services.gatewayStarting')
   } else if (health === 'degraded') {
     tone = 'warning'
     statusText = reconnectState === 'scheduled' || reconnectState === 'attempting'
@@ -688,7 +691,7 @@ function bindEvents(page) {
 
 const ACTION_LABELS = { start: t('services.start'), stop: t('services.stop'), restart: t('services.restart') }
 const POLL_INTERVAL = 1500  // 轮询间隔 ms
-const POLL_TIMEOUT = 30000  // 最长等待 30s
+const POLL_TIMEOUT = 120000  // 最长等待 120s，配合 Rust 侧 /health 检查
 
 function isGatewayActionSettled(action, service) {
   const gatewayState = getGatewayHealthState()

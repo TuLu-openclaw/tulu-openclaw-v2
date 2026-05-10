@@ -203,15 +203,38 @@ async fn current_gateway_runtime(label: &str) -> (bool, Option<u32>) {
     }
 }
 
+async fn is_gateway_health_ready() -> bool {
+    let port = crate::commands::gateway_listen_port();
+    let url = format!("http://127.0.0.1:{port}/health");
+    match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+    {
+        Ok(client) => match client.get(&url).send().await {
+            Ok(resp) => resp.status().is_success(),
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
 async fn wait_for_gateway_running(label: &str, timeout: Duration) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
+    // 阶段1: 等待端口监听
     while Instant::now() < deadline {
         let (running, pid) = current_gateway_runtime(label).await;
         if running {
             write_gateway_owner(pid)?;
-            return Ok(());
+            break;
         }
         tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    // 阶段2: 等待 /health 就绪（Gateway 端口开了但可能还在初始化）
+    while Instant::now() < deadline {
+        if is_gateway_health_ready().await {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
     Err(format!(
         "Gateway 启动超时，请查看 {}",
@@ -446,7 +469,7 @@ async fn start_service_impl_internal(label: &str) -> Result<(), String> {
     {
         platform::start_service_impl(label).await?;
     }
-    wait_for_gateway_running(label, Duration::from_secs(15)).await
+    wait_for_gateway_running(label, Duration::from_secs(120)).await
 }
 
 async fn stop_service_impl_internal(label: &str) -> Result<(), String> {
