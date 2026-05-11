@@ -1466,30 +1466,119 @@ mod platform {
             return (true, None);
         }
 
-        #[cfg(not(target_os = "windows"))]
+        // non-Windows：先用 fuser（Linux）或 lsof（macOS）查 PID
+        #[cfg(target_os = "linux")]
+        {
+            let output = std::process::Command::new("fuser")
+                .args([&format!("{port_u16}/tcp")])
+                .output();
+            if let Ok(output) = output {
+                let s = String::from_utf8_lossy(&output.stdout);
+                for pid_str in s.split_whitespace() {
+                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                        return (true, Some(pid));
+                    }
+                }
+            }
+            return (true, None);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let output = std::process::Command::new("lsof")
+                .args(["-i", &format!(":{port_u16}"), "-t"])
+                .output();
+            if let Ok(output) = output {
+                let s = String::from_utf8_lossy(&output.stdout);
+                let pid = s.trim().parse::<u32>();
+                if let Ok(pid) = pid {
+                    return (true, Some(pid));
+                }
+            }
+            return (true, None);
+        }
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "linux"), not(target_os = "macos")))]
         {
             return (result, None);
         }
     }
 
-    /// 清理残留的 Gateway 进程（Linux 版：通过 fuser 查端口占用进程并 kill）
+    /// 清理残留的 Gateway 进程（跨平台：通过 fuser/lsof 查端口占用进程并 kill）
     fn cleanup_zombie_gateway_processes() {
         let port = crate::commands::gateway_listen_port();
-        // 尝试用 fuser 找到端口占用进程
-        if let Ok(output) = std::process::Command::new("fuser")
-            .args([&format!("{port}/tcp")])
-            .output()
+
+        #[cfg(target_os = "linux")]
         {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            for pid_str in pids.split_whitespace() {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    let _ = std::process::Command::new("kill")
-                        .args(["-9", &pid.to_string()])
-                        .output();
-                    eprintln!("[cleanup_zombie] killed PID {pid} on port {port}");
+            if let Ok(output) = std::process::Command::new("fuser")
+                .args([&format!("{port}/tcp")])
+                .output()
+            {
+                let pids = String::from_utf8_lossy(&output.stdout);
+                for pid_str in pids.split_whitespace() {
+                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", &pid.to_string()])
+                            .output();
+                        eprintln!("[cleanup_zombie] killed PID {pid} on port {port}");
+                    }
                 }
             }
         }
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(output) = std::process::Command::new("lsof")
+                .args(["-i", &format!(":{port}"), "-t"])
+                .output()
+            {
+                let s = String::from_utf8_lossy(&output.stdout);
+                for pid_str in s.split_whitespace() {
+                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-9", &pid.to_string()])
+                            .output();
+                        eprintln!("[cleanup_zombie] killed PID {pid} on port {port}");
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(pid) = find_gateway_pid_by_port_impl(port) {
+                let mut cmd = std::process::Command::new("taskkill");
+                cmd.args(["/F", "/PID", &pid.to_string()]);
+                let _ = cmd.output();
+                eprintln!("[cleanup_zombie] killed PID {pid} on port {port}");
+            }
+        }
+    }
+
+    /// Windows 专用的 PID 查找（供 cleanup_zombie_gateway_processes 调用）
+    fn find_gateway_pid_by_port_impl(port: u16) -> Option<u32> {
+        #[cfg(target_os = "windows")]
+        {
+            let output = std::process::Command::new("netstat")
+                .args(["-ano", "-p", "TCP"])
+                .output()
+                .ok()?;
+            let lines = String::from_utf8_lossy(&output.stdout);
+            for line in lines.lines() {
+                let line = line.trim();
+                if line.contains(&format!(":{port}")) && line.contains("LISTENING") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 5 {
+                        if let Ok(pid) = parts[4].parse::<u32>() {
+                            return Some(pid);
+                        }
+                    }
+                }
+            }
+            None
+        }
+        #[cfg(not(target_os = "windows"))]
+        None
     }
 
     async fn gateway_command(action: &str) -> Result<(), String> {

@@ -74,7 +74,30 @@ fn find_gateway_pid_by_port(port: u16) -> Option<u32> {
         }
         None
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("fuser")
+            .args([&format!("{port}/tcp")])
+            .output()
+            .ok()?;
+        let s = String::from_utf8_lossy(&output.stdout);
+        for pid_str in s.split_whitespace() {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                return Some(pid);
+            }
+        }
+        None
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("lsof")
+            .args(["-i", &format!(":{port}"), "-t"])
+            .output()
+            .ok()?;
+        let s = String::from_utf8_lossy(&output.stdout);
+        s.trim().parse::<u32>().ok()
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "linux"), not(target_os = "macos")))]
     {
         None
     }
