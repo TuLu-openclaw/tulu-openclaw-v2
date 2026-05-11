@@ -342,9 +342,9 @@ function _debouncedReloadGateway() {
 export const api = {
   // 服务管理（状态用短缓存，操作不缓存）
   getServicesStatus: () => cachedInvoke('get_services_status', {}, 10000),
-  startService: (label) => { invalidate('get_services_status'); return invoke('start_service', { label }, 60000) },
+  startService: (label) => { invalidate('get_services_status'); return invoke('start_service', { label }, 300000) },
   stopService: (label) => { invalidate('get_services_status'); return invoke('stop_service', { label }, 60000) },
-  restartService: (label) => { invalidate('get_services_status'); return invoke('restart_service', { label }, 60000) },
+  restartService: (label) => { invalidate('get_services_status'); return invoke('restart_service', { label }, 300000) },
   claimGateway: () => { invalidate('get_services_status'); return invoke('claim_gateway') },
   guardianStatus: () => invoke('guardian_status'),
 
