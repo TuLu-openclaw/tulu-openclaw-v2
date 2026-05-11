@@ -53,34 +53,66 @@ fn hermes_gateway_url() -> String {
     format!("http://127.0.0.1:{port}")
 }
 
-/// 精准杀掉我们 spawn 的 Gateway 进程
-fn kill_gateway_pid() -> bool {
-    let pid = GW_PID.load(Ordering::SeqCst);
-    if pid == 0 {
-        return false;
+fn find_gateway_pid_by_port(port: u16) -> Option<u32> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .output()
+            .ok()?;
+        let lines = String::from_utf8_lossy(&output.stdout);
+        for line in lines.lines() {
+            let line = line.trim();
+            if line.contains(&format!(":{port}")) && line.contains("LISTENING") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 5 {
+                    if let Ok(pid) = parts[4].parse::<u32>() {
+                        return Some(pid);
+                    }
+                }
+            }
+        }
+        None
     }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+fn kill_gateway_pid() -> bool {
+    // 先尝试用内存中的 PID
+    let pid = GW_PID.load(Ordering::SeqCst);
+    let mut killed = false;
+
+    // 如果内存中没有 PID（进程重启后），用 netstat 查端口
+    if pid == 0 {
+        let port = hermes_gateway_port();
+        if let Some(real_pid) = find_gateway_pid_by_port(port) {
+            killed = kill_process_by_pid(real_pid);
+        }
+    } else {
+        killed = kill_process_by_pid(pid);
+    }
+    GW_PID.store(0, Ordering::SeqCst);
+    killed
+}
+
+fn kill_process_by_pid(pid: u32) -> bool {
     #[cfg(target_os = "windows")]
     {
         let mut cmd = std::process::Command::new("taskkill");
         cmd.args(["/F", "/PID", &pid.to_string()]);
         cmd.creation_flags(CREATE_NO_WINDOW);
-        let ok = cmd.output().map(|o| o.status.success()).unwrap_or(false);
-        if ok {
-            GW_PID.store(0, Ordering::SeqCst);
-        }
-        ok
+        cmd.output().map(|o| o.status.success()).unwrap_or(false)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let ok = std::process::Command::new("kill")
+        std::process::Command::new("kill")
             .args(["-9", &pid.to_string()])
             .output()
             .map(|o| o.status.success())
-            .unwrap_or(false);
-        if ok {
-            GW_PID.store(0, Ordering::SeqCst);
-        }
-        ok
+            .unwrap_or(false)
     }
 }
 
@@ -246,16 +278,20 @@ async fn do_restart_gateway() -> Result<(), String> {
         .map_err(|e| format!("启动 hermes gateway run 失败: {e}"))?;
     GW_PID.store(child.id(), Ordering::SeqCst);
 
-    // 4. 等待端口可达（最多 120s，Gateway 可能初始化缓慢）
+    // 4. 等待端口可达且被新进程持有（最多 300s）
+    let spawned_pid = child.id();
     let port = hermes_gateway_port();
     let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500))
-            .is_ok()
-        {
-            return Ok(());
+        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500)).is_ok() {
+            // 确认端口被新进程持有
+            if let Some(real_pid) = find_gateway_pid_by_port(port) {
+                if real_pid == spawned_pid {
+                    return Ok(());
+                }
+            }
         }
     }
     Err("Gateway 重启后未就绪".into())

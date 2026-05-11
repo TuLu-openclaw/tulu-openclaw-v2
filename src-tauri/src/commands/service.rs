@@ -1424,6 +1424,7 @@ mod platform {
 
     /// 跨平台统一检测：TCP 连端口
     #[allow(dead_code)]
+    #[allow(dead_code)]
     pub async fn check_service_status(_uid: u32, _label: &str) -> (bool, Option<u32>) {
         let port = crate::commands::gateway_listen_port();
         let addr = format!("127.0.0.1:{port}");
@@ -1431,17 +1432,43 @@ mod platform {
             Ok(a) => a,
             Err(_) => return (false, None),
         };
-        // 使用 spawn_blocking 避免阻塞 Tokio 运行时
+        let port_u16 = port;
         let result = tokio::task::spawn_blocking(move || {
             std::net::TcpStream::connect_timeout(&socket_addr, std::time::Duration::from_secs(1))
                 .is_ok()
         })
         .await
         .unwrap_or(false);
-        if result {
-            (true, None)
-        } else {
-            (false, None)
+        if !result {
+            return (false, None);
+        }
+
+        // Windows：用 netstat 查询端口占用进程的 PID
+        #[cfg(target_os = "windows")]
+        {
+            let output = std::process::Command::new("netstat")
+                .args(["-ano", "-p", "TCP"])
+                .output();
+            if let Ok(output) = output {
+                let lines = String::from_utf8_lossy(&output.stdout);
+                for line in lines.lines() {
+                    let line = line.trim();
+                    if line.contains(&format!(":{port_u16}")) && line.contains("LISTENING") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 5 {
+                            if let Ok(pid) = parts[4].parse::<u32>() {
+                                return (true, Some(pid));
+                            }
+                        }
+                    }
+                }
+            }
+            return (true, None);
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            return (result, None);
         }
     }
 
