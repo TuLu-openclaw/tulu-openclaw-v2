@@ -538,7 +538,7 @@ export const api = {
   checkHermes: () => cachedInvoke('check_hermes', {}, 30000),
   checkHermesUpdate: () => invoke('check_hermes_update'),
   checkPython: () => cachedInvoke('check_python', {}, 60000),
-  installHermes: (method = 'uv-tool', extras = []) => { invalidate('check_hermes'); return invoke('install_hermes', { method, extras }) },
+  installHermes: (method = 'uv-tool', extras = []) => { invalidate('check_hermes'); return invoke('install_hermes', { method, extras }, 300000) },
   configureHermes: (provider, apiKey, model, baseUrl) => { invalidate('check_hermes'); return invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null }) },
   hermesGatewayAction: (action) => { invalidate('check_hermes'); return invoke('hermes_gateway_action', { action }, action === 'start' || action === 'restart' ? 60000 : 15000) },
   hermesHealthCheck: () => invoke('hermes_health_check'),
