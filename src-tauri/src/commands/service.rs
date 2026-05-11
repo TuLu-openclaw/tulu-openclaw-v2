@@ -210,31 +210,20 @@ async fn is_gateway_health_ready() -> bool {
         .timeout(std::time::Duration::from_secs(2))
         .build()
     {
-        Ok(client) => match client.get(&url).send().await {
-            Ok(resp) => resp.status().is_success(),
-            Err(_) => false,
-        },
+        Ok(client) => client.get(&url).send().await.is_ok(),
         Err(_) => false,
     }
 }
 
 async fn wait_for_gateway_running(label: &str, timeout: Duration) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
-    // 阶段1: 等待端口监听
     while Instant::now() < deadline {
         let (running, pid) = current_gateway_runtime(label).await;
         if running {
             write_gateway_owner(pid)?;
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(300)).await;
-    }
-    // 阶段2: 等待 /health 就绪（Gateway 端口开了但可能还在初始化）
-    while Instant::now() < deadline {
-        if is_gateway_health_ready().await {
             return Ok(());
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
     }
     Err(format!(
         "Gateway 启动超时，请查看 {}",
