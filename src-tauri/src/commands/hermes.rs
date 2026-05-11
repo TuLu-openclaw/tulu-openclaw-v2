@@ -425,8 +425,8 @@ fn uv_bin_path() -> PathBuf {
     }
 }
 
-/// uv 下载 URL（按当前编译平台选择）
-fn uv_download_url(version: &str) -> String {
+/// uv 下载 URL（按当前编译平台选择，返回多个镜像地址用于回退）
+fn uv_download_urls(version: &str) -> Vec<String> {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     let filename = "uv-x86_64-pc-windows-msvc.zip";
     #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
@@ -440,7 +440,10 @@ fn uv_download_url(version: &str) -> String {
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     let filename = "uv-aarch64-unknown-linux-gnu.tar.gz";
 
-    format!("https://github.com/astral-sh/uv/releases/download/{version}/{filename}")
+    let primary = format!("https://github.com/astral-sh/uv/releases/download/{version}/{filename}");
+    let mirror1 = format!("https://ghproxy.com/https://github.com/astral-sh/uv/releases/download/{version}/{filename}");
+    let mirror2 = format!("https://mirror.ghproxy.com/https://github.com/astral-sh/uv/releases/download/{version}/{filename}");
+    vec![primary, mirror1, mirror2]
 }
 
 /// 构建增强 PATH，确保能找到 uv、hermes、python 等
@@ -1308,26 +1311,30 @@ async fn ensure_uv(app: &tauri::AppHandle) -> Result<String, String> {
     let _ = app.emit("hermes-install-progress", 5u32);
 
     let version = "0.7.12"; // 稳定版本
-    let url = uv_download_url(version);
-    let _ = app.emit("hermes-install-log", format!("下载: {url}"));
+    let urls = uv_download_urls(version);
+    let _ = app.emit("hermes-install-log", format!("下载: {}", urls[0]));
 
     let client = super::build_http_client(std::time::Duration::from_secs(300), Some("ClawPanel"))
         .map_err(|e| format!("HTTP 客户端创建失败: {e}"))?;
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("uv 下载失败: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("uv 下载失败 (HTTP {})", resp.status()));
+    let mut bytes = None;
+    let mut last_err = String::new();
+    for (i, url) in urls.iter().enumerate() {
+        if i > 0 {
+            let _ = app.emit("hermes-install-log", format!("🔄 尝试镜像: {url}"));
+        }
+        match client.get(url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                match resp.bytes().await {
+                    Ok(b) => { bytes = Some(b); break; }
+                    Err(e) => { last_err = format!("uv 下载读取失败: {e}"); }
+                }
+            }
+            Ok(resp) => { last_err = format!("uv 下载失败 (HTTP {})", resp.status()); }
+            Err(e) => { last_err = format!("uv 下载失败: {e}"); }
+        }
     }
-
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("uv 下载读取失败: {e}"))?;
+    let bytes = bytes.ok_or(last_err)?;
 
     let _ = app.emit(
         "hermes-install-log",
