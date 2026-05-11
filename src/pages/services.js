@@ -691,7 +691,7 @@ function bindEvents(page) {
 
 const ACTION_LABELS = { start: t('services.start'), stop: t('services.stop'), restart: t('services.restart') }
 const POLL_INTERVAL = 1500  // 轮询间隔 ms
-const POLL_TIMEOUT = 120000  // 最长等待 120s，配合 Rust 侧 /health 检查
+const POLL_TIMEOUT = 300000  // 最长等待 300s，配合 Rust 侧端口监听等待
 
 function isGatewayActionSettled(action, service) {
   const gatewayState = getGatewayHealthState()

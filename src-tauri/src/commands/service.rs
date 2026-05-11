@@ -458,7 +458,7 @@ async fn start_service_impl_internal(label: &str) -> Result<(), String> {
     {
         platform::start_service_impl(label).await?;
     }
-    wait_for_gateway_running(label, Duration::from_secs(120)).await
+    wait_for_gateway_running(label, Duration::from_secs(300)).await
 }
 
 async fn stop_service_impl_internal(label: &str) -> Result<(), String> {
@@ -1204,15 +1204,12 @@ mod platform {
         // 端口已通 → 检查是不是我们的进程
         let (running, pid) = check_service_status(0, "");
         if running {
-            // 有 PID 说明就是我们的进程在跑，可以直接返回
-            if pid.is_some() {
-                return Ok(());
+            // 已有 Gateway 在跑，更新已知 PID（避免后续重复拉起导致 lock 冲突），直接返回成功
+            if let Some(p) = pid {
+                let mut known = LAST_KNOWN_GATEWAY_PID.lock().unwrap();
+                *known = Some(p);
             }
-            // 无 PID 但端口通 → 可能是其他进程占用，拒绝启动
-            return Err(format!(
-                "端口 {} 被未知进程占用，请先关闭占用该端口的程序",
-                crate::commands::gateway_listen_port()
-            ));
+            return Ok(());
         }
 
         let (stdout_log, stderr_log) = create_gateway_log_files()?;
@@ -1237,7 +1234,7 @@ mod platform {
         }
 
         // 轮询等待：端口就绪 AND PID 变化（说明新进程已接管端口）
-        let deadline = Instant::now() + Duration::from_secs(15);
+        let deadline = Instant::now() + Duration::from_secs(300);
         while Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(300)).await;
             let (running2, pid2) = check_service_status(0, "");

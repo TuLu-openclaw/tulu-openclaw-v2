@@ -249,7 +249,7 @@ async fn do_restart_gateway() -> Result<(), String> {
     // 4. 等待端口可达（最多 120s，Gateway 可能初始化缓慢）
     let port = hermes_gateway_port();
     let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500))
