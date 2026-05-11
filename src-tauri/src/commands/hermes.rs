@@ -1689,11 +1689,19 @@ pub async fn configure_hermes(
         format!("  provider: {provider}\n")
     };
 
-    let config_content = if config_path.exists() {
+    let mut config_content = if config_path.exists() {
         // 读取现有配置，只更新 model 区块，保留其余内容
         let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
         merge_hermes_config_yaml(&existing, &model_str, &base_url_line, &provider_line)
     } else {
+        // 动态生成平台信息
+        let os_label = if cfg!(target_os = "windows") { "Windows" }
+            else if cfg!(target_os = "macos") { "macOS" }
+            else { "Linux" };
+        let shell_hint = if cfg!(target_os = "windows") { "Use cmd or PowerShell for terminal commands. Use backslashes for paths." }
+            else if cfg!(target_os = "macos") { "Use zsh or bash for terminal commands." }
+            else { "Use bash for terminal commands." };
+        let home_dir = dirs::home_dir().unwrap_or_default().to_string_lossy().to_string();
         // 首次创建：生成完整的基线配置
         format!(
             r#"# Hermes Agent configuration (managed by ClawPanel)
@@ -1707,9 +1715,25 @@ terminal:
 platforms:
   api_server:
     enabled: true
+system:
+  extra_instructions: |
+    You are running on {os_label}. Home directory: {home_dir}. {shell_hint}
 "#
         )
     };
+    // 如果合并后没有 system 区块，追加以免模型不知道平台信息
+    if !config_content.contains("system:") {
+        let os_label = if cfg!(target_os = "windows") { "Windows" }
+            else if cfg!(target_os = "macos") { "macOS" }
+            else { "Linux" };
+        let shell_hint = if cfg!(target_os = "windows") { "Use cmd or PowerShell for terminal commands. Use backslashes for paths." }
+            else if cfg!(target_os = "macos") { "Use zsh or bash for terminal commands." }
+            else { "Use bash for terminal commands." };
+        let home_dir = dirs::home_dir().unwrap_or_default().to_string_lossy().to_string();
+        config_content.push_str(&format!(
+            "system:\n  extra_instructions: |\n    You are running on {os_label}. Home directory: {home_dir}. {shell_hint}\n"
+        ));
+    }
     std::fs::write(&config_path, &config_content)
         .map_err(|e| format!("写入 config.yaml 失败: {e}"))?;
 
