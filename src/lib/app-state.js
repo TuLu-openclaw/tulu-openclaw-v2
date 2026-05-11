@@ -324,7 +324,6 @@ export async function refreshGatewayStatus() {
   return _gatewayRunning
 }
 
-let _pollTimer = null
 /** 启动 Gateway 状态轮询（启动/修复窗口内 1 秒轮询，稳定后退回 15 秒） */
 export function startGatewayPoll() {
   if (_pollTimer) return
