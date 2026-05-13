@@ -111,7 +111,8 @@ body{font-family:-apple-system,'PingFang SC',sans-serif;background:var(--bg);col
 <div class="toast" id="toast"></div>
 <audio id="audio" preload="metadata"></audio>
 <script>
-﻿(function(){
+/* 全局作用域 — 供内联 onclick 调用 */
+(function(){
 var $=function(id){return document.getElementById(id)};
 var audio=$('audio');
 var state={currentSong:null,isPlaying:false,showLyrics:false,currentList:[],currentIndex:-1,liked:JSON.parse(localStorage.getItem('liked')||'[]'),history:JSON.parse(localStorage.getItem('history')||'[]'),searchMode:'all',lyrics:[],lastSearchResults:[],lastSearchResults2:[]};
@@ -122,7 +123,7 @@ function getPlatformLabel(p){var m={netease:'网易云',qq:'QQ',kugou:'酷狗',k
 function getCoverUrl(song){if(!song)return '';if(song.platform==='netease')return 'https://p3.music.126.net/'+song.id+'/300x300.jpg';if(song.platform==='qq')return 'https://y.gtimg.cn/music/photo_new/T002R300x300M000'+(song.mid||song.id)+'.jpg';if(song.platform==='kugou')return song.img||'https://www.kugou.com/yy/static/images/logo.png';if(song.platform==='kuwo')return song.img||'https://www.kuwo.cn/logo.png';if(song.platform==='migu')return song.img||'https://www.migu.cn/logo.png';return '';}
 function saveLiked(){localStorage.setItem('liked',JSON.stringify(state.liked));}
 function saveHistory(){localStorage.setItem('history',JSON.stringify(state.history));}
-async function getPlayUrl(song){if(!song||!song.id)return null;var source=song.platform,id=song.id;try{var res=await fetch('/api/music/injahow/meting/?type=url&id='+id+'&source='+source);if(res.ok){var json=await res.json();if(json.url)return json.url;}}catch(e){}if(source==='netease')return 'https://music.163.com/song/media/outer/url?id='+id+'.mp3';return null;}
+async function getPlayUrl(song){if(!song||!song.id)return null;var source=song.platform,id=song.id;try{var res=await fetch('/api/music/injahow/meting/?type=url&id='+id+'&source='+source,{redirect:'manual'});if(res.status===302||res.status===301){var loc=res.headers.get('location');if(loc)return loc;}if(res.ok){try{var json=await res.json();if(json.url)return json.url;}catch(e){}}}catch(e){}if(source==='netease')return 'https://music.163.com/song/media/outer/url?id='+id+'.mp3';return null;}
 async function fetchLyrics(song){try{if(song.platform==='netease'){var res=await fetch('/api/music/163/api/song/lyric?id='+song.id+'&lv=1',{headers:{'Referer':'https://music.163.com'}});var json=await res.json();if(json.lrc&&json.lrc.lyric)return parseLrc(json.lrc.lyric);}else if(song.platform==='qq'&&song.mid){var res2=await fetch('/api/music/qq/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid='+song.mid+'&format=json');var json2=await res2.json();if(json2.lyric)return parseLrc(atob(json2.lyric));}}catch(e){}return[];}
 function parseLrc(lrc){var result=[];lrc.split('\n').forEach(function(line){var m=line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);if(m)result.push({time:parseInt(m[1])*60+parseInt(m[2])+parseInt(m[3])/1000,text:m[4].trim()||'♪'});});return result.sort(function(a,b){return a.time-b.time;});}
 function renderLyrics(currentTime){var lw=$('lyricsWrap');if(!state.lyrics||state.lyrics.length===0){lw.innerHTML='';return;}var html='',active=false;state.lyrics.forEach(function(l){var isActive=!active&&l.time<=currentTime;if(isActive)active=true;html+='<div class="lyric-line'+(isActive?' active':'')+'">'+l.text+'</div>';});lw.innerHTML=html;}
@@ -163,6 +164,15 @@ document.querySelectorAll('.platform-tab').forEach(function(t){t.addEventListene
 $('mainSearch').addEventListener('keydown',function(e){if(e.key==='Enter')doMainSearch();});
 $('discoverSearch').addEventListener('keydown',function(e){if(e.key==='Enter')doDiscoverSearch();});
 renderRecommendList();renderLikedList();renderHistoryList();renderHotSearch();
+window.playSongById=playSongById;
+window.toggleLike=toggleLike;
+window.doMainSearch=doMainSearch;
+window.doDiscoverSearch=doDiscoverSearch;
+window.togglePlay=togglePlay;
+window.prevSong=prevSong;
+window.nextSong=nextSong;
+window.doDownload=doDownload;
+window.doSearch=doSearch;
 })();
 
 </script>
