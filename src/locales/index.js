@@ -31,13 +31,14 @@ import toast from './modules/toast.js'
 import modal from './modules/modal.js'
 import engagement from './modules/engagement.js'
 import engine from './modules/engine.js'
+import music from './modules/music.js'
 import openclawSetup from './modules/openclaw-setup.js'
 
 const MODULES = {
   common, sidebar, instance, dashboard, services, settings,
   models, agents, agentDetail, gateway, security, communication, channels,
   memory, cron, usage, skills, chat, chatDebug, setup, about,
-  ext, logs, assistant, toast, modal, engagement, engine, openclawSetup,
+  ext, logs, assistant, toast, modal, engagement, engine, music, openclawSetup,
 }
 
 /** 构建所有语言字典 { 'zh-CN': { common: {...}, sidebar: {...}, ... }, ... } */
