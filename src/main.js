@@ -55,7 +55,6 @@ import './style/agents.css'
 import './style/debug.css'
 import './style/assistant.css'
 import './style/ai-drawer.css'
-import './styles/music-player.css'
 import './engines/hermes/style/hermes.css'
 import './engines/hermes/style/skills-hub.css'
 
