@@ -36,6 +36,38 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     proxy: {
+      '/api/music/163': {
+        target: 'https://music.163.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/163/, ''),
+        headers: { Referer: 'https://music.163.com' },
+      },
+      '/api/music/qq': {
+        target: 'https://c.y.qq.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/qq/, ''),
+        headers: { Referer: 'https://y.qq.com' },
+      },
+      '/api/music/kugou': {
+        target: 'https://songsearch.kugou.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/kugou/, ''),
+      },
+      '/api/music/kuwo': {
+        target: 'https://search.kuwo.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/kuwo/, ''),
+      },
+      '/api/music/migu': {
+        target: 'https://m.music.migu.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/migu/, ''),
+      },
+      '/api/music/injahow': {
+        target: 'https://api.injahow.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/injahow/, ''),
+      },
       '/ws': {
         target: `ws://127.0.0.1:${gatewayPort}`,
         ws: true,
