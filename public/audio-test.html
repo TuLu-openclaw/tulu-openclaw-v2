@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Audio Proxy Test</title></head>
+<body>
+<h1>Audio Proxy Test</h1>
+<button id="test">Play 晴天</button>
+<button id="pause">Pause</button>
+<button id="resume">Resume</button>
+<pre id="log"></pre>
+<audio id="audio"></audio>
+<script>
+var a=document.getElementById('audio');
+var log=document.getElementById('log');
+function L(msg){log.textContent+=msg+'\n';console.log(msg);}
+
+document.getElementById('test').onclick=function(){
+  L('Setting src...');
+  a.src='/api/music/injahow/meting/?type=url&id=18600102&source=netease';
+  L('src='+a.src);
+  a.play().then(function(){
+    L('PLAY OK - playing: '+!a.paused);
+  }).catch(function(e){
+    L('PLAY FAIL: '+e.message);
+  });
+};
+document.getElementById('pause').onclick=function(){
+  a.pause(); L('PAUSED, paused='+a.paused);
+};
+document.getElementById('resume').onclick=function(){
+  a.play().then(function(){L('RESUME OK');}).catch(function(e){L('RESUME FAIL: '+e.message);});
+};
+a.addEventListener('loadedmetadata',function(){L('METADATA: duration='+a.duration);});
+a.addEventListener('canplay',function(){L('CANPLAY');});
+a.addEventListener('playing',function(){L('PLAYING');});
+a.addEventListener('error',function(e){L('ERROR: '+a.error?.message);});
+a.addEventListener('ended',function(){L('ENDED');});
+</script>
+</body></html>
