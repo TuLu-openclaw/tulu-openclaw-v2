@@ -7,7 +7,7 @@ mod windows_proxy;
 
 use commands::{
     agent, assistant, config, device, extensions, hermes, hermes_providers, logs, memory,
-    messaging, pairing, proxy, service, skills, tvbox, update,
+    messaging, music, pairing, proxy, service, skills, tvbox, update,
 };
 
 pub fn run() {
@@ -295,6 +295,14 @@ pub fn run() {
             tvbox::tvbox_parse,
             // 全球内置代理
             proxy::proxy_url,
+            // 音乐播放器
+            music::music_search_all,
+            music::music_get_play_url,
+            music::music_proxy_audio,
+            music::music_download_song,
+            music::music_set_download_dir,
+            music::music_get_download_dir,
+            music::music_get_lyrics,
         ])
         .on_window_event(|window, event| {
             // 关闭窗口时最小化到托盘，不退出应用（仅主窗口）

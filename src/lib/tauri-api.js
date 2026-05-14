@@ -590,4 +590,13 @@ export const api = {
   hermesDashboardPlugins: () => invoke('hermes_dashboard_plugins'),
   hermesDashboardPluginsRescan: () => invoke('hermes_dashboard_plugins_rescan'),
   hermesUsageAnalytics: (days = 30) => invoke('hermes_usage_analytics', { days }),
+
+  // 音乐播放器
+  musicSearchAll: (query, platforms, limit) => invoke('music_search_all', { query, platforms: platforms || null, limit: limit || 20 }),
+  musicGetPlayUrl: (platform, id) => invoke('music_get_play_url', { platform, id }),
+  musicProxyAudio: (url, platform) => invoke('music_proxy_audio', { url, platform }),
+  musicDownloadSong: (platform, id, name, artist) => invoke('music_download_song', { platform, id, name, artist }),
+  musicSetDownloadDir: (path) => invoke('music_set_download_dir', { path }),
+  musicGetDownloadDir: () => invoke('music_get_download_dir'),
+  musicGetLyrics: (platform, id) => invoke('music_get_lyrics', { platform, id }),
 }
