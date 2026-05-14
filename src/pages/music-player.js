@@ -9,11 +9,6 @@ import { toast } from '../components/toast.js'
 // 初始化 i18n
 initI18n()
 
-let _rootEl = null
-
-// ESC helper
-function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
-
 // ===== 平台配置 =====
 const PLATFORMS = {
   netease: { name: t('music.platformNetease'), icon: '🎵', color: '#e60026' },
@@ -317,30 +312,28 @@ function formatTimeAgo(timestamp) {
   return new Date(timestamp).toLocaleDateString()
 }
 
+// ESC helper
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+// ===== 全局 page 引用（供 renderPage 使用）=====
+let _page = null
+
 // ===== 渲染 =====
 function renderPage() {
+  if (!_page) return
   try {
-    const scope = _rootEl || document
-    const el = scope.querySelector('.music-player-page')
-    if (!el) {
-      console.error('[music-player] .music-player-page element not found in', scope)
-      return
-    }
-
-    el.innerHTML = `
+    _page.innerHTML = `
     <div class="xingmu-container" style="--bg-color:${state.bgColor}">
       ${renderHeader()}
       ${renderMainContent()}
       ${renderMiniPlayer()}
     </div>
   `
-  bindEvents()
-  if (state.currentSong?.cover) setBackground(state.currentSong.cover)
+    bindEvents(_page)
+    if (state.currentSong?.cover) setBackground(_page, state.currentSong.cover)
   } catch(e) {
     console.error('[music-player] renderPage error:', e)
-    const scope = _rootEl || document
-    const el = scope.querySelector('.music-player-page')
-    if (el) el.innerHTML = `<div style="color:red;padding:40px;text-align:center">星枢音乐渲染失败: ${e?.message||e}<br><button onclick="location.reload()">重新加载</button></div>`
+    if (_page) _page.innerHTML = `<div style="color:red;padding:40px;text-align:center">星枢音乐渲染失败: ${e?.message||e}<br><button onclick="location.reload()">重新加载</button></div>`
   }
 }
 
@@ -535,28 +528,27 @@ function renderMiniPlayer() {
   `
 }
 
-function setBackground(coverUrl) {
-  const scope = _rootEl || document
-  const container = scope.querySelector('.xingmu-container')
+function setBackground(page, coverUrl) {
+  const container = page.querySelector('.xingmu-container')
   if (!container || !coverUrl) return
-  let bg = scope.querySelector('.xingmu-bg')
+  let bg = page.querySelector('.xingmu-bg')
   if (!bg) { bg = document.createElement('div'); bg.className = 'xingmu-bg'; container.insertBefore(bg, container.firstChild) }
   bg.style.backgroundImage = `url(${coverUrl})`
 }
 
 function updateProgressUI() {
-  const scope = _rootEl || document
-  const fill = scope.querySelector('#xingmu-progress-fill')
-  const miniFill = scope.querySelector('#xingmu-mini-progress-fill')
-  const cur = scope.querySelector('#xingmu-time-current')
-  const total = scope.querySelector('#xingmu-time-total')
+  if (!_page) return
+  const fill = _page.querySelector('#xingmu-progress-fill')
+  const miniFill = _page.querySelector('#xingmu-mini-progress-fill')
+  const cur = _page.querySelector('#xingmu-time-current')
+  const total = _page.querySelector('#xingmu-time-total')
   const pct = state.duration > 0 ? (state.progress / state.duration) * 100 : 0
   if (fill) fill.style.width = pct + '%'
   if (miniFill) miniFill.style.width = pct + '%'
   if (cur) cur.textContent = formatDuration(state.progress * 1000)
   if (total) total.textContent = formatDuration(state.duration * 1000)
 
-  const lyricLines = scope.querySelectorAll('.xingmu-lyric-line')
+  const lyricLines = _page.querySelectorAll('.xingmu-lyric-line')
   if (lyricLines.length > 0) {
     const lrc = parseLyrics(state.lyrics)
     let activeIdx = -1
@@ -568,34 +560,32 @@ function updateProgressUI() {
   }
 }
 
-function bindEvents() {
-  const scope = _rootEl || document
-
+function bindEvents(page) {
   // Tab 切换
-  scope.querySelectorAll('.xingmu-tab').forEach(btn => {
+  page.querySelectorAll('.xingmu-tab').forEach(btn => {
     btn.addEventListener('click', () => { state.activeTab = btn.dataset.tab; renderPage() })
   })
-  scope.querySelectorAll('[data-tab]').forEach(btn => {
+  page.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.dataset.tab) { state.activeTab = btn.dataset.tab; renderPage() }
     })
   })
 
   // 搜索
-  const searchInput = scope.querySelector('#xingmu-search-input')
-  const searchBtn = scope.querySelector('#xingmu-search-btn')
+  const searchInput = page.querySelector('#xingmu-search-input')
+  const searchBtn = page.querySelector('#xingmu-search-btn')
   searchInput?.addEventListener('keydown', e => { if (e.key === 'Enter') { state.query = searchInput.value; doSearch() } })
   searchBtn?.addEventListener('click', () => { state.query = searchInput?.value || ''; doSearch() })
 
   // 播放控制
-  scope.querySelector('#xingmu-toggle-btn')?.addEventListener('click', togglePlay)
-  scope.querySelector('#xingmu-mini-toggle')?.addEventListener('click', togglePlay)
-  scope.querySelector('#xingmu-prev-btn')?.addEventListener('click', playPrev)
-  scope.querySelector('#xingmu-next-btn')?.addEventListener('click', playNext)
-  scope.querySelector('#xingmu-mini-next')?.addEventListener('click', playNext)
+  page.querySelector('#xingmu-toggle-btn')?.addEventListener('click', togglePlay)
+  page.querySelector('#xingmu-mini-toggle')?.addEventListener('click', togglePlay)
+  page.querySelector('#xingmu-prev-btn')?.addEventListener('click', playPrev)
+  page.querySelector('#xingmu-next-btn')?.addEventListener('click', playNext)
+  page.querySelector('#xingmu-mini-next')?.addEventListener('click', playNext)
 
   // 播放模式
-  scope.querySelector('#xingmu-mode-btn')?.addEventListener('click', () => {
+  page.querySelector('#xingmu-mode-btn')?.addEventListener('click', () => {
     const modes = ['order', 'loop', 'random']
     const idx = modes.indexOf(state.playMode)
     state.playMode = modes[(idx + 1) % modes.length]
@@ -603,15 +593,15 @@ function bindEvents() {
   })
 
   // 喜欢按钮
-  scope.querySelector('#xingmu-fav-btn-lg')?.addEventListener('click', () => {
+  page.querySelector('#xingmu-fav-btn-lg')?.addEventListener('click', () => {
     if (state.currentSong) toggleFavorite(state.currentSong)
   })
 
   // 下载
-  scope.querySelector('#xingmu-download-btn')?.addEventListener('click', downloadSong)
+  page.querySelector('#xingmu-download-btn')?.addEventListener('click', downloadSong)
 
   // 歌曲卡片播放
-  scope.querySelectorAll('.xingmu-play-btn').forEach(btn => {
+  page.querySelectorAll('.xingmu-play-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation()
       const idx = parseInt(btn.dataset.index)
@@ -625,7 +615,7 @@ function bindEvents() {
   })
 
   // 歌曲卡片喜欢
-  scope.querySelectorAll('.xingmu-fav-btn').forEach(btn => {
+  page.querySelectorAll('.xingmu-fav-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation()
       const idx = parseInt(btn.dataset.index)
@@ -635,7 +625,7 @@ function bindEvents() {
   })
 
   // 推荐卡片
-  scope.querySelectorAll('.xingmu-rec-card').forEach(card => {
+  page.querySelectorAll('.xingmu-rec-card').forEach(card => {
     card.addEventListener('click', async () => {
       const recs = [
         { name: '孤勇者', artist: '陈奕迅', platform: 'netease', id: '1901371647', album: '单打独斗', duration: 298000, cover: '' },
@@ -654,7 +644,7 @@ function bindEvents() {
   })
 
   // 进度条点击
-  scope.querySelector('#xingmu-progress-bar')?.addEventListener('click', e => {
+  page.querySelector('#xingmu-progress-bar')?.addEventListener('click', e => {
     if (!state.audioEl || !state.duration) return
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = (e.clientX - rect.left) / rect.width
@@ -662,7 +652,7 @@ function bindEvents() {
   })
 
   // 键盘
-  (_rootEl || document).addEventListener('keydown', e => {
+  page.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return
     if (e.code === 'Space') { e.preventDefault(); togglePlay() }
     if (e.code === 'ArrowLeft' && state.audioEl) state.audioEl.currentTime = Math.max(0, state.audioEl.currentTime - 5)
@@ -671,34 +661,22 @@ function bindEvents() {
 }
 
 // ===== 导出 =====
-export async function render(container) {
-  try {
-    if (container instanceof HTMLElement) {
-      _rootEl = container
-      container.className = 'music-player-page'
-      await renderPage()
-      return
-    }
-    const el = document.createElement('div')
-    el.className = 'music-player-page'
-    _rootEl = el
-    await renderPage()
-    return el
-  } catch(e) {
-    console.error('[music-player] render error:', e)
-    container.innerHTML = `<div style="color:red;padding:40px;text-align:center">星枢音乐初始化失败: ${e?.message||e}<br><button onclick="location.reload()">重新加载</button></div>`
-  }
+export async function render() {
+  const page = document.createElement('div')
+  page.className = 'page music-player-page'
+  _page = page
+  page.innerHTML = `
+    <div class="xingmu-container" style="--bg-color:${state.bgColor}">
+      ${renderHeader()}
+      ${renderMainContent()}
+      ${renderMiniPlayer()}
+    </div>
+  `
+  bindEvents(page)
+  if (state.currentSong?.cover) setBackground(page, state.currentSong.cover)
+  return page
 }
 
-export default function MusicPlayerPage() {
-  try {
-    const el = document.createElement('div')
-    el.className = 'music-player-page'
-    _rootEl = el
-    renderPage()
-    return el
-  } catch(e) {
-    console.error('[music-player] MusicPlayerPage error:', e)
-    return document.createElement('div')
-  }
+export function cleanup() {
+  _page = null
 }
