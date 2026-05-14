@@ -72,19 +72,24 @@ pub async fn music_search_all(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let futures: Vec<_> = platforms.into_iter().map(|platform| async move {
-        match platform.as_str() {
-            "netease" => search_netease(&client, &query, limit).await,
-            "qq" => search_qq(&client, &query, limit).await,
-            "kugou" => search_kugou(&client, &query, limit).await,
-            "kuwo" => search_kuwo(&client, &query, limit).await,
-            "migu" => search_migu(&client, &query, limit).await,
-            _ => PlatformSearchResult {
-                platform,
-                success: false,
-                songs: vec![],
-                error: "Unknown platform".into(),
-            },
+    let query_clone = query.clone();
+    let futures: Vec<_> = platforms.into_iter().map(move |platform| {
+        let client = client.clone();
+        let q = query_clone.clone();
+        async move {
+            match platform.as_str() {
+                "netease" => search_netease(&client, &q, limit).await,
+                "qq" => search_qq(&client, &q, limit).await,
+                "kugou" => search_kugou(&client, &q, limit).await,
+                "kuwo" => search_kuwo(&client, &q, limit).await,
+                "migu" => search_migu(&client, &q, limit).await,
+                _ => PlatformSearchResult {
+                    platform,
+                    success: false,
+                    songs: vec![],
+                    error: "Unknown platform".into(),
+                },
+            }
         }
     }).collect();
 
