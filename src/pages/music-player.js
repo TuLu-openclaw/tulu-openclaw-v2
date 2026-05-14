@@ -662,23 +662,33 @@ function bindEvents() {
 
 // ===== 导出 =====
 export async function render(container) {
-  if (container instanceof HTMLElement) {
-    _rootEl = container
-    container.className = 'music-player-page'
+  try {
+    if (container instanceof HTMLElement) {
+      _rootEl = container
+      container.className = 'music-player-page'
+      renderPage()
+      return
+    }
+    const el = document.createElement('div')
+    el.className = 'music-player-page'
+    _rootEl = el
     renderPage()
-    return
+    return el
+  } catch(e) {
+    console.error('[music-player] render error:', e)
+    container.innerHTML = `<div style="color:red;padding:40px;text-align:center">星枢音乐初始化失败: ${e?.message||e}<br><button onclick="location.reload()">重新加载</button></div>`
   }
-  const el = document.createElement('div')
-  el.className = 'music-player-page'
-  _rootEl = el
-  renderPage()
-  return el
 }
 
 export default function MusicPlayerPage() {
-  const el = document.createElement('div')
-  el.className = 'music-player-page'
-  _rootEl = el
-  renderPage()
-  return el
+  try {
+    const el = document.createElement('div')
+    el.className = 'music-player-page'
+    _rootEl = el
+    renderPage()
+    return el
+  } catch(e) {
+    console.error('[music-player] MusicPlayerPage error:', e)
+    return document.createElement('div')
+  }
 }
