@@ -72,10 +72,8 @@ pub async fn music_search_all(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut results = Vec::new();
-
-    for platform in platforms {
-        let result = match platform.as_str() {
+    let futures: Vec<_> = platforms.into_iter().map(|platform| async move {
+        match platform.as_str() {
             "netease" => search_netease(&client, &query, limit).await,
             "qq" => search_qq(&client, &query, limit).await,
             "kugou" => search_kugou(&client, &query, limit).await,
@@ -87,10 +85,11 @@ pub async fn music_search_all(
                 songs: vec![],
                 error: "Unknown platform".into(),
             },
-        };
-        results.push(result);
-    }
+        }
+    }).collect();
 
+    use futures_util::future::join_all;
+    let results = join_all(futures).await;
     Ok(results)
 }
 

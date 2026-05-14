@@ -125,7 +125,7 @@ async function doSearch() {
   }
 }
 
-async function playSong(song, addToHistory = true) {
+async function playSong(song, addToHistoryFlag = true) {
   if (!song) return
   if (state.audioEl) state.audioEl.pause()
 
@@ -142,15 +142,14 @@ async function playSong(song, addToHistory = true) {
   if (state.queue.length > 100) state.queue.pop()
   state.queueIndex = 0
 
-  if (addToHistory) addToHistory(song)
+  if (addToHistoryFlag) addToHistory(song)
 
   try {
     const rawUrl = await api.musicGetPlayUrl(song.platform, song.id)
 
     // 过滤无效 URL
-    if (!rawUrl || rawUrl === 'null' ||
-        (rawUrl.includes('api.injahow.cn') && rawUrl.length < 100) ||
-        rawUrl.includes('meting') && rawUrl.length < 100) {
+    const isMetingUrl = rawUrl.includes('api.injahow.cn') || rawUrl.includes('meting.yanyanlong.com')
+    if (!rawUrl || rawUrl === 'null' || (isMetingUrl && rawUrl.length < 100)) {
       throw new Error(t('music.playErrorGeneral'))
     }
 
