@@ -496,6 +496,14 @@ export const api = {
   dockerRemoveNode: (nodeId) => invoke('docker_remove_node', { nodeId }),
   dockerClusterOverview: () => invoke('docker_cluster_overview', {}),
 
+  // Music player
+  musicSearchAll: (q, platforms, limit) => invoke('music_search_all', { query: q, platforms: platforms || null, limit: limit || 20 }),
+  musicGetPlayUrl: (platform, id) => invoke('music_get_play_url', { platform, id }),
+  musicProxyAudio: (url, platform) => invoke('music_proxy_audio', { url, platform }),
+  musicDownloadSong: (platform, id, name, artist) => invoke('music_download_song', { platform, id, name, artist }),
+  musicSetDownloadDir: (path) => invoke('music_set_download_dir', { path }),
+  musicGetDownloadDir: () => invoke('music_get_download_dir'),
+  musicGetLyrics: (platform, id) => invoke('music_get_lyrics', { platform, id }),
 
   // 前端热更新
   checkFrontendUpdate: () => invoke('check_frontend_update'),

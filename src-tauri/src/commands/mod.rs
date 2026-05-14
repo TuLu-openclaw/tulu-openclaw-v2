@@ -22,6 +22,7 @@ pub mod hermes;
 pub mod logs;
 pub mod memory;
 pub mod messaging;
+pub mod music;
 pub mod pairing;
 pub mod proxy;
 pub mod service;

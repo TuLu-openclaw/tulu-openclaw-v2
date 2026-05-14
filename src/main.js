@@ -433,6 +433,7 @@ async function boot() {
   registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
+  registerRoute('/music-player', () => import('./pages/music-player.js'))
   registerRoute('/coming-soon', () => import('./pages/coming-soon.js'))
   registerRoute('/security', () => import('./pages/security.js'))
   registerRoute('/about', () => import('./pages/about.js'))
