@@ -746,7 +746,8 @@ pub async fn music_proxy_audio(url: String, platform: String) -> Result<String, 
 
     match req.send().await {
         Ok(resp) => {
-            if resp.status().is_success() {
+            let status = resp.status();
+            if status.is_success() {
                 let ct = resp
                     .headers()
                     .get("content-type")
@@ -763,7 +764,7 @@ pub async fn music_proxy_audio(url: String, platform: String) -> Result<String, 
                     Err(_) => {}
                 }
             }
-            Err(format!("Failed to fetch audio: {}", resp.status()))
+            Err(format!("Failed to fetch audio: {}", status))
         }
         Err(e) => Err(e.to_string()),
     }
