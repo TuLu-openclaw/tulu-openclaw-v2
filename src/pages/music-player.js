@@ -45,6 +45,7 @@ const STORAGE_KEYS = {
   favorites: 'xingsu_favorites',
   history: 'xingxu_history',
   downloadDir: 'xingxu_download_dir',
+  settings: 'xingmu_settings',
 }
 
 function loadFavorites() {
@@ -64,6 +65,25 @@ function loadDownloadDir() {
 }
 function saveDownloadDir(dir) {
   localStorage.setItem(STORAGE_KEYS.downloadDir, dir)
+}
+
+// ===== 设置管理 =====
+const DEFAULT_SETTINGS = {
+  quality: 'high',      // standard | high | lossless
+  autoCache: false,
+  notifyOnSongChange: true,
+  downloadDir: '',
+}
+
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.settings) || '{}')
+    return { ...DEFAULT_SETTINGS, ...saved }
+  } catch { return { ...DEFAULT_SETTINGS } }
+}
+
+function saveSettings(settings) {
+  localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings))
 }
 
 // ===== 颜色提取 =====
@@ -184,7 +204,10 @@ async function playSong(song, addToHistoryFlag = true) {
     }
 
     renderPage()
-    toast(t('music.nowPlaying', { name: song.name, artist: song.artist }))
+    const settings = loadSettings()
+    if (settings.notifyOnSongChange) {
+      toast(t('music.nowPlaying', { name: song.name, artist: song.artist }))
+    }
   } catch (e) {
     console.error('Play error:', e)
     toast(t('music.playError', { error: e?.message || e }), 'error')
@@ -343,6 +366,7 @@ function renderHeader() {
       <div class="xingmu-tabs">
         <button class="xingmu-tab ${state.activeTab === 'discover' ? 'active' : ''}" data-tab="discover">${t('music.tabDiscover')}</button>
         <button class="xingmu-tab ${state.activeTab === 'my' ? 'active' : ''}" data-tab="my">${t('music.tabMy')}</button>
+        <button class="xingmu-tab ${state.activeTab === 'settings' ? 'active' : ''}" data-tab="settings">${t('music.tabSettings') || '设置'}</button>
       </div>
       ${state.activeTab !== 'player' && state.currentSong ? `
         <button class="xingmu-player-btn" data-tab="player">
@@ -359,6 +383,7 @@ function renderHeader() {
 
 function renderMainContent() {
   if (state.activeTab === 'player') return renderPlayerPage()
+  if (state.activeTab === 'settings') return `<div class="xingmu-content">${renderSettingsPage()}</div>`
   return `<div class="xingmu-content">${state.activeTab === 'discover' ? renderDiscover() : renderMyPage()}</div>`
 }
 
@@ -368,7 +393,33 @@ function renderDiscover() {
       <input type="text" class="xingmu-search-input" placeholder="${t('music.searchPlaceholder')}" value="${esc(state.query)}" id="xingmu-search-input">
       <button class="xingmu-search-btn" id="xingmu-search-btn">🔍</button>
     </div>
-    ${!state.query ? renderRecommendations() : renderSearchResults()}
+    ${!state.query ? renderRecommendationCategories() + renderRecommendations() : renderSearchResults()}
+  `
+}
+
+function renderRecommendationCategories() {
+  const categories = [
+    { id: 'hot', name: '🔥 热门推荐', icon: '🔥', keywords: ['热门', '流行', '排行榜'] },
+    { id: 'new', name: '🆕 新歌速递', icon: '🆕', keywords: ['新歌', '2024', '最新'] },
+    { id: 'soar', name: '📈 飙升榜', icon: '📈', keywords: ['飙升', '热门', '热门歌曲'] },
+    { id: 'douyin', name: '🎵 抖音热歌', icon: '🎵', keywords: ['抖音', '神曲', '热门'] },
+    { id: 'classic', name: '🎸 经典老歌', icon: '🎸', keywords: ['经典', '老歌', '怀旧'] },
+    { id: 'love', name: '❤️ 情歌', icon: '❤️', keywords: ['情歌', '爱情', '甜蜜'] },
+    { id: 'rock', name: '🎸 摇滚', icon: '🎸', keywords: ['摇滚', '乐队', '金属'] },
+    { id: 'rap', name: '🎤 说唱', icon: '🎤', keywords: ['说唱', 'rap', 'hiphop'] },
+  ]
+  return `
+    <div class="xingmu-section">
+      <div class="xingmu-section-title">📋 ${t('music.categories') || '推荐分类'}</div>
+      <div class="xingmu-rec-grid">
+        ${categories.map(c => `
+          <div class="xingmu-rec-card" data-category="${esc(c.id)}" data-keywords="${esc(c.keywords.join(','))}">
+            <div class="xingmu-rec-cover">${c.icon}</div>
+            <div class="xingmu-rec-name">${esc(c.name.replace(/^[\S]+\s/, ''))}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
   `
 }
 
@@ -379,6 +430,7 @@ function renderRecommendations() {
     { name: '漠河舞厅', artist: '柳爽', platform: 'netease', id: '1498195650', album: '漠河舞厅', duration: 268000, cover: '' },
     { name: '稻香', artist: '周杰伦', platform: 'netease', id: '18600163', album: '魔杰座', duration: 224000, cover: '' },
     { name: '晴天', artist: '周杰伦', platform: 'netease', id: '18600102', album: '叶惠美', duration: 267000, cover: '' },
+    { name: '七里香', artist: '周杰伦', platform: 'netease', id: '18600103', album: '七里香', duration: 268000, cover: '' },
   ]
   return `
     <div class="xingmu-section">
@@ -447,6 +499,60 @@ function renderMyPage() {
         ${state.history.length === 0
           ? `<div class="xingmu-empty">${t('music.emptyHistory')}</div>`
           : `<div class="xingmu-results">${state.history.slice(0, 20).map((s, i) => renderSongCard(s, i)).join('')}</div>`}
+      </div>
+    </div>
+  `
+}
+
+function renderSettingsPage() {
+  const settings = loadSettings()
+  const qualityLabels = { standard: '标准 (128k)', high: '高品质 (320k)', lossless: '无损 (flac)' }
+  return `
+    <div class="xingmu-settings">
+      <div class="xingmu-section">
+        <div class="xingmu-section-title">📥 ${t('music.settingDownloadDir') || '下载路径'}</div>
+        <div class="xingmu-setting-row">
+          <span class="xingmu-setting-value" id="xingmu-download-dir-display">${settings.downloadDir ? esc(settings.downloadDir) : t('music.settingNotSet') || '未设置'}</span>
+          <button class="xingmu-setting-btn" id="xingmu-change-dir-btn">${t('music.settingChange') || '修改'}</button>
+        </div>
+      </div>
+
+      <div class="xingmu-section">
+        <div class="xingmu-section-title">🎵 ${t('music.settingQuality') || '默认音质'}</div>
+        <div class="xingmu-quality-options">
+          ${['standard', 'high', 'lossless'].map(q => `
+            <button class="xingmu-quality-btn ${settings.quality === q ? 'active' : ''}" data-quality="${q}">${qualityLabels[q]}</button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="xingmu-section">
+        <div class="xingmu-section-title">💾 ${t('music.settingAutoCache') || '自动缓存'}</div>
+        <div class="xingmu-setting-row">
+          <span class="xingmu-setting-label">${t('music.settingAutoCacheDesc') || '播放过的歌曲自动缓存到本地'}</span>
+          <label class="xingmu-switch">
+            <input type="checkbox" id="xingmu-auto-cache-toggle" ${settings.autoCache ? 'checked' : ''}>
+            <span class="xingmu-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="xingmu-section">
+        <div class="xingmu-section-title">🔔 ${t('music.settingNotify') || '通知设置'}</div>
+        <div class="xingmu-setting-row">
+          <span class="xingmu-setting-label">${t('music.settingNotifyDesc') || '切歌时显示通知'}</span>
+          <label class="xingmu-switch">
+            <input type="checkbox" id="xingmu-notify-toggle" ${settings.notifyOnSongChange ? 'checked' : ''}>
+            <span class="xingmu-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="xingmu-section">
+        <div class="xingmu-section-title">ℹ️ ${t('music.settingAbout') || '关于'}</div>
+        <div class="xingmu-setting-row">
+          <span class="xingmu-setting-label">星枢音乐播放器 v2.0</span>
+        </div>
       </div>
     </div>
   `
@@ -548,8 +654,8 @@ function updateProgressUI() {
   if (cur) cur.textContent = formatDuration(state.progress * 1000)
   if (total) total.textContent = formatDuration(state.duration * 1000)
 
-  const lyricLines = _page.querySelectorAll('.xingmu-lyric-line')
-  if (lyricLines.length > 0) {
+  const lyricLines = _page?.querySelectorAll('.xingmu-lyric-line')
+  if (lyricLines && lyricLines.length > 0) {
     const lrc = parseLyrics(state.lyrics)
     let activeIdx = -1
     for (let i = 0; i < lrc.length; i++) {
@@ -557,6 +663,11 @@ function updateProgressUI() {
       else break
     }
     lyricLines.forEach((line, i) => line.classList.toggle('active', i === activeIdx))
+    // Auto scroll active lyric into view
+    if (activeIdx >= 0) {
+      const activeLine = _page?.querySelector('.xingmu-lyric-line.active')
+      activeLine?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   }
 }
 
@@ -627,20 +738,82 @@ function bindEvents(page) {
   // 推荐卡片
   page.querySelectorAll('.xingmu-rec-card').forEach(card => {
     card.addEventListener('click', async () => {
-      const recs = [
-        { name: '孤勇者', artist: '陈奕迅', platform: 'netease', id: '1901371647', album: '单打独斗', duration: 298000, cover: '' },
-        { name: '起风了', artist: '买辣椒也用券', platform: 'netease', id: '1842022081', album: '起风了', duration: 305000, cover: '' },
-        { name: '漠河舞厅', artist: '柳爽', platform: 'netease', id: '1498195650', album: '漠河舞厅', duration: 268000, cover: '' },
-        { name: '稻香', artist: '周杰伦', platform: 'netease', id: '18600163', album: '魔杰座', duration: 224000, cover: '' },
-        { name: '晴天', artist: '周杰伦', platform: 'netease', id: '18600102', album: '叶惠美', duration: 267000, cover: '' },
-      ]
       const idx = parseInt(card.dataset.recIndex)
-      if (recs[idx]) {
-        state.queue = [recs[idx]]
-        state.queueIndex = 0
-        playSong(recs[idx])
+      if (!isNaN(idx)) {
+        const recs = [
+          { name: '孤勇者', artist: '陈奕迅', platform: 'netease', id: '1901371647', album: '单打独斗', duration: 298000, cover: '' },
+          { name: '起风了', artist: '买辣椒也用券', platform: 'netease', id: '1842022081', album: '起风了', duration: 305000, cover: '' },
+          { name: '漠河舞厅', artist: '柳爽', platform: 'netease', id: '1498195650', album: '漠河舞厅', duration: 268000, cover: '' },
+          { name: '稻香', artist: '周杰伦', platform: 'netease', id: '18600163', album: '魔杰座', duration: 224000, cover: '' },
+          { name: '晴天', artist: '周杰伦', platform: 'netease', id: '18600102', album: '叶惠美', duration: 267000, cover: '' },
+          { name: '七里香', artist: '周杰伦', platform: 'netease', id: '18600103', album: '七里香', duration: 268000, cover: '' },
+        ]
+        if (recs[idx]) {
+          state.queue = [recs[idx]]
+          state.queueIndex = 0
+          playSong(recs[idx])
+        }
       }
     })
+  })
+
+  // 分类卡片 - 触发关键词搜索
+  page.querySelectorAll('[data-category]').forEach(card => {
+    card.addEventListener('click', () => {
+      const keywords = card.dataset.keywords?.split(',') || []
+      if (keywords.length > 0) {
+        const keyword = keywords[Math.floor(Math.random() * keywords.length)]
+        state.query = keyword
+        const searchInput = page.querySelector('#xingmu-search-input')
+        if (searchInput) searchInput.value = keyword
+        doSearch()
+      }
+    })
+  })
+
+  // 设置页 - 下载目录修改
+  page.querySelector('#xingmu-change-dir-btn')?.addEventListener('click', async () => {
+    try {
+      const current = await api.musicGetDownloadDir()
+      const dir = prompt(t('music.settingDownloadDirPrompt') || '请输入下载目录路径：', current || '')
+      if (dir !== null) {
+        await api.musicSetDownloadDir(dir)
+        const settings = loadSettings()
+        settings.downloadDir = dir
+        saveSettings(settings)
+        const display = page.querySelector('#xingmu-download-dir-display')
+        if (display) display.textContent = dir || (t('music.settingNotSet') || '未设置')
+        toast(t('music.settingSaved') || '设置已保存')
+      }
+    } catch (e) {
+      toast(t('music.settingError') || '设置保存失败：' + (e?.message || e), 'error')
+    }
+  })
+
+  // 设置页 - 音质切换
+  page.querySelectorAll('.xingmu-quality-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const settings = loadSettings()
+      settings.quality = btn.dataset.quality
+      saveSettings(settings)
+      page.querySelectorAll('.xingmu-quality-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      toast(t('music.settingSaved') || '音质已切换')
+    })
+  })
+
+  // 设置页 - 自动缓存开关
+  page.querySelector('#xingmu-auto-cache-toggle')?.addEventListener('change', e => {
+    const settings = loadSettings()
+    settings.autoCache = e.target.checked
+    saveSettings(settings)
+  })
+
+  // 设置页 - 通知开关
+  page.querySelector('#xingmu-notify-toggle')?.addEventListener('change', e => {
+    const settings = loadSettings()
+    settings.notifyOnSongChange = e.target.checked
+    saveSettings(settings)
   })
 
   // 进度条点击

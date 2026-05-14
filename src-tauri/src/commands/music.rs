@@ -56,7 +56,7 @@ pub async fn music_search_all(
     platforms: Option<Vec<String>>,
     limit: Option<u32>,
 ) -> Result<Vec<PlatformSearchResult>, String> {
-    let limit = limit.unwrap_or(20) as usize;
+    let limit = limit.unwrap_or(30) as usize;
     let platforms = platforms.unwrap_or_else(|| {
         vec![
             "netease".into(),
@@ -67,35 +67,87 @@ pub async fn music_search_all(
         ]
     });
 
+    // 生成搜索关键词变体
+    let keywords = generate_search_variants(&query);
+
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let query_clone = query.clone();
-    let futures: Vec<_> = platforms.into_iter().map(move |platform| {
-        let client = client.clone();
-        let q = query_clone.clone();
-        async move {
-            match platform.as_str() {
-                "netease" => search_netease(&client, &q, limit).await,
-                "qq" => search_qq(&client, &q, limit).await,
-                "kugou" => search_kugou(&client, &q, limit).await,
-                "kuwo" => search_kuwo(&client, &q, limit).await,
-                "migu" => search_migu(&client, &q, limit).await,
+    let mut all_results: Vec<PlatformSearchResult> = Vec::new();
+
+    for platform in platforms {
+        let mut platform_songs: Vec<Song> = Vec::new();
+        let mut platform_error = String::new();
+
+        // 每个平台搜索多个关键词，合并去重
+        for kw in &keywords {
+            let result = match platform.as_str() {
+                "netease" => search_netease(&client, kw, limit).await,
+                "qq" => search_qq(&client, kw, limit).await,
+                "kugou" => search_kugou(&client, kw, limit).await,
+                "kuwo" => search_kuwo(&client, kw, limit).await,
+                "migu" => search_migu(&client, kw, limit).await,
                 _ => PlatformSearchResult {
-                    platform,
+                    platform: platform.clone(),
                     success: false,
                     songs: vec![],
                     error: "Unknown platform".into(),
                 },
+            };
+
+            if result.success {
+                platform_songs.extend(result.songs);
+            } else if platform_error.is_empty() {
+                platform_error = result.error;
             }
         }
-    }).collect();
 
-    use futures_util::future::join_all;
-    let results = join_all(futures).await;
-    Ok(results)
+        // 去重（按 id + platform）
+        let mut seen = std::collections::HashSet::new();
+        platform_songs.retain(|s| seen.insert(format!("{}|{}", s.id, platform)));
+
+        // 限制数量
+        platform_songs.truncate(limit);
+
+        all_results.push(PlatformSearchResult {
+            platform,
+            success: !platform_songs.is_empty() || platform_error.is_empty(),
+            songs: platform_songs,
+            error: platform_error,
+        });
+    }
+
+    Ok(all_results)
+}
+
+/// 生成搜索关键词变体
+fn generate_search_variants(query: &str) -> Vec<String> {
+    let mut variants = vec![query.to_string()];
+
+    // 中英文变体映射
+    let translations: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::from([
+        ("周杰伦", vec!["Jay Chou", "周杰伦"]),
+        ("陈奕迅", vec!["陈奕迅", "Eason Chan"]),
+        ("林俊杰", vec!["林俊杰", "JJ Lin"]),
+        ("邓紫棋", vec!["邓紫棋", "G.E.M."]),
+        ("蔡依林", vec!["蔡依林", "Jolin Tsai"]),
+    ]);
+
+    for (key, vals) in translations {
+        if query.contains(key) {
+            for v in vals {
+                if !variants.contains(&v.to_string()) {
+                    variants.push(v.to_string());
+                }
+            }
+        }
+    }
+
+    // 最多保留 3 个关键词避免过多请求
+    variants.truncate(3);
+    variants
 }
 
 /// 网易云音乐搜索
