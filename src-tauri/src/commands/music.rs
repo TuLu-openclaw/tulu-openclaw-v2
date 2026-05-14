@@ -747,12 +747,12 @@ pub async fn music_proxy_audio(url: String, platform: String) -> Result<String, 
     match req.send().await {
         Ok(resp) => {
             if resp.status().is_success() {
-                // 先获取 headers（bytes() 会 move resp）
                 let ct = resp
                     .headers()
                     .get("content-type")
                     .and_then(|v| v.to_str().ok())
-                    .unwrap_or("audio/mpeg");
+                    .unwrap_or("audio/mpeg")
+                    .to_string();
                 match resp.bytes().await {
                     Ok(bytes) => {
                         if ct.contains("audio") || bytes.len() > 1024 {
