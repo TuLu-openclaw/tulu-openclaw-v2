@@ -319,11 +319,15 @@ function formatTimeAgo(timestamp) {
 
 // ===== 渲染 =====
 function renderPage() {
-  const scope = _rootEl || document
-  const el = scope.querySelector('.music-player-page')
-  if (!el) return
+  try {
+    const scope = _rootEl || document
+    const el = scope.querySelector('.music-player-page')
+    if (!el) {
+      console.error('[music-player] .music-player-page element not found in', scope)
+      return
+    }
 
-  el.innerHTML = `
+    el.innerHTML = `
     <div class="xingmu-container" style="--bg-color:${state.bgColor}">
       ${renderHeader()}
       ${renderMainContent()}
@@ -332,6 +336,12 @@ function renderPage() {
   `
   bindEvents()
   if (state.currentSong?.cover) setBackground(state.currentSong.cover)
+  } catch(e) {
+    console.error('[music-player] renderPage error:', e)
+    const scope = _rootEl || document
+    const el = scope.querySelector('.music-player-page')
+    if (el) el.innerHTML = `<div style="color:red;padding:40px;text-align:center">星枢音乐渲染失败: ${e?.message||e}<br><button onclick="location.reload()">重新加载</button></div>`
+  }
 }
 
 function renderHeader() {
@@ -666,13 +676,13 @@ export async function render(container) {
     if (container instanceof HTMLElement) {
       _rootEl = container
       container.className = 'music-player-page'
-      renderPage()
+      await renderPage()
       return
     }
     const el = document.createElement('div')
     el.className = 'music-player-page'
     _rootEl = el
-    renderPage()
+    await renderPage()
     return el
   } catch(e) {
     console.error('[music-player] render error:', e)
