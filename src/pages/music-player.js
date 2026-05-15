@@ -679,14 +679,17 @@ function bindEvents(page) {
   page.querySelectorAll('.xingmu-tab').forEach(btn => {
     btn.addEventListener('click', () => { state.activeTab = btn.dataset.tab; renderPage() })
   })
-  page.querySelectorAll('[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.dataset.tab) {
-        state.previousTab = state.activeTab
-        state.activeTab = btn.dataset.tab
-        renderPage()
-      }
-    })
+  // 事件委托：捕获所有动态渲染的 [data-tab] 按钮（返回按钮等）
+  page.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-tab]')
+    if (!btn) return
+    // 跳过 .xingmu-tab（已有独立处理）
+    if (btn.classList.contains('xingmu-tab')) return
+    if (btn.dataset.tab) {
+      state.previousTab = state.activeTab
+      state.activeTab = btn.dataset.tab
+      renderPage()
+    }
   })
 
   // 搜索
