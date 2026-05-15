@@ -253,31 +253,21 @@ export function render() {
     return { official, local }
   }
 
-  function starsHtml(n) {
-    const full = Math.min(n || 0, 5)
-    return '⭐'.repeat(full) + '☆'.repeat(5 - full)
-  }
-
   function renderStoreCard(skill) {
-    const stars = skill.stars || 3
     return `
       <div class="hm-store-card">
         <div class="hm-store-card-header">
-          <span class="hm-store-card-org">${escHtml(skill.orgEmoji || '📦')} ${escHtml(skill.org || '')}</span>
-          <span class="hm-store-card-type ${skill.type}">${skill.type === 'official' ? t('engine.skillsStoreOfficial') : t('engine.skillsStoreLocal')}</span>
+          <span class="hm-store-card-type ${skill.type || 'official'}">${skill.type === 'official' ? t('engine.skillsStoreOfficial') : t('engine.skillsStoreLocal')}</span>
+          <span class="hm-store-card-cat">${escHtml(skill.category || '')}</span>
         </div>
         <div class="hm-store-card-name">${escHtml(basename(skill.name || ''))}</div>
         <div class="hm-store-card-desc">${escHtml(skill.description || '')}</div>
-        <div class="hm-store-card-meta">
-          <span class="hm-store-card-stars" title="${stars} 星">${starsHtml(stars)}</span>
-          <span class="hm-store-card-cat">📂 ${escHtml(skill.category || '')}</span>
-        </div>
         <div class="hm-store-card-actions">
           <a href="${escHtml(skill.link || '#')}" target="_blank" rel="noopener" class="hm-store-card-link">${t('engine.skillsStoreViewOnGithub')}</a>
           <button class="hm-btn hm-btn--cta hm-btn--xs hm-store-install-btn"
                   data-install-name="${escHtml(skill.name || '')}"
                   data-install-desc="${escHtml(skill.description || '')}"
-                  data-install-link="${escHtml(skill.link || '')}">⬇ ${t('engine.skillsStoreInstall')}</button>
+                  data-install-link="${escHtml(skill.link || '')}">${t('engine.skillsStoreInstall')}</button>
         </div>
       </div>
     `
@@ -289,7 +279,6 @@ export function render() {
       <button class="hm-store-cat-chip ${isActive ? 'is-active' : ''}"
               data-cat="${escHtml(cat.name)}"
               title="${escHtml(cat.description || '')}: ${cat.count} 个技能">
-        <span class="hm-store-cat-emoji">${escHtml(cat.emoji || '📦')}</span>
         <span class="hm-store-cat-name">${escHtml(cat.name)}</span>
         <span class="hm-store-cat-count">${cat.count}</span>
       </button>
@@ -313,7 +302,6 @@ export function render() {
       return `
         <div class="hm-hub-panel">
           <div class="hm-hub-empty">
-            <div style="margin-bottom:12px;font-size:1.5rem">📡</div>
             <div>${t('engine.skillsStoreLoadFailed')}</div>
             <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-store-retry" style="margin-top:10px">${t('engine.skillsStoreRefresh')}</button>
           </div>
@@ -330,18 +318,17 @@ export function render() {
       <div class="hm-store-panel">
         <div class="hm-store-stats">
           <span>${t('engine.skillsStoreTotal', { official: storeData.officialCount || 0, local: storeData.localCount || 0, total: storeData.total || 0 })}</span>
-          ${storeData.updatedAt ? `<span style="opacity:0.6;font-size:0.75rem">🕐 ${new Date(storeData.updatedAt).toLocaleDateString('zh-CN')}</span>` : ''}
         </div>
         <div class="hm-store-search">
           <input type="text" id="hm-store-query" class="hm-hub-input"
                  placeholder="${t('engine.skillsStoreSearchPlaceholder')}" value="${escHtml(storeQuery)}">
-          <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-store-refresh">🔄</button>
+          <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-store-refresh">${t('engine.skillsRefresh')}</button>
         </div>
         <div class="hm-store-filter-row">
           <div class="hm-store-type-filters">
             <button class="hm-store-type-chip ${storeFilterType === 'all' ? 'is-active' : ''}" data-store-type="all">${t('engine.skillsStoreAll')}</button>
-            <button class="hm-store-type-chip ${storeFilterType === 'official' ? 'is-active' : ''}" data-store-type="official">🏛️ ${t('engine.skillsStoreOfficial')}</button>
-            <button class="hm-store-type-chip ${storeFilterType === 'local' ? 'is-active' : ''}" data-store-type="local">🇨🇳 ${t('engine.skillsStoreLocal')}</button>
+            <button class="hm-store-type-chip ${storeFilterType === 'official' ? 'is-active' : ''}" data-store-type="official">${t('engine.skillsStoreOfficial')}</button>
+            <button class="hm-store-type-chip ${storeFilterType === 'local' ? 'is-active' : ''}" data-store-type="local">${t('engine.skillsStoreLocal')}</button>
           </div>
         </div>
         <div class="hm-store-cats">
@@ -352,7 +339,7 @@ export function render() {
           ${totalCount === 0 ? `
             <div class="hm-hub-empty">${t('engine.skillsStoreNoMatch')}</div>
           ` : `
-            <div class="hm-store-results-count">${totalCount} ${t('engine.skillsStoreAll') === 'All' ? 'skills' : '个技能'}</div>
+            <div class="hm-store-results-count">${totalCount} 个技能</div>
             <div class="hm-store-grid">${allSkills.map(renderStoreCard).join('')}</div>
           `}
         </div>
@@ -613,7 +600,7 @@ export function render() {
         <div class="hm-skills-sidebar-tabs">
           <button class="hm-skills-tab ${!hubMode && !storeMode ? 'is-active' : ''}" id="hm-skills-tab-local">${t('engine.skillsLocalTab')}</button>
           <button class="hm-skills-tab ${hubMode ? 'is-active' : ''}" id="hm-skills-tab-hub">${t('engine.skillsHubTab')}</button>
-          <button class="hm-skills-tab ${storeMode ? 'is-active' : ''}" id="hm-skills-tab-store">🏪 ${t('engine.skillsStoreTab')}</button>
+          <button class="hm-skills-tab ${storeMode ? 'is-active' : ''}" id="hm-skills-tab-store">${t('engine.skillsStoreTab')}</button>
         </div>
         ${!hubMode && !storeMode ? `
           <div class="hm-skills-sidebar-search">
@@ -764,7 +751,6 @@ export function render() {
     if (storeMode) {
       return `
         <div class="hm-skills-detail-empty">
-          <div style="font-size:3rem;margin-bottom:12px">🏪</div>
           <div class="hm-skills-detail-empty-title">${t('engine.skillsStoreTab')}</div>
           <div class="hm-skills-detail-empty-sub">${t('engine.skillsStoreTotal', { official: storeData?.officialCount || 0, local: storeData?.localCount || 0, total: storeData?.total || 243 })}</div>
         </div>
@@ -953,18 +939,18 @@ export function render() {
         const link = btn.dataset.installLink
         if (!name) return
         btn.disabled = true
-        btn.textContent = '⏳ 安装中...'
+        btn.textContent = '安装中...'
         try {
           await api.skillhubInstallForEngine(name, desc, link, 'hermes')
-          btn.textContent = '✅ 已安装'
+          btn.textContent = '已安装'
           btn.classList.remove('hm-btn--cta')
           btn.style.opacity = '0.6'
           toast(t('engine.skillsHubInstalled', { slug: name }), 'success')
           loadSkills()
         } catch (err) {
-          btn.textContent = '❌ 失败'
+          btn.textContent = '安装失败'
           toast(t('engine.skillsHubInstallFailed') + ': ' + (err?.message || err), 'error')
-          setTimeout(() => { btn.disabled = false; btn.textContent = '⬇ ' + t('engine.skillsStoreInstall'); btn.classList.add('hm-btn--cta'); btn.style.opacity = '' }, 2000)
+          setTimeout(() => { btn.disabled = false; btn.textContent = t('engine.skillsStoreInstall'); btn.classList.add('hm-btn--cta'); btn.style.opacity = '' }, 2000)
         }
       }
     })

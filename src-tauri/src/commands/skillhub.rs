@@ -365,111 +365,74 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
     let c = client()?;
     let base = "https://raw.githubusercontent.com/anbeime/skill/main/data";
 
-    // 拉取官方技能（182个）- 15s 超时保护
+    // 拉取官方技能（独立 180s 超时保护）
     let official: Result<AnbeimeSkillsFile, String> = tokio::time::timeout(
         Duration::from_secs(180),
         async {
             let resp = c.get(format!("{base}/skills.json")).send().await
-                .map_err(|e| format!("拉取官方技能失败: {e}"))?;
+                .map_err(|e| format!("技能商店: 官方技能 fetch 失败: {e}"))?;
             resp.json().await
-                .map_err(|e| format!("解析官方技能失败: {e}"))
+                .map_err(|e| format!("技能商店: 官方技能 JSON 解析失败: {e}"))
         }
     ).await
-    .map_err(|e| format!("拉取官方技能超时: {e}"))
-    .and_then(|r| r); // flatten Result<Result<T, E>, E>
+    .map_err(|e| format!("技能商店: 官方技能请求超时 (180s): {e}"))
+    .and_then(|r| r);
 
-    // 拉取本地技能（61个，带分类和评分）- 15s 超时保护
+    // 拉取本地技能（独立 180s 超时保护）
     let local: Result<AnbeimeLocalFile, String> = tokio::time::timeout(
         Duration::from_secs(180),
         async {
             let resp = c.get(format!("{base}/local_skills.json")).send().await
-                .map_err(|e| format!("拉取本地技能失败: {e}"))?;
+                .map_err(|e| format!("技能商店: 本地技能 fetch 失败: {e}"))?;
             resp.json().await
-                .map_err(|e| format!("解析本地技能失败: {e}"))
+                .map_err(|e| format!("技能商店: 本地技能 JSON 解析失败: {e}"))
         }
     ).await
-    .map_err(|e| format!("拉取本地技能超时: {e}"))
-    .and_then(|r| r); // flatten
+    .map_err(|e| format!("技能商店: 本地技能请求超时 (180s): {e}"))
+    .and_then(|r| r);
 
-    // 分类元数据（emoji + 描述）
-    let cat_meta: Vec<(&str, &str, &str)> = vec![
-        ("内容创作与发布", "📝", "内容创作、采集、格式化、多平台发布"),
-        ("视频创作", "🎬", "视频创作、剪辑、二创、反推分析"),
-        ("电商与营销", "🛒", "电商带货、视频营销、文案创作"),
-        ("PPT与演示", "📊", "智能PPT生成、视觉增强、路演视频"),
-        ("语音与音频", "🎙️", "语音合成、TTS、ASR语音转文字"),
-        ("数字人与视频配音", "🤖", "数字人口播、音频驱动视频配音"),
-        ("文档与分析", "📄", "论文分析、合同审核、股票分析"),
-        ("智能体协作", "🤝", "多智能体团队协作与会议"),
-        ("产品与项目管理", "💼", "产品经理工具包、销售AI助手"),
-        ("设计与可视化", "🎨", "前端设计、流程图、3D插画"),
-        ("文档处理", "📑", "Word/Excel/PPT/PDF格式处理（系统内置）"),
-        ("技能管理", "🔧", "技能发现、创建与管理（系统内置）"),
-        ("财务分析", "💰", "财务建模、市场研究报告"),
-        ("文化创作", "🎭", "古诗词、文学艺术创作"),
+    // 分类元数据（纯文本，无 emoji）
+    let cat_meta: Vec<(&str, &str)> = vec![
+        ("内容创作与发布", "内容创作、采集、格式化、多平台发布"),
+        ("视频创作", "视频创作、剪辑、二创、反推分析"),
+        ("电商与营销", "电商带货、视频营销、文案创作"),
+        ("PPT与演示", "智能PPT生成、视觉增强、路演视频"),
+        ("语音与音频", "语音合成、TTS、ASR语音转文字"),
+        ("数字人与视频配音", "数字人口播、音频驱动视频配音"),
+        ("文档与分析", "论文分析、合同审核、股票分析"),
+        ("智能体协作", "多智能体团队协作与会议"),
+        ("产品与项目管理", "产品经理工具包、销售AI助手"),
+        ("设计与可视化", "前端设计、流程图、3D插画"),
+        ("文档处理", "Word/Excel/PPT/PDF格式处理（系统内置）"),
+        ("技能管理", "技能发现、创建与管理（系统内置）"),
+        ("财务分析", "财务建模、市场研究报告"),
+        ("文化创作", "古诗词、文学艺术创作"),
     ];
 
-    // 构建分类查找表
-    let cat_meta_map: std::collections::HashMap<&str, (&str, &str)> = cat_meta
-        .iter()
-        .map(|(n, e, d)| (*n, (*e, *d)))
-        .collect();
-
-    // 源组织 emoji 映射
-    let org_emoji: std::collections::HashMap<&str, &str> = [
-        ("anthropics", "🏛️"),
-        ("vercel-labs", "▲"),
-        ("cloudflare", "☁️"),
-        ("trailofbits", "🔐"),
-        ("huggingface-projects", "🤗"),
-        ("google-labs", "🔬"),
-        ("stripe", "💳"),
-        ("supabase", "⚡"),
-        ("expo", "📱"),
-        ("sentry", "🐛"),
-        ("better-auth", "🔑"),
-        ("remotion", "🎥"),
-        ("inngest", "⚙️"),
-        ("tinybird", "🐦"),
-        ("anthropic", "🏛️"),
-    ]
-    .iter()
-    .cloned()
-    .collect();
-
-    // 构建官方技能列表
+    // 构建官方技能列表（纯净数据，无额外装饰）
     let official_ok = official?;
     let official_skills: Vec<serde_json::Value> = official_ok
         .skills
         .iter()
         .map(|s| {
-            let org = s.name.split('/').next().unwrap_or(&s.name);
-            let org_e = org_emoji.get(org).copied().unwrap_or("📦");
             serde_json::json!({
                 "name": s.name,
                 "description": s.description,
                 "link": s.link,
                 "category": s.category,
                 "source": s.source,
-                "stars": 4,
-                "org": org,
-                "orgEmoji": org_e,
                 "type": "official"
             })
         })
         .collect();
 
-    // 构建本地技能列表
+    // 构建本地技能列表（纯净数据）
     let mut local_skills: Vec<serde_json::Value> = Vec::new();
     let local_data = local?;
     if let Some(categories) = local_data.categories.as_object() {
         let highlights = &local_data.highlights;
         for (cat_name, cat_data) in categories {
             if let Some(skill_names) = cat_data.get("skills").and_then(|s| s.as_array()) {
-                let cat_e = cat_meta_map
-                    .get(cat_name.as_str())
-                    .map(|(e, _)| *e)
-                    .unwrap_or("📦");
                 for sn in skill_names {
                     if let Some(s) = sn.as_str() {
                         let hl = highlights
@@ -478,20 +441,13 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
                         let desc = hl
                             .and_then(|h| h.get("description").and_then(|d| d.as_str()))
                             .unwrap_or(s);
-                        let stars = hl
-                            .and_then(|h| h.get("rating").and_then(|r| r.as_u64()))
-                            .unwrap_or(3) as u32;
                         local_skills.push(serde_json::json!({
                             "name": s,
                             "description": desc,
                             "link": format!("https://github.com/anbeime/skill/tree/main/skills/{s}"),
                             "category": cat_name,
                             "source": "本地技能库",
-                            "stars": stars,
-                            "org": "local",
-                            "orgEmoji": "🇨🇳",
-                            "type": "local",
-                            "emoji": cat_e
+                            "type": "local"
                         }));
                     }
                 }
@@ -499,10 +455,10 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
         }
     }
 
-    // 构建全量分类统计
+    // 构建分类统计
     let all_categories: Vec<serde_json::Value> = cat_meta
         .iter()
-        .map(|(name, emoji, desc)| {
+        .map(|(name, desc)| {
             let oc = official_skills
                 .iter()
                 .filter(|s| s["category"].as_str() == Some(name))
@@ -512,8 +468,8 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
                 .filter(|s| s["category"].as_str() == Some(name))
                 .count();
             serde_json::json!({
-                "name": name, "emoji": emoji, "description": desc,
-                "count": oc + lc, "officialCount": oc, "localCount": lc
+                "name": name, "description": desc,
+                "count": oc + lc
             })
         })
         .collect();
@@ -526,7 +482,6 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
         "officialCount": official_skills.len(),
         "localCount": local_skills.len(),
         "categories": all_categories,
-        "highlights": local_data.highlights,
         "updatedAt": chrono::Utc::now().to_rfc3339(),
     });
 
