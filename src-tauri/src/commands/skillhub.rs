@@ -365,25 +365,31 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
     let c = client()?;
     let base = "https://raw.githubusercontent.com/anbeime/skill/main/data";
 
-    // 拉取官方技能（182个）
-    let official: AnbeimeSkillsFile = c
-        .get(format!("{base}/skills.json"))
-        .send()
-        .await
-        .map_err(|e| format!("拉取官方技能列表失败: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("解析官方技能失败: {e}"))?;
+    // 拉取官方技能（182个）- 15s 超时保护
+    let official: Result<AnbeimeSkillsFile, String> = tokio::time::timeout(
+        Duration::from_secs(15),
+        async {
+            let resp = c.get(format!("{base}/skills.json")).send().await
+                .map_err(|e| format!("拉取官方技能失败: {e}"))?;
+            resp.json().await
+                .map_err(|e| format!("解析官方技能失败: {e}"))
+        }
+    ).await
+    .map_err(|e| format!("拉取官方技能超时: {e}"))
+    .and_then(|r| r); // flatten Result<Result<T, E>, E>
 
-    // 拉取本地技能（61个，带分类和评分）
-    let local: AnbeimeLocalFile = c
-        .get(format!("{base}/local_skills.json"))
-        .send()
-        .await
-        .map_err(|e| format!("拉取本地技能列表失败: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("解析本地技能失败: {e}"))?;
+    // 拉取本地技能（61个，带分类和评分）- 15s 超时保护
+    let local: Result<AnbeimeLocalFile, String> = tokio::time::timeout(
+        Duration::from_secs(15),
+        async {
+            let resp = c.get(format!("{base}/local_skills.json")).send().await
+                .map_err(|e| format!("拉取本地技能失败: {e}"))?;
+            resp.json().await
+                .map_err(|e| format!("解析本地技能失败: {e}"))
+        }
+    ).await
+    .map_err(|e| format!("拉取本地技能超时: {e}"))
+    .and_then(|r| r); // flatten
 
     // 分类元数据（emoji + 描述）
     let cat_meta: Vec<(&str, &str, &str)> = vec![
@@ -432,7 +438,8 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
     .collect();
 
     // 构建官方技能列表
-    let official_skills: Vec<serde_json::Value> = official
+    let official_ok = official?;
+    let official_skills: Vec<serde_json::Value> = official_ok
         .skills
         .iter()
         .map(|s| {
@@ -454,8 +461,9 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
 
     // 构建本地技能列表
     let mut local_skills: Vec<serde_json::Value> = Vec::new();
-    if let Some(categories) = local.categories.as_object() {
-        let highlights = &local.highlights;
+    let local_data = local?;
+    if let Some(categories) = local_data.categories.as_object() {
+        let highlights = &local_data.highlights;
         for (cat_name, cat_data) in categories {
             if let Some(skill_names) = cat_data.get("skills").and_then(|s| s.as_array()) {
                 let cat_e = cat_meta_map
@@ -518,7 +526,7 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
         "officialCount": official_skills.len(),
         "localCount": local_skills.len(),
         "categories": all_categories,
-        "highlights": local.highlights,
+        "highlights": local_data.highlights,
         "updatedAt": chrono::Utc::now().to_rfc3339(),
     });
 
