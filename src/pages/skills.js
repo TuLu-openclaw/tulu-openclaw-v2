@@ -296,6 +296,7 @@ function renderStoreItems(el, items) {
     const slug = item.slug || ''
     const name = item.display_name || item.displayName || item.name || slug
     const desc = item.summary || item.description || ''
+    const link = item.link || item.source || ''
     const installed = _installedNames.has(slug)
     return `
       <div class="clawhub-item store-item" data-slug="${esc(slug)}" data-name="${esc(name)}" data-desc="${esc(desc)}">
@@ -307,7 +308,7 @@ function renderStoreItems(el, items) {
         <div class="clawhub-item-actions">
           ${installed
             ? `<span class="clawhub-badge installed">${t('skills.installed')}</span>`
-            : `<button class="btn btn-primary btn-sm" data-action="store-install" data-slug="${esc(slug)}">${t('skills.install')}</button>`
+            : `<button class="btn btn-primary btn-sm" data-action="store-install" data-slug="${esc(slug)}" data-name="${esc(name)}" data-desc="${esc(desc)}" data-link="${esc(link)}">${t('skills.install')}</button>`
           }
         </div>
       </div>
@@ -366,11 +367,14 @@ async function handleStoreSearch(page) {
 
 async function handleStoreInstall(page, btn) {
   const slug = btn.dataset.slug
+  const name = btn.dataset.name || slug
+  const desc = btn.dataset.desc || ""
+  const link = btn.dataset.link || ""
   btn.disabled = true
   btn.textContent = t('skills.installing')
   try {
-    await api.skillhubInstall(slug)
-    toast(t('skills.skillInstalled', { name: slug }), 'success')
+    await api.skillhubInstallForEngine(name, desc, link, 'openclaw')
+    toast(t('skills.skillInstalled', { name }), 'success')
     btn.textContent = t('skills.installed')
     btn.classList.remove('btn-primary')
     btn.classList.add('btn-secondary')
