@@ -114,10 +114,31 @@
 }
 
 /* Search */
+.xingmu-search-bar {
+  padding: 8px 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: rgba(0,0,0,0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: sticky;
+  top: 72px;
+  z-index: 9;
+}
 .xingmu-search {
   display: flex;
   gap: 10px;
-  margin-bottom: 24px;
+  flex: 1;
+  margin-bottom: 0;
+}
+.xingmu-search-bar .xingmu-back-btn {
+  margin-bottom: 0;
+  padding: 10px 16px;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+  font-size: 13px;
 }
 
 .xingmu-search-input {

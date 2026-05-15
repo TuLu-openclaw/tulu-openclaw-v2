@@ -379,6 +379,15 @@ function renderHeader() {
         </button>
       ` : ''}
     </div>
+    ${state.activeTab !== 'player' ? `
+      <div class="xingmu-search-bar">
+        <div class="xingmu-search">
+          <input type="text" class="xingmu-search-input" placeholder="${t('music.searchPlaceholder')}" value="${esc(state.query)}" id="xingmu-search-input">
+          <button class="xingmu-search-btn" id="xingmu-search-btn">🔍</button>
+        </div>
+        ${state.query ? `<button class="xingmu-back-btn" id="xingmu-clear-search-btn">← ${t('music.backBtn')}</button>` : ''}
+      </div>
+    ` : ''}
   `
 }
 
@@ -390,10 +399,6 @@ function renderMainContent() {
 
 function renderDiscover() {
   return `
-    <div class="xingmu-search">
-      <input type="text" class="xingmu-search-input" placeholder="${t('music.searchPlaceholder')}" value="${esc(state.query)}" id="xingmu-search-input">
-      <button class="xingmu-search-btn" id="xingmu-search-btn">🔍</button>
-    </div>
     ${!state.query ? renderRecommendationCategories() + renderRecommendations() : renderSearchResults()}
   `
 }
@@ -697,6 +702,11 @@ function bindEvents(page) {
   const searchBtn = page.querySelector('#xingmu-search-btn')
   searchInput?.addEventListener('keydown', e => { if (e.key === 'Enter') { state.query = searchInput.value; doSearch() } })
   searchBtn?.addEventListener('click', () => { state.query = searchInput?.value || ''; doSearch() })
+  // 清除搜索（事件委托，按钮动态渲染）
+  page.addEventListener('click', (e) => {
+    const btn = e.target.closest('#xingmu-clear-search-btn')
+    if (btn) { state.query = ''; state.searchResults = []; state.activeTab = 'discover'; renderPage() }
+  })
 
   // 播放控制
   page.querySelector('#xingmu-toggle-btn')?.addEventListener('click', togglePlay)

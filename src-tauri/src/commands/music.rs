@@ -574,89 +574,65 @@ pub async fn music_get_play_url(platform: String, id: String) -> Result<String, 
 
 /// 网易云：多级 fallback 获取播放 URL
 async fn get_netease_url(client: &reqwest::Client, id: &str) -> Result<String, String> {
-    // 方法1: 尝试 meting API (api.injahow.cn)
-    if let Ok(url) = fetch_meting_url(client, id, "netease").await {
+    // 多镜像 meting API
+    if let Ok(url) = fetch_meting_url_multi(client, id, "netease").await {
         if is_valid_url(&url) {
             return Ok(url);
         }
     }
 
-    // 方法2: 尝试备用 meting API
-    if let Ok(url) = fetch_meting_url_backup(client, id, "netease").await {
-        if is_valid_url(&url) {
-            return Ok(url);
-        }
-    }
-
-    // 方法3: 网易云直链（需要代理 header）
+    // 直链（需要代理）
     let direct_url = format!("https://music.163.com/song/media/outer/url?id={}", id);
-
-    // 返回直链，让前端通过 music_proxy_audio 代理
     Ok(direct_url)
 }
 
-/// 通用 meting API
-async fn fetch_meting_url(
+/// Meting API 镜像列表（按优先级排列）
+static METING_MIRRORS: &[(&str, &str)] = &[
+    // (url_template, name)
+    ("https://api.injahow.cn/meting/?type=song&id={id}&server={platform}", "injahow"),
+    ("https://api.uomg.com/api/meting/?type=song&id={id}&server={platform}", "uomg"),
+    ("https://api.qqsuu.cn/meting/?type=song&id={id}&server={platform}", "qqsuu"),
+    ("https://meting.yanyanlong.com/api?Id={id}&type=song&r=mp3", "yanyanlong"),
+];
+
+/// 多镜像 meting API：依次尝试所有镜像直到成功
+async fn fetch_meting_url_multi(
     client: &reqwest::Client,
     id: &str,
     platform: &str,
 ) -> Result<String, String> {
-    let url = format!(
-        "https://api.injahow.cn/meting/?id={}&type={}&source={}",
-        id, "song", platform
-    );
+    let mut last_error = String::new();
 
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    let text = resp.text().await.map_err(|e| e.to_string())?;
+    for (template, name) in METING_MIRRORS {
+        let url = template
+            .replace("{id}", id)
+            .replace("{platform}", platform);
 
-    // 解析 JSON
-    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
-        if let Some(url) = data.get("url").and_then(|u| u.as_str()) {
-            if !url.is_empty() && url != "null" {
-                return Ok(url.to_string());
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                if let Ok(text) = resp.text().await {
+                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(url) = data.get("url").and_then(|u| u.as_str()) {
+                            if !url.is_empty() && url != "null" {
+                                return Ok(url.to_string());
+                            }
+                        }
+                    }
+                }
+                last_error = format!("mirror {} returned empty url", name);
+            }
+            Err(e) => {
+                last_error = format!("mirror {} failed: {}", name, e);
             }
         }
     }
 
-    Err("Meting API returned empty".into())
-}
-
-/// 备用 meting API
-async fn fetch_meting_url_backup(
-    client: &reqwest::Client,
-    id: &str,
-    platform: &str,
-) -> Result<String, String> {
-    let url = format!(
-        "https://meting.yanyanlong.com/api?Id={}&type=song&r=mp3",
-        id
-    );
-
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-
-    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
-        if let Some(url) = data.get("url").and_then(|u| u.as_str()) {
-            if !url.is_empty() && url != "null" {
-                return Ok(url.to_string());
-            }
-        }
-    }
-
-    Err("Backup meting API failed".into())
+    Err(format!("All {} mirrors failed: {}", METING_MIRRORS.len(), last_error))
 }
 
 /// QQ 音乐 URL
 async fn get_qq_url(client: &reqwest::Client, id: &str) -> Result<String, String> {
-    // 方法1: meting
-    if let Ok(url) = fetch_meting_url(client, id, "qq").await {
-        if is_valid_url(&url) {
-            return Ok(url);
-        }
-    }
-
-    // 方法2: 备用
-    if let Ok(url) = fetch_meting_url_backup(client, id, "qq").await {
+    if let Ok(url) = fetch_meting_url_multi(client, id, "qq").await {
         if is_valid_url(&url) {
             return Ok(url);
         }
@@ -695,8 +671,8 @@ async fn get_kugou_url(client: &reqwest::Client, id: &str) -> Result<String, Str
         Err(_) => {}
     }
 
-    // Fallback: meting
-    if let Ok(url) = fetch_meting_url(client, id, "kugou").await {
+    // Fallback: meting 多镜像
+    if let Ok(url) = fetch_meting_url_multi(client, id, "kugou").await {
         if is_valid_url(&url) {
             return Ok(url);
         }
@@ -732,8 +708,8 @@ async fn get_kuwo_url(client: &reqwest::Client, id: &str) -> Result<String, Stri
         Err(_) => {}
     }
 
-    // Fallback: meting
-    if let Ok(url) = fetch_meting_url(client, id, "kuwo").await {
+    // Fallback: meting 多镜像
+    if let Ok(url) = fetch_meting_url_multi(client, id, "kuwo").await {
         if is_valid_url(&url) {
             return Ok(url);
         }
@@ -766,8 +742,8 @@ async fn get_migu_url(client: &reqwest::Client, id: &str) -> Result<String, Stri
         Err(_) => {}
     }
 
-    // Fallback: meting
-    if let Ok(url) = fetch_meting_url(client, id, "migu").await {
+    // Fallback: meting 多镜像
+    if let Ok(url) = fetch_meting_url_multi(client, id, "migu").await {
         if is_valid_url(&url) {
             return Ok(url);
         }
