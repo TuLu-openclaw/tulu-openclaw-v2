@@ -492,6 +492,120 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
 }
 
 /// 检测 zip 是否有单一顶层目录（如 `skill-name/...`），返回要剥掉的前缀
+// ── 多源技能商店缓存 ───────────────────────────────────
+
+static MULTI_SOURCE_STORE_CACHE: Mutex<Option<(Instant, serde_json::Value)>> = Mutex::new(None);
+const MULTI_SOURCE_STORE_TTL: Duration = Duration::from_secs(600);
+
+/// 多源并行拉取技能商店数据
+///   源1: anbeime/skill (243 技能, 带分类)
+///   源2: buainoai/awesome-clawdbot-skills README
+///   源3: clawdbot-ai/awesome-openclaw-skills-zh README
+///   各源独立超时、独立容错，合并去重
+pub async fn fetch_multi_source_store() -> Result<serde_json::Value, String> {
+    // 缓存命中
+    if let Ok(guard) = MULTI_SOURCE_STORE_CACHE.lock() {
+        if let Some((ts, ref data)) = *guard {
+            if ts.elapsed() < MULTI_SOURCE_STORE_TTL {
+                return Ok(data.clone());
+            }
+        }
+    }
+
+    // ── 源1: anbeime/skill ──
+    let anbeime_fut = fetch_anbeime_store();
+
+    // ── 源2+3: README 解析 ──
+    let readme_sources = vec![
+        ("https://raw.githubusercontent.com/buainoai/awesome-clawdbot-skills/main/README.md", "buainoai"),
+        ("https://raw.githubusercontent.com/clawdbot-ai/awesome-openclaw-skills-zh/main/README.md", "clawdbot-zh"),
+    ];
+
+    let c = client()?;
+    let readme_fut = async {
+        let mut all_skills: Vec<serde_json::Value> = Vec::new();
+        for (url, source) in readme_sources {
+            let result = tokio::time::timeout(Duration::from_secs(180), c.get(url).send()).await;
+            match result {
+                Ok(Ok(resp)) if resp.status().is_success() => {
+                    if let Ok(text) = resp.text().await {
+                        let items = parse_readme_skills(&text, source);
+                        for item in items {
+                            let name = item.display_name.unwrap_or_else(|| item.slug.clone());
+                            let fallback_name = item.name.clone().unwrap_or_else(|| name.clone());
+                            all_skills.push(serde_json::json!({
+                                "name": name,
+                                "description": item.summary.unwrap_or(fallback_name),
+                                "link": item.link.unwrap_or_else(|| format!("https://github.com/{}", item.slug)),
+                                "category": "多源技能",
+                                "source": source,
+                                "type": "external"
+                            }));
+                        }
+                    }
+                }
+                Ok(Ok(resp)) => eprintln!("[skillhub] store source {source} HTTP {}", resp.status()),
+                Ok(Err(e)) => eprintln!("[skillhub] store source {source} fetch error: {e}"),
+                Err(_) => eprintln!("[skillhub] store source {source} timed out"),
+            }
+        }
+        all_skills
+    };
+
+    // ── 并行执行 ──
+    let (anbeime_result, readme_skills) = futures_util::join!(anbeime_fut, readme_fut);
+
+    // ── 合并 ──
+    let mut result = match anbeime_result {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("[skillhub] anbeime store failed: {e}");
+            serde_json::json!({
+                "official": [],
+                "local": [],
+                "total": 0,
+                "officialCount": 0,
+                "localCount": 0,
+                "categories": [],
+                "updatedAt": chrono::Utc::now().to_rfc3339(),
+            })
+        }
+    };
+
+    // 去重 + 追加外部技能
+    if !readme_skills.is_empty() {
+        let existing: std::collections::HashSet<String> = result["official"]
+            .as_array().unwrap_or(&vec![]).iter()
+            .chain(result["local"].as_array().unwrap_or(&vec![]).iter())
+            .filter_map(|s| s["name"].as_str().map(String::from))
+            .collect();
+
+        if let Some(local) = result["local"].as_array_mut() {
+            for skill in readme_skills {
+                if let Some(name) = skill["name"].as_str() {
+                    if !existing.contains(name) {
+                        local.push(skill);
+                    }
+                }
+            }
+        }
+    }
+
+    // 更新统计
+    let official_count = result["official"].as_array().map(|a| a.len()).unwrap_or(0);
+    let local_count = result["local"].as_array().map(|a| a.len()).unwrap_or(0);
+    result["total"] = serde_json::json!(official_count + local_count);
+    result["officialCount"] = serde_json::json!(official_count);
+    result["localCount"] = serde_json::json!(local_count);
+    result["updatedAt"] = serde_json::json!(chrono::Utc::now().to_rfc3339());
+
+    // 缓存
+    if let Ok(mut guard) = MULTI_SOURCE_STORE_CACHE.lock() {
+        *guard = Some((Instant::now(), result.clone()));
+    }
+    Ok(result)
+}
+
 fn detect_single_root_dir(names: &[String]) -> Option<String> {
     let mut root: Option<String> = None;
     for name in names {

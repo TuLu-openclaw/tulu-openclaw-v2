@@ -137,10 +137,10 @@ pub async fn skillhub_install(slug: String) -> Result<Value, String> {
     }))
 }
 
-/// skillhub_fetch_store — 从 anbeime/skill 仓库拉取完整技能商店数据（243技能+14分类+星级）
+/// skillhub_fetch_store — 多源并行拉取技能商店数据
 #[tauri::command]
 pub async fn skillhub_fetch_store() -> Result<Value, String> {
-    super::skillhub::fetch_anbeime_store().await
+    super::skillhub::fetch_multi_source_store().await
 }
 
 /// skillhub_install_for_engine — 从技能商店一键安装技能到指定引擎
