@@ -3,7 +3,7 @@
  * 多平台聚合搜索 · 播放 · 下载
  */
 import { t, initI18n } from '../lib/i18n.js'
-import { api } from '../lib/tauri-api.js'
+import { api, isTauriRuntime } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 
 // 初始化 i18n
@@ -489,6 +489,7 @@ function renderSongCard(song, idx) {
 function renderMyPage() {
   return `
     <div class="xingmu-my">
+      <button class="xingmu-back-btn" data-tab="discover">← ${t('music.backBtn')}</button>
       <div class="xingmu-section">
         <div class="xingmu-section-title">❤️ ${t('music.favTitle')}</div>
         ${state.favorites.length === 0
@@ -510,6 +511,7 @@ function renderSettingsPage() {
   const qualityLabels = { standard: t('music.qualityStandard'), high: t('music.qualityHigh'), lossless: t('music.qualityLossless') }
   return `
     <div class="xingmu-settings">
+      <button class="xingmu-back-btn" data-tab="discover">← ${t('music.backBtn')}</button>
       <div class="xingmu-section">
         <div class="xingmu-section-title">📥 ${t('music.settingDownloadDir')}</div>
         <div class="xingmu-setting-row">
@@ -779,15 +781,21 @@ function bindEvents(page) {
   // 设置页 - 下载目录修改
   page.querySelector('#xingmu-change-dir-btn')?.addEventListener('click', async () => {
     try {
-      const current = await api.musicGetDownloadDir()
-      const dir = prompt(t('music.settingDownloadDirPrompt'), current || '')
-      if (dir !== null) {
+      let dir = null
+      if (isTauriRuntime()) {
+        const { open } = await import('@tauri-apps/plugin-dialog')
+        dir = await open({ directory: true, title: t('music.settingDownloadDirPrompt') })
+      } else {
+        const current = await api.musicGetDownloadDir()
+        dir = prompt(t('music.settingDownloadDirPrompt'), current || '')
+      }
+      if (dir) {
         await api.musicSetDownloadDir(dir)
         const settings = loadSettings()
         settings.downloadDir = dir
         saveSettings(settings)
         const display = page.querySelector('#xingmu-download-dir-display')
-        if (display) display.textContent = dir || t('music.settingNotSet')
+        if (display) display.textContent = dir
         toast(t('music.settingSaved'))
       }
     } catch (e) {

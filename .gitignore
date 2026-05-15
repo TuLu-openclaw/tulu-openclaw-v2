@@ -3,3 +3,16 @@ get-e2e-log.cjs
 get-sec-log.cjs
 e2e_log.txt
 log-sec.txt
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
