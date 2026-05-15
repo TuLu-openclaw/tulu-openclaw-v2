@@ -69,7 +69,7 @@ const MULTI_SOURCE_TTL: Duration = Duration::from_secs(300);
 // ── HTTP 客户端 ──────────────────────────────────────────
 
 pub(crate) fn client() -> Result<reqwest::Client, String> {
-    super::build_http_client(Duration::from_secs(30), Some("星枢OpenClaw-SkillHub/1.0"))
+    super::build_http_client_no_proxy(Duration::from_secs(30), Some("星枢OpenClaw-SkillHub/1.0"))
 }
 
 // ── 公开接口 ──────────────────────────────────────────────

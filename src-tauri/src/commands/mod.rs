@@ -211,14 +211,12 @@ pub fn build_http_client(
 
 /// 构建模型请求用的 HTTP 客户端
 /// 默认不走代理；用户在面板设置中开启 proxyModelRequests 后才走代理
+/// 构建 HTTP 客户端（不走代理，用于技能商店等直接连接）
 pub fn build_http_client_no_proxy(
     timeout: Duration,
     user_agent: Option<&str>,
 ) -> Result<reqwest::Client, String> {
-    let use_proxy = read_panel_config_value()
-        .and_then(|v| v.get("networkProxy")?.get("proxyModelRequests")?.as_bool())
-        .unwrap_or(false);
-    build_http_client_opt(timeout, user_agent, use_proxy)
+    build_http_client_opt(timeout, user_agent, false)
 }
 
 fn build_http_client_opt(
