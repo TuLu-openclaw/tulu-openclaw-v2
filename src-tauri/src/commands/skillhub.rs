@@ -64,7 +64,7 @@ struct IndexResponse {
 static INDEX_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(None);
 
 static MULTI_SOURCE_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(None);
-const MULTI_SOURCE_TTL: Duration = Duration::from_secs(600);
+const MULTI_SOURCE_TTL: Duration = Duration::from_secs(300);
 
 // ── HTTP 客户端 ──────────────────────────────────────────
 
@@ -120,6 +120,7 @@ pub async fn fetch_multi_source_index() -> Result<Vec<SkillHubItem>, String> {
     let mut seen_slugs: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (url, source_label) in sources {
+        let fetch_start = Instant::now();
         match client.get(url).send().await {
             Ok(resp) if resp.status().is_success() => {
                 if let Ok(text) = resp.text().await {
@@ -131,8 +132,22 @@ pub async fn fetch_multi_source_index() -> Result<Vec<SkillHubItem>, String> {
                     }
                 }
             }
+            Ok(resp) if resp.status().is_server_error() => {
+                eprintln!("[skillhub] source {} returned {}, skipping", source_label, resp.status());
+            }
+            Err(e) if fetch_start.elapsed().as_secs() >= 8 => {
+                eprintln!("[skillhub] source {} timeout after 8s: {}, skipping", source_label, e);
+            }
+            Err(e) => {
+                eprintln!("[skillhub] source {} failed: {}, skipping", source_label, e);
+            }
             _ => {}
         }
+    }
+
+    // Only error if all sources failed
+    if all_items.is_empty() {
+        return Err("所有技能源均无法访问，请检查网络连接".to_string());
     }
 
     // Cache result
