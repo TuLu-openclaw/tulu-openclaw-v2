@@ -21,6 +21,7 @@ const PLATFORMS = {
 // ===== 状态管理 =====
 const state = {
   activeTab: 'discover',
+  previousTab: 'discover', // 记录上一页，返回按钮使用
   query: '',
   searchResults: [],
   searchLoading: false,
@@ -568,7 +569,7 @@ function renderPlayerPage() {
   )
   return `
     <div class="xingmu-player">
-      <button class="xingmu-back-btn" data-tab="discover">← ${t('music.backBtn')}</button>
+      <button class="xingmu-back-btn" data-tab="${state.previousTab || 'discover'}">← ${t('music.backBtn')}</button>
       <div class="xingmu-player-cover-wrap">
         <div class="xingmu-player-cover">
           ${song.cover
@@ -678,7 +679,11 @@ function bindEvents(page) {
   })
   page.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.tab) { state.activeTab = btn.dataset.tab; renderPage() }
+      if (btn.dataset.tab) {
+        state.previousTab = state.activeTab
+        state.activeTab = btn.dataset.tab
+        renderPage()
+      }
     })
   })
 
