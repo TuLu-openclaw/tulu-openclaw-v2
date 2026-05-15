@@ -143,6 +143,70 @@ pub async fn skillhub_fetch_store() -> Result<Value, String> {
     super::skillhub::fetch_anbeime_store().await
 }
 
+/// skillhub_install_for_engine — 从技能商店一键安装技能到指定引擎
+/// engine: "hermes" | "openclaw"
+/// 会在引擎的 skills 目录下创建 <name>/SKILL.md
+#[tauri::command]
+pub async fn skillhub_install_for_engine(
+    name: String,
+    description: String,
+    link: String,
+    engine: String,
+) -> Result<Value, String> {
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err("无效的技能名称".to_string());
+    }
+
+    let home = dirs::home_dir().unwrap_or_default();
+    let skills_dir = match engine.as_str() {
+        "hermes" => home.join(".hermes").join("skills"),
+        "openclaw" => super::openclaw_dir().join("skills"),
+        _ => return Err(format!("未知引擎: {engine}")),
+    };
+
+    let skill_dir = skills_dir.join(&name);
+    std::fs::create_dir_all(&skill_dir)
+        .map_err(|e| format!("创建目录失败: {e}"))?;
+
+    let slug = if name.contains('/') { name.split('/').last().unwrap_or(&name) } else { &name };
+    let now = chrono::Utc::now().to_rfc3339();
+    let content = format!(
+        r#"---
+description: {description}
+fullPath: {}
+link: {link}
+installed: {now}
+---
+
+# {slug}
+
+{description}
+
+## 来源
+
+- 技能商店安装
+- 链接: {link}
+- 安装时间: {now}
+
+## 使用
+
+此技能通过技能商店一键安装。请根据技能的原始文档学习使用方法。
+"#,
+        skill_dir.to_string_lossy().replace('\\', "/"),
+    );
+
+    let skill_md = skill_dir.join("SKILL.md");
+    std::fs::write(&skill_md, content).map_err(|e| format!("写入 SKILL.md 失败: {e}"))?;
+
+    Ok(serde_json::json!({
+        "success": true,
+        "name": name,
+        "slug": slug,
+        "engine": engine,
+        "path": skill_dir.to_string_lossy(),
+    }))
+}
+
 /// hermes_skillhub_install — 安装技能到 Hermes 目录 (~/.hermes/skills/)
 #[tauri::command]
 pub async fn hermes_skillhub_install(slug: String) -> Result<Value, String> {

@@ -274,7 +274,10 @@ export function render() {
         </div>
         <div class="hm-store-card-actions">
           <a href="${escHtml(skill.link || '#')}" target="_blank" rel="noopener" class="hm-store-card-link">${t('engine.skillsStoreViewOnGithub')}</a>
-          <button class="hm-btn hm-btn--cta hm-btn--xs" data-install-slug="${escHtml(skill.name || '')}">⬇ ${t('engine.skillsStoreInstall')}</button>
+          <button class="hm-btn hm-btn--cta hm-btn--xs hm-store-install-btn"
+                  data-install-name="${escHtml(skill.name || '')}"
+                  data-install-desc="${escHtml(skill.description || '')}"
+                  data-install-link="${escHtml(skill.link || '')}">⬇ ${t('engine.skillsStoreInstall')}</button>
         </div>
       </div>
     `
@@ -942,11 +945,27 @@ export function render() {
     el.querySelectorAll('.hm-store-cat-chip').forEach(chip => {
       chip.addEventListener('click', () => { storeFilterCat = chip.dataset.cat; draw() })
     })
-    el.querySelector('.hm-store-grid')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-install-slug]')
+    el.querySelector('.hm-store-grid')?.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.hm-store-install-btn')
       if (btn) {
-        const slug = btn.dataset.installSlug
-        if (slug) installHubSkill(slug)
+        const name = btn.dataset.installName
+        const desc = btn.dataset.installDesc
+        const link = btn.dataset.installLink
+        if (!name) return
+        btn.disabled = true
+        btn.textContent = '⏳ 安装中...'
+        try {
+          await api.skillhubInstallForEngine(name, desc, link, 'hermes')
+          btn.textContent = '✅ 已安装'
+          btn.classList.remove('hm-btn--cta')
+          btn.style.opacity = '0.6'
+          toast(t('engine.skillsHubInstalled', { slug: name }), 'success')
+          loadSkills()
+        } catch (err) {
+          btn.textContent = '❌ 失败'
+          toast(t('engine.skillsHubInstallFailed') + ': ' + (err?.message || err), 'error')
+          setTimeout(() => { btn.disabled = false; btn.textContent = '⬇ ' + t('engine.skillsStoreInstall'); btn.classList.add('hm-btn--cta'); btn.style.opacity = '' }, 2000)
+        }
       }
     })
   }

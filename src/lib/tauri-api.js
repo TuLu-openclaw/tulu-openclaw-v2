@@ -496,6 +496,7 @@ export const api = {
   skillhubIndex: () => invoke('skillhub_index'),
   skillhubInstall: (slug) => invoke('skillhub_install', { slug }),
   skillhubFetchStore: () => invoke('skillhub_fetch_store'),
+  skillhubInstallForEngine: (name, description, link, engine) => invoke('skillhub_install_for_engine', { name, description, link, engine }),
   hermesSkillhubInstall: (slug) => invoke('hermes_skillhub_install', { slug }),
 
   // 实例管理

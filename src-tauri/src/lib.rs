@@ -276,6 +276,7 @@ pub fn run() {
             skills::skillhub_index,
             skills::skillhub_install,
             skills::skillhub_fetch_store,
+            skills::skillhub_install_for_engine,
             skills::hermes_skillhub_install,
             hermes::check_hermes_update,
             // 前端热更新
