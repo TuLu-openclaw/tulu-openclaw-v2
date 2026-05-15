@@ -121,8 +121,9 @@ pub async fn fetch_multi_source_index() -> Result<Vec<SkillHubItem>, String> {
 
     for (url, source_label) in sources {
         let fetch_start = Instant::now();
-        match client.get(url).send().await {
-            Ok(resp) if resp.status().is_success() => {
+        let request = client.get(url).send();
+        match tokio::time::timeout(Duration::from_secs(60), request).await {
+            Ok(Ok(resp)) if resp.status().is_success() => {
                 if let Ok(text) = resp.text().await {
                     let items = parse_readme_skills(&text, source_label);
                     for item in items {
@@ -132,16 +133,15 @@ pub async fn fetch_multi_source_index() -> Result<Vec<SkillHubItem>, String> {
                     }
                 }
             }
-            Ok(resp) if resp.status().is_server_error() => {
-                eprintln!("[skillhub] source {} returned {}, skipping", source_label, resp.status());
+            Ok(Ok(resp)) => {
+                eprintln!("[skillhub] source {} HTTP {}, skipping", source_label, resp.status());
             }
-            Err(e) if fetch_start.elapsed().as_secs() >= 8 => {
-                eprintln!("[skillhub] source {} timeout after 8s: {}, skipping", source_label, e);
-            }
-            Err(e) => {
+            Ok(Err(e)) => {
                 eprintln!("[skillhub] source {} failed: {}, skipping", source_label, e);
             }
-            _ => {}
+            Err(_) => {
+                eprintln!("[skillhub] source {} timed out after 60s, skipping", source_label);
+            }
         }
     }
 
