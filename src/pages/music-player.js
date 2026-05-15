@@ -356,7 +356,7 @@ function renderPage() {
     if (state.currentSong?.cover) setBackground(_page, state.currentSong.cover)
   } catch(e) {
     console.error('[music-player] renderPage error:', e)
-    if (_page) _page.innerHTML = `<div style="color:red;padding:40px;text-align:center">星枢音乐渲染失败: ${e?.message||e}<br><button onclick="location.reload()">重新加载</button></div>`
+    if (_page) _page.innerHTML = `<div style="color:red;padding:40px;text-align:center">${t('music.renderError')}: ${e?.message||e}<br><button onclick="location.reload()">${t('music.reload')}</button></div>`
   }
 }
 
@@ -366,7 +366,7 @@ function renderHeader() {
       <div class="xingmu-tabs">
         <button class="xingmu-tab ${state.activeTab === 'discover' ? 'active' : ''}" data-tab="discover">${t('music.tabDiscover')}</button>
         <button class="xingmu-tab ${state.activeTab === 'my' ? 'active' : ''}" data-tab="my">${t('music.tabMy')}</button>
-        <button class="xingmu-tab ${state.activeTab === 'settings' ? 'active' : ''}" data-tab="settings">${t('music.tabSettings') || '设置'}</button>
+        <button class="xingmu-tab ${state.activeTab === 'settings' ? 'active' : ''}" data-tab="settings">${t('music.tabSettings')}</button>
       </div>
       ${state.activeTab !== 'player' && state.currentSong ? `
         <button class="xingmu-player-btn" data-tab="player">
@@ -399,18 +399,18 @@ function renderDiscover() {
 
 function renderRecommendationCategories() {
   const categories = [
-    { id: 'hot', name: '🔥 热门推荐', icon: '🔥', keywords: ['热门', '流行', '排行榜'] },
-    { id: 'new', name: '🆕 新歌速递', icon: '🆕', keywords: ['新歌', '2024', '最新'] },
-    { id: 'soar', name: '📈 飙升榜', icon: '📈', keywords: ['飙升', '热门', '热门歌曲'] },
-    { id: 'douyin', name: '🎵 抖音热歌', icon: '🎵', keywords: ['抖音', '神曲', '热门'] },
-    { id: 'classic', name: '🎸 经典老歌', icon: '🎸', keywords: ['经典', '老歌', '怀旧'] },
-    { id: 'love', name: '❤️ 情歌', icon: '❤️', keywords: ['情歌', '爱情', '甜蜜'] },
-    { id: 'rock', name: '🎸 摇滚', icon: '🎸', keywords: ['摇滚', '乐队', '金属'] },
-    { id: 'rap', name: '🎤 说唱', icon: '🎤', keywords: ['说唱', 'rap', 'hiphop'] },
+    { id: 'hot', name: '🔥 ' + t('music.catHot'), icon: '🔥', keywords: ['热门', '流行', '排行榜'] },
+    { id: 'new', name: '🆕 ' + t('music.catNew'), icon: '🆕', keywords: ['新歌', '2024', '最新'] },
+    { id: 'soar', name: '📈 ' + t('music.catSoar'), icon: '📈', keywords: ['飙升', '热门', '热门歌曲'] },
+    { id: 'douyin', name: '🎵 ' + t('music.catDouyin'), icon: '🎵', keywords: ['抖音', '神曲', '热门'] },
+    { id: 'classic', name: '🎸 ' + t('music.catClassic'), icon: '🎸', keywords: ['经典', '老歌', '怀旧'] },
+    { id: 'love', name: '❤️ ' + t('music.catLove'), icon: '❤️', keywords: ['情歌', '爱情', '甜蜜'] },
+    { id: 'rock', name: '🎸 ' + t('music.catRock'), icon: '🎸', keywords: ['摇滚', '乐队', '金属'] },
+    { id: 'rap', name: '🎤 ' + t('music.catRap'), icon: '🎤', keywords: ['说唱', 'rap', 'hiphop'] },
   ]
   return `
     <div class="xingmu-section">
-      <div class="xingmu-section-title">📋 ${t('music.categories') || '推荐分类'}</div>
+      <div class="xingmu-section-title">📋 ${t('music.categories')}</div>
       <div class="xingmu-rec-grid">
         ${categories.map(c => `
           <div class="xingmu-rec-card" data-category="${esc(c.id)}" data-keywords="${esc(c.keywords.join(','))}">
@@ -506,19 +506,19 @@ function renderMyPage() {
 
 function renderSettingsPage() {
   const settings = loadSettings()
-  const qualityLabels = { standard: '标准 (128k)', high: '高品质 (320k)', lossless: '无损 (flac)' }
+  const qualityLabels = { standard: t('music.qualityStandard'), high: t('music.qualityHigh'), lossless: t('music.qualityLossless') }
   return `
     <div class="xingmu-settings">
       <div class="xingmu-section">
-        <div class="xingmu-section-title">📥 ${t('music.settingDownloadDir') || '下载路径'}</div>
+        <div class="xingmu-section-title">📥 ${t('music.settingDownloadDir')}</div>
         <div class="xingmu-setting-row">
-          <span class="xingmu-setting-value" id="xingmu-download-dir-display">${settings.downloadDir ? esc(settings.downloadDir) : t('music.settingNotSet') || '未设置'}</span>
-          <button class="xingmu-setting-btn" id="xingmu-change-dir-btn">${t('music.settingChange') || '修改'}</button>
+          <span class="xingmu-setting-value" id="xingmu-download-dir-display">${settings.downloadDir ? esc(settings.downloadDir) : t('music.settingNotSet')}</span>
+          <button class="xingmu-setting-btn" id="xingmu-change-dir-btn">${t('music.settingChange')}</button>
         </div>
       </div>
 
       <div class="xingmu-section">
-        <div class="xingmu-section-title">🎵 ${t('music.settingQuality') || '默认音质'}</div>
+        <div class="xingmu-section-title">🎵 ${t('music.settingQuality')}</div>
         <div class="xingmu-quality-options">
           ${['standard', 'high', 'lossless'].map(q => `
             <button class="xingmu-quality-btn ${settings.quality === q ? 'active' : ''}" data-quality="${q}">${qualityLabels[q]}</button>
@@ -527,9 +527,9 @@ function renderSettingsPage() {
       </div>
 
       <div class="xingmu-section">
-        <div class="xingmu-section-title">💾 ${t('music.settingAutoCache') || '自动缓存'}</div>
+        <div class="xingmu-section-title">💾 ${t('music.settingAutoCache')}</div>
         <div class="xingmu-setting-row">
-          <span class="xingmu-setting-label">${t('music.settingAutoCacheDesc') || '播放过的歌曲自动缓存到本地'}</span>
+          <span class="xingmu-setting-label">${t('music.settingAutoCacheDesc')}</span>
           <label class="xingmu-switch">
             <input type="checkbox" id="xingmu-auto-cache-toggle" ${settings.autoCache ? 'checked' : ''}>
             <span class="xingmu-slider"></span>
@@ -538,9 +538,9 @@ function renderSettingsPage() {
       </div>
 
       <div class="xingmu-section">
-        <div class="xingmu-section-title">🔔 ${t('music.settingNotify') || '通知设置'}</div>
+        <div class="xingmu-section-title">🔔 ${t('music.settingNotify')}</div>
         <div class="xingmu-setting-row">
-          <span class="xingmu-setting-label">${t('music.settingNotifyDesc') || '切歌时显示通知'}</span>
+          <span class="xingmu-setting-label">${t('music.settingNotifyDesc')}</span>
           <label class="xingmu-switch">
             <input type="checkbox" id="xingmu-notify-toggle" ${settings.notifyOnSongChange ? 'checked' : ''}>
             <span class="xingmu-slider"></span>
@@ -549,7 +549,7 @@ function renderSettingsPage() {
       </div>
 
       <div class="xingmu-section">
-        <div class="xingmu-section-title">ℹ️ ${t('music.settingAbout') || '关于'}</div>
+        <div class="xingmu-section-title">ℹ️ ${t('music.settingAbout')}</div>
         <div class="xingmu-setting-row">
           <span class="xingmu-setting-label">星枢音乐播放器 v2.0</span>
         </div>
@@ -599,7 +599,7 @@ function renderPlayerPage() {
           </div>
         </div>
         <div class="xingmu-controls">
-          <button class="xingmu-ctrl-btn xingmu-mode-btn" id="xingmu-mode-btn" title="${t('music.modeOrder')}">${state.playMode === 'order' ? '🔁' : state.playMode === 'loop' ? '🔂' : '🔀'}</button>
+          <button class="xingmu-ctrl-btn xingmu-mode-btn" id="xingmu-mode-btn" title="${state.playMode === 'order' ? t('music.modeOrder') : state.playMode === 'loop' ? t('music.modeLoop') : t('music.modeRandom')}">${state.playMode === 'order' ? '🔁' : state.playMode === 'loop' ? '🔂' : '🔀'}</button>
           <button class="xingmu-ctrl-btn" id="xingmu-prev-btn" title="${t('music.prevTrack')}">⏮</button>
           <button class="xingmu-ctrl-btn xingmu-play-btn-lg" id="xingmu-toggle-btn">${state.playing ? '⏸' : '▶'}</button>
           <button class="xingmu-ctrl-btn" id="xingmu-next-btn" title="${t('music.nextTrack')}">⏭</button>
@@ -775,18 +775,18 @@ function bindEvents(page) {
   page.querySelector('#xingmu-change-dir-btn')?.addEventListener('click', async () => {
     try {
       const current = await api.musicGetDownloadDir()
-      const dir = prompt(t('music.settingDownloadDirPrompt') || '请输入下载目录路径：', current || '')
+      const dir = prompt(t('music.settingDownloadDirPrompt'), current || '')
       if (dir !== null) {
         await api.musicSetDownloadDir(dir)
         const settings = loadSettings()
         settings.downloadDir = dir
         saveSettings(settings)
         const display = page.querySelector('#xingmu-download-dir-display')
-        if (display) display.textContent = dir || (t('music.settingNotSet') || '未设置')
-        toast(t('music.settingSaved') || '设置已保存')
+        if (display) display.textContent = dir || t('music.settingNotSet')
+        toast(t('music.settingSaved'))
       }
     } catch (e) {
-      toast(t('music.settingError') || '设置保存失败：' + (e?.message || e), 'error')
+      toast(t('music.settingError', { error: e?.message || e }), 'error')
     }
   })
 
@@ -798,7 +798,7 @@ function bindEvents(page) {
       saveSettings(settings)
       page.querySelectorAll('.xingmu-quality-btn').forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
-      toast(t('music.settingSaved') || '音质已切换')
+      toast(t('music.settingSaved'))
     })
   })
 
