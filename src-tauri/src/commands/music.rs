@@ -589,10 +589,22 @@ async fn get_netease_url(client: &reqwest::Client, id: &str) -> Result<String, S
 /// Meting API 镜像列表（按优先级排列）
 static METING_MIRRORS: &[(&str, &str)] = &[
     // (url_template, name)
-    ("https://api.injahow.cn/meting/?type=song&id={id}&server={platform}", "injahow"),
-    ("https://api.uomg.com/api/meting/?type=song&id={id}&server={platform}", "uomg"),
-    ("https://api.qqsuu.cn/meting/?type=song&id={id}&server={platform}", "qqsuu"),
-    ("https://meting.yanyanlong.com/api?Id={id}&type=song&r=mp3", "yanyanlong"),
+    (
+        "https://api.injahow.cn/meting/?type=song&id={id}&server={platform}",
+        "injahow",
+    ),
+    (
+        "https://api.uomg.com/api/meting/?type=song&id={id}&server={platform}",
+        "uomg",
+    ),
+    (
+        "https://api.qqsuu.cn/meting/?type=song&id={id}&server={platform}",
+        "qqsuu",
+    ),
+    (
+        "https://meting.yanyanlong.com/api?Id={id}&type=song&r=mp3",
+        "yanyanlong",
+    ),
 ];
 
 /// 多镜像 meting API：依次尝试所有镜像直到成功
@@ -604,9 +616,7 @@ async fn fetch_meting_url_multi(
     let mut last_error = String::new();
 
     for (template, name) in METING_MIRRORS {
-        let url = template
-            .replace("{id}", id)
-            .replace("{platform}", platform);
+        let url = template.replace("{id}", id).replace("{platform}", platform);
 
         match client.get(&url).send().await {
             Ok(resp) => {
@@ -627,7 +637,11 @@ async fn fetch_meting_url_multi(
         }
     }
 
-    Err(format!("All {} mirrors failed: {}", METING_MIRRORS.len(), last_error))
+    Err(format!(
+        "All {} mirrors failed: {}",
+        METING_MIRRORS.len(),
+        last_error
+    ))
 }
 
 /// QQ 音乐 URL
