@@ -467,8 +467,6 @@ let _ocQuery = ''
 let _ocFilterCat = ''
 let _ocFilterType = 'all'
 
-function starsStr(n) { return '⭐'.repeat(Math.min(n||0,5)) + '☆'.repeat(Math.max(0,5-(n||0))) }
-
 async function renderSkillStoreTab(page) {
   const el = page.querySelector('#oc-store-content')
   if (!el) return
@@ -489,17 +487,16 @@ async function renderSkillStoreTab(page) {
 
 function drawOCStore(el) {
   if (_ocStoreLoading) {
-    el.innerHTML = '<div class="form-hint" style="padding:60px;text-align:center">🏪 正在加载技能商店...</div>'
+    el.innerHTML = '<div class="form-hint" style="padding:60px;text-align:center">正在加载技能商店...</div>'
     return
   }
   if (!_ocStoreData) {
     el.innerHTML = `<div style="text-align:center;padding:60px;color:var(--text-tertiary)">
-      📡 技能商店加载失败<br><button class="btn btn-secondary btn-sm" id="oc-store-retry" style="margin-top:12px">重试</button>
+      技能商店加载失败<br><button class="btn btn-secondary btn-sm" id="oc-store-retry" style="margin-top:12px">重试</button>
     </div>`
     el.querySelector('#oc-store-retry')?.addEventListener('click', () => { _ocStoreData = null; renderSkillStoreTab(el.closest('.page')) })
     return
   }
-  // 筛选
   let official = _ocStoreData.official || []
   let local = _ocStoreData.local || []
   if (_ocFilterType === 'official') local = []
@@ -518,46 +515,42 @@ function drawOCStore(el) {
 
   el.innerHTML = `
     <div style="margin-bottom:12px;color:var(--text-secondary);font-size:12px;display:flex;align-items:center;gap:8px">
-      <span style="background:linear-gradient(135deg,#f59e0b,#fbbf24);padding:2px 10px;border-radius:10px;color:#000;font-weight:700">243个技能</span>
-      <span>182官方 + 61本地 · 14个分类</span>
+      <span style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:2px 10px;border-radius:10px;color:#fff;font-weight:700">
+        ${_ocStoreData.total || 243} 个技能</span>
+      <span>${_ocStoreData.officialCount || 182} 官方 + ${_ocStoreData.localCount || 61} 本地 · ${cats.length} 个分类</span>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <input type="text" class="input" id="oc-store-search" placeholder="搜索技能名称或描述..." value="${esc(_ocQuery)}" style="flex:1">
-      <button class="btn btn-secondary btn-sm" id="oc-store-refresh">🔄</button>
+      <button class="btn btn-secondary btn-sm" id="oc-store-refresh">刷新</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:8px">
       <button class="btn btn-sm oc-type-chip" data-oc-type="all" style="font-size:11px;${_ocFilterType==='all'?'background:var(--accent);color:#fff':''}">全部</button>
-      <button class="btn btn-sm oc-type-chip" data-oc-type="official" style="font-size:11px;${_ocFilterType==='official'?'background:var(--accent);color:#fff':''}">🏛️ 官方</button>
-      <button class="btn btn-sm oc-type-chip" data-oc-type="local" style="font-size:11px;${_ocFilterType==='local'?'background:var(--accent);color:#fff':''}">🇨🇳 本地</button>
+      <button class="btn btn-sm oc-type-chip" data-oc-type="official" style="font-size:11px;${_ocFilterType==='official'?'background:var(--accent);color:#fff':''}">官方</button>
+      <button class="btn btn-sm oc-type-chip" data-oc-type="local" style="font-size:11px;${_ocFilterType==='local'?'background:var(--accent);color:#fff':''}">本地</button>
     </div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
       <button class="btn btn-sm oc-cat-chip" data-oc-cat="" style="font-size:10px;${!_ocFilterCat?'background:var(--accent);color:#fff':''}">全部</button>
-      ${cats.map(c => `<button class="btn btn-sm oc-cat-chip" data-oc-cat="${esc(c.name)}" style="font-size:10px;${_ocFilterCat===c.name?'background:var(--accent);color:#fff':''}">${esc(c.emoji||'')} ${esc(c.name)} (${c.count})</button>`).join('')}
+      ${cats.map(c => `<button class="btn btn-sm oc-cat-chip" data-oc-cat="${esc(c.name)}" style="font-size:10px;${_ocFilterCat===c.name?'background:var(--accent);color:#fff':''}">${esc(c.name)} (${c.count})</button>`).join('')}
     </div>
     <div style="margin-bottom:8px;font-size:12px;color:var(--text-tertiary)">${all.length} 个技能</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
       ${all.map(s => `
         <div class="clawhub-item oc-store-card" style="flex-direction:column;align-items:stretch;gap:6px;padding:14px">
           <div style="display:flex;justify-content:space-between">
-            <span style="font-size:10px;color:var(--text-tertiary)">${esc(s.orgEmoji||'')} ${esc(s.org||'')}</span>
             <span class="clawhub-badge" style="font-size:9px;background:${s.type==='official'?'rgba(59,130,246,0.12)':'rgba(245,158,11,0.12)'};color:${s.type==='official'?'#60a5fa':'#fbbf24'}">${s.type==='official'?'官方':'本地'}</span>
+            <span style="font-size:10px;color:var(--text-tertiary)">${esc(s.category||'')}</span>
           </div>
           <div style="font-weight:700;font-size:14px;color:var(--text-primary)">${esc(s.name.includes('/')?s.name.split('/').pop():s.name)}</div>
           <div style="font-size:12px;color:var(--text-tertiary);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(s.description||'')}</div>
-          <div style="display:flex;gap:8px;align-items:center;font-size:11px">
-            <span>${starsStr(s.stars||3)}</span>
-            <span style="color:var(--text-tertiary)">📂 ${esc(s.category||'')}</span>
-          </div>
           <div style="display:flex;gap:8px;margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
-            <a href="${esc(s.link||'#')}" target="_blank" class="btn btn-sm" style="flex:1;font-size:11px;border:1px solid var(--border);text-align:center;text-decoration:none;color:var(--text-secondary);border-radius:8px">GitHub ↗</a>
-            <button class="btn btn-primary btn-sm oc-install-btn" data-oc-name="${esc(s.name||'')}" data-oc-desc="${esc(s.description||'')}" data-oc-link="${esc(s.link||'')}" style="flex:1;font-size:11px">⬇ 安装到OpenClaw</button>
+            <a href="${esc(s.link||'#')}" target="_blank" class="btn btn-sm" style="flex:1;font-size:11px;border:1px solid var(--border);text-align:center;text-decoration:none;color:var(--text-secondary);border-radius:8px">GitHub</a>
+            <button class="btn btn-primary btn-sm oc-install-btn" data-oc-name="${esc(s.name||'')}" data-oc-desc="${esc(s.description||'')}" data-oc-link="${esc(s.link||'')}" style="flex:1;font-size:11px">安装到OpenClaw</button>
           </div>
         </div>
       `).join('')}
     </div>
   `
 
-  // 绑定事件
   el.querySelector('#oc-store-search')?.addEventListener('input', (e) => { _ocQuery = e.target.value; drawOCStore(el) })
   el.querySelector('#oc-store-refresh')?.addEventListener('click', () => { _ocStoreData = null; renderSkillStoreTab(el.closest('.page')) })
   el.querySelectorAll('.oc-type-chip').forEach(b => b.addEventListener('click', () => { _ocFilterType = b.dataset.ocType; drawOCStore(el) }))
@@ -566,11 +559,11 @@ function drawOCStore(el) {
     b.disabled = true; b.textContent = '安装中...'
     try {
       await api.skillhubInstallForEngine(b.dataset.ocName, b.dataset.ocDesc, b.dataset.ocLink, 'openclaw')
-      b.textContent = '✅ 已安装'
+      b.textContent = '已安装'
       b.classList.remove('btn-primary'); b.classList.add('btn-secondary')
     } catch (e) {
-      b.textContent = '❌ 失败'
-      setTimeout(() => { b.disabled = false; b.textContent = '⬇ 安装到OpenClaw' }, 2000)
+      b.textContent = '安装失败'
+      setTimeout(() => { b.disabled = false; b.textContent = '安装到OpenClaw' }, 2000)
     }
   }))
 }
