@@ -367,7 +367,7 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
 
     // 拉取官方技能（182个）- 15s 超时保护
     let official: Result<AnbeimeSkillsFile, String> = tokio::time::timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(180),
         async {
             let resp = c.get(format!("{base}/skills.json")).send().await
                 .map_err(|e| format!("拉取官方技能失败: {e}"))?;
@@ -380,7 +380,7 @@ pub async fn fetch_anbeime_store() -> Result<serde_json::Value, String> {
 
     // 拉取本地技能（61个，带分类和评分）- 15s 超时保护
     let local: Result<AnbeimeLocalFile, String> = tokio::time::timeout(
-        Duration::from_secs(15),
+        Duration::from_secs(180),
         async {
             let resp = c.get(format!("{base}/local_skills.json")).send().await
                 .map_err(|e| format!("拉取本地技能失败: {e}"))?;
