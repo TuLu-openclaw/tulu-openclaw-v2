@@ -40,6 +40,8 @@ pub struct SkillHubItem {
     #[serde(default)]
     pub homepage: Option<String>,
     #[serde(default)]
+    pub link: Option<String>,
+    #[serde(default)]
     pub downloads: Option<u64>,
     #[serde(default)]
     pub stars: Option<u64>,
@@ -61,6 +63,9 @@ struct IndexResponse {
 
 static INDEX_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(None);
 
+static MULTI_SOURCE_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(None);
+const MULTI_SOURCE_TTL: Duration = Duration::from_secs(600);
+
 // ── HTTP 客户端 ──────────────────────────────────────────
 
 pub(crate) fn client() -> Result<reqwest::Client, String> {
@@ -76,33 +81,104 @@ pub async fn search(query: &str, limit: u32) -> Result<Vec<SkillHubItem>, String
         return Ok(vec![]);
     }
 
-    // 从 anbeime 技能商店搜索（本地缓存，1h TTL）
-    let anbeime = fetch_anbeime_store().await?;
-    let official = anbeime.get("official").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let local = anbeime.get("local").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let all = [official, local].concat();
+    // 多源聚合搜索（anbeime + clawdbot + openclaw-zh）
+    let all_items = fetch_multi_source_index().await?;
 
-    let matched: Vec<SkillHubItem> = all
+    let matched: Vec<SkillHubItem> = all_items
         .into_iter()
         .filter(|s| {
-            let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-            let desc = s.get("description").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-            let cat = s.get("category").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-            name.contains(&q) || desc.contains(&q) || cat.contains(&q)
+            let name = s.name.as_deref().unwrap_or("").to_lowercase();
+            let desc = s.summary.as_deref().unwrap_or("").to_lowercase();
+            let link = s.link.as_deref().unwrap_or("").to_lowercase();
+            name.contains(&q) || desc.contains(&q) || link.contains(&q)
         })
         .take(limit as usize)
-        .map(|v| {
-            let slug = v.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
-            let name = v.get("name").and_then(|s| s.as_str()).map(|s| s.to_string());
-            let description = v.get("description").and_then(|s| s.as_str()).map(|s| s.to_string());
-            SkillHubItem { slug, name, description, ..Default::default() }
-        })
         .collect();
 
     Ok(matched)
 }
 
 /// 拉取全量索引（多源聚合，合并去重）
+/// Fetch and parse multiple README sources for skill aggregation
+pub async fn fetch_multi_source_index() -> Result<Vec<SkillHubItem>, String> {
+    if let Ok(guard) = MULTI_SOURCE_CACHE.lock() {
+        if let Some((ts, ref items)) = *guard {
+            if ts.elapsed() < MULTI_SOURCE_TTL {
+                return Ok(items.clone());
+            }
+        }
+    }
+
+    let sources = vec![
+        ("https://raw.githubusercontent.com/buainoai/awesome-clawdbot-skills/main/README.md", "clawdbot"),
+        ("https://raw.githubusercontent.com/clawdbot-ai/awesome-openclaw-skills-zh/main/README.md", "openclaw-zh"),
+        ("https://raw.githubusercontent.com/anbeime/skill/main/README.md", "anbeime"),
+    ];
+
+    let client = client()?;
+    let mut all_items: Vec<SkillHubItem> = Vec::new();
+    let mut seen_slugs: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for (url, source_label) in sources {
+        match client.get(url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(text) = resp.text().await {
+                    let items = parse_readme_skills(&text, source_label);
+                    for item in items {
+                        if seen_slugs.insert(item.slug.clone()) {
+                            all_items.push(item);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Cache result
+    if let Ok(mut guard) = MULTI_SOURCE_CACHE.lock() {
+        *guard = Some((Instant::now(), all_items.clone()));
+    }
+
+    Ok(all_items)
+}
+
+/// Parse skill links from README markdown
+fn parse_readme_skills(readme: &str, source: &str) -> Vec<SkillHubItem> {
+    let mut items = Vec::new();
+    let re = regex::Regex::new(r"\[([^\]]+)\]\(https://github\.com/([^/]+)/([^/]+)/tree/main/skills/([^)]+)\)").ok();
+
+    if let Some(re) = re {
+        for cap in re.captures_iter(readme) {
+            let name = &cap[1];
+            let _link = &cap[0];
+            let org = &cap[2];
+            let repo = &cap[3];
+            let slug_raw = &cap[4];
+
+            let display_name = name.trim().to_string();
+            let slug = slug_raw.replace(" ", "-").to_lowercase();
+
+            items.push(SkillHubItem {
+                slug: slug.clone(),
+                name: Some(display_name.clone()),
+                display_name: Some(display_name),
+                summary: Some(format!("{} skill from {}", org, repo)),
+                link: Some(format!("https://github.com/{}/{}/tree/main/skills/{}", org, repo, slug_raw)),
+                homepage: Some(format!("https://github.com/{}/{}", org, repo)),
+                tags: Some(vec![source.to_string()]),
+                categories: None,
+                author: Some(org.to_string()),
+                version: None,
+                description: None,
+                downloads: None,
+                stars: None,
+            });
+        }
+    }
+    items
+}
+
 pub async fn fetch_index() -> Result<Vec<SkillHubItem>, String> {
     if let Ok(guard) = INDEX_CACHE.lock() {
         if let Some((ts, ref items)) = *guard {
@@ -112,27 +188,8 @@ pub async fn fetch_index() -> Result<Vec<SkillHubItem>, String> {
         }
     }
 
-    // 从 anbeime 技能商店获取全量数据
-    let anbeime = fetch_anbeime_store().await?;
-    let official = anbeime.get("official").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let local = anbeime.get("local").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let all = [official, local].concat();
-
-    let items: Vec<SkillHubItem> = all
-        .into_iter()
-        .map(|v| {
-            let slug = v.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
-            let name = v.get("name").and_then(|s| s.as_str()).map(|s| s.to_string());
-            let description = v.get("description").and_then(|s| s.as_str()).map(|s| s.to_string());
-            let stars = v.get("stars").and_then(|s| s.as_u64());
-            SkillHubItem { slug, name, description, stars, ..Default::default() }
-        })
-        .collect();
-
-    if let Ok(mut guard) = INDEX_CACHE.lock() {
-        *guard = Some((Instant::now(), items.clone()));
-    }
-    Ok(items)
+    // 复用多源索引（10分钟缓存）
+    fetch_multi_source_index().await
 }
 
 /// 下载 Skill zip（COS 镜像优先，回退主站 API）
