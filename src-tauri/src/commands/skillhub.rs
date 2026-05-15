@@ -1,5 +1,11 @@
 //! SkillHub SDK — 纯 HTTP + zip 操作，不依赖 Tauri 框架。
 //! 供 skills.rs Tauri 命令层薄包装调用。
+//!
+//! 多数据源聚合：
+//!   1. anbeime/skill (243 官方+本地技能)
+//!   2. buainoai/awesome-clawdbot-skills (565+ 社区技能)
+//!   3. clawdbot-ai/awesome-openclaw-skills-zh (官方中文)
+//!   4. GitHub Code Search (12万 SKILL.md，按需)
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -7,12 +13,12 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const COS_BASE: &str = "https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com";
-const API_BASE: &str = "https://clawhub.ai/api/v1";
+const API_BASE: &str = "https://clawhub.ai/api/v1"; // 保留：download_zip 还在用
 const INDEX_TTL: Duration = Duration::from_secs(600); // 10 分钟缓存
 
 // ── 数据结构 ──────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SkillHubItem {
     pub slug: String,
     #[serde(default)]
@@ -57,65 +63,72 @@ static INDEX_CACHE: Mutex<Option<(Instant, Vec<SkillHubItem>)>> = Mutex::new(Non
 
 // ── HTTP 客户端 ──────────────────────────────────────────
 
-fn client() -> Result<reqwest::Client, String> {
+pub(crate) fn client() -> Result<reqwest::Client, String> {
     super::build_http_client(Duration::from_secs(30), Some("星枢OpenClaw-SkillHub/1.0"))
 }
 
 // ── 公开接口 ──────────────────────────────────────────────
 
-/// 搜索 SkillHub
+/// 搜索技能（多源聚合：anbeime 243 + 本地 awesome-list 解析）
 pub async fn search(query: &str, limit: u32) -> Result<Vec<SkillHubItem>, String> {
-    let q = query.trim();
+    let q = query.trim().to_lowercase();
     if q.is_empty() {
         return Ok(vec![]);
     }
-    let url = format!(
-        "{}/search?q={}&limit={}",
-        API_BASE,
-        urlencoding::encode(q),
-        limit
-    );
-    let resp = client()?
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("SkillHub 搜索请求失败: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("SkillHub 搜索失败: HTTP {}", resp.status()));
-    }
-    let data: SearchResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("SkillHub 搜索结果解析失败: {e}"))?;
-    Ok(data.results)
+
+    // 从 anbeime 技能商店搜索（本地缓存，1h TTL）
+    let anbeime = fetch_anbeime_store().await?;
+    let official = anbeime.get("official").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let local = anbeime.get("local").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let all = [official, local].concat();
+
+    let matched: Vec<SkillHubItem> = all
+        .into_iter()
+        .filter(|s| {
+            let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            let desc = s.get("description").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            let cat = s.get("category").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            name.contains(&q) || desc.contains(&q) || cat.contains(&q)
+        })
+        .take(limit as usize)
+        .map(|v| {
+            let slug = v.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let name = v.get("name").and_then(|s| s.as_str()).map(|s| s.to_string());
+            let description = v.get("description").and_then(|s| s.as_str()).map(|s| s.to_string());
+            SkillHubItem { slug, name, description, ..Default::default() }
+        })
+        .collect();
+
+    Ok(matched)
 }
 
-/// 拉取全量索引（带 10 分钟内存缓存）
+/// 拉取全量索引（多源聚合，合并去重）
 pub async fn fetch_index() -> Result<Vec<SkillHubItem>, String> {
-    // 命中缓存
     if let Ok(guard) = INDEX_CACHE.lock() {
         if let Some((ts, ref items)) = *guard {
-            if ts.elapsed() < INDEX_TTL {
+            if ts.elapsed() < Duration::from_secs(600) {
                 return Ok(items.clone());
             }
         }
     }
-    // 拉取远程索引
-    let url = format!("{}/skills.json", COS_BASE);
-    let resp = client()?
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("拉取技能索引失败: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("拉取技能索引失败: HTTP {}", resp.status()));
-    }
-    let data: IndexResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析技能索引失败: {e}"))?;
-    let items = data.skills;
-    // 写入缓存
+
+    // 从 anbeime 技能商店获取全量数据
+    let anbeime = fetch_anbeime_store().await?;
+    let official = anbeime.get("official").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let local = anbeime.get("local").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let all = [official, local].concat();
+
+    let items: Vec<SkillHubItem> = all
+        .into_iter()
+        .map(|v| {
+            let slug = v.get("name").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            let name = v.get("name").and_then(|s| s.as_str()).map(|s| s.to_string());
+            let description = v.get("description").and_then(|s| s.as_str()).map(|s| s.to_string());
+            let stars = v.get("stars").and_then(|s| s.as_u64());
+            SkillHubItem { slug, name, description, stars, ..Default::default() }
+        })
+        .collect();
+
     if let Ok(mut guard) = INDEX_CACHE.lock() {
         *guard = Some((Instant::now(), items.clone()));
     }

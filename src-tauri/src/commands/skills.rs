@@ -170,12 +170,31 @@ pub async fn skillhub_install_for_engine(
 
     let slug = if name.contains('/') { name.split('/').last().unwrap_or(&name) } else { &name };
     let now = chrono::Utc::now().to_rfc3339();
-    let content = format!(
-        r#"---
+        // 尝试从 GitHub 下载真实 SKILL.md
+// 尝试从 GitHub 下载真实 SKILL.md
+    let skill_content = download_skill_md(&name, &link).await;
+    let sourced = skill_content.is_ok();
+
+    let content = if let Ok(md) = skill_content {
+        format!(
+            r#"---
 description: {description}
-fullPath: {}
 link: {link}
 installed: {now}
+source: skillhub
+---
+
+{md}"#
+        )
+    } else {
+        let fp = skill_dir.to_string_lossy().replace('\\', "/").to_string();
+        format!(
+            r#"---
+description: {description}
+fullPath: {fp}
+link: {link}
+installed: {now}
+source: skillhub
 ---
 
 # {slug}
@@ -184,19 +203,20 @@ installed: {now}
 
 ## 来源
 
-- 技能商店安装
+- 技能商店一键安装
 - 链接: {link}
 - 安装时间: {now}
 
 ## 使用
 
-此技能通过技能商店一键安装。请根据技能的原始文档学习使用方法。
-"#,
-        skill_dir.to_string_lossy().replace('\\', "/"),
-    );
+请根据技能的原始文档学习使用方法。
+"#
+        )
+    };
 
     let skill_md = skill_dir.join("SKILL.md");
-    std::fs::write(&skill_md, content).map_err(|e| format!("写入 SKILL.md 失败: {e}"))?;
+    std::fs::write(&skill_md, &content)
+        .map_err(|e| format!("写入 SKILL.md 失败: {e}"))?;
 
     Ok(serde_json::json!({
         "success": true,
@@ -204,7 +224,53 @@ installed: {now}
         "slug": slug,
         "engine": engine,
         "path": skill_dir.to_string_lossy(),
+        "sourceSkilled": sourced,
     }))
+}
+
+/// 从 GitHub 下载真实 SKILL.md
+async fn download_skill_md(name: &str, link: &str) -> Result<String, String> {
+    let c = crate::commands::skillhub::client()?;
+    let mut urls: Vec<String> = Vec::new();
+
+    // anbeime/skill 格式
+    if link.contains("anbeime/skill") {
+        let skill_name = name.split('/').last().unwrap_or(name);
+        urls.push(format!("https://raw.githubusercontent.com/anbeime/skill/main/skills/{}/SKILL.md", skill_name));
+        urls.push(format!("https://raw.githubusercontent.com/anbeime/skill/main/skills/{}/skill.md", skill_name));
+        urls.push(format!("https://raw.githubusercontent.com/anbeime/skill/main/skills/{}/README.md", skill_name));
+    }
+
+    // clawdbot/skills 格式
+    if link.contains("clawdbot/skills") {
+        if let Some(rest) = link.split("tree/main/skills/").nth(1) {
+            let parts: Vec<&str> = rest.split('/').collect();
+            if parts.len() >= 2 {
+                let org = parts[0];
+                let skill_n = parts[1];
+                urls.push(format!("https://raw.githubusercontent.com/clawdbot/skills/main/skills/{}/{}/SKILL.md", org, skill_n));
+            }
+        }
+    }
+
+    // 通用备选
+    let name_part = name.split('/').last().unwrap_or(name);
+    urls.push(format!("https://raw.githubusercontent.com/anbeime/skill/main/skills/{}/SKILL.md", name_part));
+    urls.push(format!("https://raw.githubusercontent.com/clawdbot/skills/main/skills/{}/SKILL.md", name_part));
+
+    for url in &urls {
+        match c.get(url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(text) = resp.text().await {
+                    if !text.is_empty() && text.len() > 50 {
+                        return Ok(text);
+                    }
+                }
+            }
+            _ => continue,
+        }
+    }
+    Err("未找到 SKILL.md".to_string())
 }
 
 /// hermes_skillhub_install — 安装技能到 Hermes 目录 (~/.hermes/skills/)
