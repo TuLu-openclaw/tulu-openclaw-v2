@@ -97,7 +97,11 @@ fn find_gateway_pid_by_port(port: u16) -> Option<u32> {
         let s = String::from_utf8_lossy(&output.stdout);
         s.trim().parse::<u32>().ok()
     }
-    #[cfg(all(not(target_os = "windows"), not(target_os = "linux"), not(target_os = "macos")))]
+    #[cfg(all(
+        not(target_os = "windows"),
+        not(target_os = "linux"),
+        not(target_os = "macos")
+    ))]
     {
         None
     }
@@ -308,7 +312,9 @@ async fn do_restart_gateway() -> Result<(), String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500)).is_ok() {
+        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(500))
+            .is_ok()
+        {
             // 确认端口被新进程持有
             if let Some(real_pid) = find_gateway_pid_by_port(port) {
                 if real_pid == spawned_pid {
@@ -1324,14 +1330,21 @@ async fn ensure_uv(app: &tauri::AppHandle) -> Result<String, String> {
             let _ = app.emit("hermes-install-log", format!("🔄 尝试镜像: {url}"));
         }
         match client.get(url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.bytes().await {
-                    Ok(b) => { bytes = Some(b); break; }
-                    Err(e) => { last_err = format!("uv 下载读取失败: {e}"); }
+            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                Ok(b) => {
+                    bytes = Some(b);
+                    break;
                 }
+                Err(e) => {
+                    last_err = format!("uv 下载读取失败: {e}");
+                }
+            },
+            Ok(resp) => {
+                last_err = format!("uv 下载失败 (HTTP {})", resp.status());
             }
-            Ok(resp) => { last_err = format!("uv 下载失败 (HTTP {})", resp.status()); }
-            Err(e) => { last_err = format!("uv 下载失败: {e}"); }
+            Err(e) => {
+                last_err = format!("uv 下载失败: {e}");
+            }
         }
     }
     let bytes = bytes.ok_or(last_err)?;
@@ -1695,13 +1708,24 @@ pub async fn configure_hermes(
         merge_hermes_config_yaml(&existing, &model_str, &base_url_line, &provider_line)
     } else {
         // 动态生成平台信息
-        let os_label = if cfg!(target_os = "windows") { "Windows" }
-            else if cfg!(target_os = "macos") { "macOS" }
-            else { "Linux" };
-        let shell_hint = if cfg!(target_os = "windows") { "Use cmd or PowerShell for terminal commands. Use backslashes for paths." }
-            else if cfg!(target_os = "macos") { "Use zsh or bash for terminal commands." }
-            else { "Use bash for terminal commands." };
-        let home_dir = dirs::home_dir().unwrap_or_default().to_string_lossy().to_string();
+        let os_label = if cfg!(target_os = "windows") {
+            "Windows"
+        } else if cfg!(target_os = "macos") {
+            "macOS"
+        } else {
+            "Linux"
+        };
+        let shell_hint = if cfg!(target_os = "windows") {
+            "Use cmd or PowerShell for terminal commands. Use backslashes for paths."
+        } else if cfg!(target_os = "macos") {
+            "Use zsh or bash for terminal commands."
+        } else {
+            "Use bash for terminal commands."
+        };
+        let home_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         // 首次创建：生成完整的基线配置
         format!(
             r#"# Hermes Agent configuration (managed by ClawPanel)
@@ -1723,13 +1747,24 @@ system:
     };
     // 如果合并后没有 system 区块，追加以免模型不知道平台信息
     if !config_content.contains("system:") {
-        let os_label = if cfg!(target_os = "windows") { "Windows" }
-            else if cfg!(target_os = "macos") { "macOS" }
-            else { "Linux" };
-        let shell_hint = if cfg!(target_os = "windows") { "Use cmd or PowerShell for terminal commands. Use backslashes for paths." }
-            else if cfg!(target_os = "macos") { "Use zsh or bash for terminal commands." }
-            else { "Use bash for terminal commands." };
-        let home_dir = dirs::home_dir().unwrap_or_default().to_string_lossy().to_string();
+        let os_label = if cfg!(target_os = "windows") {
+            "Windows"
+        } else if cfg!(target_os = "macos") {
+            "macOS"
+        } else {
+            "Linux"
+        };
+        let shell_hint = if cfg!(target_os = "windows") {
+            "Use cmd or PowerShell for terminal commands. Use backslashes for paths."
+        } else if cfg!(target_os = "macos") {
+            "Use zsh or bash for terminal commands."
+        } else {
+            "Use bash for terminal commands."
+        };
+        let home_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         config_content.push_str(&format!(
             "system:\n  extra_instructions: |\n    You are running on {os_label}. Home directory: {home_dir}. {shell_hint}\n"
         ));

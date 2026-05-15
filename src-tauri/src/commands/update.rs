@@ -108,8 +108,7 @@ pub async fn download_frontend_update(url: String, expected_hash: String) -> Res
     let zip_name = format!("星枢OpenClaw_v{}.zip", env!("CARGO_PKG_VERSION"));
     let desktop_zip = desktop.join(&zip_name);
     // 写入桌面 ZIP
-    fs::write(&desktop_zip, bytes.as_ref())
-        .map_err(|e| format!("写入桌面 ZIP 失败: {e}"))?;
+    fs::write(&desktop_zip, bytes.as_ref()).map_err(|e| format!("写入桌面 ZIP 失败: {e}"))?;
 
     let cursor = std::io::Cursor::new(bytes.as_ref());
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("解压失败: {e}"))?;
@@ -144,9 +143,7 @@ pub async fn download_frontend_update(url: String, expected_hash: String) -> Res
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open")
-            .arg(&desktop_zip)
-            .spawn();
+        let _ = std::process::Command::new("open").arg(&desktop_zip).spawn();
     }
     #[cfg(target_os = "linux")]
     {

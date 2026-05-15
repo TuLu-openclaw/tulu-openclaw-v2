@@ -1498,7 +1498,11 @@ mod platform {
             return (true, None);
         }
 
-        #[cfg(all(not(target_os = "windows"), not(target_os = "linux"), not(target_os = "macos")))]
+        #[cfg(all(
+            not(target_os = "windows"),
+            not(target_os = "linux"),
+            not(target_os = "macos")
+        ))]
         {
             return (result, None);
         }

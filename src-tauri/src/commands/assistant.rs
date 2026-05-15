@@ -572,7 +572,9 @@ pub async fn fetch_page(url: String) -> Result<String, String> {
     if !resp.status().is_success() {
         return Err(format!("fetch_page HTTP {}", resp.status()));
     }
-    resp.text().await.map_err(|e| format!("fetch_page 读取响应失败: {e}"))
+    resp.text()
+        .await
+        .map_err(|e| format!("fetch_page 读取响应失败: {e}"))
 }
 
 /// 使用 WebView2/Edge 渲染 JS 页面，提取视频 URL（用于 JS 动态渲染站）
@@ -884,7 +886,8 @@ pub async fn open_player_window(
         if let tauri::WindowEvent::CloseRequested { .. } = event {
             // 不调用 api.prevent_close()，直接清理后 destroy
             use tauri::Emitter;
-            let _ = app_for_event.emit_to(&win_label_emit, "player-close-event", serde_json::json!({}));
+            let _ =
+                app_for_event.emit_to(&win_label_emit, "player-close-event", serde_json::json!({}));
             // 给前端 500ms 做清理，然后 force destroy（不触发 CloseRequested）
             let app_clone = app_for_event.clone();
             let label_clone = win_label_emit.clone();

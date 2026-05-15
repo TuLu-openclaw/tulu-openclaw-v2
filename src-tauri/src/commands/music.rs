@@ -127,13 +127,14 @@ fn generate_search_variants(query: &str) -> Vec<String> {
     let mut variants = vec![query.to_string()];
 
     // 中英文变体映射
-    let translations: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::from([
-        ("周杰伦", vec!["Jay Chou", "周杰伦"]),
-        ("陈奕迅", vec!["陈奕迅", "Eason Chan"]),
-        ("林俊杰", vec!["林俊杰", "JJ Lin"]),
-        ("邓紫棋", vec!["邓紫棋", "G.E.M."]),
-        ("蔡依林", vec!["蔡依林", "Jolin Tsai"]),
-    ]);
+    let translations: std::collections::HashMap<&str, Vec<&str>> =
+        std::collections::HashMap::from([
+            ("周杰伦", vec!["Jay Chou", "周杰伦"]),
+            ("陈奕迅", vec!["陈奕迅", "Eason Chan"]),
+            ("林俊杰", vec!["林俊杰", "JJ Lin"]),
+            ("邓紫棋", vec!["邓紫棋", "G.E.M."]),
+            ("蔡依林", vec!["蔡依林", "Jolin Tsai"]),
+        ]);
 
     for (key, vals) in translations {
         if query.contains(key) {
@@ -151,7 +152,11 @@ fn generate_search_variants(query: &str) -> Vec<String> {
 }
 
 /// 网易云音乐搜索
-async fn search_netease(client: &reqwest::Client, query: &str, limit: usize) -> PlatformSearchResult {
+async fn search_netease(
+    client: &reqwest::Client,
+    query: &str,
+    limit: usize,
+) -> PlatformSearchResult {
     let url = format!(
         "https://music.163.com/api/search/get?s={}&type=1&limit={}",
         urlencoding::encode(query),
@@ -189,7 +194,8 @@ async fn search_netease(client: &reqwest::Client, query: &str, limit: usize) -> 
                                     .and_then(|n| n.as_str())
                                     .unwrap_or("")
                                     .to_string();
-                                let duration = s.get("duration").and_then(|d| d.as_u64()).unwrap_or(0);
+                                let duration =
+                                    s.get("duration").and_then(|d| d.as_u64()).unwrap_or(0);
                                 let cover = s
                                     .get("album")
                                     .and_then(|a| a.get("picUrl"))
@@ -353,7 +359,11 @@ async fn search_kugou(client: &reqwest::Client, query: &str, limit: usize) -> Pl
                                     .and_then(|s| s.parse::<f64>().ok())
                                     .map(|d| (d * 1000.0) as u64)
                                     .unwrap_or(0);
-                                let cover = s.get("Img").and_then(|p| p.as_str()).unwrap_or("").to_string();
+                                let cover = s
+                                    .get("Img")
+                                    .and_then(|p| p.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
                                 Some(Song {
                                     id,
                                     name,
@@ -415,7 +425,11 @@ async fn search_kuwo(client: &reqwest::Client, query: &str, limit: usize) -> Pla
                                         .and_then(|a| a.as_str())
                                         .unwrap_or("未知")
                                         .to_string();
-                                    let album = s.get("album").and_then(|a| a.as_str()).unwrap_or("").to_string();
+                                    let album = s
+                                        .get("album")
+                                        .and_then(|a| a.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
                                     let duration = s
                                         .get("duration")
                                         .and_then(|d| d.as_str())
@@ -582,7 +596,11 @@ async fn get_netease_url(client: &reqwest::Client, id: &str) -> Result<String, S
 }
 
 /// 通用 meting API
-async fn fetch_meting_url(client: &reqwest::Client, id: &str, platform: &str) -> Result<String, String> {
+async fn fetch_meting_url(
+    client: &reqwest::Client,
+    id: &str,
+    platform: &str,
+) -> Result<String, String> {
     let url = format!(
         "https://api.injahow.cn/meting/?id={}&type={}&source={}",
         id, "song", platform
@@ -650,7 +668,10 @@ async fn get_qq_url(client: &reqwest::Client, id: &str) -> Result<String, String
 /// 酷狗 URL
 async fn get_kugou_url(client: &reqwest::Client, id: &str) -> Result<String, String> {
     // 酷狗的 hash 搜索
-    let search_url = format!("https://www.kugou.com/yy/index.php?r=play/getdata&hash={}", id);
+    let search_url = format!(
+        "https://www.kugou.com/yy/index.php?r=play/getdata&hash={}",
+        id
+    );
 
     match client
         .get(&search_url)
@@ -827,8 +848,7 @@ pub async fn music_proxy_audio(url: String, platform: String) -> Result<String, 
 }
 
 fn base64_encode(data: &[u8]) -> String {
-    const ALPHABET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::new();
     for chunk in data.chunks(3) {
         let b = match chunk.len() {
@@ -949,7 +969,10 @@ async fn get_qq_lyrics(client: &reqwest::Client, id: &str) -> Result<String, Str
 }
 
 async fn get_kugou_lyrics(client: &reqwest::Client, id: &str) -> Result<String, String> {
-    let url = format!("https://www.kugou.com/yy/index.php?r=play/getdata&hash={}", id);
+    let url = format!(
+        "https://www.kugou.com/yy/index.php?r=play/getdata&hash={}",
+        id
+    );
 
     match client
         .get(&url)
