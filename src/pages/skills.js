@@ -549,6 +549,7 @@ function drawOCStore(el) {
         </div>
       `).join('')}
     </div>
+    ${renderWorkflowSection(_ocStoreData.workflows || [])}
   `
 
   el.querySelector('#oc-store-search')?.addEventListener('input', (e) => { _ocQuery = e.target.value; drawOCStore(el) })
@@ -566,4 +567,31 @@ function drawOCStore(el) {
       setTimeout(() => { b.disabled = false; b.textContent = '安装到OpenClaw' }, 2000)
     }
   }))
+}
+
+function renderWorkflowSection(workflows) {
+  if (!workflows || !workflows.length) return ''
+  const t = { 'github-action': 'CI/CD', 'project': '项目', 'template': '模板' }
+  const bg = { 'github-action': 'rgba(34,197,94,0.12)', 'project': 'rgba(59,130,246,0.12)', 'template': 'rgba(139,92,246,0.12)' }
+  const fg = { 'github-action': '#4ade80', 'project': '#60a5fa', 'template': '#c4b5fd' }
+  return `
+    <div style="margin-top:20px;padding-top:16px;border-top:2px solid var(--border)">
+      <div style="font-weight:700;font-size:14px;color:var(--text-primary);margin-bottom:12px">工作流 & 项目模板 (${workflows.length})</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+        ${workflows.map(w => `
+          <div class="clawhub-item" style="flex-direction:column;align-items:stretch;gap:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="clawhub-badge" style="font-size:9px;background:${bg[w.type]||'rgba(255,255,255,0.06)'};color:${fg[w.type]||'#fff'}">${t[w.type]||w.type}</span>
+              <span style="font-size:10px;color:var(--text-tertiary)">${esc(w.source||'')}</span>
+            </div>
+            <div style="font-weight:700;font-size:14px;color:var(--text-primary)">${esc(w.name||'')}</div>
+            <div style="font-size:12px;color:var(--text-tertiary);line-height:1.5">${esc(w.description||'')}</div>
+            <div style="padding-top:8px;border-top:1px solid var(--border)">
+              <a href="${esc(w.link||'#')}" target="_blank" class="btn btn-sm" style="font-size:11px;border:1px solid var(--border);text-align:center;text-decoration:none;color:var(--text-secondary);border-radius:8px;display:block">GitHub 查看</a>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `
 }

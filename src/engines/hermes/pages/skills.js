@@ -273,6 +273,32 @@ export function render() {
     `
   }
 
+  function renderStoreWorkflows(data) {
+    const workflows = data?.workflows || []
+    if (!workflows.length) return ''
+    const typeLabel = { 'github-action': 'CI/CD', 'project': '项目', 'template': '模板' }
+    const typeClr = { 'github-action': '#4ade80', 'project': '#60a5fa', 'template': '#c4b5fd' }
+    return `
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)">
+        <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:8px">工作流 & 项目 (${workflows.length})</div>
+        <div class="hm-store-grid">
+          ${workflows.map(w => `
+            <div class="hm-store-card">
+              <div class="hm-store-card-header">
+                <span class="hm-store-card-type" style="background:rgba(${w.type==='github-action'?'34,197,94':w.type==='project'?'59,130,246':'139,92,246'},0.12);color:${typeClr[w.type]||'#fff'}">${typeLabel[w.type]||w.type}</span>
+              </div>
+              <div class="hm-store-card-name" style="font-size:13px">${escHtml(w.name||'')}</div>
+              <div class="hm-store-card-desc">${escHtml(w.description||'')}</div>
+              <div class="hm-store-card-actions">
+                <a href="${escHtml(w.link||'#')}" target="_blank" rel="noopener" class="hm-store-card-link">GitHub</a>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `
+  }
+
   function renderStoreCategoryChip(cat) {
     const isActive = storeFilterCat === cat.name
     return `
@@ -341,6 +367,7 @@ export function render() {
           ` : `
             <div class="hm-store-results-count">${totalCount} 个技能</div>
             <div class="hm-store-grid">${allSkills.map(renderStoreCard).join('')}</div>
+            ${renderStoreWorkflows(storeData)}
           `}
         </div>
       </div>

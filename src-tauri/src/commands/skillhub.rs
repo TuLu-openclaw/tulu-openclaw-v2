@@ -599,11 +599,163 @@ pub async fn fetch_multi_source_store() -> Result<serde_json::Value, String> {
     result["localCount"] = serde_json::json!(local_count);
     result["updatedAt"] = serde_json::json!(chrono::Utc::now().to_rfc3339());
 
+    // ── 工作流/项目/模板 ──
+    result["workflows"] = serde_json::json!(fetch_workflows().await);
+
     // 缓存
     if let Ok(mut guard) = MULTI_SOURCE_STORE_CACHE.lock() {
         *guard = Some((Instant::now(), result.clone()));
     }
     Ok(result)
+}
+
+/// 拉取工作流/项目/模板元数据（anbeime/skill 仓库）
+///   包含 GitHub Actions 工作流、项目模板、个性注入模板
+///   先尝试 GitHub API 实时拉取，超时/失败回退硬编码
+async fn fetch_workflows() -> Vec<serde_json::Value> {
+    let c = match client() {
+        Ok(c) => c,
+        Err(_) => return hardcoded_workflows(),
+    };
+
+    let base = "https://api.github.com/repos/anbeime/skill/contents";
+
+    // ── CI/CD 工作流 ──（返回自己的 Vec）
+    let c1 = c.clone();
+    let wf_fut = async move {
+        let mut v = Vec::new();
+        let resp = c1.get(format!("{base}/.github/workflows"))
+            .header("User-Agent", "OpenClaw-SkillHub/1.0")
+            .send().await.ok()?;
+        let items: Vec<serde_json::Value> = resp.json().await.ok()?;
+        for item in items {
+            let name = item["name"].as_str().unwrap_or("");
+            if name.ends_with(".yml") || name.ends_with(".yaml") {
+                let display = name.trim_end_matches(".yml").trim_end_matches(".yaml").to_string();
+                v.push(serde_json::json!({
+                    "type": "github-action",
+                    "name": display,
+                    "description": format!("GitHub Actions 工作流"),
+                    "link": format!("https://github.com/anbeime/skill/blob/main/.github/workflows/{name}"),
+                    "source": "anbeime"
+                }));
+            }
+        }
+        Some(v)
+    };
+
+    // ── 项目模板 ──
+    let c2 = c.clone();
+    let proj_fut = async move {
+        let mut v = Vec::new();
+        let resp = c2.get(format!("{base}/projects"))
+            .header("User-Agent", "OpenClaw-SkillHub/1.0")
+            .send().await.ok()?;
+        let items: Vec<serde_json::Value> = resp.json().await.ok()?;
+        for item in items {
+            if item["type"].as_str() == Some("dir") {
+                let name = item["name"].as_str().unwrap_or("");
+                v.push(serde_json::json!({
+                    "type": "project",
+                    "name": name,
+                    "description": "项目模板",
+                    "link": format!("https://github.com/anbeime/skill/tree/main/projects/{name}"),
+                    "source": "anbeime"
+                }));
+            }
+        }
+        Some(v)
+    };
+
+    // ── 模板 ──
+    let c3 = c.clone();
+    let tmpl_fut = async move {
+        let mut v = Vec::new();
+        let resp = c3.get(format!("{base}/templates"))
+            .header("User-Agent", "OpenClaw-SkillHub/1.0")
+            .send().await.ok()?;
+        let items: Vec<serde_json::Value> = resp.json().await.ok()?;
+        for item in items {
+            if item["type"].as_str() == Some("file") && item["name"].as_str().map(|n| n.ends_with(".md")).unwrap_or(false) {
+                let name = item["name"].as_str().unwrap_or("");
+                v.push(serde_json::json!({
+                    "type": "template",
+                    "name": name.trim_end_matches(".md"),
+                    "description": "模板",
+                    "link": format!("https://github.com/anbeime/skill/blob/main/templates/{name}"),
+                    "source": "anbeime"
+                }));
+            }
+        }
+        Some(v)
+    };
+
+    let (wf_r, proj_r, tmpl_r) = futures_util::join!(wf_fut, proj_fut, tmpl_fut);
+
+    let mut workflows: Vec<serde_json::Value> = Vec::new();
+    if let Some(v) = wf_r { workflows.extend(v); }
+    if let Some(v) = proj_r { workflows.extend(v); }
+    if let Some(v) = tmpl_r { workflows.extend(v); }
+
+    if workflows.is_empty() {
+        return hardcoded_workflows();
+    }
+    workflows
+}
+
+/// 硬编码工作流列表（GitHub API 不可用时的回退）
+fn hardcoded_workflows() -> Vec<serde_json::Value> {
+    vec![
+        serde_json::json!({
+            "type": "github-action",
+            "name": "sync-skills",
+            "description": "每日自动从上游同步技能数据（OpenAI Skills、VoltAgent 等）",
+            "link": "https://github.com/anbeime/skill/blob/main/.github/workflows/sync-skills.yml",
+            "source": "anbeime"
+        }),
+        serde_json::json!({
+            "type": "github-action",
+            "name": "sync-clawhub",
+            "description": "每日自动同步 ClawHub 技能信息到 README",
+            "link": "https://github.com/anbeime/skill/blob/main/.github/workflows/sync_clawhub.yml",
+            "source": "anbeime"
+        }),
+        serde_json::json!({
+            "type": "project",
+            "name": "companion-skill",
+            "description": "小易伴侣技能版 — TypeScript 技能系统框架，含场景检测、图像生成、个性化对话",
+            "link": "https://github.com/anbeime/skill/tree/main/projects/companion-skill",
+            "source": "anbeime"
+        }),
+        serde_json::json!({
+            "type": "project",
+            "name": "companion-simple",
+            "description": "小易伴侣简化版 — Python 技能数据爬取与管理、Web 界面、定时调度",
+            "link": "https://github.com/anbeime/skill/tree/main/projects/companion-simple",
+            "source": "anbeime"
+        }),
+        serde_json::json!({
+            "type": "project",
+            "name": "assistant",
+            "description": "小易助手核心系统 — TypeScript 智能代理框架、记忆管理、文件管理",
+            "link": "https://github.com/anbeime/skill/tree/main/projects/assistant",
+            "source": "anbeime"
+        }),
+        serde_json::json!({
+            "type": "project",
+            "name": "xiaoyue-web",
+            "description": "小跃 Web 伴侣 — 多模态集成 Web 应用",
+            "link": "https://github.com/anbeime/skill/tree/main/projects/xiaoyue-web",
+            "source": "anbeime"
+        }),
+        serde_json::json!({
+            "type": "template",
+            "name": "soul-injection",
+            "description": "Soul 注入模板 — AI 虚拟伴侣个性定义（性格特征、对话风格、互动原则）",
+            "link": "https://github.com/anbeime/skill/blob/main/templates/soul-injection.md",
+            "source": "anbeime"
+        }),
+    ]
 }
 
 fn detect_single_root_dir(names: &[String]) -> Option<String> {
