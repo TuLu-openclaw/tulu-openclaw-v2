@@ -121,7 +121,7 @@ const NAV_ITEMS_HERMES = [
       { route: '/h/setup', label: '引擎设置', icon: 'setup' },
       { route: '/h/sessions', label: '会话记录', icon: 'chat' },
       { route: '/h/usage', label: '用量分析', icon: 'bar-chart' },
-      { route: '/h/skills', label: '技能中心', icon: 'skills' },
+      { route: '/h/skills', label: '🏪 技能中心', icon: 'skills' },
       { route: '/h/channels', label: '对话渠道', icon: 'channels' },
       { route: '/h/logs', label: '运行日志', icon: 'logs' },
       { route: '/h/memory', label: '记忆管理', icon: 'memory' },

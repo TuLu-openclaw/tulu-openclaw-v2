@@ -137,6 +137,12 @@ pub async fn skillhub_install(slug: String) -> Result<Value, String> {
     }))
 }
 
+/// skillhub_fetch_store — 从 anbeime/skill 仓库拉取完整技能商店数据（243技能+14分类+星级）
+#[tauri::command]
+pub async fn skillhub_fetch_store() -> Result<Value, String> {
+    super::skillhub::fetch_anbeime_store().await
+}
+
 /// hermes_skillhub_install — 安装技能到 Hermes 目录 (~/.hermes/skills/)
 #[tauri::command]
 pub async fn hermes_skillhub_install(slug: String) -> Result<Value, String> {
