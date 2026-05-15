@@ -33,7 +33,7 @@ export async function render() {
       <div class="clawhub-toolbar" style="margin-bottom:var(--space-sm)">
         <input class="input clawhub-search-input" id="skill-store-search" placeholder="${t('skills.searchPlaceholder')}" type="text" style="flex:1">
         <button class="btn btn-primary btn-sm" data-action="store-search">${t('skills.search')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://clawhub.ai" target="_blank" rel="noopener">${t('skills.browse')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://skillhub.cloud.tencent.com" target="_blank" rel="noopener">${t('skills.browse')}</a>
       </div>
       <div id="store-results" class="clawhub-list" style="max-height:calc(100vh - 300px);overflow-y:auto">
         <div class="form-hint" style="padding:var(--space-xl);text-align:center">${t('skills.storeLoading')}</div>
