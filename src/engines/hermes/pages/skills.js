@@ -369,7 +369,7 @@ export function render() {
       try {
         // 直接 fetch skillhub.cloud.tencent.com API，避免 Rust 层转发
         const q = encodeURIComponent(hubQuery.trim())
-        const url = `https://skillhub.cloud.tencent.com/api/v1/skills?q=${q}&limit=25&_=${Date.now()}`
+        const url = `https://clawhub.ai/api/v1/skills?q=${q}&limit=25&_=${Date.now()}`
         let data = null
         try {
           const r = await fetch(url, {
