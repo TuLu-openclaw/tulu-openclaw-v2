@@ -345,8 +345,8 @@ export async function render() {
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
-  // 启动实时刷新：每 5s 检查一次新消息，无需切换页面
-  _liveRefreshTimer = setInterval(() => { if (_pageActive && !_isStreaming && !_isSending) void liveRefresh() }, 5000)
+  // 启动实时刷新：每 15s 检查一次新消息，无需切换页面
+  _liveRefreshTimer = setInterval(() => { if (_pageActive && !_isStreaming && !_isSending) void liveRefresh() }, 15000)
   // 非阻塞：先返回 DOM，后台连接 Gateway
   connectGateway()
   return page
@@ -1706,7 +1706,6 @@ function handleChatEvent(payload) {
         _streamStartTime = Date.now()
         // 从 payload 捕获真实模型（来自 Context，非下拉框）
         _currentAiModel = payload.model || payload.message?.model || payload.modelId || ''
-        console.log('[chat] 模型捕获调试:', JSON.stringify({ model: payload.model, msgModel: payload.message?.model, modelId: payload.modelId, fullPayloadKeys: Object.keys(payload) }))
         updateSendState()
       }
       _currentAiText = c.text
@@ -2237,7 +2236,7 @@ async function loadHistory() {
   }
 }
 
-/** 实时增量刷新：每5s调用，若 Gateway 有新消息则追加显示（不重绘现有消息） */
+/** 实时增量刷新：每15s调用，若 Gateway 有新消息则追加显示（不重绘现有消息） */
 async function liveRefresh() {
   if (!_sessionKey || !_messagesEl || !wsClient.gatewayReady) return
   if (_isLoadingHistory || _isStreaming || _isSending) return
@@ -2245,28 +2244,18 @@ async function liveRefresh() {
     const result = await wsClient.chatHistory(_sessionKey, 50)
     if (!result?.messages?.length) return
     const deduped = dedupeHistory(result.messages)
-    // 只追加本地没有的新消息
-    const existingKeys = new Set(
-      [..._messagesEl.querySelectorAll('.msg-ai[data-run-id]')].map(el => el.dataset.runId)
+    // 用 msg.id 做去重（比 runId 更可靠）
+    const existingIds = new Set(
+      [..._messagesEl.querySelectorAll('.msg-ai[data-msg-id]')].map(el => el.dataset.msgId)
     )
     let newCount = 0
     for (const msg of deduped) {
       if (msg.role !== 'assistant') continue
-      const runId = msg.id || msg.runId || ''
-      if (existingKeys.has(runId) && runId) continue
+      const msgId = msg.id || ''
+      if (existingIds.has(msgId)) continue
       const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
       const c = extractContent(msg)
-      const images = c.images || []
-      const videos = c.videos || []
-      const audios = c.audios || []
-      const files = c.files || []
-      const tools = c.tools || []
-      appendAiMessage(c.text, msgTime, images, videos, audios, files, tools, msg.model || msg.modelId || '', msg.id || msg.runId || '')
-      if (runId) {
-        const wraps = _messagesEl.querySelectorAll('.msg-ai')
-        const last = wraps[wraps.length - 1]
-        if (last) last.dataset.runId = runId
-      }
+      appendAiMessage(c.text, msgTime, c.images || [], c.videos || [], c.audios || [], c.files || [], c.tools || [], msg.model || msg.modelId || '', msgId)
       newCount++
     }
     if (newCount > 0) scrollToBottom()
