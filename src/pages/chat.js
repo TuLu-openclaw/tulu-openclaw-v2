@@ -63,7 +63,7 @@ let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
 let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
-let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
+let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null, _currentAiModel = '', _liveRefreshTimer = null
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
 let _lastRenderTime = 0, _renderPending = false, _lastHistoryHash = ''
 let _autoScrollEnabled = true, _lastScrollTop = 0, _touchStartY = 0
@@ -345,6 +345,8 @@ export async function render() {
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
+  // 启动实时刷新：每 5s 检查一次新消息，无需切换页面
+  _liveRefreshTimer = setInterval(() => { if (_pageActive && !_isStreaming && !_isSending) void liveRefresh() }, 5000)
   // 非阻塞：先返回 DOM，后台连接 Gateway
   connectGateway()
   return page
@@ -1702,6 +1704,8 @@ function handleChatEvent(payload) {
         _currentRunId = payload.runId
         _isStreaming = true
         _streamStartTime = Date.now()
+        // 从 payload 捕获真实模型（来自 Context，非下拉框）
+        _currentAiModel = payload.model || payload.message?.model || payload.modelId || ''
         updateSendState()
       }
       _currentAiText = c.text
@@ -1766,13 +1770,20 @@ function handleChatEvent(payload) {
       appendFilesToEl(_currentAiBubble, _currentAiFiles)
       appendToolsToEl(_currentAiBubble, finalTools.length ? finalTools : _currentAiTools)
     }
-    // 添加时间戳 + 耗时 + token 消耗
+    // 添加模型标签 + 时间戳 + 耗时 + token 消耗（均在 bubble 下方）
     const wrapper = _currentAiBubble?.parentElement
     if (wrapper) {
+      // 第一行：模型背景（实时从 Context 捕获）
+      if (_currentAiModel) {
+        const modelRow = document.createElement('div')
+        modelRow.className = 'msg-model'
+        modelRow.innerHTML = `<span class="msg-model-badge">🤖 ${escapeAttr(_currentAiModel)}</span>`
+        wrapper.appendChild(modelRow)
+      }
+      // 第二行：时间 + 耗时 + token + 复制
       const meta = document.createElement('div')
       meta.className = 'msg-meta'
       let parts = [`<span class="msg-time">${formatTime(new Date())}</span>`]
-      // 计算响应耗时
       let durStr = ''
       if (payload.durationMs) {
         durStr = (payload.durationMs / 1000).toFixed(1) + 's'
@@ -1780,7 +1791,6 @@ function handleChatEvent(payload) {
         durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
       if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
-      // token 消耗（从 payload.usage 或 payload.message.usage 提取）
       const usage = payload.usage || payload.message?.usage || null
       if (usage) {
         const inp = usage.input_tokens || usage.prompt_tokens || 0
@@ -2138,6 +2148,7 @@ function resetStreamState() {
   _currentAiFiles = []
   _currentAiTools = []
   _currentRunId = null
+  _currentAiModel = ''
   _isStreaming = false
   _streamStartTime = 0
   _lastErrorMsg = null
@@ -2162,7 +2173,7 @@ async function loadHistory() {
         if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
         else if (msg.role === 'assistant') {
           const images = (msg.attachments || []).filter(a => a.category === 'image').map(a => ({ mediaType: a.mimeType, data: a.content, url: a.url }))
-          appendAiMessage(msg.content || '', msgTime, images, [], [], [], [])
+          appendAiMessage(msg.content || '', msgTime, images, [], [], [], [], '', msg.id || '')
         }
       })
       scrollToBottom()
@@ -2205,7 +2216,7 @@ async function loadHistory() {
         if (msg.images?.length && !userAtts.length) hasOmittedImages = true
         appendUserMessage(msg.text, userAtts, msgTime)
       } else if (msg.role === 'assistant') {
-        appendAiMessage(msg.text, msgTime, msg.images, msg.videos, msg.audios, msg.files, msg.tools)
+        appendAiMessage(msg.text, msgTime, msg.images, msg.videos, msg.audios, msg.files, msg.tools, msg.model || msg.modelId || '')
       }
     })
     if (hasOmittedImages) {
@@ -2222,6 +2233,44 @@ async function loadHistory() {
     if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${e.message}`)
   } finally {
     _isLoadingHistory = false
+  }
+}
+
+/** 实时增量刷新：每5s调用，若 Gateway 有新消息则追加显示（不重绘现有消息） */
+async function liveRefresh() {
+  if (!_sessionKey || !_messagesEl || !wsClient.gatewayReady) return
+  if (_isLoadingHistory || _isStreaming || _isSending) return
+  try {
+    const result = await wsClient.chatHistory(_sessionKey, 50)
+    if (!result?.messages?.length) return
+    const deduped = dedupeHistory(result.messages)
+    // 只追加本地没有的新消息
+    const existingKeys = new Set(
+      [..._messagesEl.querySelectorAll('.msg-ai[data-run-id]')].map(el => el.dataset.runId)
+    )
+    let newCount = 0
+    for (const msg of deduped) {
+      if (msg.role !== 'assistant') continue
+      const runId = msg.id || msg.runId || ''
+      if (existingKeys.has(runId) && runId) continue
+      const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
+      const c = extractContent(msg)
+      const images = c.images || []
+      const videos = c.videos || []
+      const audios = c.audios || []
+      const files = c.files || []
+      const tools = c.tools || []
+      appendAiMessage(c.text, msgTime, images, videos, audios, files, tools, msg.model || msg.modelId || '', msg.id || msg.runId || '')
+      if (runId) {
+        const wraps = _messagesEl.querySelectorAll('.msg-ai')
+        const last = wraps[wraps.length - 1]
+        if (last) last.dataset.runId = runId
+      }
+      newCount++
+    }
+    if (newCount > 0) scrollToBottom()
+  } catch (e) {
+    console.warn('[chat] liveRefresh error:', e)
   }
 }
 
@@ -2403,9 +2452,10 @@ function appendUserMessage(text, attachments = [], msgTime) {
   scrollToBottom()
 }
 
-function appendAiMessage(text, msgTime, images, videos, audios, files, tools) {
+function appendAiMessage(text, msgTime, images, videos, audios, files, tools, model, runId) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-ai'
+  if (runId) wrap.dataset.runId = runId
   const bubble = document.createElement('div')
   bubble.className = 'msg-bubble'
   appendToolsToEl(bubble, tools)
@@ -2417,14 +2467,20 @@ function appendAiMessage(text, msgTime, images, videos, audios, files, tools) {
   appendVideosToEl(bubble, videos)
   appendAudiosToEl(bubble, audios)
   appendFilesToEl(bubble, files)
-  // 图片点击灯箱
   bubble.querySelectorAll('img').forEach(img => { if (!img.onclick) img.onclick = () => showLightbox(img.src) })
 
+  wrap.appendChild(bubble)
+  // 模型背景行（bubble 下方第一行）
+  if (model) {
+    const modelRow = document.createElement('div')
+    modelRow.className = 'msg-model'
+    modelRow.innerHTML = `<span class="msg-model-badge">🤖 ${escapeAttr(model)}</span>`
+    wrap.appendChild(modelRow)
+  }
+  // 时间/操作行（bubble 下方）
   const meta = document.createElement('div')
   meta.className = 'msg-meta'
   meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
-
-  wrap.appendChild(bubble)
   wrap.appendChild(meta)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
@@ -3157,6 +3213,9 @@ export function cleanup() {
   _currentAiFiles = []
   _currentAiTools = []
   _currentRunId = null
+  _currentAiModel = ''
+  clearInterval(_liveRefreshTimer)
+  _liveRefreshTimer = null
   _isStreaming = false
   _isSending = false
   _messageQueue = []

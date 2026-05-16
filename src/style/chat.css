@@ -1197,6 +1197,27 @@
 }
 
 /* 消息时间戳 + 元信息 */
+.msg-model {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  padding: 0 4px;
+  opacity: 0.85;
+}
+.msg-user .msg-model { justify-content: flex-end; }
+.msg-ai .msg-model { justify-content: flex-start; }
+.msg-model-badge {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 .msg-meta {
   display: flex;
   align-items: center;
