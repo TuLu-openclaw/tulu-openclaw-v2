@@ -1706,6 +1706,7 @@ function handleChatEvent(payload) {
         _streamStartTime = Date.now()
         // 从 payload 捕获真实模型（来自 Context，非下拉框）
         _currentAiModel = payload.model || payload.message?.model || payload.modelId || ''
+        console.log('[chat] 模型捕获调试:', JSON.stringify({ model: payload.model, msgModel: payload.message?.model, modelId: payload.modelId, fullPayloadKeys: Object.keys(payload) }))
         updateSendState()
       }
       _currentAiText = c.text
