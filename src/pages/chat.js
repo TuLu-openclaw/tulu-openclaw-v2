@@ -1705,7 +1705,8 @@ function handleChatEvent(payload) {
         _isStreaming = true
         _streamStartTime = Date.now()
         // 从 payload 捕获真实模型（来自 Context，非下拉框）
-        _currentAiModel = payload.model || payload.message?.model || payload.modelId || ''
+        // 若 payload 无模型，则用发送时的模型（chat.history 返回前用这个兜底）
+        _currentAiModel = payload.model || payload.message?.model || payload.modelId || _selectedModel || ''
         updateSendState()
       }
       _currentAiText = c.text
@@ -1762,6 +1763,8 @@ function handleChatEvent(payload) {
       _currentAiBubble = createStreamBubble()
       _currentAiText = finalText
     }
+    // 调试：打印 final payload.message 的所有字段
+    console.log('[chat] final payload.message 字段:', JSON.stringify(Object.keys(payload.message || {})), 'payload:', JSON.stringify(Object.keys(payload)))
     if (_currentAiBubble) {
       if (_currentAiText) _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
       appendImagesToEl(_currentAiBubble, _currentAiImages)
