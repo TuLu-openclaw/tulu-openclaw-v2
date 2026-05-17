@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全球内置 - 安全验证</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif; background: #050510; }
+
+/* ===== 全屏遮罩 ===== */
+#auth-overlay {
+  position: fixed; inset: 0;
+  background: #050510;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2147483647;
+  overflow: hidden;
+}
+
+/* 背景动效 */
+.auth-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.auth-orb {
+  position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.35;
+  animation: orbFloat 8s ease-in-out infinite;
+}
+.auth-orb:nth-child(1) {
+  width: 400px; height: 400px; top: -100px; left: -100px;
+  background: radial-gradient(circle, #6366f1, #8b5cf6);
+  animation-delay: 0s;
+}
+.auth-orb:nth-child(2) {
+  width: 350px; height: 350px; bottom: -80px; right: -80px;
+  background: radial-gradient(circle, #ec4899, #f43f5e);
+  animation-delay: -3s;
+}
+.auth-orb:nth-child(3) {
+  width: 300px; height: 300px; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #06b6d4, #3b82f6);
+  animation-delay: -5s;
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -40px) scale(1.1); }
+  50% { transform: translate(-20px, 30px) scale(0.95); }
+  75% { transform: translate(40px, 20px) scale(1.05); }
+}
+
+/* 网格背景 */
+.auth-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black, transparent);
+}
+
+/* 验证卡片 */
+.auth-container {
+  position: relative; z-index: 1;
+  text-align: center; padding: 52px 44px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 32px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06);
+  animation: cardIn 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 400px; width: 90%;
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(36px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 旋转光环 */
+.auth-ring {
+  width: 80px; height: 80px; margin: 0 auto 24px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #6366f1, #8b5cf6, #ec4899, #f43f5e, #f59e0b, #6366f1);
+  display: flex; align-items: center; justify-content: center;
+  animation: ringSpin 4s linear infinite;
+  position: relative;
+}
+.auth-ring::before {
+  content: ''; position: absolute; inset: 3px;
+  border-radius: 50%; background: #0a0a1a;
+}
+.auth-ring-inner { position: relative; z-index: 1; font-size: 32px; }
+@keyframes ringSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.auth-title {
+  font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 8px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #fff, rgba(255,255,255,0.7));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.auth-subtitle { font-size: 13px; color: rgba(255,255,255,0.35); margin-bottom: 32px; }
+
+/* 输入框 */
+.input-group { position: relative; margin-bottom: 20px; }
+.auth-input {
+  width: 100%; padding: 14px 18px 14px 48px;
+  font-size: 17px; font-family: 'Courier New', monospace;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; color: #fff; outline: none;
+  letter-spacing: 5px; text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.auth-input::placeholder { color: rgba(255,255,255,0.15); letter-spacing: 2px; font-size: 13px; }
+.auth-input:focus {
+  border-color: rgba(99,102,241,0.5);
+  background: rgba(255,255,255,0.08);
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.1);
+}
+.auth-input.error {
+  border-color: rgba(239,68,68,0.6);
+  animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.input-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 18px; opacity: 0.25; pointer-events: none; }
+
+/* 错误提示 */
+.auth-error {
+  margin-top: 8px; font-size: 12px; color: rgba(239,68,68,0.85);
+  min-height: 16px; letter-spacing: 0.02em;
+}
+
+/* 提示文字 */
+.enter-hint {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 16px; padding: 5px 14px;
+  font-size: 11px; color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 8px;
+}
+.enter-hint kbd {
+  display: inline-block; padding: 1px 5px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px; font-size: 10px;
+}
+</style>
+</head>
+<body>
+
+<!-- 密码验证遮罩（始终置顶，阻挡一切） -->
+<div id="auth-overlay">
+  <div class="auth-bg">
+    <div class="auth-orb"></div>
+    <div class="auth-orb"></div>
+    <div class="auth-orb"></div>
+    <div class="auth-grid"></div>
+  </div>
+  <div class="auth-container">
+    <div class="auth-ring">
+      <div class="auth-ring-inner">🔐</div>
+    </div>
+    <div class="auth-title">全球内置</div>
+    <div class="auth-subtitle">输入密码以访问</div>
+    <div class="input-group">
+      <span class="input-icon">🔑</span>
+      <input type="password" class="auth-input" id="pwd-input" placeholder="输入密码" autocomplete="off" spellcheck="false" autofocus>
+    </div>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="enter-hint">按 <kbd>Enter</kbd> 确认</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // 目标 URL 由 Rust 在导航时通过 URL 参数传入
+  // 例如: global-builtin.html?url=https://example.com
+  var params = new URLSearchParams(window.location.search);
+  var TARGET = '';
+  var PWD = '2552667173';
+
+  var input = document.getElementById('pwd-input');
+  var errorEl = document.getElementById('auth-error');
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    input.classList.add('error');
+    setTimeout(function() { input.classList.remove('error'); }, 500);
+  }
+
+  function doAuth() {
+    var pwd = input.value;
+    if (!pwd) { showError('请输入密码'); return; }
+    if (pwd !== PWD) { showError('密码错误，请重试'); input.value = ''; return; }
+
+    // 密码正确 → 移除遮罩 → 导航到目标 URL
+    var overlay = document.getElementById('auth-overlay');
+    overlay.style.transition = 'opacity 0.5s ease';
+    overlay.style.opacity = '0';
+    setTimeout(function() {
+      overlay.remove();
+      // 导航到目标 URL（全屏窗口直接加载目标页面，不再用 iframe）
+      window.location.href = TARGET;
+    }, 500);
+  }
+
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doAuth();
+  });
+})();
+</script>
+</body>
+</html>

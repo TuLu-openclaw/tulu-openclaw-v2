@@ -1,0 +1,122 @@
+import { defineConfig } from 'vite'
+import { devApiPlugin } from './scripts/dev-api.js'
+import fs from 'fs'
+import path from 'path'
+import { homedir } from 'os'
+
+// 读取 package.json 版本号，构建时注入前端
+const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+
+// 读取 Gateway 端口（启动时读取一次）
+// 注意：Gateway 默认端口是 18789，不是 18790
+let gatewayPort = 18789
+try {
+  const cfgPath = path.join(homedir(), '.openclaw', 'openclaw.json')
+  if (fs.existsSync(cfgPath)) {
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    // 端口必须 > 0 且 < 65536
+    const port = cfg?.gateway?.port
+    if (port && typeof port === 'number' && port > 0 && port < 65536) {
+      gatewayPort = port
+    }
+  }
+} catch (e) {
+  console.warn('[vite] 读取 Gateway 端口配置失败，使用默认端口 18789:', e.message)
+}
+
+console.log(`[vite] Gateway WebSocket 代理目标: ws://127.0.0.1:${gatewayPort}`)
+
+export default defineConfig({
+  plugins: [devApiPlugin()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
+  clearScreen: false,
+  server: {
+    port: 1420,
+    strictPort: true,
+    proxy: {
+      '/api/music/163': {
+        target: 'https://music.163.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/163/, ''),
+        headers: { Referer: 'https://music.163.com' },
+      },
+      '/api/music/qq': {
+        target: 'https://c.y.qq.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/qq/, ''),
+        headers: { Referer: 'https://y.qq.com' },
+      },
+      '/api/music/kugou': {
+        target: 'https://songsearch.kugou.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/kugou/, ''),
+      },
+      '/api/music/kuwo': {
+        target: 'https://search.kuwo.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/kuwo/, ''),
+      },
+      '/api/music/migu': {
+        target: 'https://m.music.migu.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/migu/, ''),
+      },
+      '/api/music/injahow': {
+        target: 'https://api.injahow.cn',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/music\/injahow/, ''),
+      },
+      '/ws': {
+        target: `ws://127.0.0.1:${gatewayPort}`,
+        ws: true,
+        changeOrigin: true,
+        timeout: 30000,
+        configure: (proxy, options) => {
+          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            socket.setTimeout(30000)
+            socket.on('timeout', () => {
+              console.warn('[vite/ws] WebSocket 超时，关闭连接')
+              socket.destroy()
+            })
+          })
+          proxy.on('error', (err, req, socket) => {
+            console.warn(`[vite/ws] 代理错误: ${err.code} ${err.message}`)
+            // WebSocket 升级后 socket 是 net.Socket，无 headersSent
+            if (socket && !socket.destroyed) {
+              socket.destroy()
+            }
+          })
+        },
+      },
+    },
+  },
+  envPrefix: ['VITE_', 'TAURI_'],
+  build: {
+    target: ['es2021', 'chrome100', 'safari13'],
+    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+    sourcemap: !!process.env.TAURI_DEBUG,
+    chunkSizeWarningLimit: 700,
+    // Tauri 多页面入口：index.html + 龙虾办公室独立窗口页面
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'lobster-office': path.resolve(__dirname, 'lobster-office.html'),
+      },
+      output: {
+        manualChunks(id) {
+          if (!id) return
+          const cleanId = id.replace(/\\/g, '/')
+          if (cleanId.includes('/node_modules/')) {
+            if (cleanId.includes('@tauri-apps/api')) return 'vendor-tauri'
+            return 'vendor'
+          }
+          if (cleanId.includes('/src/engines/hermes/')) return 'hermes-core'
+          if (cleanId.includes('/src/lib/tauri-api.js') || cleanId.includes('/src/lib/ws-client.js')) return 'gateway-core'
+          if (cleanId.includes('/src/lib/app-state.js') || cleanId.includes('/src/lib/engine-manager.js') || cleanId.includes('/src/components/sidebar.js')) return 'app-core'
+        },
+      },
+    },
+  },
+})

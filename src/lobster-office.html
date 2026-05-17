@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>龙虾办公室</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1a2e;
+  --wall: #16213e;
+  --floor: #2d2d44;
+  --floor-grid: #3a3a5c;
+  --accent: #e94560;
+  --accent2: #0f3460;
+  --text: #eaeaea;
+  --text-dim: #8892b0;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --research: #60a5fa;
+  --syncing: #a78bfa;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── 顶部状态栏 ── */
+#topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 44px;
+  background: rgba(22,33,62,0.95);
+  backdrop-filter: blur(8px);
+  border-bottom: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  z-index: 100;
+}
+
+#topbar .logo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+#topbar .status-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+#status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+#status-dot.idle { background: var(--text-dim); box-shadow: 0 0 6px var(--text-dim); }
+#status-dot.writing, #status-dot.researching, #status-dot.executing { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+#status-dot.error { background: var(--error); box-shadow: 0 0 6px var(--error); }
+#status-dot.syncing { background: var(--syncing); box-shadow: 0 0 6px var(--syncing); }
+
+#topbar .time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ── 办公室主体 ── */
+#office {
+  position: fixed;
+  top: 44px; left: 0; right: 0; bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  grid-template-rows: 1fr 90px;
+  gap: 0;
+}
+
+/* ── 主区域（像素格渲染） ── */
+#scene {
+  position: relative;
+  background: var(--wall);
+  overflow: hidden;
+}
+
+/* 地板 */
+#scene::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 35%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--floor) 0px, var(--floor) 39px,
+      var(--floor-grid) 39px, var(--floor-grid) 40px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      var(--floor) 0px, var(--floor) 39px,
+      var(--floor-grid) 39px, var(--floor-grid) 40px
+    );
+}
+
+/* ── 区域装饰 ── */
+.zone {
+  position: absolute;
+  pointer-events: none;
+}
+
+.zone-label {
+  font-size: 9px;
+  color: rgba(255,255,255,0.3);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+/* 工作区 */
+#zone-work {
+  bottom: 36%;
+  left: 8%;
+  width: 200px;
+  height: 100px;
+}
+
+#zone-work::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 120px; height: 60px;
+  background: #3d2b1f;
+  border: 2px solid #5c4033;
+  border-radius: 2px;
+}
+
+#zone-work::after {
+  content: '';
+  position: absolute;
+  bottom: 50px; left: 10px;
+  width: 80px; height: 50px;
+  background: #4a90d9;
+  border: 3px solid #2d5a87;
+  border-radius: 1px;
+  box-shadow: inset 0 0 10px rgba(74,144,217,0.5);
+}
+
+/* 休息区 */
+#zone-sofa {
+  bottom: 36%;
+  right: 12%;
+  width: 140px;
+  height: 80px;
+}
+
+#zone-sofa::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 100px; height: 40px;
+  background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+  border-radius: 8px 8px 4px 4px;
+  border: 2px solid #a78bfa;
+}
+
+/* Bug区 */
+#zone-bug {
+  bottom: 36%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 80px;
+}
+
+#zone-bug::before {
+  content: '🐛';
+  position: absolute;
+  bottom: 10px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 28px;
+  filter: drop-shadow(0 0 4px var(--error));
+}
+
+/* 书架装饰 */
+#shelf {
+  position: absolute;
+  top: 20px;
+  right: 10%;
+  width: 80px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.shelf-row {
+  width: 70px;
+  height: 3px;
+  background: #5c4033;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 4px;
+  gap: 3px;
+}
+
+.book {
+  width: 8px;
+  border-radius: 1px;
+  display: inline-block;
+}
+
+/* ── 龙虾角色 ── */
+#lobster {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  transition: bottom 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
+              left 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  z-index: 10;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+/* 龙虾像素图用 CSS 画 */
+.lobster-body {
+  position: absolute;
+  bottom: 8px; left: 50%;
+  transform: translateX(-50%);
+  width: 28px; height: 20px;
+  background: #e94560;
+  border-radius: 50% 50% 40% 40%;
+  border: 2px solid #c1122f;
+}
+
+.lobster-head {
+  position: absolute;
+  bottom: 24px; left: 50%;
+  transform: translateX(-50%);
+  width: 18px; height: 14px;
+  background: #e94560;
+  border-radius: 50% 50% 30% 30%;
+  border: 2px solid #c1122f;
+}
+
+.lobster-eye-l, .lobster-eye-r {
+  position: absolute;
+  bottom: 34px;
+  width: 5px; height: 5px;
+  background: #111;
+  border-radius: 50%;
+}
+.lobster-eye-l { left: 14px; }
+.lobster-eye-r { right: 14px; }
+
+.lobster-claw-l, .lobster-claw-r {
+  position: absolute;
+  bottom: 16px;
+  width: 12px; height: 8px;
+  background: #e94560;
+  border: 2px solid #c1122f;
+  border-radius: 50%;
+}
+.lobster-claw-l { left: -4px; transform: rotate(-20deg); }
+.lobster-claw-r { right: -4px; transform: rotate(20deg); }
+
+.lobster-tail {
+  position: absolute;
+  bottom: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 16px; height: 10px;
+  background: #ff6b6b;
+  border-radius: 0 0 50% 50%;
+  border: 2px solid #c1122f;
+  border-top: none;
+}
+
+.lobster-antenna {
+  position: absolute;
+  bottom: 36px;
+  width: 2px; height: 10px;
+  background: #e94560;
+  border-radius: 2px;
+}
+.lobster-antenna-l { left: 16px; transform: rotate(-15deg); }
+.lobster-antenna-r { right: 16px; transform: rotate(15deg); }
+
+/* 状态气泡 */
+#speech-bubble {
+  position: absolute;
+  bottom: 56px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.95);
+  color: #111;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  max-width: 160px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+#speech-bubble.show { opacity: 1; }
+
+#speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(255,255,255,0.95);
+  border-bottom: none;
+}
+
+/* ── 右侧状态面板 ── */
+#sidebar {
+  grid-row: 1 / 3;
+  background: rgba(22,33,62,0.8);
+  border-left: 2px solid var(--accent2);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.sidebar-title {
+  font-size: 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--accent2);
+  margin-bottom: 4px;
+}
+
+.state-card {
+  background: var(--bg);
+  border: 1px solid var(--accent2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.state-card:hover { border-color: var(--accent); transform: translateX(2px); }
+.state-card.active { border-color: var(--accent); background: rgba(233,69,96,0.1); }
+
+.state-card .sc-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.state-card .sc-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.state-card .sc-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.state-card .sc-desc {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ── 底部状态栏 ── */
+#bottombar {
+  grid-column: 1;
+  background: rgba(22,33,62,0.9);
+  border-top: 2px solid var(--accent2);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+#bottombar .stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#bottombar .stat-val {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sep { color: var(--accent2); }
+
+/* ── 动画 ── */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px currentColor; }
+  50% { box-shadow: 0 0 14px currentColor; }
+}
+
+.idle-lobster { animation: bob 2s ease-in-out infinite; }
+
+@keyframes walk {
+  0% { transform: translateX(0) scaleX(1); }
+  25% { transform: translateX(4px) scaleX(1); }
+  50% { transform: translateX(0) scaleX(1); }
+  75% { transform: translateX(-4px) scaleX(1); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+
+.walking { animation: walk 0.4s steps(2) infinite; }
+
+/* 状态灯闪烁 */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.blinking { animation: blink 1s steps(1) infinite; }
+
+/* 窗户 */
+.window {
+  position: absolute;
+  top: 30px;
+  width: 60px; height: 50px;
+  background: linear-gradient(180deg, #87ceeb 0%, #b0e2ff 100%);
+  border: 4px solid #5c4033;
+  box-shadow: inset 0 0 10px rgba(255,255,255,0.3);
+}
+.window::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 2px; height: 100%;
+  background: #5c4033;
+}
+.window::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 0;
+  transform: translateY(-50%);
+  width: 100%; height: 2px;
+  background: #5c4033;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="logo">🦞 龙虾办公室</span>
+  <div class="status-info">
+    <span id="status-dot"></span>
+    <span id="status-text">待命中</span>
+  </div>
+  <span class="time" id="clock">--:--:--</span>
+</div>
+
+<div id="office">
+  <div id="scene">
+    <!-- 窗户 -->
+    <div class="window" style="left: 30%; top: 30px;"></div>
+    <div class="window" style="left: 55%; top: 30px;"></div>
+
+    <!-- 区域 -->
+    <div class="zone" id="zone-work" style="left: 8%; bottom: 36%;">
+      <div class="zone-label">💻 工作区</div>
+    </div>
+    <div class="zone" id="zone-sofa" style="right: 12%; bottom: 36%;">
+      <div class="zone-label">🛋️ 休息区</div>
+    </div>
+    <div class="zone" id="zone-bug" style="left: 50%; transform: translateX(-50%); bottom: 36%;">
+      <div class="zone-label">🐛 Bug 区</div>
+    </div>
+
+    <!-- 书架 -->
+    <div id="shelf">
+      <div class="shelf-row">
+        <span class="book" style="background:#e94560;height:20px"></span>
+        <span class="book" style="background:#60a5fa;height:16px"></span>
+        <span class="book" style="background:#4ade80;height:22px"></span>
+        <span class="book" style="background:#fbbf24;height:18px"></span>
+        <span class="book" style="background:#a78bfa;height:14px"></span>
+      </div>
+      <div class="shelf-row">
+        <span class="book" style="background:#fb923c;height:18px"></span>
+        <span class="book" style="background:#f472b6;height:22px"></span>
+        <span class="book" style="background:#34d399;height:16px"></span>
+        <span class="book" style="background:#818cf8;height:20px"></span>
+      </div>
+    </div>
+
+    <!-- 龙虾角色 -->
+    <div id="lobster" class="idle-lobster">
+      <div class="lobster-antenna lobster-antenna-l"></div>
+      <div class="lobster-antenna lobster-antenna-r"></div>
+      <div class="lobster-head"></div>
+      <div class="lobster-eye-l"></div>
+      <div class="lobster-eye-r"></div>
+      <div class="lobster-claw-l"></div>
+      <div class="lobster-claw-r"></div>
+      <div class="lobster-body"></div>
+      <div class="lobster-tail"></div>
+      <div id="speech-bubble">待命中...</div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sidebar-title">当前状态</div>
+
+    <div class="state-card active" data-state="idle" onclick="setState('idle')">
+      <div class="sc-name"><span class="sc-dot" style="background:#8892b0"></span>待命</div>
+      <div class="sc-desc">idle — 休息中</div>
+    </div>
+
+    <div class="state-card" data-state="writing" onclick="setState('writing')">
+      <div class="sc-name"><span class="sc-dot" style="background:#fbbf24"></span>写代码</div>
+      <div class="sc-desc">writing — 编写/修改代码</div>
+    </div>
+
+    <div class="state-card" data-state="researching" onclick="setState('researching')">
+      <div class="sc-name"><span class="sc-dot" style="background:#60a5fa"></span>调研中</div>
+      <div class="sc-desc">researching — 搜索/分析</div>
+    </div>
+
+    <div class="state-card" data-state="executing" onclick="setState('executing')">
+      <div class="sc-name"><span class="sc-dot" style="background:#fbbf24"></span>执行中</div>
+      <div class="sc-desc">executing — 运行命令/任务</div>
+    </div>
+
+    <div class="state-card" data-state="syncing" onclick="setState('syncing')">
+      <div class="sc-name"><span class="sc-dot" style="background:#a78bfa"></span>同步中</div>
+      <div class="sc-desc">syncing — 推送/同步数据</div>
+    </div>
+
+    <div class="state-card" data-state="error" onclick="setState('error')">
+      <div class="sc-name"><span class="sc-dot" style="background:#f87171"></span>报错</div>
+      <div class="sc-desc">error — 发现问题排查中</div>
+    </div>
+
+    <div class="sidebar-title" style="margin-top:8px">会话信息</div>
+    <div class="state-card">
+      <div class="sc-label">当前模型</div>
+      <div class="sc-desc" id="model-info">—</div>
+    </div>
+    <div class="state-card">
+      <div class="sc-label">运行时长</div>
+      <div class="sc-desc" id="uptime">—</div>
+    </div>
+    <div class="state-card">
+      <div class="sc-label">今日消息</div>
+      <div class="sc-desc" id="msg-count">—</div>
+    </div>
+  </div>
+
+  <div id="bottombar">
+    <div class="stat">🦞 <span class="stat-val" id="state-label">idle</span></div>
+    <span class="sep">|</span>
+    <div class="stat">窗口 <span class="stat-val" id="window-count">1</span></div>
+    <span class="sep">|</span>
+    <div class="stat">OpenClaw <span class="stat-val">v2</span></div>
+    <span class="sep">|</span>
+    <div class="stat" id="fps-display">FPS <span class="stat-val" id="fps">60</span></div>
+  </div>
+</div>
+
+<script>
+// ── 状态映射 ──────────────────────────────────────────────
+const STATES = {
+  idle:        { label: '待命中',    color: '#8892b0', zone: 'sofa',  x: '72%',  y: '36%'  },
+  writing:     { label: '写代码中',  color: '#fbbf24', zone: 'work',  x: '18%',  y: '36%'  },
+  researching: { label: '调研中',   color: '#60a5fa', zone: 'work',  x: '28%',  y: '36%'  },
+  executing:   { label: '执行任务', color: '#fbbf24', zone: 'work',  x: '38%',  y: '36%'  },
+  syncing:     { label: '同步数据', color: '#a78bfa', zone: 'work',  x: '48%',  y: '36%'  },
+  error:       { label: '排查问题', color: '#f87171', zone: 'bug',   x: '50%',  y: '36%'  },
+}
+
+const lobster = document.getElementById('lobster')
+const speech = document.getElementById('speech-bubble')
+const dot = document.getElementById('status-dot')
+const statusText = document.getElementById('status-text')
+const stateLabel = document.getElementById('state-label')
+
+let currentState = 'idle'
+let startTime = Date.now()
+let msgCount = 0
+
+// ── 状态切换 ──────────────────────────────────────────────
+function setState(state, message) {
+  const s = STATES[state] || STATES.idle
+  currentState = state
+
+  // 更新 dot 和文字
+  dot.className = state
+  statusText.textContent = message || s.label
+  stateLabel.textContent = state
+
+  // 更新右侧卡片高亮
+  document.querySelectorAll('.state-card').forEach(c => {
+    c.classList.toggle('active', c.dataset.state === state)
+  })
+
+  // 龙虾移动
+  lobster.style.left = s.x
+  lobster.style.bottom = s.y
+
+  // 气泡
+  speech.textContent = message || s.label
+  speech.classList.add('show')
+  clearTimeout(window._bubbleTimer)
+  window._bubbleTimer = setTimeout(() => speech.classList.remove('show'), 4000)
+
+  // 动画
+  lobster.classList.remove('idle-lobster', 'walking')
+  if (state === 'idle') {
+    lobster.classList.add('idle-lobster')
+  } else {
+    lobster.classList.add('walking')
+  }
+
+  // 通知父窗口（如果有）
+  if (window.opener && !window.opener.closed) {
+    window.opener.postMessage({ type: 'lobsterStateChange', state, message }, '*')
+  }
+}
+
+// ── 时钟 ──────────────────────────────────────────────
+function updateClock() {
+  const n = new Date()
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('zh-CN', { hour12: false })
+}
+setInterval(updateClock, 1000)
+updateClock()
+
+// ── 运行时长 ──────────────────────────────────────────────
+function updateUptime() {
+  const s = Math.floor((Date.now() - startTime) / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  document.getElementById('uptime').textContent =
+    h > 0 ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`
+}
+setInterval(updateUptime, 1000)
+
+// ── 帧率显示（假数据，办公室不需要真实帧率）─────────────
+let fps = 60
+setInterval(() => {
+  fps = 55 + Math.floor(Math.random() * 10)
+  document.getElementById('fps').textContent = fps
+}, 2000)
+
+// ── 监听父窗口消息 ──────────────────────────────────────
+window.addEventListener('message', e => {
+  const d = e.data
+  if (!d || typeof d !== 'object') return
+  if (d.type === 'lobsterStateUpdate') {
+    setState(d.state, d.message)
+  }
+  if (d.type === 'lobsterUptime') {
+    startTime = Date.now() - (d.elapsed || 0) * 1000
+  }
+  if (d.type === 'lobsterMsgCount') {
+    msgCount = d.count
+    document.getElementById('msg-count').textContent = d.count + ' 条'
+  }
+  if (d.type === 'lobsterModelInfo') {
+    document.getElementById('model-info').textContent = d.model || '—'
+  }
+})
+
+// ── 本地存储轮询（跨窗口状态同步）─────────────────────────
+// 主窗口调用 updateLobsterState(state, message) 写入 localStorage
+// 这里轮询读取，实现跨窗口状态同步
+let _lastState = null
+setInterval(() => {
+  try {
+    const stored = localStorage.getItem('lobsterState')
+    if (stored) {
+      const { state, message, ts } = JSON.parse(stored)
+      // 忽略过期超过 10 秒的旧状态
+      if (Date.now() - ts < 10000 && state !== _lastState) {
+        _lastState = state
+        setState(state, message)
+      }
+    }
+  } catch (e) {}
+}, 2000)
+
+// ── 初始化：读取本地存储的最近状态 + 请求父窗口同步 ──────
+window.addEventListener('load', () => {
+  // 先读本地存储恢复状态
+  try {
+    const stored = localStorage.getItem('lobsterState')
+    if (stored) {
+      const { state, message } = JSON.parse(stored)
+      if (state) { setState(state, message); _lastState = state }
+    } else {
+      setState('idle')
+    }
+  } catch (e) { setState('idle') }
+
+  // 通知主窗口我打开了
+  if (window.opener && !window.opener.closed) {
+    window.opener.postMessage({ type: 'lobsterReady' }, '*')
+  }
+})
+
+// ── 右键菜单 ──────────────────────────────────────────────
+document.addEventListener('contextmenu', e => {
+  e.preventDefault()
+})
+</script>
+</body>
+</html>

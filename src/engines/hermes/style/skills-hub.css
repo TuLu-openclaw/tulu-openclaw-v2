@@ -1,0 +1,221 @@
+/* ===== Skills Hub UI Enhancement ===== */
+
+/* Tab buttons - more prominent */
+[data-engine="hermes"] .hm-skills-sidebar-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+[data-engine="hermes"] .hm-skills-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary, rgba(255,255,255,0.5));
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+  text-align: center;
+}
+[data-engine="hermes"] .hm-skills-tab:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-primary, #fff);
+}
+[data-engine="hermes"] .hm-skills-tab.is-active {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+}
+
+/* Hub panel */
+[data-engine="hermes"] .hm-hub-panel {
+  padding: 12px;
+}
+
+/* Hub search */
+[data-engine="hermes"] .hm-hub-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+[data-engine="hermes"] .hm-hub-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-primary, #fff);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+[data-engine="hermes"] .hm-hub-input:focus {
+  border-color: rgba(99,102,241,0.4);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+}
+[data-engine="hermes"] .hm-hub-input::placeholder {
+  color: rgba(255,255,255,0.2);
+}
+
+/* Hub result cards - improved */
+[data-engine="hermes"] .hm-hub-result-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  margin-bottom: 8px;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+[data-engine="hermes"] .hm-hub-result-card:hover {
+  background: rgba(99,102,241,0.06);
+  border-color: rgba(99,102,241,0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+[data-engine="hermes"] .hm-hub-result-info {
+  flex: 1;
+  min-width: 0;
+}
+[data-engine="hermes"] .hm-hub-result-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  margin-bottom: 4px;
+}
+[data-engine="hermes"] .hm-hub-result-desc {
+  font-size: 12px;
+  color: var(--text-tertiary, rgba(255,255,255,0.4));
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+[data-engine="hermes"] .hm-hub-result-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+[data-engine="hermes"] .hm-hub-badge {
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+  font-weight: 500;
+}
+
+/* Install button */
+[data-engine="hermes"] .hm-hub-install-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+[data-engine="hermes"] .hm-hub-install-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16,185,129,0.3);
+}
+[data-engine="hermes"] .hm-hub-install-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Skill items - better visual */
+[data-engine="hermes"] .hm-skill-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+[data-engine="hermes"] .hm-skill-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+[data-engine="hermes"] .hm-skill-item.is-active {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.2);
+}
+[data-engine="hermes"] .hm-skill-item.is-disabled {
+  opacity: 0.4;
+}
+[data-engine="hermes"] .hm-skill-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+[data-engine="hermes"] .hm-skill-desc {
+  font-size: 11px;
+  color: var(--text-tertiary, rgba(255,255,255,0.35));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+/* Category headers */
+[data-engine="hermes"] .hm-skill-cat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+[data-engine="hermes"] .hm-skill-cat-header:hover {
+  color: var(--text-primary, #fff);
+  background: rgba(255,255,255,0.03);
+}
+[data-engine="hermes"] .hm-skill-cat-count {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* Hub hint/empty */
+[data-engine="hermes"] .hm-hub-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-tertiary, rgba(255,255,255,0.3));
+  font-size: 13px;
+}
+
+/* Hub loading skeleton */
+[data-engine="hermes"] .hm-hub-loading .hm-skel {
+  border-radius: 12px;
+}
+
+/* Search input in sidebar */
+[data-engine="hermes"] .hm-skills-sidebar-search {
+  position: relative;
+  margin-bottom: 12px;
+}
