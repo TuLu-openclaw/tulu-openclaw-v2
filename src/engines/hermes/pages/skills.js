@@ -214,12 +214,25 @@ export function render() {
           if (r.ok) data = await r.json()
         } catch (e) { console.warn('clawhub fetch failed', e) }
 
-        // Fallback: 通过 Rust 后端代理（如果前端 fetch 失败）
-        if (!data || !Array.isArray(data)) {
-          try { data = await api.skillhubSearch(hubQuery.trim(), 25) } catch (_) {}
+        // 提取 items 数组（API 返回 {items: [...]} 格式）
+        let parsed = null
+        if (Array.isArray(data)) {
+          parsed = data
+        } else if (data && Array.isArray(data.items)) {
+          parsed = data.items
+        } else if (data && Array.isArray(data.results)) {
+          parsed = data.results
         }
 
-        hubResults = Array.isArray(data) ? data : []
+        // Fallback: 通过 Rust 后端代理（如果前端 fetch 失败或格式不对）
+        if (!parsed || !parsed.length) {
+          try {
+            const fallback = await api.skillhubSearch(hubQuery.trim(), 25)
+            parsed = Array.isArray(fallback) ? fallback : []
+          } catch (_) {}
+        }
+
+        hubResults = parsed || []
         if (hubResults.length === 0) {
           toast(t('engine.skillsHubNoResults') || '未找到匹配的技能', 'info')
         }

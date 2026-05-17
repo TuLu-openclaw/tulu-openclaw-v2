@@ -32,7 +32,7 @@ export async function render() {
       <div class="clawhub-toolbar" style="margin-bottom:var(--space-sm)">
         <input class="input clawhub-search-input" id="skill-store-search" placeholder="${t('skills.searchPlaceholder')}" type="text" style="flex:1">
         <button class="btn btn-primary btn-sm" data-action="store-search">${t('skills.search')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://clawhub.ai" target="_blank" rel="noopener">${t('skills.browse')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://skillhub.cloud.tencent.com/" target="_blank" rel="noopener">${t('skills.browse')}</a>
       </div>
       <div id="store-results" class="clawhub-list" style="max-height:calc(100vh - 300px);overflow-y:auto">
         <div class="form-hint" style="padding:var(--space-xl);text-align:center">${t('skills.storeLoading')}</div>
@@ -347,15 +347,31 @@ async function handleStoreSearch(page) {
       return
     }
 
-    // 没有索引时走服务端搜索
+    // 调用服务端搜索（即使有缓存索引也调API，获取更全面的结果）
     results.innerHTML = `<div class="form-hint" style="padding:var(--space-sm)">${t('skills.searching')}</div>`
     try {
       const items = await api.skillhubSearch(input.value.trim())
-      if (seq !== _searchSeq) return // 期间有新搜索，丢弃结果
-      renderStoreItems(results, items)
-    } catch (e) {
       if (seq !== _searchSeq) return
-      results.innerHTML = `<div style="color:var(--error);padding:var(--space-sm)">${t('skills.searchFailed')}: ${esc(e?.message || e)}</div>`
+      if (items && items.length > 0) {
+        renderStoreItems(results, items)
+        return
+      }
+    } catch (e) {
+      console.warn('skillhubSearch failed, falling back to local filter', e)
+    }
+
+    // 服务端搜索无结果时回退到客户端过滤
+    if (_storeIndex && seq === _searchSeq) {
+      const filtered = _storeIndex.filter(item => {
+        const slug = (item.slug || '').toLowerCase()
+        const name = (item.display_name || item.displayName || item.name || '').toLowerCase()
+        const desc = (item.summary || item.description || '').toLowerCase()
+        const tags = (item.tags || []).join(' ').toLowerCase()
+        return slug.includes(q) || name.includes(q) || desc.includes(q) || tags.includes(q)
+      })
+      if (seq === _searchSeq) {
+        renderStoreItems(results, filtered)
+      }
     }
   }, 300) // 300ms 防抖
 }
