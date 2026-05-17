@@ -333,21 +333,7 @@ async function handleStoreSearch(page) {
     }
     if (!q) return
 
-    // 客户端过滤已有索引
-    if (_storeIndex) {
-      const filtered = _storeIndex.filter(item => {
-        const slug = (item.slug || '').toLowerCase()
-        const name = (item.display_name || item.displayName || '').toLowerCase()
-        const desc = (item.summary || item.description || '').toLowerCase()
-        const tags = (item.tags || []).join(' ').toLowerCase()
-        return slug.includes(q) || name.includes(q) || desc.includes(q) || tags.includes(q)
-      })
-      if (seq !== _searchSeq) return
-      renderStoreItems(results, filtered)
-      return
-    }
-
-    // 调用服务端搜索（即使有缓存索引也调API，获取更全面的结果）
+    // 先调服务端搜索（获取API全量在线结果）
     results.innerHTML = `<div class="form-hint" style="padding:var(--space-sm)">${t('skills.searching')}</div>`
     try {
       const items = await api.skillhubSearch(input.value.trim())
@@ -360,7 +346,7 @@ async function handleStoreSearch(page) {
       console.warn('skillhubSearch failed, falling back to local filter', e)
     }
 
-    // 服务端搜索无结果时回退到客户端过滤
+    // 服务端搜索无结果时回退到客户端过滤本地缓存
     if (_storeIndex && seq === _searchSeq) {
       const filtered = _storeIndex.filter(item => {
         const slug = (item.slug || '').toLowerCase()
