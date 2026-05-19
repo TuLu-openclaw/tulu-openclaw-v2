@@ -560,7 +560,10 @@ function bindActions(page) {
       try {
         await api.startService('ai.openclaw.gateway')
         toast(t('dashboard.gwStartSent'), 'success')
-        setTimeout(() => loadDashboardData(page), 2000)
+        setTimeout(() => {
+          loadDashboardData(page)
+          navigate('/chat')
+        }, 3000)
       } catch (err) {
         if (isForeignGatewayError(err)) await openGatewayConflict(page, err)
         else toast(t('dashboard.startFail') + ': ' + err, 'error')

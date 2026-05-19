@@ -1248,14 +1248,71 @@
 .msg-copy-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 .msg-copy-btn.copied { opacity: 1; color: var(--success); }
 
-/* 消息内图片 */
-.msg-img {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 6px;
-  cursor: pointer;
-  object-fit: cover;
+/* 会话状态提示 */
+.msg-streaming {
+  position: relative;
 }
+
+.chat-reply-status {
+  margin: 6px 4px 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.12);
+  border: 1px solid rgba(255,255,255,0.16);
+  transition: transform 0.18s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.chat-reply-status::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.14);
+  flex: 0 0 auto;
+}
+
+.chat-reply-status-live {
+  opacity: 1;
+}
+
+.chat-reply-status[data-state="queued"] {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.chat-reply-status[data-state="sending"] {
+  background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+}
+
+.chat-reply-status[data-state="thinking"] {
+  background: linear-gradient(135deg, #2563eb, #8b5cf6);
+}
+
+.chat-reply-status[data-state="tool"] {
+  background: linear-gradient(135deg, #7c3aed, #ec4899);
+}
+
+.chat-reply-status[data-state="streaming"] {
+  background: linear-gradient(135deg, #6366f1, #14b8a6);
+}
+
+.chat-reply-status[data-state="finalizing"] {
+  background: linear-gradient(135deg, #10b981, #22c55e);
+}
+
+.chat-reply-status[data-state="waiting"] {
+  background: linear-gradient(135deg, #64748b, #334155);
+}
+
 
 /* 消息内视频 */
 .msg-video {

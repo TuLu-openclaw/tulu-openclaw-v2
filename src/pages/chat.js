@@ -61,6 +61,16 @@ const COMMANDS = [
 
 let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
+const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
+const CHAT_REPLY_STATUS_TEXT = {
+  queued: '已收到，正在排队…',
+  sending: 'OpenClaw 正在接收消息…',
+  thinking: 'OpenClaw 正在思考…',
+  tool: 'OpenClaw 正在调用工具…',
+  streaming: 'OpenClaw 正在回复…',
+  finalizing: 'OpenClaw 正在整理答案…',
+  waiting: 'OpenClaw 正在等待输入…',
+}
 let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
@@ -1600,6 +1610,8 @@ async function doSend(text, attachments = []) {
   })
   showTyping(true)
   _isSending = true
+  updateSendState()
+  updateStreamingStatus('sending')
   _startResponseWatchdog()
   try {
     await wsClient.chatSend(_sessionKey, text, attachments.length ? attachments : undefined)
@@ -1611,6 +1623,7 @@ async function doSend(text, attachments = []) {
     _isSending = false
     if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
+    updateStreamingStatus('waiting')
   }
 }
 
@@ -1654,6 +1667,7 @@ function handleEvent(msg) {
     if (toolName && !_isStreaming) {
       emitLobsterPhase('tool', `调用工具：${toolName}`)
       showTyping(true, t('chat.usingTool', { name: toolName }))
+      updateStreamingStatus('tool', t('chat.usingTool', { name: toolName }))
     }
   }
 
@@ -1703,8 +1717,10 @@ function handleChatEvent(payload) {
         _isStreaming = true
         _streamStartTime = Date.now()
         updateSendState()
+        updateStreamingStatus('queued')
       }
       _currentAiText = c.text
+      updateStreamingStatus('thinking')
       // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
       clearTimeout(_streamSafetyTimer)
       _streamSafetyTimer = setTimeout(() => {
@@ -1759,6 +1775,7 @@ function handleChatEvent(payload) {
       _currentAiText = finalText
     }
     if (_currentAiBubble) {
+      updateStreamingStatus('finalizing')
       if (_currentAiText) _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
       appendImagesToEl(_currentAiBubble, _currentAiImages)
       appendVideosToEl(_currentAiBubble, _currentAiVideos)
@@ -1796,6 +1813,7 @@ function handleChatEvent(payload) {
       meta.innerHTML = parts.join('')
       wrapper.appendChild(meta)
     }
+    updateStreamingStatus('waiting')
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
@@ -1865,6 +1883,7 @@ function handleChatEvent(payload) {
 
     showTyping(false)
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
+    updateStreamingStatus('waiting')
     resetStreamState()
     processMessageQueue()
     return
@@ -2046,14 +2065,35 @@ function createStreamBubble() {
   if (!_messagesEl || !_typingEl) return null
   showTyping(false)
   const wrap = document.createElement('div')
-  wrap.className = 'msg msg-ai'
+  wrap.className = 'msg msg-ai msg-streaming'
   const bubble = document.createElement('div')
   bubble.className = 'msg-bubble'
   bubble.innerHTML = '<span class="stream-cursor"></span>'
   wrap.appendChild(bubble)
+  const status = document.createElement('div')
+  status.className = 'chat-reply-status chat-reply-status-live'
+  status.id = CHAT_REPLY_STATUS_ID
+  status.textContent = CHAT_REPLY_STATUS_TEXT.waiting
+  wrap.appendChild(status)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
   return bubble
+}
+
+function updateStreamingStatus(state, detail = '') {
+  if (!_messagesEl) return
+  let status = document.getElementById(CHAT_REPLY_STATUS_ID)
+  if (!status && (_currentAiBubble?.parentElement || _isStreaming || _isSending)) {
+    const wrap = _currentAiBubble?.parentElement
+    if (!wrap) return
+    status = document.createElement('div')
+    status.className = 'chat-reply-status chat-reply-status-live'
+    status.id = CHAT_REPLY_STATUS_ID
+    wrap.appendChild(status)
+  }
+  if (!status) return
+  status.dataset.state = state
+  status.textContent = detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting
 }
 
 // ── 流式渲染（节流） ──
@@ -2645,7 +2685,14 @@ function showTyping(show, hint) {
     _typingEl.style.display = show ? 'flex' : 'none'
     // 更新提示文字（如工具调用状态）
     const hintEl = _typingEl.querySelector('.typing-hint')
-    if (hintEl) hintEl.textContent = hint || ''
+    if (hintEl) hintEl.textContent = hint || (show ? (t('chat.thinking') || 'OpenClaw 正在思考…') : '')
+  }
+  if (show && (_currentAiBubble?.parentElement) && !document.getElementById(CHAT_REPLY_STATUS_ID)) {
+    const status = document.createElement('div')
+    status.className = 'chat-reply-status chat-reply-status-live'
+    status.id = CHAT_REPLY_STATUS_ID
+    status.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
+    _currentAiBubble.parentElement.appendChild(status)
   }
   if (show) scrollToBottom()
 }

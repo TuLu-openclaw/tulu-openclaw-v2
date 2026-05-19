@@ -1288,18 +1288,28 @@ function setDebug(msg, detail) {
   }
 
   async function openDetail(id, name, sourceName, pic) {
-    const source = VOD_SOURCES[src]
+    const source = VOD_SOURCES.find(s => s.name === sourceName) || VOD_SOURCES[src]
     const content = el.querySelector('#t-content')
     content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
+    const detailId = String(id || '').trim()
+    if (!source?.api || !detailId) {
+      content.innerHTML = '<div class="tvbox-empty">未找到该影片</div>'
+      return
+    }
     let json = { list: null }
-    try { json = await fetchJSON(source.api + '?ac=detail&ids=' + id) } catch {}
-    if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=detail&ids=' + id) } catch {} }
+    try { json = await fetchJSON(source.api + '?ac=detail&ids=' + encodeURIComponent(detailId)) } catch {}
+    if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=detail&ids=' + encodeURIComponent(detailId)) } catch {} }
     const item = json.list && json.list[0]
+    if (!item && name) {
+      const alt = await searchDetailFallback(source, name)
+      if (alt) return showEpisodePicker(alt, source.name)
+    }
     if (!item) { content.innerHTML = '<div class="tvbox-empty">未找到该影片</div>'; return }
     await showEpisodePicker(item, source.name)
   }
 
   async function showEpisodePicker(item, sourceName) {
+    const warmup = warmUpEpisodeSources(item).catch(() => {})
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = item.vod_name
@@ -1311,7 +1321,8 @@ function setDebug(msg, detail) {
     // ── 豆瓣评分异步获取 ───────────────────────────────
     let doubanRating = ''
     try {
-      const r = await fetch('https://api.douban.com/v2/movie/search?q=' + encodeURIComponent(item.vod_name), { signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined })
+      const controller = AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+      const r = await fetch('https://api.douban.com/v2/movie/search?q=' + encodeURIComponent(item.vod_name), controller ? { signal: controller } : undefined)
       const d = await r.json().catch(() => null)
       const score = d?.subjects?.[0]?.rating?.average
       if (score && score > 0) doubanRating = '⭐ 豆瓣 ' + score
@@ -2663,5 +2674,42 @@ function pickDirectUrl(url) {
       })
     })
     return sources
+  }
+
+  async function searchDetailFallback(source, keyword) {
+    const q = encodeURIComponent(keyword)
+    const urls = [
+      source.api + '?ac=videolist&wd=' + q + '&pg=1',
+      source.api + '?ac=videolist&zm=' + q + '&pg=1',
+      source.api + '?ac=list&wd=' + q + '&pg=1',
+      source.api + '?ac=detail&wd=' + q,
+    ]
+    for (const url of urls) {
+      try {
+        const json = await fetchJSON(url)
+        const item = json?.list?.find?.(v => String(v.vod_name || '').includes(keyword)) || json?.list?.[0]
+        if (item) return item
+      } catch {}
+      try {
+        const jsonp = await fetchJsonp(url)
+        const item = jsonp?.list?.find?.(v => String(v.vod_name || '').includes(keyword)) || jsonp?.list?.[0]
+        if (item) return item
+      } catch {}
+    }
+    return null
+  }
+
+  async function warmUpEpisodeSources(item) {
+    const urls = []
+    const from = String(item?.vod_play_from || '').split('$$$')
+    const play = String(item?.vod_play_url || '').split('$$$')
+    for (let i = 0; i < Math.min(from.length, play.length); i++) {
+      const part = play[i] || ''
+      const first = part.split('#').find(Boolean) || ''
+      const idx = first.indexOf('$')
+      if (idx >= 0) urls.push(first.slice(idx + 1))
+    }
+    const ping = urls.slice(0, 3).filter(Boolean).map(url => fetch(url, { method: 'HEAD', signal: AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined }).catch(() => null))
+    await Promise.allSettled(ping)
   }
 }
