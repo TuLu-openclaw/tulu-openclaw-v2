@@ -55,25 +55,16 @@ ENV TZ=Asia/Shanghai
 ENV NODE_ENV=production
 ENV HOME=/root
 
-# 创建非 root 用户 (可选，主要用于日志查看)
-RUN set -eux; \
-    if getent group 1000 >/dev/null 2>&1; then \
-        group_name="$(getent group 1000 | cut -d: -f1)"; \
-    else \
-        addgroup -g 1000 appgroup; \
-        group_name="appgroup"; \
-    fi; \
-    if ! id -u appuser >/dev/null 2>&1; then \
-        adduser -u 1000 -G "$group_name" -s /bin/sh -D appuser; \
-    fi
+# node:alpine 已内置 node:node (uid/gid 1000)，直接复用，避免 uid/gid 冲突
+RUN id node && getent group node
 
 WORKDIR /app
 
 # 复制构建产物
-COPY --from=builder --chown=appuser:appgroup /build/dist ./dist
-COPY --from=builder --chown=appuser:appgroup /build/scripts ./scripts
-COPY --from=builder --chown=appuser:appgroup /build/package*.json ./
-COPY --from=builder --chown=appuser:appgroup /build/node_modules ./node_modules
+COPY --from=builder --chown=node:node /build/dist ./dist
+COPY --from=builder --chown=node:node /build/scripts ./scripts
+COPY --from=builder --chown=node:node /build/package*.json ./
+COPY --from=builder --chown=node:node /build/node_modules ./node_modules
 
 # 安装 OpenClaw CLI（用于读写配置）
 # 使用国内镜像源加速
@@ -82,13 +73,13 @@ RUN npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmir
 
 # 创建数据目录
 RUN mkdir -p /app/data && \
-    chown -R appuser:appgroup /app
+    chown -R node:node /app
 
 # 暴露端口
 EXPOSE 1420
 
 # 使用 root 用户运行（确保能管理 Gateway 等）
-# 如需安全性，可切换到 appuser，但需确保卷挂载权限正确
+# 如需安全性，可切换到 node，但需确保卷挂载权限正确
 USER root
 
 # 健康检查
