@@ -862,20 +862,54 @@ function initApp(el) {
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') { if (query) await loadTvboxSearch(); else await loadTvboxList() }
       else if (query) await loadSearch()
-      else if (getPlayHistory().length > 0 && page === 1 && !query) { await showPlayHistory(); return }
+      else if (!query && page === 1) { await showHome(); return }
       else await loadList()
     } catch (e) {
       content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
     }
   }
 
-  // 更新调试面板（界面可见状态）
-function setDebug(msg, detail) {
-  const el = document.querySelector('#t-debug-status')
-  if (!el) return
-  el.textContent = new Date().toLocaleTimeString('zh-CN') + ' ' + msg
-  console.info('[DEBUG]', msg, detail || '')
-}
+  function renderHomeCards(list, source) {
+    return (list || []).map(item => {
+      const pic = item.vod_pic || ''
+      const title = item.vod_name || item.name || item.title || ''
+      const sub = item.vod_actor || item.type_name || '影视'
+      return '<div class="tvbox-home-card" data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(source.name) + '" data-sourcekey="' + escHtml(source.key) + '" data-pic="' + escHtml(pic) + '" data-name="' + escHtml(title) + '">' +
+        '<div class="tvbox-home-pic">' + (pic ? '<img src="' + escHtml(pic) + '" alt="' + escHtml(title) + '" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" />' : '<span class="tvbox-card-placeholder">🎬</span>') + '<span>' + escHtml(item.type_name || '影视') + '</span></div>' +
+        '<div class="tvbox-home-name">' + escHtml(title) + '</div>' +
+        '<div class="tvbox-home-subline">' + escHtml(sub) + '</div>' +
+      '</div>'
+    }).join('')
+  }
+
+  async function showHome() {
+    const content = el.querySelector('#t-content')
+    const source = VOD_SOURCES[src]
+    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在整理首页推荐...</span></div>'
+    let latest = []
+    try { latest = await showHomeHighlights(source) } catch {}
+    const cats = _catCache[source.key] || await fetchSourceCategories(source.key).catch(() => [])
+    const latestHtml = latest.length ? '<section class="tvbox-home-section"><div class="tvbox-section-header"><div class="tvbox-section-heading"><div class="tvbox-section-heading-dot"></div>最近更新</div><button id="t-home-open-list" class="tvbox-clear-btn">查看全部</button></div><div class="tvbox-home-row">' + renderHomeCards(latest, source) + '</div></section>' : ''
+    const catHtml = cats.length ? '<section class="tvbox-home-section"><div class="tvbox-section-header"><div class="tvbox-section-heading"><div class="tvbox-section-heading-dot"></div>快捷分类</div></div><div class="tvbox-home-cats">' + cats.slice(0, 12).map(c => '<button class="tvbox-home-cat" data-catid="' + escHtml(c.id) + '" data-typeid="' + escHtml(c.typeId) + '">' + escHtml(c.name) + '</button>').join('') + '</div></section>' : ''
+    content.innerHTML = '<div class="tvbox-home"><div class="tvbox-home-hero"><div><div class="tvbox-home-kicker">当前首页源</div><div class="tvbox-home-title">' + escHtml(source.name) + '</div><div class="tvbox-home-sub">自动优选资源源，优先选择资源量、速度和稳定性更好的接口。</div></div><button class="tvbox-home-action" id="t-home-refresh">重新评估源</button></div>' + latestHtml + catHtml + '</div>'
+    content.querySelector('#t-home-refresh')?.addEventListener('click', async () => { await autoSelectBestVodSource(el, { reload: false }); renderSrcBar(); await renderCatBar(true); await showHome() })
+    content.querySelector('#t-home-open-list')?.addEventListener('click', () => { page = 1; loadList() })
+    content.querySelectorAll('.tvbox-home-cat').forEach(btn => btn.addEventListener('click', async () => {
+      cat = btn.dataset.catid
+      _currentTypeId = parseInt(btn.dataset.typeid)
+      page = 1
+      query = ''
+      searchInput.value = ''
+      renderCatBar(); renderSrcBar()
+      await loadList()
+    }))
+    content.querySelectorAll('.tvbox-home-card:not(.tvbox-home-history)').forEach(card => card.addEventListener('click', () => {
+      _viewStack.push('home')
+      openDetail(card.dataset.id, card.dataset.name, card.dataset.source, card.dataset.pic, card.dataset.sourcekey)
+    }))
+    content.querySelectorAll('.tvbox-home-history').forEach(card => card.addEventListener('click', () => openResumePlayer(card.dataset.name, card.dataset.pic, card.dataset.id, card.dataset.epname, card.dataset.epurl, parseFloat(card.dataset.progress || '0'))))
+  }
+
 
   async function loadList() {
     const content = el.querySelector('#t-content')
@@ -1184,7 +1218,7 @@ function setDebug(msg, detail) {
       const histItem = history.find(h => h.id == item.vod_id && h.source === sourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
-      return '<div class="tvbox-card" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
+      return '<div class="tvbox-card" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-sourcekey="' + escHtml(item._srcKey || '') + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
             (item.vod_pic ? '<img src="' + escHtml(fixPic(item.vod_pic, item._srcKey)) + '" alt="' + escHtml(item.vod_name) + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
@@ -1205,7 +1239,7 @@ function setDebug(msg, detail) {
     grid.querySelectorAll('.tvbox-card').forEach(card => {
       card.addEventListener('click', () => {
         _viewStack.push('list')
-        openDetail(card.dataset.id, card.dataset.name, card.dataset.source, card.dataset.pic)
+        openDetail(card.dataset.id, card.dataset.name, card.dataset.source, card.dataset.pic, card.dataset.sourcekey)
       })
     })
     if (pagination) {
@@ -1266,7 +1300,7 @@ function setDebug(msg, detail) {
   function openPlayerTv(name, url) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
-    el.querySelector('#t-player-title').textContent = '📺 ' + name
+    body.className = 'tvbox-player-body'
     el.querySelector('#t-ext-link').href = url
     body.innerHTML = '<div class="tvbox-player-loading">正在加载...</div>'
     overlay.style.display = 'flex'
@@ -1287,8 +1321,8 @@ function setDebug(msg, detail) {
     }
   }
 
-  async function openDetail(id, name, sourceName, pic) {
-    const source = VOD_SOURCES[src]
+  async function openDetail(id, name, sourceName, pic, sourceKey = '') {
+    const source = VOD_SOURCES.find(s => s.key === sourceKey) || VOD_SOURCES[src]
     const content = el.querySelector('#t-content')
     content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
     let json = { list: null }
@@ -1302,10 +1336,12 @@ function setDebug(msg, detail) {
   async function showEpisodePicker(item, sourceName) {
     const overlay = el.querySelector('#t-player-overlay')
     const body = el.querySelector('#t-player-body')
+    body.className = 'tvbox-player-body tvbox-detail-panel'
     el.querySelector('#t-player-title').textContent = item.vod_name
     el.querySelector('#t-ext-link').href = '#'
     const episodes = parsePlaylist(item.vod_play_from, item.vod_play_url)
-    const hist = getPlayHistory().find(h => h.id == item.vod_id && h.source === sourceName)
+    const scoreTag = doubanRating ? '<span class="tvbox-detail-chip">' + escHtml(doubanRating) + '</span>' : ''
+    const sourceTag = '<span class="tvbox-detail-chip tvbox-detail-chip-muted">' + escHtml(sourceName) + '</span>'
     playingEp = null
 
     // ── 豆瓣评分异步获取 ───────────────────────────────
@@ -1329,20 +1365,23 @@ function setDebug(msg, detail) {
       preferredSi = scored[0].i
     }
 
-    const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">← 返回列表</button></div>'
+    const backBtn = '<div class="tvbox-detail-topbar"><button class="tvbox-back-btn" id="t-detail-back">← 返回列表</button><span class="tvbox-detail-source">' + escHtml(sourceName) + '</span></div>'
     const firstUrls = episodes[preferredSi]?.urls || []
     const siHtml = episodes.length > 1
-      ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">选择源：</span>' +
-          episodes.map((e, i) => '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + (i===preferredSi?' ★':'') + '</button>').join('') +
-        '</div>'
+      ? '<div class="tvbox-source-selector"><span class="tvbox-source-selector-label">选择线路</span><div class="tvbox-source-tabs">' +
+          episodes.map((e, i) => '<button class="tvbox-source-tab' + (i===preferredSi?' active':'') + '" data-si="' + i + '">' + escHtml(e.name) + (i===preferredSi?' ★':'') + '</button>').join('') +
+        '</div></div>'
       : ''
 
     body.innerHTML =
       backBtn +
-      '<div class="tvbox-ep-info">' +
-        '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" onerror="this.style.display=\'none\'" />' +
-        (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
-        '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
+      '<div class="tvbox-detail-hero">' +
+        '<div class="tvbox-detail-poster-wrap"><img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic tvbox-detail-pic" onerror="this.style.display=\'none\'" /></div>' +
+        '<div class="tvbox-detail-meta">' +
+          '<div class="tvbox-detail-title">' + escHtml(item.vod_name) + '</div>' +
+          '<div class="tvbox-detail-chips">' + sourceTag + scoreTag + '</div>' +
+          '<div class="tvbox-detail-desc">' + (item.vod_content || '暂无简介') + '</div>' +
+        '</div>' +
       '</div>' +
       siHtml +
       '<div class="tvbox-ep-list-title">播放列表 ' + firstUrls.length + ' 集</div>' +
@@ -1572,7 +1611,7 @@ function setDebug(msg, detail) {
     }
     playingEp = null
     el.querySelector('#t-player-overlay').style.display = 'none'
-    el.querySelector('#t-player-body').innerHTML = ''
+    el.querySelector('#t-player-body').className = 'tvbox-player-body'
     if (window._movieHls) { window._movieHls.destroy(); window._movieHls = null }
   }
 
