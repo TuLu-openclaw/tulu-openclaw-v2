@@ -61,7 +61,8 @@ const COMMANDS = [
 
 let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
-let _replyStatusBadgeEl = null
+let _replyStatusRowEl = null
+let _replyStatusTextEl = null
 const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
 const CHAT_REPLY_STATUS_STORE_PREFIX = '星枢Open_chat_reply_status_'
 const CHAT_REPLY_STATUS_TEXT = {
@@ -76,6 +77,8 @@ const CHAT_REPLY_STATUS_TEXT = {
   error: '⚠️ 处理失败，状态已保存，可切换页面后继续查看。',
   aborted: '⏹️ 生成已停止，状态已保存。',
 }
+const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '' }
+let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
 let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
@@ -161,8 +164,13 @@ export async function render() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <span class="status-dot" id="chat-status-dot"></span>
-          <span class="chat-title" id="chat-title">${t('chat.chatTitle')}</span>
-          <span class="chat-reply-status-badge" id="chat-reply-status-badge" aria-live="polite" hidden></span>
+          <div class="chat-title-block">
+            <span class="chat-title" id="chat-title">${t('chat.chatTitle')}</span>
+            <div class="chat-reply-status-row" id="chat-reply-status-row" aria-live="polite" hidden>
+              <span class="chat-reply-status-dot"></span>
+              <span class="chat-reply-status-text" id="chat-reply-status-text"></span>
+            </div>
+          </div>
         </div>
         <div class="chat-header-actions">
           <div class="chat-model-group">
@@ -318,7 +326,8 @@ export async function render() {
   _statusDot = page.querySelector('#chat-status-dot')
   _typingEl = page.querySelector('#typing-indicator')
   _scrollBtn = page.querySelector('#chat-scroll-btn')
-  _replyStatusBadgeEl = page.querySelector('#chat-reply-status-badge')
+  _replyStatusRowEl = page.querySelector('#chat-reply-status-row')
+  _replyStatusTextEl = page.querySelector('#chat-reply-status-text')
   _sessionListEl = page.querySelector('#chat-session-list')
   _cmdPanelEl = page.querySelector('#chat-cmd-panel')
   _attachPreviewEl = page.querySelector('#chat-attachments-preview')
@@ -1619,19 +1628,22 @@ async function doSend(text, attachments = []) {
   showTyping(true)
   _isSending = true
   updateSendState()
-  updateStreamingStatus('sending')
+  setReplyStatus('sending', CHAT_REPLY_STATUS_TEXT.sending, { runId: _currentRunId || '' })
   _startResponseWatchdog()
+  let sendFailed = false
   try {
     await wsClient.chatSend(_sessionKey, text, attachments.length ? attachments : undefined)
   } catch (err) {
+    sendFailed = true
     showTyping(false)
     _cancelResponseWatchdog()
     appendSystemMessage(`${t('chat.sendFailed')}${err.message}`)
+    setReplyStatus('error', `⚠️ ${t('chat.sendFailed')}${err.message}`, { runId: _currentRunId || '' })
   } finally {
     _isSending = false
     if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
-    updateStreamingStatus('waiting')
+    if (!sendFailed && !_isStreaming) setReplyStatus('thinking', CHAT_REPLY_STATUS_TEXT.thinking, { runId: _currentRunId || '' })
   }
 }
 
@@ -1675,7 +1687,7 @@ function handleEvent(msg) {
     if (toolName && !_isStreaming) {
       emitLobsterPhase('tool', `调用工具：${toolName}`)
       showTyping(true, t('chat.usingTool', { name: toolName }))
-      updateStreamingStatus('tool', t('chat.usingTool', { name: toolName }))
+      setReplyStatus('tool', t('chat.usingTool', { name: toolName }), { runId: payload.runId })
     }
   }
 
@@ -1725,10 +1737,10 @@ function handleChatEvent(payload) {
         _isStreaming = true
         _streamStartTime = Date.now()
         updateSendState()
-        updateStreamingStatus('queued')
+        setReplyStatus('queued', CHAT_REPLY_STATUS_TEXT.queued, { runId: payload.runId })
       }
       _currentAiText = c.text
-      updateStreamingStatus('thinking')
+      setReplyStatus('streaming', CHAT_REPLY_STATUS_TEXT.streaming, { runId: payload.runId })
       // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
       clearTimeout(_streamSafetyTimer)
       _streamSafetyTimer = setTimeout(() => {
@@ -1783,7 +1795,7 @@ function handleChatEvent(payload) {
       _currentAiText = finalText
     }
     if (_currentAiBubble) {
-      updateStreamingStatus('finalizing')
+      setReplyStatus('finalizing', CHAT_REPLY_STATUS_TEXT.finalizing, { runId: runId || _currentRunId })
       if (_currentAiText) _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
       appendImagesToEl(_currentAiBubble, _currentAiImages)
       appendVideosToEl(_currentAiBubble, _currentAiVideos)
@@ -1821,7 +1833,7 @@ function handleChatEvent(payload) {
       meta.innerHTML = parts.join('')
       wrapper.appendChild(meta)
     }
-    updateStreamingStatus('done')
+    setReplyStatus('done', CHAT_REPLY_STATUS_TEXT.done, { runId: runId || _currentRunId })
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
@@ -1854,7 +1866,7 @@ function handleChatEvent(payload) {
       _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
     }
     appendSystemMessage(t('chat.generationStopped'))
-    updateStreamingStatus('aborted')
+    setReplyStatus('aborted', CHAT_REPLY_STATUS_TEXT.aborted, { runId: _currentRunId })
     resetStreamState()
     processMessageQueue()
     return
@@ -1892,7 +1904,7 @@ function handleChatEvent(payload) {
 
     showTyping(false)
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
-    updateStreamingStatus('error')
+    setReplyStatus('error', `⚠️ ${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId })
     resetStreamState()
     processMessageQueue()
     return
@@ -2079,11 +2091,6 @@ function createStreamBubble() {
   bubble.className = 'msg-bubble'
   bubble.innerHTML = '<span class="stream-cursor"></span>'
   wrap.appendChild(bubble)
-  const status = document.createElement('div')
-  status.className = 'chat-reply-status chat-reply-status-live'
-  status.id = CHAT_REPLY_STATUS_ID
-  status.textContent = CHAT_REPLY_STATUS_TEXT.waiting
-  wrap.appendChild(status)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
   return bubble
@@ -2093,63 +2100,71 @@ function getReplyStatusKey(sessionKey = _sessionKey) {
   return CHAT_REPLY_STATUS_STORE_PREFIX + (sessionKey || 'default')
 }
 
-function saveReplyStatus(state, detail = '', sessionKey = _sessionKey) {
-  if (!sessionKey || !isStorageAvailable()) return
-  try {
-    localStorage.setItem(getReplyStatusKey(sessionKey), JSON.stringify({ state, detail: detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting, ts: Date.now() }))
-  } catch {}
+function normalizeReplyStatus(raw = {}, sessionKey = _sessionKey) {
+  const state = CHAT_REPLY_STATUS_TEXT[raw.state] ? raw.state : 'waiting'
+  return {
+    state,
+    detail: raw.detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting,
+    ts: raw.ts || Date.now(),
+    sessionKey: raw.sessionKey || sessionKey || 'default',
+    runId: raw.runId || '',
+  }
+}
+
+function persistReplyStatus(status = _replyStatusState) {
+  if (!status?.sessionKey || !isStorageAvailable()) return
+  try { localStorage.setItem(getReplyStatusKey(status.sessionKey), JSON.stringify(status)) } catch {}
 }
 
 function loadReplyStatus(sessionKey = _sessionKey) {
   if (!sessionKey || !isStorageAvailable()) return null
-  try { return JSON.parse(localStorage.getItem(getReplyStatusKey(sessionKey)) || 'null') } catch { return null }
+  try {
+    const raw = JSON.parse(localStorage.getItem(getReplyStatusKey(sessionKey)) || 'null')
+    return raw ? normalizeReplyStatus(raw, sessionKey) : null
+  } catch { return null }
 }
 
-function ensureReplyStatusElement(anchorWrap = null) {
-  if (!_messagesEl) return null
-  let status = document.getElementById(CHAT_REPLY_STATUS_ID)
-  if (status) return status
-  const wrap = anchorWrap || _currentAiBubble?.parentElement || null
-  if (wrap) {
-    status = document.createElement('div')
-    status.className = 'chat-reply-status chat-reply-status-live'
-    status.id = CHAT_REPLY_STATUS_ID
-    wrap.appendChild(status)
-    return status
+function renderReplyStatus(status = _replyStatusState) {
+  if (!_replyStatusRowEl || !_replyStatusTextEl) return
+  if (!status || !status.state) {
+    _replyStatusRowEl.hidden = true
+    return
   }
-  if (_replyStatusBadgeEl) {
-    _replyStatusBadgeEl.hidden = false
-    _replyStatusBadgeEl.dataset.state = 'waiting'
-    return _replyStatusBadgeEl
-  }
-  return null
+  _replyStatusRowEl.hidden = false
+  _replyStatusRowEl.dataset.state = status.state
+  _replyStatusRowEl.dataset.sessionKey = status.sessionKey || _sessionKey || ''
+  _replyStatusRowEl.title = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || ''
+  _replyStatusTextEl.textContent = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || CHAT_REPLY_STATUS_TEXT.waiting
 }
 
-function restoreReplyStatus() {
-  const saved = loadReplyStatus()
-  if (!saved) return
-  const status = ensureReplyStatusElement()
-  if (!status) return
-  status.dataset.state = saved.state || 'waiting'
-  status.dataset.persisted = '1'
-  status.textContent = saved.detail || CHAT_REPLY_STATUS_TEXT[saved.state] || CHAT_REPLY_STATUS_TEXT.waiting
-  if (status === _replyStatusBadgeEl) {
-    status.hidden = false
-    status.className = 'chat-reply-status-badge'
-  }
+function setReplyStatus(state, detail = '', options = {}) {
+  const sessionKey = options.sessionKey || _sessionKey || _replyStatusState.sessionKey || 'default'
+  const next = normalizeReplyStatus({
+    state,
+    detail,
+    ts: options.ts || Date.now(),
+    sessionKey,
+    runId: options.runId || _currentRunId || _replyStatusState.runId || '',
+  }, sessionKey)
+  _replyStatusState = next
+  persistReplyStatus(next)
+  renderReplyStatus(next)
+  return next
 }
 
-function updateStreamingStatus(state, detail = '') {
-  const text = detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting
-  const status = ensureReplyStatusElement()
-  if (!status) return
-  status.dataset.state = state
-  status.textContent = text
-  saveReplyStatus(state, text)
-  if (status === _replyStatusBadgeEl) {
-    status.hidden = false
-    status.className = 'chat-reply-status-badge'
+function restoreReplyStatus(sessionKey = _sessionKey) {
+  const saved = loadReplyStatus(sessionKey)
+  if (saved) {
+    _replyStatusState = saved
+  } else {
+    _replyStatusState = normalizeReplyStatus({ state: 'waiting', sessionKey, ts: Date.now() }, sessionKey)
+    persistReplyStatus(_replyStatusState)
   }
+  renderReplyStatus(_replyStatusState)
+}
+
+function updateStreamingStatus(state, detail = '', options = {}) {
+  return setReplyStatus(state, detail, options)
 }
 
 // ── 流式渲染（节流） ──
@@ -2741,29 +2756,8 @@ function clearMessages() {
 function showTyping(show, hint) {
   if (_typingEl) {
     _typingEl.style.display = show ? 'flex' : 'none'
-    // 更新提示文字（如工具调用状态）
     const hintEl = _typingEl.querySelector('.typing-hint')
     if (hintEl) hintEl.textContent = hint || (show ? (t('chat.thinking') || 'OpenClaw 正在思考…') : '')
-  }
-  if (show && (_currentAiBubble?.parentElement) && !document.getElementById(CHAT_REPLY_STATUS_ID)) {
-    const status = ensureReplyStatusElement(_currentAiBubble.parentElement)
-    if (status) status.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
-  }
-  if (_replyStatusBadgeEl) {
-    if (show) {
-      _replyStatusBadgeEl.hidden = false
-      _replyStatusBadgeEl.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
-      _replyStatusBadgeEl.dataset.state = 'thinking'
-    } else if (!_currentAiBubble && !_isStreaming && !_isSending) {
-      const saved = loadReplyStatus()
-      if (saved?.detail) {
-        _replyStatusBadgeEl.hidden = false
-        _replyStatusBadgeEl.textContent = saved.detail
-        _replyStatusBadgeEl.dataset.state = saved.state || 'waiting'
-      } else {
-        _replyStatusBadgeEl.hidden = true
-      }
-    }
   }
 }
 

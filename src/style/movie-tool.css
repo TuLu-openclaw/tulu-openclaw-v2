@@ -265,92 +265,6 @@
 
 .tvbox-clear-btn:hover { border-color: #e53e3e; color: #fc8181; }
 
-.tvbox-home {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-.tvbox-home-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(124,58,237,.24), rgba(236,72,153,.12)), var(--bg-card);
-  box-shadow: var(--shadow-card);
-}
-.tvbox-home-kicker { font-size: 11px; color: #c4b5fd; margin-bottom: 4px; }
-.tvbox-home-title { font-size: 24px; font-weight: 800; color: var(--text-primary); margin-bottom: 6px; }
-.tvbox-home-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
-.tvbox-home-action {
-  flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,.18);
-  background: rgba(255,255,255,.08);
-  color: #fff;
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.tvbox-home-action:hover { border-color: var(--accent2); color: #f5f3ff; }
-.tvbox-home-section { min-width: 0; }
-.tvbox-home-row {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding: 4px 0 10px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--bg-elevated) transparent;
-}
-.tvbox-home-card { flex: 0 0 118px; cursor: pointer; }
-.tvbox-home-pic {
-  position: relative;
-  aspect-ratio: 2/3;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  margin-bottom: 7px;
-}
-.tvbox-home-pic img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s; }
-.tvbox-home-card:hover .tvbox-home-pic img { transform: scale(1.04); }
-.tvbox-home-pic > span:not(.tvbox-card-placeholder) {
-  position: absolute;
-  left: 5px;
-  bottom: 5px;
-  max-width: calc(100% - 10px);
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(0,0,0,.72);
-  color: #fff;
-  font-size: 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tvbox-home-name {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tvbox-home-cats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.tvbox-home-cat {
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.tvbox-home-cat:hover { border-color: var(--accent); color: var(--accent2); }
-
 /* ── 视频网格 ── */
 .tvbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 10px; }
 
@@ -439,15 +353,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-top: 2px;
-}
-
-.tvbox-home-subline {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ── 直播网格 ── */
@@ -647,43 +552,65 @@
 .tvbox-open-ext { font-size: 12px; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
 .tvbox-open-ext:hover { color: var(--accent2); }
 
-.tvbox-detail-panel { padding: 14px; background: linear-gradient(180deg, rgba(17,17,28,.95), rgba(10,10,16,.98)); }
-.tvbox-detail-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-.tvbox-detail-source { font-size: 11px; color: var(--text-muted); padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid var(--border); }
-.tvbox-detail-hero { display: flex; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.03); margin-bottom: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.22); }
-.tvbox-detail-poster-wrap { flex-shrink: 0; }
-.tvbox-detail-pic { width: 112px; border-radius: 12px; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
-.tvbox-detail-meta { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.tvbox-detail-title { font-size: 19px; font-weight: 800; color: var(--text-primary); line-height: 1.35; }
-.tvbox-detail-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.tvbox-detail-chip {
+/* ── 剧集详情页 ── */
+.tvbox-detail-back {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 14px;
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(124, 58, 237, 0.16);
-  border: 1px solid rgba(124, 58, 237, 0.26);
-  color: #ddd6fe;
-  font-size: 11px;
-  line-height: 1.2;
+  gap: 4px;
+  transition: all 0.2s;
 }
-.tvbox-detail-chip-muted {
-  background: rgba(255,255,255,.04);
-  border-color: var(--border);
-  color: var(--text-secondary);
+
+.tvbox-detail-back:hover { border-color: var(--accent); color: var(--accent2); }
+
+.tvbox-detail-info { display: flex; gap: 14px; margin-bottom: 16px; }
+
+.tvbox-detail-pic {
+  width: 100px;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
+
+.tvbox-detail-meta { flex: 1; min-width: 0; }
+
+.tvbox-detail-name { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; line-height: 1.3; }
+
+.tvbox-detail-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+
+.tvbox-detail-tag {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .tvbox-detail-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.75;
-  max-height: 5.4em;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* ── 详情线路 ── */
+/* ── 源选择器 ── */
 .tvbox-source-selector { margin-bottom: 12px; }
 .tvbox-source-selector-label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; }
 .tvbox-source-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+
 .tvbox-source-tab {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -694,9 +621,17 @@
   cursor: pointer;
   transition: all 0.2s;
 }
-.tvbox-source-tab:hover { border-color: var(--accent); color: var(--accent2); }
-.tvbox-source-tab.active { background: rgba(124, 58, 237, 0.2); border-color: var(--accent); color: var(--accent2); font-weight: 600; }
 
+.tvbox-source-tab:hover { border-color: var(--accent); color: var(--accent2); }
+
+.tvbox-source-tab.active {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: var(--accent);
+  color: var(--accent2);
+  font-weight: 600;
+}
+
+/* ── 剧集网格 ── */
 .tvbox-episodes-title {
   font-size: 13px;
   font-weight: 600;
@@ -706,6 +641,7 @@
   align-items: center;
   gap: 6px;
 }
+
 .tvbox-episodes-count {
   font-size: 10px;
   font-weight: 400;
@@ -714,7 +650,9 @@
   border-radius: 10px;
   padding: 1px 6px;
 }
+
 .tvbox-ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 6px; }
+
 .tvbox-ep-btn {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -729,9 +667,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tvbox-ep-btn:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124, 58, 237, 0.08); }
-.tvbox-ep-btn.playing { background: rgba(16, 185, 129, 0.15); border-color: #10b981; color: #34d399; font-weight: 600; }
 
+.tvbox-ep-btn:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124, 58, 237, 0.08); }
+
+.tvbox-ep-btn.playing {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #34d399;
+  font-weight: 600;
+}
+
+/* ── 播放器 ── */
 .tvbox-video-wrap, .tvbox-iframe-wrap { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
 .tvbox-video-wrap video, .tvbox-iframe-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
 
