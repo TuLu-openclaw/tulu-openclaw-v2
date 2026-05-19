@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, CONTENT_TYPE, COOKIE, SET_COOKIE, USER_AGENT};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProxyResponse {
@@ -76,7 +76,11 @@ async fn fetch_with_http_client(url: &str, cookie: Option<&str>) -> ProxyRespons
                         status,
                         content_type,
                         html: None,
-                        set_cookie: if set_cookie.is_empty() { None } else { Some(set_cookie) },
+                        set_cookie: if set_cookie.is_empty() {
+                            None
+                        } else {
+                            Some(set_cookie)
+                        },
                         error: Some(format!("读取响应失败: {e}")),
                     };
                 }
@@ -87,7 +91,11 @@ async fn fetch_with_http_client(url: &str, cookie: Option<&str>) -> ProxyRespons
                 status,
                 content_type,
                 html,
-                set_cookie: if set_cookie.is_empty() { None } else { Some(set_cookie) },
+                set_cookie: if set_cookie.is_empty() {
+                    None
+                } else {
+                    Some(set_cookie)
+                },
                 error: None,
             }
         }

@@ -56,8 +56,16 @@ ENV NODE_ENV=production
 ENV HOME=/root
 
 # 创建非 root 用户 (可选，主要用于日志查看)
-RUN addgroup -g 1000 appgroup && \
-    adduser -u 1000 -G appgroup -s /bin/sh -D appuser
+RUN set -eux; \
+    if getent group 1000 >/dev/null 2>&1; then \
+        group_name="$(getent group 1000 | cut -d: -f1)"; \
+    else \
+        addgroup -g 1000 appgroup; \
+        group_name="appgroup"; \
+    fi; \
+    if ! id -u appuser >/dev/null 2>&1; then \
+        adduser -u 1000 -G "$group_name" -s /bin/sh -D appuser; \
+    fi
 
 WORKDIR /app
 

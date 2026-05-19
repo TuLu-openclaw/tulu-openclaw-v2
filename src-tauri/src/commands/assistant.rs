@@ -575,7 +575,11 @@ fn find_headless_browser() -> Option<String> {
             if std::path::Path::new(candidate).exists() {
                 return Some((*candidate).to_string());
             }
-        } else if std::process::Command::new(candidate).arg("--version").output().is_ok() {
+        } else if std::process::Command::new(candidate)
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
             return Some((*candidate).to_string());
         }
     }
@@ -777,9 +781,12 @@ try {{
         extract_b64 = extract_b64
     );
 
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps])
-        .creation_flags(0x08000000)
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps]);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
+    let output = cmd
         .output()
         .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
 
