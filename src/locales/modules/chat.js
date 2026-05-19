@@ -77,6 +77,7 @@ export default {
   guideHint: _('如需使用 星枢OpenClaw 内置 AI 助手（独立于 OpenClaw），请前往左侧菜单「AI 助手」页面。', 'To use 星枢OpenClaw\'s built-in AI Assistant (independent of OpenClaw), go to "AI Assistant" in the left menu.', '如需使用 星枢OpenClaw 內置 AI 助手（獨立於 OpenClaw），請前往左側菜單「AI 助手」頁面。'),
   guideClose: _('知道了', 'Got it'),
   defaultSuffix: _('(默认)', '(default)', '(預設)'),
+  currentSuffix: _('(当前)', '(current)', '(目前)'),
   cmdSession: _('会话', 'Session', '對話'),
   cmdModel: _('模型', 'Model'),
   cmdThinkMode: _('思考模式', 'Think Mode'),

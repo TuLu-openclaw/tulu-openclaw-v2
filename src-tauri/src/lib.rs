@@ -173,15 +173,10 @@ pub fn run() {
             assistant::assistant_check_port,
             assistant::assistant_web_search,
             assistant::assistant_fetch_url,
-            #[cfg(target_os = "windows")]
             assistant::fetch_page,
-            #[cfg(target_os = "windows")]
             assistant::fetch_page_js,
-            #[cfg(target_os = "windows")]
             assistant::open_player_window,
-            #[cfg(target_os = "windows")]
             assistant::open_lobster_office,
-            #[cfg(target_os = "windows")]
             assistant::open_global_builtin_window,
             assistant::fetch_live_sources,
             assistant::save_recording,
@@ -191,7 +186,6 @@ pub fn run() {
             assistant::get_window_by_label,
             assistant::update_office_state,
             assistant::sync_openclaw_to_office,
-            #[cfg(target_os = "windows")]
             assistant::vod_fetch,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,

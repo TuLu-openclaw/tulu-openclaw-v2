@@ -17,7 +17,7 @@ function escapeHtml(str) {
 }
 
 function platformDefaultDockerEndpoint() {
-  const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
+  const isWin = !isMacPlatform() && (navigator.userAgent?.includes('Windows') || navigator.userAgent?.includes('Win'))
   return isWin ? '//./pipe/docker_engine' : '/var/run/docker.sock'
 }
 
@@ -32,7 +32,7 @@ function effectiveDockerImage(cfg) {
 function openclawInstallationIdentity(installation) {
   const rawPath = String(installation?.path || '').trim()
   if (!rawPath) return ''
-  const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
+  const isWin = !isMacPlatform() && (navigator.userAgent?.includes('Windows') || navigator.userAgent?.includes('Win'))
   if (!isWin) return rawPath
   return rawPath
     .replace(/\//g, '\\')

@@ -187,8 +187,9 @@ export function render() {
   function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') }
 
   // --- 终端命令 ---
-  const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
-  const configPath = isWin ? '%USERPROFILE%\\.hermes' : '~/.hermes'
+  const platformText = navigator.userAgentData?.platform || navigator.userAgent || ''
+  const isWin = /Windows|Win32|Win64/i.test(platformText)
+  const configPath = isWin ? '$env:USERPROFILE\\.hermes' : '~/.hermes'
 
   const CLI_COMMANDS = [
     { label: t('engine.cliChat'),       desc: t('engine.cliChatDesc'),      cmd: 'hermes chat' },

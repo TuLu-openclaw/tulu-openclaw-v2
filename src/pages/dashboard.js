@@ -3,7 +3,7 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
+import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus, isMacPlatform } from '../lib/app-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
@@ -68,7 +68,7 @@ export function cleanup() {
 function openclawInstallationIdentity(installation) {
   const rawPath = String(installation?.path || '').trim()
   if (!rawPath) return ''
-  const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
+  const isWin = !isMacPlatform() && (navigator.userAgent?.includes('Windows') || navigator.userAgent?.includes('Win'))
   if (!isWin) return rawPath
   return rawPath
     .replace(/\//g, '\\')

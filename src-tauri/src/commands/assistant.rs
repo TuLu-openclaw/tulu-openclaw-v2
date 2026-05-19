@@ -448,74 +448,38 @@ pub async fn assistant_web_search(
     Ok(output)
 }
 
-/// 通过 PowerShell iwr 代理 HTTP 请求（绕过 WebView CORS 限制，继承系统网络和代理设置）
-#[cfg(target_os = "windows")]
+/// 跨平台 VOD HTTP 代理请求（绕过 WebView CORS 限制，继承面板代理设置）
 #[tauri::command]
-pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String, String> {
-    use std::process::Command;
+pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String, String> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
-    let escaped = url.replace("'", "''");
-    // 正确处理 GBK 编码 + gzip/deflate 自动解压，用 Base64 传输避免编码问题
-    let ps = format!(
-        r#"try {{
-            Add-Type -AssemblyName System.IO.Compression
-            $req = [System.Net.WebRequest]::Create('{}')
-            $req.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            $req.Accept = 'application/json, text/plain, */*'
-            $req.Timeout = 30000
-            $resp = $req.GetResponse()
-            $rs = $resp.GetResponseStream()
-            $ms = [System.IO.MemoryStream]::new()
-            if ($resp.ContentEncoding -and $resp.ContentEncoding.ToLower().Contains('gzip')) {{
-                $gz = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
-                $gz.CopyTo($ms)
-                $gz.Close()
-            }} else {{
-                $rs.CopyTo($ms)
-            }}
-            $rs.Close(); $resp.Close()
-            $bytes = $ms.ToArray()
-            $ms.Close()
-            # ── 编码处理：用 UTF-8 直接输出，绕过控制台编码问题
-            [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-            $OutputEncoding = [System.Text.Encoding]::UTF8
-            $textUtf8 = [System.Text.Encoding]::UTF8.GetString($bytes)
-            $ffc = ($textUtf8.ToCharArray() | Where-Object {{ [int]$_ -eq 0xFFFD }} | Measure-Object).Count
-            if ($ffc -gt 0) {{
-                # 含乱码 → GBK 字节序列，用 [Console] 输出绕过编码
-                $gbk = [System.Text.Encoding]::GetEncoding('GBK')
-                $decoded = $gbk.GetString($bytes)
-                [System.Console]::Out.Flush()
-                [System.Console]::Out.NewLine = ''
-                [System.Console]::Out.Write($decoded)
-            }} else {{
-                [System.Console]::Out.Flush()
-                [System.Console]::Out.NewLine = ''
-                [System.Console]::Out.Write($textUtf8)
-            }}
-        }} catch {{
-            Write-Output ('VOD_ERROR:' + $_.Exception.Message)
-        }}"#,
-        escaped
-    );
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
-        .output()
-        .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success() || stdout.contains("VOD_ERROR:") {
-        let msg = if stdout.starts_with("VOD_ERROR:") {
-            stdout.trim_start_matches("VOD_ERROR:").trim()
-        } else {
-            stderr.trim()
-        };
-        return Err(format!("vod_fetch failed: {}", msg));
+
+    let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(30).clamp(5, 120));
+    let client = super::build_http_client(
+        timeout,
+        Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+    )
+    .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json,text/plain,text/html,*/*")
+        .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+        .send()
+        .await
+        .map_err(|e| format!("vod_fetch 请求失败: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("vod_fetch HTTP {status}"));
     }
-    Ok(stdout)
+
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("vod_fetch 读取响应失败: {e}"))?;
+    Ok(text)
 }
 
 /// 抓取 URL 内容（通过 Jina Reader API）
@@ -552,7 +516,6 @@ pub async fn assistant_fetch_url(url: String) -> Result<String, String> {
 }
 
 /// 爬虫用：抓取任意网页 HTML
-#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn fetch_page(url: String) -> Result<String, String> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -577,9 +540,56 @@ pub async fn fetch_page(url: String) -> Result<String, String> {
         .map_err(|e| format!("fetch_page 读取响应失败: {e}"))
 }
 
-/// 使用 WebView2/Edge 渲染 JS 页面，提取视频 URL（用于 JS 动态渲染站）
-/// 策略：Edge headless + Chrome DevTools Protocol (CDP)
-#[cfg(target_os = "windows")]
+fn find_headless_browser() -> Option<String> {
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &[
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            "msedge",
+            "chrome",
+        ]
+    } else if cfg!(target_os = "macos") {
+        &[
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "google-chrome",
+            "microsoft-edge",
+            "chromium",
+        ]
+    } else {
+        &[
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium-browser",
+            "chromium",
+            "microsoft-edge",
+            "microsoft-edge-stable",
+        ]
+    };
+
+    for candidate in candidates {
+        if candidate.contains(std::path::MAIN_SEPARATOR) || candidate.contains(':') {
+            if std::path::Path::new(candidate).exists() {
+                return Some((*candidate).to_string());
+            }
+        } else if std::process::Command::new(candidate).arg("--version").output().is_ok() {
+            return Some((*candidate).to_string());
+        }
+    }
+    None
+}
+
+fn file_url_from_path(path: &std::path::Path) -> String {
+    url::Url::from_file_path(path)
+        .map(|u| u.to_string())
+        .unwrap_or_else(|_| format!("file:///{}", path.to_string_lossy().replace('\\', "/")))
+}
+
+/// 使用 Edge/Chromium 渲染 JS 页面，提取视频 URL（用于 JS 动态渲染站）
+/// Windows 使用 Edge；macOS/Linux 尝试常见 Chrome/Chromium/Edge，找不到时降级静态抓取。
 #[tauri::command]
 pub async fn fetch_page_js(url: String) -> Result<String, String> {
     use std::process::Command;
@@ -587,16 +597,14 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
 
-    // Edge 通常在这里
-    let msedge_paths = [
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Windows\System32\msedge.exe",
-    ];
-    let msedge_exe = msedge_paths
-        .iter()
-        .find(|p| std::path::Path::new(p).exists());
-    let browser_exe = msedge_exe.copied().unwrap_or("");
+    if !cfg!(target_os = "windows") {
+        return fetch_page(url).await;
+    }
+
+    let browser_exe = find_headless_browser().unwrap_or_default();
+    if browser_exe.is_empty() {
+        return fetch_page(url).await;
+    }
 
     // 用 CDP 的提取脚本（含第3层 PerfAPI + 第4层 fetch/XHR/WS 拦截）
     let extract_js = r#"
@@ -1145,9 +1153,7 @@ pub async fn assistant_list_dir(path: String) -> Result<String, String> {
 /// Floating button overlay for m3u8 extraction via webview.eval()
 /// Floating button overlay for m3u8 extraction via webview.eval()
 
-#[cfg(target_os = "windows")]
 #[tauri::command]
-
 pub async fn open_global_builtin_window(
     app: tauri::AppHandle,
     url: Option<String>,
@@ -1177,7 +1183,7 @@ pub async fn open_global_builtin_window(
         let temp_file = temp_dir.join("global-builtin.html");
         let _ = std::fs::write(&temp_file, &html_with_url);
         // 用 Tauri navigate API 而非 eval（更可靠）
-        let file_url = format!("file:///{}", temp_file.to_string_lossy().replace('\\', "/"));
+        let file_url = file_url_from_path(&temp_file);
         if let Ok(parsed) = url::Url::parse(&file_url) {
             let _ = window.navigate(parsed);
         }
@@ -1197,7 +1203,7 @@ pub async fn open_global_builtin_window(
     let temp_file = temp_dir.join("global-builtin.html");
     std::fs::write(&temp_file, &html_with_url).map_err(|e| format!("写入临时HTML失败: {}", e))?;
 
-    let file_url = format!("file:///{}", temp_file.to_string_lossy().replace('\\', "/"));
+    let file_url = file_url_from_path(&temp_file);
     // ★ 最早钩子脚本：通过 initialization_script 在页面 JS 之前注入
     // 确保 fetch/XHR/WebSocket 拦截在页面任何脚本执行前就位
     let hooks_js = include_str!("../../../public/global-builtin-hooks.js");

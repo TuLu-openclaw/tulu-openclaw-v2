@@ -1,4 +1,5 @@
 import { api } from './tauri-api.js'
+import { isMacPlatform } from './app-state.js'
 import { showContentModal } from '../components/modal.js'
 import { t } from './i18n.js'
 
@@ -22,7 +23,7 @@ function cliSourceLabel(source) {
 function openclawInstallationIdentity(installation) {
   const rawPath = String(installation?.path || '').trim()
   if (!rawPath) return ''
-  const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
+  const isWin = !isMacPlatform() && (navigator.userAgent?.includes('Windows') || navigator.userAgent?.includes('Win'))
   if (!isWin) return rawPath
   return rawPath
     .replace(/\//g, '\\')

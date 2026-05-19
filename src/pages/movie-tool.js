@@ -114,7 +114,7 @@ async function loadTvboxConfig(api) {
       let config
       try { config = JSON.parse(text) }
       catch { config = parseXml(text) }
-      if (config && (config.list?.length || config.total)) {
+      if (isValidMovieConfig(config)) {
         _tvboxCache[api.key] = config
         return config
       }
@@ -133,7 +133,7 @@ async function loadTvboxConfig(api) {
         let config
         try { config = JSON.parse(text) }
         catch { config = parseXml(text) }
-        if (config && (config.list?.length || config.total)) {
+        if (isValidMovieConfig(config)) {
           _tvboxCache[api.key] = config
           return config
         }
@@ -149,13 +149,40 @@ async function loadTvboxConfig(api) {
     let config
     try { config = JSON.parse(text) }
     catch { config = parseXml(text) }
-    if (!config || (!(Array.isArray(config.list) ? config.list.length : config.list?.length) && !config.total)) {
+    if (!isValidMovieConfig(config)) {
       console.warn('[movie-tool] TVBox config invalid or empty:', api.name, config)
       return null
     }
     _tvboxCache[api.key] = config
     return config
   } catch (e) { console.warn('[movie-tool] TVBox load failed:', api.name, e.message); return null }
+}
+
+function isValidMovieConfig(config) {
+  if (!config) return false
+  if (Array.isArray(config.sites) && config.sites.length) return true
+  if (Array.isArray(config.list) && config.list.length) return true
+  if (config.total) return true
+  return false
+}
+
+function normalizeCmsApiBase(api) {
+  if (!api || typeof api !== 'string') return ''
+  let base = api.trim()
+  if (!/^https?:\/\//i.test(base)) return ''
+  base = base.replace(/\/?$/, '')
+  if (/\/api\.php\/provide\/vod\/?$/i.test(base)) return base
+  if (/\/api\.php\/?$/i.test(base)) return base.replace(/\/api\.php\/?$/i, '/api.php/provide/vod')
+  if (/\/provide\/vod\/?$/i.test(base)) return base
+  return base
+}
+
+function getSearchableTvboxSites(config) {
+  const sites = Array.isArray(config?.sites) ? config.sites : []
+  return sites
+    .filter(site => site && site.api && site.searchable !== 0 && (site.type === 1 || site.type === 3 || site.type == null))
+    .map(site => ({ ...site, api: normalizeCmsApiBase(site.api) }))
+    .filter(site => site.api)
 }
 
 // ── 解析 CMS 扁平格式（量子/暴风等 CMS API）───────────────────────────────
@@ -234,18 +261,67 @@ function parseTvboxDl(v) {
 }
 
 // TVBox 列表搜索
-function searchTvboxList(config, kw) {
-  const q = kw.toLowerCase()
-  return parseVideoList(config).filter(v =>
+async function searchTvboxList(config, kw, api = null) {
+  const q = (kw || '').toLowerCase()
+  const local = parseVideoList(config).filter(v =>
     v.vod_name.toLowerCase().includes(q) ||
     (v.vod_actor && v.vod_actor.toLowerCase().includes(q))
   )
+  if (local.length) return local
+
+  const searchableSites = getSearchableTvboxSites(config)
+  const directApis = api?.api ? [{ name: api.name || '当前源', api: normalizeCmsApiBase(api.api) }] : []
+  const targets = [...directApis, ...searchableSites].filter(s => s.api).slice(0, 12)
+  if (!targets.length) return []
+
+  const merged = []
+  const seen = new Set()
+  for (const site of targets) {
+    const urls = [
+      site.api + '?ac=videolist&wd=' + encodeURIComponent(kw) + '&pg=1',
+      site.api + '?ac=videolist&zm=' + encodeURIComponent(kw) + '&pg=1',
+      site.api + '?ac=list&wd=' + encodeURIComponent(kw) + '&pg=1',
+      site.api + '?ac=detail&wd=' + encodeURIComponent(kw),
+    ]
+    for (const url of urls) {
+      try {
+        const json = await fetchJSON(url)
+        const list = parseVideoList(json)
+        if (list.length) {
+          for (const item of list) {
+            const key = (item.vod_id || item.vod_name || '') + '|' + site.api
+            if (!seen.has(key)) {
+              seen.add(key)
+              merged.push({ ...item, _srcName: site.name || api?.name || 'TVBox', _tvboxApi: site.api })
+            }
+          }
+          break
+        }
+      } catch {}
+      try {
+        const jsonp = await fetchJsonp(url)
+        const list = parseVideoList(jsonp)
+        if (list.length) {
+          for (const item of list) {
+            const key = (item.vod_id || item.vod_name || '') + '|' + site.api
+            if (!seen.has(key)) {
+              seen.add(key)
+              merged.push({ ...item, _srcName: site.name || api?.name || 'TVBox', _tvboxApi: site.api })
+            }
+          }
+          break
+        }
+      } catch {}
+    }
+    if (merged.length >= 60) break
+  }
+  return merged
 }
 
 // ── 获取当前活跃 TVBox 源（内置优先，自定义次之）
 function getActiveTvbox() {
   const key = getActiveTvboxKey()
-  return TVBOX_BUILTIN.find(a => a.key === key) || _customTvbox.find(a => a.key === key) || null
+  return TVBOX_BUILTIN.find(a => a.key === key) || _customTvbox.find(a => a.key === key) || TVBOX_BUILTIN[0] || null
 }
 
 function getTvboxSourceName(api) {
@@ -1000,7 +1076,7 @@ function setDebug(msg, detail) {
     if (!api) { content.innerHTML = '<div class="tvbox-empty">请先选择一个 TVBox 数据源</div>'; return }
     const config = await loadTvboxConfig(api)
     if (!config) { content.innerHTML = '<div class="tvbox-empty">TVBox JSON 加载失败</div>'; return }
-    const results = searchTvboxList(config, query)
+    const results = await searchTvboxList(config, query, api)
     renderVodGrid(results, results.length)
   }
 
@@ -1168,26 +1244,29 @@ function setDebug(msg, detail) {
     const totalPages = Math.max(1, Math.ceil(total / 20))
 
     // 图片 URL 处理：支持多源合并搜索（item._srcKey）和当前源
-    function getSrcBase(itemSrcKey) {
+    function getSrcBase(itemSrcKey, itemApi) {
+      if (itemApi) return itemApi.replace(/\/api\.php.*$/, '')
       const key = itemSrcKey || VOD_SOURCES[src]?.key
       const s = VOD_SOURCES.find(s => s.key === key)
       return s?.api ? s.api.replace(/\/api\.php.*$/, '') : ''
     }
-    function fixPic(url, itemSrcKey) {
+    function fixPic(url, itemSrcKey, itemApi) {
       if (!url) return ''
       if (/^https?:\/\//i.test(url)) return url
       if (url.startsWith('//')) return 'https:' + url
-      return getSrcBase(itemSrcKey) + (url.startsWith('/') ? url : '/' + url)
+      return getSrcBase(itemSrcKey, itemApi) + (url.startsWith('/') ? url : '/' + url)
     }
 
     grid.innerHTML = '<div class="tvbox-grid">' + list.map(item => {
-      const histItem = history.find(h => h.id == item.vod_id && h.source === sourceName)
+      const itemSourceName = item._srcName || sourceName
+      const itemApi = item._tvboxApi || ''
+      const histItem = history.find(h => h.id == item.vod_id && h.source === itemSourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
-      return '<div class="tvbox-card" data-id="' + item.vod_id + '" data-source="' + sourceName + '" data-name="' + item.vod_name + '" data-pic="' + item.vod_pic + '">' +
+      return '<div class="tvbox-card" data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(itemSourceName) + '" data-api="' + escHtml(itemApi) + '" data-name="' + escHtml(item.vod_name) + '" data-pic="' + escHtml(item.vod_pic) + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
-            (item.vod_pic ? '<img src="' + escHtml(fixPic(item.vod_pic, item._srcKey)) + '" alt="' + escHtml(item.vod_name) + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
+            (item.vod_pic ? '<img src="' + escHtml(fixPic(item.vod_pic, item._srcKey, itemApi)) + '" alt="' + escHtml(item.vod_name) + '" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.innerHTML=\'<span class=tvbox-card-placeholder>🎬</span>\'" />' : '<span class="tvbox-card-placeholder">🎬</span>') +
             '<span class="tvbox-card-tag">' + escHtml(item.type_name || '影视') + '</span>' +
             (item.vod_score ? '<span class="tvbox-card-score">' + escHtml(item.vod_score) + '</span>' : '') +
             (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
@@ -1205,7 +1284,7 @@ function setDebug(msg, detail) {
     grid.querySelectorAll('.tvbox-card').forEach(card => {
       card.addEventListener('click', () => {
         _viewStack.push('list')
-        openDetail(card.dataset.id, card.dataset.name, card.dataset.source, card.dataset.pic)
+        openDetail(card.dataset.id, card.dataset.name, card.dataset.source, card.dataset.pic, card.dataset.api)
       })
     })
     if (pagination) {
@@ -1287,8 +1366,8 @@ function setDebug(msg, detail) {
     }
   }
 
-  async function openDetail(id, name, sourceName, pic) {
-    const source = VOD_SOURCES.find(s => s.name === sourceName) || VOD_SOURCES[src]
+  async function openDetail(id, name, sourceName, pic, sourceApi = '') {
+    const source = sourceApi ? { name: sourceName || 'TVBox', api: sourceApi } : (VOD_SOURCES.find(s => s.name === sourceName) || VOD_SOURCES[src])
     const content = el.querySelector('#t-content')
     content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
     const detailId = String(id || '').trim()

@@ -1,7 +1,6 @@
-/**
- * 聊天页面 - 完整版，对接 OpenClaw Gateway
- * 支持：流式响应、Markdown 渲染、会话管理、Agent 选择、快捷指令
- */
+﻿/**
+ * 鑱婂ぉ椤甸潰 - 瀹屾暣鐗堬紝瀵规帴 OpenClaw Gateway
+ * 鏀寔锛氭祦寮忓搷搴斻€丮arkdown 娓叉煋銆佷細璇濈鐞嗐€丄gent 閫夋嫨銆佸揩鎹锋寚浠? */
 import { api, invalidate, isTauriRuntime } from '../lib/tauri-api.js'
 import { navigate } from '../router.js'
 import { wsClient, uuid } from '../lib/ws-client.js'
@@ -13,11 +12,11 @@ import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 const RENDER_THROTTLE = 30
-const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
-const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
-const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
-const STORAGE_SESSION_NAMES_KEY = '星枢OpenClaw-chat-session-names'
-const STORAGE_WORKSPACE_PANEL_KEY = '星枢OpenClaw-chat-workspace-open'
+const STORAGE_SESSION_KEY = '鏄熸灑OpenClaw-last-session'
+const STORAGE_MODEL_KEY = '鏄熸灑OpenClaw-chat-selected-model'
+const STORAGE_SIDEBAR_KEY = '鏄熸灑OpenClaw-chat-sidebar-open'
+const STORAGE_SESSION_NAMES_KEY = '鏄熸灑OpenClaw-chat-session-names'
+const STORAGE_WORKSPACE_PANEL_KEY = '鏄熸灑OpenClaw-chat-workspace-open'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -54,7 +53,7 @@ const COMMANDS = [
     { cmd: '/help', desc: 'chat.cmdHelp', action: 'exec' },
     { cmd: '/status', desc: 'chat.cmdStatus', action: 'exec' },
     { cmd: '/context', desc: 'chat.cmdContext', action: 'exec' },
-    { cmd: '/miaogu', desc: '喵咚验证 - 快速访问喵咚验证', action: 'navigate' },
+    { cmd: '/miaogu', desc: '喵咕验证 - 快速访问喵咕验证', action: 'navigate' },
     { cmd: '/weiyan', desc: '微验验证 - 快速访问微验验证', action: 'navigate' },
   ]},
 ]
@@ -62,6 +61,7 @@ const COMMANDS = [
 let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
 const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
+const CHAT_REPLY_STATUS_STORAGE_KEY = '星枢OpenClaw.chat.reply-status'
 const CHAT_REPLY_STATUS_TEXT = {
   queued: '已收到，正在排队…',
   sending: 'OpenClaw 正在接收消息…',
@@ -75,6 +75,7 @@ let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInp
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
+let _replyStatusState = 'waiting', _replyStatusDetail = ''
 let _lastRenderTime = 0, _renderPending = false, _lastHistoryHash = ''
 let _autoScrollEnabled = true, _lastScrollTop = 0, _touchStartY = 0
 let _isLoadingHistory = false
@@ -92,17 +93,36 @@ let _hasEverConnected = false
 let _availableModels = []
 let _primaryModel = ''
 let _selectedModel = ''
+
+const MODEL_REFRESH_DEBOUNCE_MS = 800
+let _modelRefreshTimer = null
 let _isApplyingModel = false
+
+function rememberSelectedModel(model) {
+  try {
+    if (model) localStorage.setItem(STORAGE_MODEL_KEY, model)
+    else localStorage.removeItem(STORAGE_MODEL_KEY)
+  } catch (e) {
+    console.warn('[chat] model preference storage unavailable:', e)
+  }
+}
+
+function handleModelSelectChange() {
+  _selectedModel = _modelSelectEl?.value || ''
+  rememberSelectedModel(_selectedModel)
+  clearTimeout(_modelRefreshTimer)
+  _modelRefreshTimer = setTimeout(() => { applySelectedModel() }, MODEL_REFRESH_DEBOUNCE_MS)
+}
 
 // ── 托管 Agent ──
 const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
 const HOSTED_SESSIONS_KEY = '星枢OpenClaw-hosted-agent-sessions'
 const HOSTED_SYSTEM_PROMPT = `你是一个托管调度 Agent。你的职责是：根据用户设定的目标，持续引导 OpenClaw AI Agent 完成任务。
 规则：
-1. 你每一轮只输出一条简洁的指令（1-3 句话），发给 OpenClaw 执行
-2. 根据 OpenClaw 的回复评估进展，决定下一步指令
-3. 如果任务已完成或无法继续，回复包含"完成"或"停止"来结束循环
-4. 不要重复相同的指令，不要输出解释性文字，只输出下一步要执行的指令`
+1. 你每一轮只输出一条简洁的指令（1-3 句话），发送给 OpenClaw 执行。
+2. 根据 OpenClaw 的回复评估进展，决定下一步指令。
+3. 如果任务已完成或无法继续，回复包含“完成”或“停止”来结束循环。
+4. 不要重复相同的指令，不要输出解释性文字，只输出下一步要执行的指令。`
 const HOSTED_DEFAULTS = { enabled: false, prompt: '', autoRunAfterTarget: true, stopPolicy: 'self', maxSteps: 50, stepDelayMs: 1200, retryLimit: 2, autoStopMinutes: 0 }
 const HOSTED_RUNTIME_DEFAULT = { status: HOSTED_STATUS.IDLE, stepCount: 0, lastRunAt: 0, lastRunId: '', lastError: '', pending: false, errorCount: 0 }
 const HOSTED_CONTEXT_MAX = 30
@@ -231,7 +251,7 @@ export async function render() {
           <span class="typing-hint"></span>
         </div>
       </div>
-      <button class="chat-scroll-btn" id="chat-scroll-btn" style="display:none">↓</button>
+      <button class="chat-scroll-btn" id="chat-scroll-btn" style="display:none">鈫?/button>
       <div class="chat-cmd-panel" id="chat-cmd-panel" style="display:none"></div>
       <div class="chat-attachments-preview" id="chat-attachments-preview" style="display:none"></div>
       <div class="chat-input-area">
@@ -246,7 +266,7 @@ export async function render() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
         <button class="chat-hosted-btn btn btn-sm btn-ghost" id="chat-hosted-btn" title="${t('chat.hostedAgent')}">
-          <span class="chat-hosted-label">⊕</span>
+          <span class="chat-hosted-label">鈯?/span>
           <span class="chat-hosted-badge idle" id="chat-hosted-badge">${t('chat.hostedBadge')}</span>
         </button>
       </div>
@@ -264,7 +284,7 @@ export async function render() {
           <div class="ha-slider-group">
             <div class="ha-slider-label">${t('chat.maxReplies')} <span class="ha-slider-val" id="ha-steps-val">50</span></div>
             <input type="range" class="ha-slider" id="hosted-agent-max-steps" min="5" max="205" step="5" value="50">
-            <div class="ha-slider-ticks"><span>5</span><span>50</span><span>100</span><span>200</span><span>∞</span></div>
+            <div class="ha-slider-ticks"><span>5</span><span>50</span><span>100</span><span>200</span><span>鈭?/span></div>
           </div>
           <div class="ha-timer-group">
             <div class="ha-timer-header">
@@ -350,17 +370,18 @@ export async function render() {
   applyWorkspacePanelVisibility(workspaceOpen)
   if (!workspaceOpen) syncWorkspaceContext(false)
 
-  // 首次使用引导提示
+  // 棣栨浣跨敤寮曞鎻愮ず
   showPageGuide(_messagesEl)
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
+  restoreReplyStatus()
   loadModelOptions()
-  // 非阻塞：先返回 DOM，后台连接 Gateway
+  // 闈為樆濉烇細鍏堣繑鍥?DOM锛屽悗鍙拌繛鎺?Gateway
   connectGateway()
   return page
 }
 
-const GUIDE_KEY = '星枢OpenClaw-guide-chat-dismissed'
+const GUIDE_KEY = '鏄熸灑OpenClaw-guide-chat-dismissed'
 
 function showPageGuide(container) {
   if (localStorage.getItem(GUIDE_KEY)) return
@@ -387,16 +408,11 @@ function showPageGuide(container) {
   container.insertBefore(guide, container.firstChild)
 }
 
-// ── 事件绑定 ──
+// 鈹€鈹€ 浜嬩欢缁戝畾 鈹€鈹€
 
 function bindEvents(page) {
   if (_modelSelectEl) {
-    _modelSelectEl.addEventListener('change', () => {
-      _selectedModel = _modelSelectEl.value
-      if (_selectedModel) localStorage.setItem(STORAGE_MODEL_KEY, _selectedModel)
-      else localStorage.removeItem(STORAGE_MODEL_KEY)
-      applySelectedModel()
-    })
+    _modelSelectEl.addEventListener('change', handleModelSelectChange)
   }
 
   _textarea.addEventListener('input', () => {
@@ -447,6 +463,7 @@ function bindEvents(page) {
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
   page.querySelector('#btn-reset-session').addEventListener('click', () => resetCurrentSession())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))
+
   _workspaceBtn?.addEventListener('click', async (e) => {
     e.stopPropagation()
     if (getWorkspacePanelOpen() && _workspaceDirty) {
@@ -525,11 +542,10 @@ function bindEvents(page) {
   _workspacePreviewBtn?.addEventListener('click', () => toggleWorkspacePreview())
   _workspaceSaveBtn?.addEventListener('click', () => saveWorkspaceCurrentFile())
 
-  // 文件上传
+  // 鏂囦欢涓婁紶
   page.querySelector('#chat-attach-btn').addEventListener('click', () => _fileInputEl.click())
   _fileInputEl.addEventListener('change', handleFileSelect)
-  // 粘贴图片（Ctrl+V）
-  _textarea.addEventListener('paste', handlePaste)
+  // 绮樿创鍥剧墖锛圕trl+V锛?  _textarea.addEventListener('paste', handlePaste)
 
   _messagesEl.addEventListener('scroll', () => {
     const { scrollTop, scrollHeight, clientHeight } = _messagesEl
@@ -574,7 +590,6 @@ function bindEvents(page) {
 
 async function loadModelOptions(showToast = false) {
   if (!_modelSelectEl) return
-  // 显示加载状态
   _modelSelectEl.innerHTML = `<option value="">${t('chat.loadingModels')}</option>`
   _modelSelectEl.disabled = true
   try {
@@ -582,29 +597,44 @@ async function loadModelOptions(showToast = false) {
     const configPromise = api.readOpenclawConfig()
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout(8s)')), 8000))
     const config = await Promise.race([configPromise, timeoutPromise])
+    _primaryModel = config?.agents?.defaults?.model?.primary || config?.agents?.defaults?.model || ''
+    const allowlist = config?.agents?.defaults?.models || {}
     const providers = config?.models?.providers || {}
-    _primaryModel = config?.agents?.defaults?.model?.primary || ''
     const models = []
     const seen = new Set()
-    if (_primaryModel) {
-      seen.add(_primaryModel)
-      models.push(_primaryModel)
+
+    const pushModel = (full, label = '') => {
+      if (!full || seen.has(full)) return
+      seen.add(full)
+      models.push({ full, label })
     }
+
+    // 1) 浼樺厛鏀跺綍褰撳墠鐢熸晥鐨?primary + allowlist
+    pushModel(_primaryModel, 'primary')
+    if (allowlist && typeof allowlist === 'object') {
+      for (const key of Object.keys(allowlist)) pushModel(key, 'allowlist')
+    }
+
+    // 2) 褰撳墠閰嶇疆涓槑纭垪鍑虹殑 providers.models
     for (const [providerKey, provider] of Object.entries(providers)) {
-      for (const item of (provider?.models || [])) {
+      const providerModels = provider?.models || []
+      for (const item of providerModels) {
         const modelId = typeof item === 'string' ? item : item?.id
         if (!modelId) continue
-        const full = `${providerKey}/${modelId}`
-        if (seen.has(full)) continue
-        seen.add(full)
-        models.push(full)
+        pushModel(`${providerKey}/${modelId}`, 'provider')
       }
     }
-    _availableModels = models
+
+    // 3) 濡傛灉褰撳墠浼氳瘽宸查€夋ā鍨嬩笉鍦ㄥ垪琛紝琛ヨ繘鏉ワ紝閬垮厤鍒囨崲鍚庘€滀涪澶扁€?    if (_selectedModel) pushModel(_selectedModel, 'current')
+
+    _availableModels = models.map(m => m.full)
     const saved = localStorage.getItem(STORAGE_MODEL_KEY) || ''
-    _selectedModel = models.includes(saved) ? saved : (_primaryModel || models[0] || '')
+    _selectedModel = _availableModels.includes(saved) ? saved : (_primaryModel || _availableModels[0] || '')
+    if (_isApplyingModel && _selectedModel) {
+      rememberSelectedModel(_selectedModel)
+    }
     renderModelSelect()
-    if (showToast) toast(`${t('chat.refreshModels')} (${models.length})`, 'success')
+    if (showToast) toast(`${t('chat.refreshModels')} (${_availableModels.length})`, 'success')
   } catch (e) {
     _availableModels = []
     _primaryModel = ''
@@ -624,8 +654,12 @@ function renderModelSelect(errorText = '') {
   }
   _modelSelectEl.disabled = _isApplyingModel
   _modelSelectEl.innerHTML = _availableModels.map(full => {
-    const suffix = full === _primaryModel ? ` ${t('chat.defaultSuffix')}` : ''
-    return `<option value="${escapeAttr(full)}" ${full === _selectedModel ? 'selected' : ''}>${full}${suffix}</option>`
+    const isPrimary = full === _primaryModel
+    const isCurrent = full === _selectedModel
+    const suffix = [isPrimary ? t('chat.defaultSuffix') : '', isCurrent && !isPrimary ? t('chat.currentSuffix') : '']
+      .filter(Boolean)
+      .join(' ')
+    return `<option value="${escapeAttr(full)}" ${full === _selectedModel ? 'selected' : ''}>${full}${suffix ? ' ' + suffix : ''}</option>`
   }).join('')
   _modelSelectEl.title = _selectedModel || ''
 }
@@ -634,7 +668,7 @@ function escapeAttr(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** 本地会话别名缓存 */
+/** 鏈湴浼氳瘽鍒悕缂撳瓨 */
 function getSessionNames() {
   try { return JSON.parse(localStorage.getItem(STORAGE_SESSION_NAMES_KEY) || '{}') } catch { return {} }
 }
@@ -987,7 +1021,7 @@ async function openWorkspaceFile(relativePath, options = {}) {
     if (typeof file.size === 'number') metaParts.push(formatWorkspaceFileSize(file.size))
     const timeText = formatWorkspaceFileTime(file.mtime)
     if (timeText) metaParts.push(timeText)
-    if (_workspaceMetaEl) _workspaceMetaEl.textContent = metaParts.join(' · ')
+    if (_workspaceMetaEl) _workspaceMetaEl.textContent = metaParts.join(' 路 ')
 
     renderWorkspaceCoreFiles()
     renderWorkspaceTree()
@@ -1043,12 +1077,22 @@ async function applySelectedModel() {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
+  if (_isApplyingModel) return
   _isApplyingModel = true
+  const previousModel = _selectedModel
   renderModelSelect()
   try {
-    await wsClient.chatSend(_sessionKey, `/model ${_selectedModel}`)
-    toast(`${_selectedModel}`, 'success')
+    const before = await readCurrentSessionModel(_sessionKey).catch(() => '')
+    const targetModel = _selectedModel
+    await wsClient.chatSend(_sessionKey, `/model ${targetModel}`)
+    const confirmed = await waitForSessionModel(_sessionKey, targetModel, before, 10000)
+    if (!confirmed) {
+      toast(`${targetModel}（已发送，等待会话确认）`, 'warning')
+    } else {
+      toast(`${targetModel}`, 'success')
+    }
   } catch (e) {
+    _selectedModel = previousModel
     toast(`${t('chat.sendFailed')}${e.message || e}`, 'error')
   } finally {
     _isApplyingModel = false
@@ -1056,7 +1100,32 @@ async function applySelectedModel() {
   }
 }
 
-// ── 连接引导遮罩 ──
+async function readCurrentSessionModel(sessionKey) {
+  try {
+    const rows = await wsClient.sessionsList(200)
+    const session = (rows || []).find(s => s?.sessionKey === sessionKey || s?.key === sessionKey || s?.id === sessionKey)
+    return session?.model || ''
+  } catch {
+    return ''
+  }
+}
+
+async function waitForSessionModel(sessionKey, expectedModel, beforeModel = '', timeoutMs = 10000) {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const current = await readCurrentSessionModel(sessionKey)
+    if (current && current === expectedModel) {
+      return true
+    }
+    if (current && current !== beforeModel && current !== expectedModel) {
+      // 鍙戠敓浜嗗疄闄呭垏鎹紝浣嗕笉鏄洰鏍囨ā鍨嬶紝浠嶈涓洪渶瑕佺敤鎴锋敞鎰?      return false
+    }
+    await new Promise(resolve => setTimeout(resolve, 800))
+  }
+  return false
+}
+
+// 鈹€鈹€ 杩炴帴寮曞閬僵 鈹€鈹€
 
 function bindConnectOverlay(page) {
   const fixBtn = page.querySelector('#btn-fix-connect')
@@ -1072,7 +1141,7 @@ function bindConnectOverlay(page) {
         await api.autoPairDevice()
         await api.reloadGateway()
         if (desc) desc.textContent = t('chat.fixDoneReconnecting')
-        // 断开旧连接，重新发起
+        // 鏂紑鏃ц繛鎺ワ紝閲嶆柊鍙戣捣
         wsClient.disconnect()
         setTimeout(() => connectGateway(), 3000)
       } catch (e) {
@@ -1089,7 +1158,7 @@ function bindConnectOverlay(page) {
   }
 }
 
-// ── 文件上传 ──
+// 鈹€鈹€ 鏂囦欢涓婁紶 鈹€鈹€
 
 async function handleFileSelect(e) {
   const files = Array.from(e.target.files || [])
@@ -1162,7 +1231,7 @@ function renderAttachments() {
   _attachPreviewEl.innerHTML = _attachments.map((att, idx) => `
     <div class="chat-attachment-item">
       <img src="data:${att.mimeType};base64,${att.content}" alt="${att.fileName}">
-      <button class="chat-attachment-del" data-idx="${idx}">×</button>
+      <button class="chat-attachment-del" data-idx="${idx}">脳</button>
     </div>
   `).join('')
 
@@ -1176,7 +1245,7 @@ function renderAttachments() {
   updateSendState()
 }
 
-// ── Gateway 连接 ──
+// 鈹€鈹€ Gateway 杩炴帴 鈹€鈹€
 
 async function connectGateway() {
   try {
@@ -1196,7 +1265,7 @@ async function connectGateway() {
         _hasEverConnected = true
         if (bar) bar.style.display = 'none'
         if (overlay) overlay.style.display = 'none'
-        // WS 已连接，主动刷新 Gateway 状态以消除顶部横条延迟
+        // WS 宸茶繛鎺ワ紝涓诲姩鍒锋柊 Gateway 鐘舵€佷互娑堥櫎椤堕儴妯潯寤惰繜
         import('../lib/app-state.js').then(m => m.refreshGatewayStatus()).catch(() => {})
       } else if (status === 'error') {
         // 连接错误：显示引导遮罩而非底部条
@@ -1206,7 +1275,7 @@ async function connectGateway() {
           if (desc) desc.textContent = errorMsg || t('chat.connectFailed')
         }
       } else if (status === 'reconnecting' || status === 'disconnected') {
-        // 首次连接或多次重连失败时，显示引导遮罩而非底部小条
+        // 棣栨杩炴帴鎴栧娆￠噸杩炲け璐ユ椂锛屾樉绀哄紩瀵奸伄缃╄€岄潪搴曢儴灏忔潯
         if (!_hasEverConnected) {
           if (overlay) { overlay.style.display = 'flex'; if (desc) desc.textContent = t('chat.connectingGateway') }
         } else {
@@ -1253,14 +1322,14 @@ async function connectGateway() {
       const saved = localStorage.getItem(STORAGE_SESSION_KEY)
       _sessionKey = saved || wsClient.sessionKey
       updateStatusDot('ready')
-      showTyping(false)  // 确保关闭加载动画
+      showTyping(false)  // 纭繚鍏抽棴鍔犺浇鍔ㄧ敾
       updateSessionTitle()
       loadHistory()
       refreshSessionList()
       return
     }
 
-    // 如果正在连接中（重连等），等待 onReady 回调即可
+    // 濡傛灉姝ｅ湪杩炴帴涓紙閲嶈繛绛夛級锛岀瓑寰?onReady 鍥炶皟鍗冲彲
     if (wsClient.connected || wsClient.connecting || wsClient.gatewayReady) return
 
     // 未连接，发起新连接
@@ -1274,7 +1343,7 @@ async function connectGateway() {
   }
 }
 
-// ── 会话管理 ──
+// 鈹€鈹€ 浼氳瘽绠＄悊 鈹€鈹€
 
 async function refreshSessionList() {
   if (!_sessionListEl || !wsClient.gatewayReady) return
@@ -1306,7 +1375,7 @@ function renderSessionList(sessions) {
     return `<div class="chat-session-card${active}" data-key="${escapeAttr(key)}">
       <div class="chat-session-card-header">
         <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
-        <button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>
+        <button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">脳</button>
       </div>
       <div class="chat-session-card-meta">
         ${agentId && agentId !== 'main' ? `<span class="chat-session-agent">${escapeAttr(agentId)}</span>` : ''}
@@ -1382,7 +1451,7 @@ async function switchSession(newKey, options = {}) {
 async function showNewSessionDialog() {
   const defaultAgent = wsClient.snapshot?.sessionDefaults?.defaultAgentId || 'main'
 
-  // 先用默认选项立即显示弹窗
+  // 鍏堢敤榛樿閫夐」绔嬪嵆鏄剧ず寮圭獥
   const initialOptions = [
     { value: 'main', label: `main ${t('chat.defaultSuffix')}` },
     { value: '__new__', label: `+ ${t('chat.newAgent')}` }
@@ -1409,16 +1478,16 @@ async function showNewSessionDialog() {
     }
   })
 
-  // 异步加载完整 Agent 列表并更新下拉框
+  // 寮傛鍔犺浇瀹屾暣 Agent 鍒楄〃骞舵洿鏂颁笅鎷夋
   try {
     const agents = await api.listAgents()
     const agentOptions = agents.map(a => ({
       value: a.id,
-      label: `${a.id}${a.isDefault ? ` ${t('chat.defaultSuffix')}` : ''}${a.identityName ? ' — ' + a.identityName.split(',')[0] : ''}`
+      label: `${a.id}${a.isDefault ? ` ${t('chat.defaultSuffix')}` : ''}${a.identityName ? ' 鈥?' + a.identityName.split(',')[0] : ''}`
     }))
     agentOptions.push({ value: '__new__', label: `+ ${t('chat.newAgent')}` })
 
-    // 更新弹窗中的下拉框选项
+    // 鏇存柊寮圭獥涓殑涓嬫媺妗嗛€夐」
     const selectEl = document.querySelector('.modal-overlay [data-name="agent"]')
     if (selectEl) {
       const currentValue = selectEl.value
@@ -1427,7 +1496,7 @@ async function showNewSessionDialog() {
       ).join('')
     }
   } catch (e) {
-    console.warn('[chat] 加载 Agent 列表失败:', e)
+    console.warn('[chat] 鍔犺浇 Agent 鍒楄〃澶辫触:', e)
   }
 }
 
@@ -1494,7 +1563,7 @@ function renameSession(key, labelEl) {
       setSessionName(key, '') // clear custom name
     }
     labelEl.textContent = getDisplayLabel(key)
-    // 如果是当前会话，同步更新顶部标题
+    // 濡傛灉鏄綋鍓嶄細璇濓紝鍚屾鏇存柊椤堕儴鏍囬
     if (key === _sessionKey) updateSessionTitle()
   }
   input.addEventListener('blur', finish)
@@ -1504,7 +1573,7 @@ function renameSession(key, labelEl) {
   })
 }
 
-// ── 快捷指令面板 ──
+// 鈹€鈹€ 蹇嵎鎸囦护闈㈡澘 鈹€鈹€
 
 function showCmdPanel() {
   if (!_cmdPanelEl) return
@@ -1529,7 +1598,7 @@ function showCmdPanel() {
       _textarea.focus()
       updateSendState()
     } else if (item.dataset.action === 'navigate') {
-      // 快捷指令：跳转到对应页面
+      // 蹇嵎鎸囦护锛氳烦杞埌瀵瑰簲椤甸潰
       const cmd = item.dataset.cmd
       if (cmd === '/miaogu') navigate('/miaogu-verify')
       else if (cmd === '/weiyan') navigate('/weiyan-verify')
@@ -1569,14 +1638,14 @@ function emitLobsterPhase(phase, message) {
 function injectCollabTemplate() {
   if (!_textarea) return
   _textarea.value = t('chat.collabTemplate')
-  emitLobsterPhase('thinking', '准备协同任务模板')
+  emitLobsterPhase('thinking', '鍑嗗鍗忓悓浠诲姟妯℃澘')
   _textarea.focus()
   _textarea.style.height = 'auto'
   _textarea.style.height = Math.min(_textarea.scrollHeight, 150) + 'px'
   updateSendState()
 }
 
-// ── 消息发送 ──
+// 鈹€鈹€ 娑堟伅鍙戦€?鈹€鈹€
 
 function sendMessage() {
   const text = _textarea.value.trim()
@@ -1587,6 +1656,7 @@ function sendMessage() {
     return
   }
   hideCmdPanel()
+  updateStreamingStatus('queued')
   _textarea.value = ''
   _textarea.style.height = 'auto'
   updateSendState()
@@ -1608,7 +1678,7 @@ async function doSend(text, attachments = []) {
     id: uuid(), sessionKey: _sessionKey, role: 'user', content: text, timestamp: Date.now(),
     attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
   })
-  showTyping(true)
+  showTyping(true, CHAT_REPLY_STATUS_TEXT.sending)
   _isSending = true
   updateSendState()
   updateStreamingStatus('sending')
@@ -1621,9 +1691,9 @@ async function doSend(text, attachments = []) {
     appendSystemMessage(`${t('chat.sendFailed')}${err.message}`)
   } finally {
     _isSending = false
-    if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
+    if (_messageQueue.length === 0 && !_isStreaming) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
-    updateStreamingStatus('waiting')
+    if (_messageQueue.length === 0 && !_isStreaming) updateStreamingStatus('waiting')
   }
 }
 
@@ -1636,9 +1706,12 @@ function processMessageQueue() {
 
 function stopGeneration() {
   if (_currentRunId) wsClient.chatAbort(_sessionKey, _currentRunId).catch(() => {})
+  _replyStatusState = 'waiting'
+  _replyStatusDetail = ''
+  clearReplyStatusPersisted()
 }
 
-// ── 事件处理（参照 clawapp 实现） ──
+// 鈹€鈹€ 浜嬩欢澶勭悊锛堝弬鐓?clawapp 瀹炵幇锛?鈹€鈹€
 
 function handleEvent(msg) {
   const { event, payload } = msg
@@ -1662,7 +1735,6 @@ function handleEvent(msg) {
       if (!list.includes(toolCallId)) list.push(toolCallId)
       _toolRunIndex.set(payload.runId, list)
     }
-    // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
     if (toolName && !_isStreaming) {
       emitLobsterPhase('tool', `调用工具：${toolName}`)
@@ -1673,10 +1745,9 @@ function handleEvent(msg) {
 
   if (event === 'chat') handleChatEvent(payload)
 
-  // Compaction 状态指示：上游 2026.3.12 新增 status_reaction 事件
   if (event === 'chat.status_reaction' || event === 'status_reaction') {
     const reaction = payload.reaction || payload.emoji || ''
-    if (reaction.includes('compact') || reaction === '🗜️' || reaction === '📦') {
+    if (reaction.includes('compact') || reaction === '🧠' || reaction === '📦') {
       showCompactionHint(true)
     } else if (!reaction || reaction === 'thinking' || reaction === '💭') {
       showCompactionHint(false)
@@ -1685,19 +1756,17 @@ function handleEvent(msg) {
 }
 
 function handleChatEvent(payload) {
-  // sessionKey 过滤
   if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) return
 
   const { state } = payload
   const runId = payload.runId
 
-  // 重复 run 过滤：跳过已完成的 runId 的后续事件（Gateway 可能对同一消息触发多个 run）
   if (runId && state === 'final' && _seenRunIds.has(runId)) {
-    console.log('[chat] 跳过重复 final, runId:', runId)
+    console.log('[chat] skip duplicate final, runId:', runId)
     return
   }
   if (runId && state === 'delta' && _seenRunIds.has(runId) && !_isStreaming) {
-    console.log('[chat] 跳过已完成 run 的 delta, runId:', runId)
+    console.log('[chat] skip finished run delta, runId:', runId)
     return
   }
 
@@ -1721,11 +1790,10 @@ function handleChatEvent(payload) {
       }
       _currentAiText = c.text
       updateStreamingStatus('thinking')
-      // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
       clearTimeout(_streamSafetyTimer)
       _streamSafetyTimer = setTimeout(() => {
         if (_isStreaming) {
-          console.warn('[chat] 流式输出超时（90s 无新数据），强制结束')
+          console.warn('[chat] stream timeout, force end')
           if (_currentAiBubble && _currentAiText) {
             _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
           }
@@ -1757,10 +1825,8 @@ function handleChatEvent(payload) {
     if (finalAudios.length) _currentAiAudios = finalAudios
     if (finalFiles.length) _currentAiFiles = finalFiles
     if (finalTools.length) _currentAiTools = finalTools
-    const hasContent = finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length
-    // 忽略空 final（Gateway 会为一条消息触发多个 run，部分是空 final）
+    const hasContent = !!(finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length)
     if (!_currentAiBubble && !hasContent) return
-    // 标记 runId 为已处理，防止重复
     if (runId) {
       _seenRunIds.add(runId)
       if (_seenRunIds.size > 200) {
@@ -1769,7 +1835,6 @@ function handleChatEvent(payload) {
       }
     }
     showTyping(false)
-    // 如果流式阶段没有创建 bubble，从 final message 中提取
     if (!_currentAiBubble && hasContent) {
       _currentAiBubble = createStreamBubble()
       _currentAiText = finalText
@@ -1783,21 +1848,18 @@ function handleChatEvent(payload) {
       appendFilesToEl(_currentAiBubble, _currentAiFiles)
       appendToolsToEl(_currentAiBubble, finalTools.length ? finalTools : _currentAiTools)
     }
-    // 添加时间戳 + 耗时 + token 消耗
     const wrapper = _currentAiBubble?.parentElement
     if (wrapper) {
       const meta = document.createElement('div')
       meta.className = 'msg-meta'
       let parts = [`<span class="msg-time">${formatTime(new Date())}</span>`]
-      // 计算响应耗时
       let durStr = ''
       if (payload.durationMs) {
         durStr = (payload.durationMs / 1000).toFixed(1) + 's'
       } else if (_streamStartTime) {
         durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
-      if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
-      // token 消耗（从 payload.usage 或 payload.message.usage 提取）
+      if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱${durStr}</span>`)
       const usage = payload.usage || payload.message?.usage || null
       if (usage) {
         const inp = usage.input_tokens || usage.prompt_tokens || 0
@@ -1805,7 +1867,7 @@ function handleChatEvent(payload) {
         const total = usage.total_tokens || (inp + out)
         if (total > 0) {
           let tokenStr = `${total} tokens`
-          if (inp && out) tokenStr = `↑${inp} ↓${out}`
+          if (inp && out) tokenStr = `${inp} → ${out}`
           parts.push(`<span class="meta-sep">·</span><span class="msg-tokens">${tokenStr}</span>`)
         }
       }
@@ -1821,7 +1883,6 @@ function handleChatEvent(payload) {
         attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
       })
     }
-    // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
     if (shouldCaptureHostedTarget(payload)) {
       const capturedText = finalText || _currentAiText || ''
       if (capturedText) {
@@ -1853,10 +1914,8 @@ function handleChatEvent(payload) {
 
   if (state === 'error') {
     const errMsg = payload.errorMessage || payload.error?.message || t('common.error')
-
-    // 连接级错误（origin/pairing/auth）拦截，不作为聊天消息显示
     if (/origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|auth.*fail/i.test(errMsg)) {
-      console.warn('[chat] 拦截连接级错误，不显示为聊天消息:', errMsg)
+      console.warn('[chat] connection rejected:', errMsg)
       const overlay = document.getElementById('chat-connect-overlay')
       if (overlay) {
         overlay.style.display = 'flex'
@@ -1866,18 +1925,16 @@ function handleChatEvent(payload) {
       return
     }
 
-    // 防抖：如果是相同错误且在 2 秒内，忽略（避免重复显示）
     const now = Date.now()
     if (_lastErrorMsg === errMsg && _errorTimer && (now - _errorTimer < 2000)) {
-      console.warn('[chat] 忽略重复错误:', errMsg)
+      console.warn('[chat] ignore duplicate error:', errMsg)
       return
     }
     _lastErrorMsg = errMsg
     _errorTimer = now
 
-    // 如果正在流式输出，说明消息已经部分成功，不显示错误
     if (_isStreaming || _currentAiBubble) {
-      console.warn('[chat] 流式中收到错误，但消息已部分成功，忽略错误提示:', errMsg)
+      console.warn('[chat] stream already has partial success, skip error notice:', errMsg)
       return
     }
 
@@ -1889,8 +1946,7 @@ function handleChatEvent(payload) {
     return
   }
 }
-
-/** 从 Gateway message 对象提取文本和所有媒体（参照 clawapp extractContent） */
+/** 浠?Gateway message 瀵硅薄鎻愬彇鏂囨湰鍜屾墍鏈夊獟浣擄紙鍙傜収 clawapp extractContent锛?*/
 function extractChatContent(message) {
   if (!message || typeof message !== 'object') return null
   const tools = []
@@ -1961,7 +2017,7 @@ function extractChatContent(message) {
         if (typeof t.output === 'string') t.output = stripAnsi(t.output)
       })
     }
-    // 从 mediaUrl/mediaUrls 提取
+    // 浠?mediaUrl/mediaUrls 鎻愬彇
     const mediaUrls = message.mediaUrls || (message.mediaUrl ? [message.mediaUrl] : [])
     for (const url of mediaUrls) {
       if (!url) continue
@@ -2060,7 +2116,7 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-/** 创建流式 AI 气泡 */
+/** 鍒涘缓娴佸紡 AI 姘旀场 */
 function createStreamBubble() {
   if (!_messagesEl || !_typingEl) return null
   showTyping(false)
@@ -2070,33 +2126,88 @@ function createStreamBubble() {
   bubble.className = 'msg-bubble'
   bubble.innerHTML = '<span class="stream-cursor"></span>'
   wrap.appendChild(bubble)
-  const status = document.createElement('div')
-  status.className = 'chat-reply-status chat-reply-status-live'
-  status.id = CHAT_REPLY_STATUS_ID
-  status.textContent = CHAT_REPLY_STATUS_TEXT.waiting
+  let status = document.getElementById(CHAT_REPLY_STATUS_ID)
+  if (!status) {
+    status = document.createElement('div')
+    status.className = 'chat-reply-status chat-reply-status-live'
+    status.id = CHAT_REPLY_STATUS_ID
+  }
+  status.textContent = _replyStatusDetail || CHAT_REPLY_STATUS_TEXT[_replyStatusState] || CHAT_REPLY_STATUS_TEXT.waiting
+  status.dataset.state = _replyStatusState
   wrap.appendChild(status)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
   return bubble
 }
 
-function updateStreamingStatus(state, detail = '') {
-  if (!_messagesEl) return
+function persistReplyStatus() {
+  try {
+    sessionStorage.setItem(CHAT_REPLY_STATUS_STORAGE_KEY, JSON.stringify({
+      state: _replyStatusState,
+      detail: _replyStatusDetail,
+      isSending: _isSending,
+      isStreaming: _isStreaming,
+      sessionKey: _sessionKey,
+      ts: Date.now(),
+    }))
+  } catch {}
+}
+
+function clearReplyStatusPersisted() {
+  try { sessionStorage.removeItem(CHAT_REPLY_STATUS_STORAGE_KEY) } catch {}
+}
+
+function restorePersistedReplyStatus() {
+  try {
+    const raw = sessionStorage.getItem(CHAT_REPLY_STATUS_STORAGE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || (data.sessionKey && _sessionKey && data.sessionKey !== _sessionKey)) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function ensureReplyStatusEl() {
+  if (!_messagesEl || !_typingEl) return null
   let status = document.getElementById(CHAT_REPLY_STATUS_ID)
-  if (!status && (_currentAiBubble?.parentElement || _isStreaming || _isSending)) {
-    const wrap = _currentAiBubble?.parentElement
-    if (!wrap) return
+  if (!status) {
     status = document.createElement('div')
     status.className = 'chat-reply-status chat-reply-status-live'
     status.id = CHAT_REPLY_STATUS_ID
-    wrap.appendChild(status)
+    const wrap = _currentAiBubble?.parentElement
+    if (wrap) wrap.appendChild(status)
+    else _messagesEl.insertBefore(status, _typingEl)
   }
-  if (!status) return
-  status.dataset.state = state
-  status.textContent = detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting
+  return status
 }
 
-// ── 流式渲染（节流） ──
+function updateStreamingStatus(state, detail = '') {
+  _replyStatusState = state || 'waiting'
+  _replyStatusDetail = detail || ''
+  persistReplyStatus()
+  const status = ensureReplyStatusEl()
+  if (!status) return
+  status.dataset.state = _replyStatusState
+  status.textContent = _replyStatusDetail || CHAT_REPLY_STATUS_TEXT[_replyStatusState] || CHAT_REPLY_STATUS_TEXT.waiting
+}
+
+function restoreReplyStatus() {
+  const persisted = restorePersistedReplyStatus()
+  if (persisted) {
+    _replyStatusState = persisted.state || _replyStatusState
+    _replyStatusDetail = persisted.detail || _replyStatusDetail
+    _isSending = !!persisted.isSending
+    _isStreaming = !!persisted.isStreaming
+  }
+  if (!_messagesEl) return
+  if (_isSending) updateStreamingStatus(_replyStatusState || 'sending', _replyStatusDetail)
+  else if (_isStreaming) updateStreamingStatus(_replyStatusState || 'streaming', _replyStatusDetail)
+  else if (_replyStatusState && _replyStatusState !== 'waiting') updateStreamingStatus(_replyStatusState, _replyStatusDetail)
+}
+
+// 鈹€鈹€ 娴佸紡娓叉煋锛堣妭娴侊級 鈹€鈹€
 
 function throttledRender() {
   if (_renderPending) return
@@ -2117,23 +2228,20 @@ function doRender() {
   }
 }
 
-// ── 响应看门狗：防止页面卡在等待状态 ──
+// 响应看门狗：防止页面卡在等待状态
 
 function _startResponseWatchdog() {
   _cancelResponseWatchdog()
   _responseWatchdog = setTimeout(async () => {
     _responseWatchdog = null
-    // 如果还在等待（未开始流式），强制刷新历史
     if (!_isStreaming && _sessionKey && _messagesEl && _pageActive) {
-      console.log('[chat] 响应看门狗触发：15s 无 delta，刷新历史')
+      console.log('[chat] response watchdog triggered: 15s no delta, refresh history')
       const oldHash = _lastHistoryHash
       _lastHistoryHash = ''
       await loadHistory()
-      // 如果历史有更新，关闭 typing 指示器
       if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
         showTyping(false)
       } else {
-        // 历史没更新，继续等待，再设一轮看门狗
         _startResponseWatchdog()
       }
     }
@@ -2156,7 +2264,7 @@ function _schedulePostFinalCheck() {
   }, 2000)
 }
 
-// ensureAiBubble 已被 createStreamBubble 替代
+// ensureAiBubble 宸茶 createStreamBubble 鏇夸唬
 
 function resetStreamState() {
   clearTimeout(_streamSafetyTimer)
@@ -2186,7 +2294,7 @@ function resetStreamState() {
   updateSendState()
 }
 
-// ── 历史消息加载 ──
+// 鈹€鈹€ 鍘嗗彶娑堟伅鍔犺浇 鈹€鈹€
 
 async function loadHistory() {
   if (!_sessionKey || !_messagesEl) return
@@ -2256,7 +2364,7 @@ async function loadHistory() {
       const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
       return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now() }
     }))
-    scrollToBottom()
+    restoreReplyStatus()
   } catch (e) {
     console.error('[chat] loadHistory error:', e)
     if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${e.message}`)
@@ -2280,10 +2388,9 @@ function dedupeHistory(messages) {
     if (last && last.role === role) {
       if (role === 'user' && last.text === c.text) continue
       if (role === 'assistant') {
-        // 同文本去重（Gateway 重试产生的重复回复）
+        // 鍚屾枃鏈幓閲嶏紙Gateway 閲嶈瘯浜х敓鐨勯噸澶嶅洖澶嶏級
         if (c.text && last.text === c.text) continue
-        // 不同文本则合并
-        last.text = [last.text, c.text].filter(Boolean).join('\n')
+        // 涓嶅悓鏂囨湰鍒欏悎骞?        last.text = [last.text, c.text].filter(Boolean).join('\n')
         last.images = [...(last.images || []), ...c.images]
         last.videos = [...(last.videos || []), ...c.videos]
         last.audios = [...(last.audios || []), ...c.audios]
@@ -2380,7 +2487,7 @@ function extractContent(msg) {
   return { text: stripThinkingTags(text), images: [], videos: [], audios: [], files: [], tools }
 }
 
-// ── DOM 操作 ──
+// 鈹€鈹€ DOM 鎿嶄綔 鈹€鈹€
 
 function appendUserMessage(text, attachments = [], msgTime) {
   const wrap = document.createElement('div')
@@ -2457,7 +2564,7 @@ function appendAiMessage(text, msgTime, images, videos, audios, files, tools) {
   appendVideosToEl(bubble, videos)
   appendAudiosToEl(bubble, audios)
   appendFilesToEl(bubble, files)
-  // 图片点击灯箱
+  // 鍥剧墖鐐瑰嚮鐏
   bubble.querySelectorAll('img').forEach(img => { if (!img.onclick) img.onclick = () => showLightbox(img.src) })
 
   const meta = document.createElement('div')
@@ -2470,23 +2577,23 @@ function appendAiMessage(text, msgTime, images, videos, audios, files, tools) {
   scrollToBottom()
 }
 
-/** 渲染图片到消息气泡（支持 Anthropic/OpenAI/直接格式） */
+/** 娓叉煋鍥剧墖鍒版秷鎭皵娉★紙鏀寔 Anthropic/OpenAI/鐩存帴鏍煎紡锛?*/
 function appendImagesToEl(el, images) {
   if (!images?.length) return
   const container = document.createElement('div')
   container.style.cssText = 'display:flex;gap:6px;margin-top:8px;flex-wrap:wrap'
   images.forEach(img => {
     const imgEl = document.createElement('img')
-    // Anthropic 格式: { type: 'image', source: { data, media_type } }
+    // Anthropic 鏍煎紡: { type: 'image', source: { data, media_type } }
     if (img.source?.data) {
       imgEl.src = `data:${img.source.media_type || 'image/png'};base64,${img.source.data}`
-    // 直接格式: { data, mediaType }
+    // 鐩存帴鏍煎紡: { data, mediaType }
     } else if (img.data) {
       imgEl.src = `data:${img.mediaType || img.media_type || 'image/png'};base64,${img.data}`
-    // OpenAI 格式: { type: 'image_url', image_url: { url } }
+    // OpenAI 鏍煎紡: { type: 'image_url', image_url: { url } }
     } else if (img.image_url?.url) {
       imgEl.src = img.image_url.url
-    // URL 格式
+    // URL 鏍煎紡
     } else if (img.url) {
       imgEl.src = img.url
     } else {
@@ -2499,7 +2606,7 @@ function appendImagesToEl(el, images) {
   if (container.children.length) el.appendChild(container)
 }
 
-/** 渲染视频到消息气泡 */
+/** 娓叉煋瑙嗛鍒版秷鎭皵娉?*/
 function appendVideosToEl(el, videos) {
   if (!videos?.length) return
   videos.forEach(vid => {
@@ -2514,7 +2621,7 @@ function appendVideosToEl(el, videos) {
   })
 }
 
-/** 渲染音频到消息气泡 */
+/** 娓叉煋闊抽鍒版秷鎭皵娉?*/
 function appendAudiosToEl(el, audios) {
   if (!audios?.length) return
   audios.forEach(aud => {
@@ -2528,7 +2635,7 @@ function appendAudiosToEl(el, audios) {
   })
 }
 
-/** 渲染文件卡片到消息气泡 */
+/** 娓叉煋鏂囦欢鍗＄墖鍒版秷鎭皵娉?*/
 function appendFilesToEl(el, files) {
   if (!files?.length) return
   files.forEach(f => {
@@ -2620,7 +2727,7 @@ function collectToolsFromMessage(message, tools) {
   }
 }
 
-/** 渲染工具调用到消息气泡 */
+/** 娓叉煋宸ュ叿璋冪敤鍒版秷鎭皵娉?*/
 function appendToolsToEl(el, tools) {
   if (!el) return
   const existing = el.querySelector?.('.msg-tool')
@@ -2637,7 +2744,7 @@ function appendToolsToEl(el, tools) {
     const status = tool.status === 'error' ? t('chat.toolFailed') : t('chat.toolSuccess')
     const timeValue = getToolTime(tool) || resolveToolTime(tool.id || tool.tool_call_id, tool.messageTimestamp)
     const timeText = timeValue ? formatTime(new Date(timeValue)) : ''
-    summary.innerHTML = `${escapeHtml(tool.name || 'tool')} · ${status}${timeText ? ' · ' + timeText : ''}`
+    summary.innerHTML = `${escapeHtml(tool.name || 'tool')} 路 ${status}${timeText ? ' 路 ' + timeText : ''}`
     const body = document.createElement('div')
     body.className = 'msg-tool-body'
     const inputJson = stripAnsi(safeStringify(tool.input))
@@ -2652,7 +2759,7 @@ function appendToolsToEl(el, tools) {
   el.insertBefore(container, el.firstChild)
 }
 
-/** 图片灯箱查看 */
+/** 鍥剧墖鐏鏌ョ湅 */
 function showLightbox(src) {
   const existing = document.querySelector('.chat-lightbox')
   if (existing) existing.remove()
@@ -2661,7 +2768,7 @@ function showLightbox(src) {
   lb.innerHTML = `<img src="${src}" class="chat-lightbox-img" />`
   lb.onclick = (e) => { if (e.target === lb || e.target.tagName !== 'IMG') lb.remove() }
   document.body.appendChild(lb)
-  // ESC 关闭
+  // ESC 鍏抽棴
   const onKey = (e) => { if (e.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', onKey) } }
   document.addEventListener('keydown', onKey)
 }
@@ -2683,18 +2790,13 @@ function clearMessages() {
 function showTyping(show, hint) {
   if (_typingEl) {
     _typingEl.style.display = show ? 'flex' : 'none'
-    // 更新提示文字（如工具调用状态）
     const hintEl = _typingEl.querySelector('.typing-hint')
     if (hintEl) hintEl.textContent = hint || (show ? (t('chat.thinking') || 'OpenClaw 正在思考…') : '')
   }
-  if (show && (_currentAiBubble?.parentElement) && !document.getElementById(CHAT_REPLY_STATUS_ID)) {
-    const status = document.createElement('div')
-    status.className = 'chat-reply-status chat-reply-status-live'
-    status.id = CHAT_REPLY_STATUS_ID
-    status.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
-    _currentAiBubble.parentElement.appendChild(status)
+  if (show) {
+    updateStreamingStatus(_replyStatusState === 'waiting' ? 'thinking' : _replyStatusState, hint || _replyStatusDetail)
+    scrollToBottom()
   }
-  if (show) scrollToBottom()
 }
 
 function showCompactionHint(show) {
@@ -2703,7 +2805,7 @@ function showCompactionHint(show) {
     hint = document.createElement('div')
     hint.id = 'compaction-hint'
     hint.className = 'msg msg-system compaction-hint'
-    hint.innerHTML = `🗜️ ${t('chat.compacting')}`
+    hint.innerHTML = `馃棞锔?${t('chat.compacting')}`
     _messagesEl.insertBefore(hint, _typingEl)
     scrollToBottom()
   } else if (!show && hint) {
@@ -2743,7 +2845,7 @@ function updateStatusDot(status) {
   else _statusDot.classList.add('offline')
 }
 
-// ── 托管 Agent 核心逻辑 ──
+// 鈹€鈹€ 鎵樼 Agent 鏍稿績閫昏緫 鈹€鈹€
 
 function toggleHostedPanel() {
   if (!_hostedPanelEl) return
@@ -2825,24 +2927,23 @@ function renderHostedPanel() {
   if (timerToggle) { timerToggle.checked = (_hostedSessionConfig.autoStopMinutes || 0) > 0; timerToggle.disabled = isRunning }
   if (timerBody) timerBody.style.display = timerToggle?.checked ? '' : 'none'
   if (_hostedSaveBtn) {
-    _hostedSaveBtn.textContent = isRunning ? `⏹ ${t('chat.stopHosted')}` : `▶ ${t('chat.startHosted')}`
+    _hostedSaveBtn.textContent = isRunning ? `鈴?${t('chat.stopHosted')}` : `鈻?${t('chat.startHosted')}`
     _hostedSaveBtn.className = isRunning ? 'btn btn-ghost' : 'btn btn-primary'
     _hostedSaveBtn.style.flex = '1'
   }
-  // 主按钮同时作为停止按钮，无需额外 stop btn
-  // 状态栏
+  // 涓绘寜閽悓鏃朵綔涓哄仠姝㈡寜閽紝鏃犻渶棰濆 stop btn
+  // 鐘舵€佹爮
   const statusEl = _hostedPanelEl.querySelector('#hosted-agent-status')
   if (statusEl) {
     let msg = t('chat.ready')
     if (_hostedRuntime.lastError) msg = `${t('chat.errorPrefix')}${_hostedRuntime.lastError}`
     else if (isRunning) {
       const remaining = Math.max(0, _hostedSessionConfig.maxSteps - _hostedRuntime.stepCount)
-      msg = `${t('chat.hostedRunning')} · ${t('chat.remaining')} ${remaining}`
+      msg = `${t('chat.hostedRunning')} 路 ${t('chat.remaining')} ${remaining}`
     }
     statusEl.textContent = msg
   }
-  // 倒计时
-  updateCountdown()
+  // 鍊掕鏃?  updateCountdown()
 }
 
 function updateCountdown() {
@@ -2899,7 +3000,7 @@ async function startHostedAgent() {
   persistHostedRuntime()
   renderHostedPanel()
   updateHostedBadge()
-  // 启动定时停止
+  // 鍚姩瀹氭椂鍋滄
   clearTimeout(_hostedAutoStopTimer)
   if (autoStopMinutes > 0) {
     _hostedAutoStopTimer = setTimeout(() => {
@@ -2990,7 +3091,7 @@ function buildHostedMessages() {
 
 function detectStopFromText(text) {
   if (!text) return false
-  return /\b(完成|无需继续|结束|停止|done|stop|final)\b/i.test(text)
+  return /\b(瀹屾垚|鏃犻渶缁х画|缁撴潫|鍋滄|done|stop|final)\b/i.test(text)
 }
 
 async function runHostedAgentStep() {
@@ -3038,13 +3139,13 @@ async function runHostedAgentStep() {
     persistHostedRuntime()
     appendHostedOutput(resultText + ` | step=${_hostedRuntime.stepCount}`)
 
-    // 如果 AI 回复中有「执行命令」类内容，通过 Gateway 发送给 Agent
+    // 濡傛灉 AI 鍥炲涓湁銆屾墽琛屽懡浠ゃ€嶇被鍐呭锛岄€氳繃 Gateway 鍙戦€佺粰 Agent
     const instruction = resultText.trim()
     if (instruction && !detectStopFromText(instruction)) {
       _hostedRuntime.status = HOSTED_STATUS.WAITING
       _hostedRuntime.pending = false
       persistHostedRuntime(); updateHostedBadge()
-      // 将指令发给 Gateway Agent
+      // 灏嗘寚浠ゅ彂缁?Gateway Agent
       try { await wsClient.chatSend(_sessionKey, instruction) } catch {}
     } else {
       _hostedRuntime.status = HOSTED_STATUS.IDLE
@@ -3072,7 +3173,7 @@ async function runHostedAgentStep() {
 async function callHostedAI(messages, onChunk) {
   let config
   try {
-    const raw = localStorage.getItem('星枢OpenClaw-assistant')
+    const raw = localStorage.getItem('鏄熸灑OpenClaw-assistant')
     const stored = raw ? JSON.parse(raw) : {}
     config = { baseUrl: stored.baseUrl || '', apiKey: stored.apiKey || '', model: stored.model || '', temperature: stored.temperature || 0.7, apiType: stored.apiType || 'openai-completions' }
   } catch { config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, apiType: 'openai-completions' } }
@@ -3174,7 +3275,7 @@ function appendHostedOutput(text) {
   scrollToBottom()
 }
 
-// ── 页面离开清理 ──
+// 鈹€鈹€ 椤甸潰绂诲紑娓呯悊 鈹€鈹€
 
 export function cleanup() {
   _pageActive = false
@@ -3253,3 +3354,4 @@ export function cleanup() {
   _workspaceLoadSeq = 0
   _workspaceOpenSeq = 0
 }
+

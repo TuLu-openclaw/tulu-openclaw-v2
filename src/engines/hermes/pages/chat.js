@@ -1979,7 +1979,8 @@ export function render() {
   // --- Global keyboard: Ctrl/Cmd+K opens search, keys navigate when open ---
   function onGlobalKey(e) {
     if (!el.isConnected) return
-    const isMac = /Mac|iPhone|iPad/i.test(navigator.platform)
+    const platformText = navigator.userAgentData?.platform || navigator.userAgent || ''
+    const isMac = /Mac|iPhone|iPad/i.test(platformText)
     const mod = isMac ? e.metaKey : e.ctrlKey
     if (mod && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault()

@@ -97,7 +97,8 @@ export function diagnoseInstallError(errStr) {
 
   // EACCES（权限不足）
   if (s.includes('eacces') || s.includes('permission denied')) {
-    const isMac = navigator.platform?.includes('Mac') || navigator.userAgent?.includes('Mac')
+    const platformText = navigator.userAgentData?.platform || navigator.userAgent || ''
+    const isMac = /Mac|Macintosh/i.test(platformText)
     return {
       title: '安装失败 — 权限不足',
       hint: isMac ? '请在终端使用 sudo 安装：' : '请以管理员身份打开 PowerShell 安装：',

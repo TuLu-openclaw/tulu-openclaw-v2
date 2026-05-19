@@ -449,8 +449,8 @@ function renderInstallSection() {
 }
 
 function renderEnvironmentHint() {
-  const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
-  const isMac = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Macintosh')
+  const isWin = !isMacPlatform() && (navigator.userAgent?.includes('Windows') || navigator.userAgent?.includes('Win'))
+  const isMac = isMacPlatform() || navigator.userAgent?.includes('Macintosh') || navigator.userAgent?.includes('Mac')
   const isDesktop = !!window.__TAURI_INTERNALS__
   if (!isDesktop) return ''
 
