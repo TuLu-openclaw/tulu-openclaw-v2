@@ -61,15 +61,20 @@ const COMMANDS = [
 
 let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
+let _replyStatusBadgeEl = null
 const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
+const CHAT_REPLY_STATUS_STORE_PREFIX = '星枢Open_chat_reply_status_'
 const CHAT_REPLY_STATUS_TEXT = {
-  queued: '已收到，正在排队…',
-  sending: 'OpenClaw 正在接收消息…',
-  thinking: 'OpenClaw 正在思考…',
-  tool: 'OpenClaw 正在调用工具…',
-  streaming: 'OpenClaw 正在回复…',
-  finalizing: 'OpenClaw 正在整理答案…',
-  waiting: 'OpenClaw 正在等待输入…',
+  queued: '✅ 已收到任务，正在进入处理队列…',
+  sending: '📨 消息已发送，OpenClaw 正在接收…',
+  thinking: '🧠 OpenClaw 正在思考，请稍候…',
+  tool: '🛠️ OpenClaw 正在调用工具处理任务…',
+  streaming: '✍️ OpenClaw 正在生成回复…',
+  finalizing: '📦 OpenClaw 正在整理最终答案…',
+  done: '✅ 回复已完成，状态已保存。',
+  waiting: '🟢 当前会话空闲，等待你的下一条指令。',
+  error: '⚠️ 处理失败，状态已保存，可切换页面后继续查看。',
+  aborted: '⏹️ 生成已停止，状态已保存。',
 }
 let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
@@ -157,6 +162,7 @@ export async function render() {
           </button>
           <span class="status-dot" id="chat-status-dot"></span>
           <span class="chat-title" id="chat-title">${t('chat.chatTitle')}</span>
+          <span class="chat-reply-status-badge" id="chat-reply-status-badge" aria-live="polite" hidden></span>
         </div>
         <div class="chat-header-actions">
           <div class="chat-model-group">
@@ -312,6 +318,7 @@ export async function render() {
   _statusDot = page.querySelector('#chat-status-dot')
   _typingEl = page.querySelector('#typing-indicator')
   _scrollBtn = page.querySelector('#chat-scroll-btn')
+  _replyStatusBadgeEl = page.querySelector('#chat-reply-status-badge')
   _sessionListEl = page.querySelector('#chat-session-list')
   _cmdPanelEl = page.querySelector('#chat-cmd-panel')
   _attachPreviewEl = page.querySelector('#chat-attachments-preview')
@@ -352,6 +359,7 @@ export async function render() {
 
   // 首次使用引导提示
   showPageGuide(_messagesEl)
+  restoreReplyStatus()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -1813,7 +1821,7 @@ function handleChatEvent(payload) {
       meta.innerHTML = parts.join('')
       wrapper.appendChild(meta)
     }
-    updateStreamingStatus('waiting')
+    updateStreamingStatus('done')
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
@@ -1846,6 +1854,7 @@ function handleChatEvent(payload) {
       _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
     }
     appendSystemMessage(t('chat.generationStopped'))
+    updateStreamingStatus('aborted')
     resetStreamState()
     processMessageQueue()
     return
@@ -1883,7 +1892,7 @@ function handleChatEvent(payload) {
 
     showTyping(false)
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
-    updateStreamingStatus('waiting')
+    updateStreamingStatus('error')
     resetStreamState()
     processMessageQueue()
     return
@@ -2080,20 +2089,67 @@ function createStreamBubble() {
   return bubble
 }
 
-function updateStreamingStatus(state, detail = '') {
-  if (!_messagesEl) return
+function getReplyStatusKey(sessionKey = _sessionKey) {
+  return CHAT_REPLY_STATUS_STORE_PREFIX + (sessionKey || 'default')
+}
+
+function saveReplyStatus(state, detail = '', sessionKey = _sessionKey) {
+  if (!sessionKey || !isStorageAvailable()) return
+  try {
+    localStorage.setItem(getReplyStatusKey(sessionKey), JSON.stringify({ state, detail: detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting, ts: Date.now() }))
+  } catch {}
+}
+
+function loadReplyStatus(sessionKey = _sessionKey) {
+  if (!sessionKey || !isStorageAvailable()) return null
+  try { return JSON.parse(localStorage.getItem(getReplyStatusKey(sessionKey)) || 'null') } catch { return null }
+}
+
+function ensureReplyStatusElement(anchorWrap = null) {
+  if (!_messagesEl) return null
   let status = document.getElementById(CHAT_REPLY_STATUS_ID)
-  if (!status && (_currentAiBubble?.parentElement || _isStreaming || _isSending)) {
-    const wrap = _currentAiBubble?.parentElement
-    if (!wrap) return
+  if (status) return status
+  const wrap = anchorWrap || _currentAiBubble?.parentElement || null
+  if (wrap) {
     status = document.createElement('div')
     status.className = 'chat-reply-status chat-reply-status-live'
     status.id = CHAT_REPLY_STATUS_ID
     wrap.appendChild(status)
+    return status
   }
+  if (_replyStatusBadgeEl) {
+    _replyStatusBadgeEl.hidden = false
+    _replyStatusBadgeEl.dataset.state = 'waiting'
+    return _replyStatusBadgeEl
+  }
+  return null
+}
+
+function restoreReplyStatus() {
+  const saved = loadReplyStatus()
+  if (!saved) return
+  const status = ensureReplyStatusElement()
+  if (!status) return
+  status.dataset.state = saved.state || 'waiting'
+  status.dataset.persisted = '1'
+  status.textContent = saved.detail || CHAT_REPLY_STATUS_TEXT[saved.state] || CHAT_REPLY_STATUS_TEXT.waiting
+  if (status === _replyStatusBadgeEl) {
+    status.hidden = false
+    status.className = 'chat-reply-status-badge'
+  }
+}
+
+function updateStreamingStatus(state, detail = '') {
+  const text = detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting
+  const status = ensureReplyStatusElement()
   if (!status) return
   status.dataset.state = state
-  status.textContent = detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting
+  status.textContent = text
+  saveReplyStatus(state, text)
+  if (status === _replyStatusBadgeEl) {
+    status.hidden = false
+    status.className = 'chat-reply-status-badge'
+  }
 }
 
 // ── 流式渲染（节流） ──
@@ -2257,6 +2313,7 @@ async function loadHistory() {
       return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now() }
     }))
     scrollToBottom()
+    restoreReplyStatus()
   } catch (e) {
     console.error('[chat] loadHistory error:', e)
     if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${e.message}`)
@@ -2676,6 +2733,7 @@ function appendSystemMessage(text) {
 
 function clearMessages() {
   _messagesEl.querySelectorAll('.msg').forEach(m => m.remove())
+  restoreReplyStatus()
   _autoScrollEnabled = true
   _lastScrollTop = 0
 }
@@ -2688,13 +2746,25 @@ function showTyping(show, hint) {
     if (hintEl) hintEl.textContent = hint || (show ? (t('chat.thinking') || 'OpenClaw 正在思考…') : '')
   }
   if (show && (_currentAiBubble?.parentElement) && !document.getElementById(CHAT_REPLY_STATUS_ID)) {
-    const status = document.createElement('div')
-    status.className = 'chat-reply-status chat-reply-status-live'
-    status.id = CHAT_REPLY_STATUS_ID
-    status.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
-    _currentAiBubble.parentElement.appendChild(status)
+    const status = ensureReplyStatusElement(_currentAiBubble.parentElement)
+    if (status) status.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
   }
-  if (show) scrollToBottom()
+  if (_replyStatusBadgeEl) {
+    if (show) {
+      _replyStatusBadgeEl.hidden = false
+      _replyStatusBadgeEl.textContent = hint || (t('chat.thinking') || 'OpenClaw 正在思考…')
+      _replyStatusBadgeEl.dataset.state = 'thinking'
+    } else if (!_currentAiBubble && !_isStreaming && !_isSending) {
+      const saved = loadReplyStatus()
+      if (saved?.detail) {
+        _replyStatusBadgeEl.hidden = false
+        _replyStatusBadgeEl.textContent = saved.detail
+        _replyStatusBadgeEl.dataset.state = saved.state || 'waiting'
+      } else {
+        _replyStatusBadgeEl.hidden = true
+      }
+    }
+  }
 }
 
 function showCompactionHint(show) {
