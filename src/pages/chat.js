@@ -1450,8 +1450,10 @@ async function connectGateway() {
 async function refreshSessionList() {
   if (!_sessionListEl || !wsClient.gatewayReady) return
   try {
-    const result = await wsClient.sessionsList(50, { activeMinutes: 1, includeGlobal: true, includeUnknown: true })
-    const sessions = result?.sessions || result || []
+    // 聊天页没有独立的会话下拉框，侧边栏必须展示所有可见会话。
+    // 不传 activeMinutes，避免只返回活跃会话；includeGlobal/includeUnknown 保持与原生面板一致，防止跨入口会话丢失。
+    const result = await wsClient.sessionsList(200, { includeGlobal: true, includeUnknown: true })
+    const sessions = normalizeSessionList(result?.sessions || result || [])
     updateSessionRuntimeCache(sessions, result?.defaults)
     applyRuntimeModelToSelect(_sessionKey)
     renderSessionList(sessions)
@@ -1460,13 +1462,33 @@ async function refreshSessionList() {
   }
 }
 
+function normalizeSessionList(rawSessions = []) {
+  const byKey = new Map()
+  for (const item of (rawSessions || [])) {
+    const key = item.sessionKey || item.key || ''
+    if (!key) continue
+    const prev = byKey.get(key)
+    if (!prev) {
+      byKey.set(key, { ...item, key, sessionKey: key })
+      continue
+    }
+    const prevTs = prev.updatedAt || prev.lastActivity || prev.createdAt || 0
+    const nextTs = item.updatedAt || item.lastActivity || item.createdAt || 0
+    byKey.set(key, nextTs >= prevTs ? { ...prev, ...item, key, sessionKey: key } : { ...item, ...prev, key, sessionKey: key })
+  }
+  if (_sessionKey && !byKey.has(_sessionKey)) {
+    byKey.set(_sessionKey, { key: _sessionKey, sessionKey: _sessionKey, updatedAt: Date.now(), displayName: getDisplayLabel(_sessionKey) })
+  }
+  return Array.from(byKey.values()).sort((a, b) => (b.updatedAt || b.lastActivity || b.createdAt || 0) - (a.updatedAt || a.lastActivity || a.createdAt || 0))
+}
+
 function renderSessionList(sessions) {
   if (!_sessionListEl) return
+  sessions = normalizeSessionList(sessions)
   if (!sessions.length) {
     _sessionListEl.innerHTML = `<div class="chat-session-empty">${t('chat.noSessions')}</div>`
     return
   }
-  sessions.sort((a, b) => (b.updatedAt || b.lastActivity || 0) - (a.updatedAt || a.lastActivity || 0))
   _sessionListEl.innerHTML = sessions.map(s => {
     const key = s.sessionKey || s.key || ''
     const active = key === _sessionKey ? ' active' : ''
