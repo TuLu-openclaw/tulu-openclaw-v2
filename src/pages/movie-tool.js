@@ -957,7 +957,7 @@ function initApp(el) {
     try {
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') { if (query) await loadTvboxSearch(); else await loadTvboxList() }
-      else if (query) await loadSearch()
+      else if (query) await searchAllSources(query)
       else if (getPlayHistory().length > 0 && page === 1 && !query) { await showPlayHistory(); return }
       else await loadList()
     } catch (e) {
@@ -1289,7 +1289,11 @@ function buildPicCandidates(url, itemSrcKey, itemApi) {
   const candidates = [direct]
   if (base && raw.startsWith('/')) candidates.push(base + raw)
   if (base && !/^https?:\/\//i.test(raw) && !raw.startsWith('//')) candidates.push(base + '/' + raw.replace(/^\/+/, ''))
-  if (/^https?:\/\//i.test(raw)) candidates.push('https://images.weserv.nl/?url=' + encodeURIComponent(raw.replace(/^https?:\/\//i, '')))
+  if (/^https?:\/\//i.test(raw)) {
+    const strip = raw.replace(/^https?:\/\//i, '')
+    candidates.push('https://images.weserv.nl/?url=' + encodeURIComponent(strip))
+    candidates.push('https://proxy.this.im/image?url=' + encodeURIComponent(raw))
+  }
   return [...new Set(candidates.filter(Boolean))]
 }
 

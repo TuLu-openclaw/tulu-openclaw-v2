@@ -166,10 +166,6 @@ export async function render() {
           <span class="status-dot" id="chat-status-dot"></span>
           <div class="chat-title-block">
             <span class="chat-title" id="chat-title">${t('chat.chatTitle')}</span>
-            <div class="chat-reply-status-row" id="chat-reply-status-row" aria-live="polite" hidden>
-              <span class="chat-reply-status-dot"></span>
-              <span class="chat-reply-status-text" id="chat-reply-status-text"></span>
-            </div>
           </div>
         </div>
         <div class="chat-header-actions">
@@ -196,6 +192,10 @@ export async function render() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
           </button>
         </div>
+      </div>
+      <div class="chat-reply-status-row" id="chat-reply-status-row" aria-live="polite" hidden>
+        <span class="chat-reply-status-dot"></span>
+        <span class="chat-reply-status-text" id="chat-reply-status-text"></span>
       </div>
       <div class="chat-workspace-panel" id="chat-workspace-panel" style="display:none">
         <div class="chat-workspace-header">
@@ -1063,10 +1063,12 @@ async function applySelectedModel() {
   _isApplyingModel = true
   renderModelSelect()
   try {
-    await wsClient.chatSend(_sessionKey, `/model ${_selectedModel}`)
-    toast(`${_selectedModel}`, 'success')
+    await wsClient.sessionModelSet(_sessionKey, _selectedModel)
+    _primaryModel = _selectedModel
+    localStorage.setItem(STORAGE_MODEL_KEY, _selectedModel)
+    toast(`✅ 已切换至 ${_selectedModel}`, 'success')
   } catch (e) {
-    toast(`${t('chat.sendFailed')}${e.message || e}`, 'error')
+    toast(`${t('chat.sendFailed')}${e?.message || e}`, 'error')
   } finally {
     _isApplyingModel = false
     renderModelSelect()

@@ -609,6 +609,10 @@ export class WsClient {
     return this.request('sessions.reset', { key })
   }
 
+  sessionModelSet(sessionKey, model) {
+    return this.request('session.configure', { key: sessionKey, model })
+  }
+
   onEvent(callback) {
     this._eventListeners.push(callback)
     return () => { this._eventListeners = this._eventListeners.filter(fn => fn !== callback) }
