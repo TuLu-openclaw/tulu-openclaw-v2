@@ -597,8 +597,8 @@ export class WsClient {
     return this.request('chat.abort', params)
   }
 
-  sessionsList(limit = 50) {
-    return this.request('sessions.list', { limit })
+  sessionsList(limit = 50, options = {}) {
+    return this.request('sessions.list', { limit, ...options })
   }
 
   sessionsDelete(key) {
@@ -610,7 +610,11 @@ export class WsClient {
   }
 
   sessionModelSet(sessionKey, model) {
-    return this.request('chat.send', { sessionKey, message: `/model ${model}`, deliver: false, idempotencyKey: uuid() })
+    return this.sessionsPatch(sessionKey, { model: model || null })
+  }
+
+  sessionsPatch(sessionKey, patch = {}) {
+    return this.request('sessions.patch', { key: sessionKey, ...patch })
   }
 
   onEvent(callback) {

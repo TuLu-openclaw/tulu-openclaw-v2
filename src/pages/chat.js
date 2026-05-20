@@ -99,6 +99,7 @@ let _attachments = []
 let _hasEverConnected = false
 let _availableModels = []
 let _primaryModel = ''
+let _defaultModelLabel = ''
 let _selectedModel = ''
 let _isApplyingModel = false
 let _sessionModels = new Map()
@@ -414,8 +415,6 @@ function bindEvents(page) {
   if (_modelSelectEl) {
     _modelSelectEl.addEventListener('change', () => {
       _selectedModel = _modelSelectEl.value
-      if (_selectedModel) localStorage.setItem(STORAGE_MODEL_KEY, _selectedModel)
-      else localStorage.removeItem(STORAGE_MODEL_KEY)
       applySelectedModel()
     })
   }
@@ -596,7 +595,6 @@ function bindEvents(page) {
 
 async function loadModelOptions(showToast = false) {
   if (!_modelSelectEl) return
-  // 显示加载状态
   _modelSelectEl.innerHTML = `<option value="">${t('chat.loadingModels')}</option>`
   _modelSelectEl.disabled = true
   try {
@@ -606,32 +604,31 @@ async function loadModelOptions(showToast = false) {
     const config = await Promise.race([configPromise, timeoutPromise])
     const providers = config?.models?.providers || {}
     _primaryModel = config?.agents?.defaults?.model?.primary || ''
+    _defaultModelLabel = _primaryModel ? `Default (${_primaryModel})` : 'Default model'
     const models = []
     const seen = new Set()
-    if (_primaryModel) {
-      seen.add(_primaryModel)
-      models.push(_primaryModel)
+    const addModel = (value) => {
+      const full = normalizeModelValue(value)
+      if (!full || seen.has(full)) return
+      seen.add(full)
+      models.push(full)
     }
+    addModel(_primaryModel)
     for (const [providerKey, provider] of Object.entries(providers)) {
       for (const item of (provider?.models || [])) {
         const modelId = typeof item === 'string' ? item : item?.id
         if (!modelId) continue
-        const full = `${providerKey}/${modelId}`
-        if (seen.has(full)) continue
-        seen.add(full)
-        models.push(full)
+        addModel(modelId.includes('/') ? modelId : `${providerKey}/${modelId}`)
       }
     }
     _availableModels = models
-    const runtimeModel = getSessionRuntimeModel(_sessionKey)
-    if (runtimeModel) ensureModelOption(runtimeModel)
-    const saved = localStorage.getItem(STORAGE_MODEL_KEY) || ''
-    _selectedModel = runtimeModel || (models.includes(saved) ? saved : (_primaryModel || models[0] || ''))
+    applyRuntimeModelToSelect(_sessionKey)
     renderModelSelect()
     if (showToast) toast(`${t('chat.refreshModels')} (${models.length})`, 'success')
   } catch (e) {
     _availableModels = []
     _primaryModel = ''
+    _defaultModelLabel = 'Default model'
     _selectedModel = ''
     renderModelSelect(`${t('common.loadFailed')}: ${e.message || e}`)
     if (showToast) toast(`${t('common.loadFailed')}: ${e.message || e}`, 'error')
@@ -640,18 +637,28 @@ async function loadModelOptions(showToast = false) {
 
 function renderModelSelect(errorText = '') {
   if (!_modelSelectEl) return
-  if (!_availableModels.length) {
-    _modelSelectEl.innerHTML = `<option value="">${escapeAttr(errorText || t('chat.loadingModels'))}</option>`
+  if (!_availableModels.length && errorText) {
+    _modelSelectEl.innerHTML = `<option value="">${escapeAttr(errorText)}</option>`
     _modelSelectEl.disabled = true
     _modelSelectEl.title = errorText || ''
     return
   }
-  _modelSelectEl.disabled = _isApplyingModel
-  _modelSelectEl.innerHTML = _availableModels.map(full => {
+  _modelSelectEl.disabled = _isApplyingModel || !_availableModels.length
+  const defaultLabel = _defaultModelLabel || (_primaryModel ? `Default (${_primaryModel})` : 'Default model')
+  const defaultOption = `<option value="" ${_selectedModel === '' ? 'selected' : ''}>${escapeAttr(defaultLabel)}</option>`
+  const modelOptions = _availableModels.map(full => {
     const suffix = full === _primaryModel ? ` ${t('chat.defaultSuffix')}` : ''
-    return `<option value="${escapeAttr(full)}" ${full === _selectedModel ? 'selected' : ''}>${full}${suffix}</option>`
+    return `<option value="${escapeAttr(full)}" ${full === _selectedModel ? 'selected' : ''}>${escapeAttr(full + suffix)}</option>`
   }).join('')
-  _modelSelectEl.title = _selectedModel || ''
+  _modelSelectEl.innerHTML = defaultOption + modelOptions
+  _modelSelectEl.title = _selectedModel || defaultLabel
+}
+
+function normalizeModelValue(model, provider = '') {
+  const raw = String(model || '').trim()
+  const prov = String(provider || '').trim()
+  if (!raw) return ''
+  return raw.includes('/') || !prov ? raw : `${prov}/${raw}`
 }
 
 function getSessionRuntimeModel(sessionKey) {
@@ -660,19 +667,17 @@ function getSessionRuntimeModel(sessionKey) {
 }
 
 function ensureModelOption(model) {
-  if (!model) return
-  if (!_availableModels.includes(model)) _availableModels = [model, ..._availableModels]
+  const full = normalizeModelValue(model)
+  if (!full) return
+  if (!_availableModels.includes(full)) _availableModels = [full, ..._availableModels]
 }
 
 function applyRuntimeModelToSelect(sessionKey = _sessionKey) {
   const runtimeModel = getSessionRuntimeModel(sessionKey)
-  if (!runtimeModel) return ''
-  ensureModelOption(runtimeModel)
-  _selectedModel = runtimeModel
-  _primaryModel = runtimeModel
-  localStorage.setItem(STORAGE_MODEL_KEY, runtimeModel)
+  if (runtimeModel) ensureModelOption(runtimeModel)
+  _selectedModel = runtimeModel || ''
   renderModelSelect()
-  return runtimeModel
+  return _selectedModel
 }
 
 function sleep(ms) {
@@ -681,38 +686,29 @@ function sleep(ms) {
 
 async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
   if (!sessionKey || !wsClient.gatewayReady) return ''
-  const result = await wsClient.sessionsList(100)
+  const result = await wsClient.sessionsList(100, {
+    activeMinutes: 0,
+    includeGlobal: true,
+    includeUnknown: true,
+  })
   const sessions = result?.sessions || result || []
   updateSessionModelCache(sessions)
-  const direct = sessions.find(s => (s.sessionKey || s.key || '') === sessionKey)
-  const model = direct?.model || direct?.runtimeModel || direct?.currentModel || ''
-  if (model) {
-    _sessionModels.set(sessionKey, model)
-    applyRuntimeModelToSelect(sessionKey)
+  const defaultsModel = normalizeModelValue(result?.defaults?.model, result?.defaults?.modelProvider)
+  if (defaultsModel) {
+    _primaryModel = defaultsModel
+    _defaultModelLabel = `Default (${defaultsModel})`
+    ensureModelOption(defaultsModel)
   }
-  return model || getSessionRuntimeModel(sessionKey)
-}
-
-async function waitForSessionModel(sessionKey, expectedModel, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs
-  let lastModel = ''
-  while (Date.now() < deadline) {
-    try {
-      lastModel = await refreshRuntimeModelFromSessions(sessionKey) || lastModel
-      if (lastModel && (!expectedModel || lastModel === expectedModel)) return lastModel
-    } catch (e) {
-      console.warn('[chat] waitForSessionModel failed:', e?.message || e)
-    }
-    await sleep(700)
-  }
-  return lastModel || expectedModel || ''
+  return applyRuntimeModelToSelect(sessionKey)
 }
 
 function updateSessionModelCache(sessions) {
-  for (const s of (sessions || [])) {
-    const key = s.sessionKey || s.key || ''
-    const model = s.model || s.runtimeModel || s.currentModel || ''
-    if (key && model) _sessionModels.set(key, model)
+  for (const item of (sessions || [])) {
+    const key = item.sessionKey || item.key || ''
+    if (!key) continue
+    const model = normalizeModelValue(item.model || item.runtimeModel || item.currentModel || '', item.modelProvider || item.provider || '')
+    if (model) _sessionModels.set(key, model)
+    else _sessionModels.delete(key)
   }
 }
 
@@ -1121,29 +1117,29 @@ async function saveWorkspaceCurrentFile() {
 }
 
 async function applySelectedModel() {
-  if (!_selectedModel) {
-    toast(t('chat.loadingModels'), 'warning')
-    return
-  }
   if (!wsClient.gatewayReady || !_sessionKey) {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
-  const targetModel = _selectedModel
+  const targetModel = normalizeModelValue(_selectedModel)
+  const previousModel = getSessionRuntimeModel(_sessionKey)
+  if (previousModel === targetModel) return
   _isApplyingModel = true
   renderModelSelect()
   try {
-    toast(`正在切换，正在预热 ${targetModel}`, 'info')
+    toast(targetModel ? `正在切换模型：${targetModel}` : '正在恢复默认模型', 'info')
     await wsClient.sessionModelSet(_sessionKey, targetModel)
-    const actualModel = await waitForSessionModel(_sessionKey, targetModel, 15000)
-    const finalModel = actualModel || targetModel
-    ensureModelOption(finalModel)
-    _selectedModel = finalModel
-    _primaryModel = finalModel
-    localStorage.setItem(STORAGE_MODEL_KEY, finalModel)
-    renderModelSelect()
-    toast(`切换成功，当前真实模型：${finalModel}`, 'success')
+    if (targetModel) _sessionModels.set(_sessionKey, targetModel)
+    else _sessionModels.delete(_sessionKey)
+    applyRuntimeModelToSelect(_sessionKey)
+    await refreshSessionList()
+    await refreshRuntimeModelFromSessions(_sessionKey)
+    const actualModel = getSessionRuntimeModel(_sessionKey)
+    toast(actualModel ? `切换成功：${actualModel}` : '已恢复默认模型', 'success')
   } catch (e) {
+    if (previousModel) _sessionModels.set(_sessionKey, previousModel)
+    else _sessionModels.delete(_sessionKey)
+    applyRuntimeModelToSelect(_sessionKey)
     toast(`${t('chat.sendFailed')}${e?.message || e}`, 'error')
   } finally {
     _isApplyingModel = false
@@ -1374,7 +1370,7 @@ async function connectGateway() {
 async function refreshSessionList() {
   if (!_sessionListEl || !wsClient.gatewayReady) return
   try {
-    const result = await wsClient.sessionsList(50)
+    const result = await wsClient.sessionsList(50, { activeMinutes: 0, includeGlobal: true, includeUnknown: true })
     const sessions = result?.sessions || result || []
     updateSessionModelCache(sessions)
     applyRuntimeModelToSelect(_sessionKey)
