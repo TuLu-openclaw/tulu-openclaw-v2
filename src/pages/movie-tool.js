@@ -809,11 +809,15 @@ function initApp(el) {
       '<button id="t-clear-play" class="tvbox-clear-btn" style="margin-left:auto">清除全部</button></div>'
     html += '<div style="display:flex;gap:10px;overflow-x:auto;padding:8px 0 16px;scrollbar-width:none"><style>.tvbox-hist-card{flex-shrink:0;width:100px;cursor:pointer}.tvbox-hist-card:hover .tvbox-card-inner{transform:translateY(-2px);border-color:var(--border-hover)}.tvbox-hist-pic{position:relative;aspect-ratio:2/3;background:var(--bg-elevated);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border);margin-bottom:6px}.tvbox-hist-pic img{width:100%;height:100%;object-fit:cover;display:block}.tvbox-hist-name{font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}.tvbox-hist-ep{font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}</style>'
     h.forEach(item => {
+      const source = [...VOD_SOURCES, ...TVBOX_BUILTIN].find(s => s.key === item._srcKey || s.name === item.source)
+      const srcKey = source?.key || item.source
+      const srcApi = source?.api || source?.url || ''
+      const posterHtml = renderPosterImg(item.pic, item.name, srcKey, srcApi, '🎬')
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
       html += '<div class="tvbox-hist-card" data-id="' + item.id + '" data-source="' + item.source + '" data-name="' + item.name + '" data-pic="' + item.pic + '" data-epname="' + (item.epName || '') + '" data-epurl="' + (item.epUrl || '') + '" data-progress="' + item.progress + '" data-duration="' + (item.duration || 0) + '">' +
         '<div class="tvbox-hist-pic">' +
-        '<img src="' + escHtml(item.pic) + '" alt="' + escHtml(item.name) + '" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" />' +
+        posterHtml +
           (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + resumeLabel + '</span>' : '') +
           '<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1)"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--accent),#ec4899)"></div></div>' +
         '</div>' +
@@ -1486,10 +1490,12 @@ if (typeof window !== 'undefined') window.__tuluPosterFallback = posterFallback
         '</div>'
       : ''
 
+    const sourceForPic = VOD_SOURCES.find(s => s.name === sourceName) || {}
+    const picCands = buildPicCandidates(item.vod_pic, sourceForPic.key, sourceForPic.api || '')
     body.innerHTML =
       backBtn +
       '<div class="tvbox-ep-info">' +
-        '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" />' +
+        '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" data-poster-cands="' + escHtml(picCands.slice(1).join('||')) + '" />' +
         (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
         '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
       '</div>' +

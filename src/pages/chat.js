@@ -166,6 +166,9 @@ export async function render() {
           <span class="status-dot" id="chat-status-dot"></span>
           <div class="chat-title-block">
             <span class="chat-title" id="chat-title">${t('chat.chatTitle')}</span>
+            <button class="btn-refresh-chat" id="btn-refresh-chat" title="${t('chat.refreshChat')}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            </button>
           </div>
         </div>
         <div class="chat-header-actions">
@@ -459,6 +462,7 @@ function bindEvents(page) {
   }
   page.querySelector('#btn-toggle-sidebar')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
+  page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-new-session').addEventListener('click', () => showNewSessionDialog())
   page.querySelector('#btn-collab').addEventListener('click', () => injectCollabTemplate())
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
@@ -2336,6 +2340,28 @@ async function loadHistory() {
     if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${e.message}`)
   } finally {
     _isLoadingHistory = false
+  }
+}
+
+async function forceRefreshChat() {
+  if (_isLoadingHistory || !_sessionKey) return
+  const btn = document.querySelector('#btn-refresh-chat')
+  if (btn) {
+    btn.classList.add('spinning')
+    btn.disabled = true
+  }
+  try {
+    _lastHistoryHash = null
+    _isLoadingHistory = false
+    await loadHistory()
+    toast('✅ 聊天数据已刷新', 'success')
+  } catch (e) {
+    toast(`刷新失败: ${e?.message || e}`, 'error')
+  } finally {
+    if (btn) {
+      btn.classList.remove('spinning')
+      btn.disabled = false
+    }
   }
 }
 
