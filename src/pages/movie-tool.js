@@ -546,6 +546,77 @@ function filterSearchResults(list, kw) {
   return exact
 }
 
+function getVodSourceBase(itemSrcKey, itemApi) {
+  if (itemApi) return itemApi.replace(/\/api\.php.*$/, '')
+  const key = itemSrcKey || VOD_SOURCES[src]?.key
+  const s = VOD_SOURCES.find(s => s.key === key)
+  return s?.api ? s.api.replace(/\/api\.php.*$/, '') : ''
+}
+
+function fixPosterUrl(url, itemSrcKey, itemApi) {
+  if (!url) return ''
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  if (raw.startsWith('//')) return 'https:' + raw
+  const base = getVodSourceBase(itemSrcKey, itemApi)
+  return base ? base + (raw.startsWith('/') ? raw : '/' + raw) : raw
+}
+
+function buildPicCandidates(url, itemSrcKey, itemApi) {
+  const raw = String(url || '').trim()
+  if (!raw) return []
+  const base = getVodSourceBase(itemSrcKey, itemApi)
+  const direct = fixPosterUrl(raw, itemSrcKey, itemApi)
+  const candidates = [direct]
+  if (base && raw.startsWith('/')) candidates.push(base + raw)
+  if (base && !/^https?:\/\//i.test(raw) && !raw.startsWith('//')) candidates.push(base + '/' + raw.replace(/^\/+/, ''))
+  if (/^https?:\/\//i.test(raw)) {
+    const strip = raw.replace(/^https?:\/\//i, '')
+    candidates.push('https://images.weserv.nl/?url=' + encodeURIComponent(strip))
+    candidates.push('https://proxy.this.im/image?url=' + encodeURIComponent(raw))
+  }
+  return [...new Set(candidates.filter(Boolean))]
+}
+
+function posterFallback(img, placeholder = '🎬') {
+  if (!img) return
+  const next = img.dataset.posterCands ? img.dataset.posterCands.split('||').filter(Boolean) : []
+  if (next.length) {
+    img.dataset.posterCands = next.slice(1).join('||')
+    img.src = next[0]
+    return
+  }
+  if (img.parentElement) img.parentElement.innerHTML = '<span class="tvbox-card-placeholder">' + placeholder + '</span>'
+}
+
+function renderPosterImg(url, alt, itemSrcKey, itemApi, placeholder = '🎬') {
+  const candidates = buildPicCandidates(url, itemSrcKey, itemApi)
+  if (!candidates.length) return '<span class="tvbox-card-placeholder">' + placeholder + '</span>'
+  const first = candidates[0]
+  return '<img src="' + escHtml(first) + '" data-poster-cands="' + escHtml(candidates.slice(1).join('||')) + '" alt="' + escHtml(alt || '') + '" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this, \'' + placeholder + '\')" />'
+}
+
+function normalizeVodItem(item, source) {
+  const name = item?.vod_name || item?.name || item?.title || item?.vod_title || ''
+  const pic = item?.vod_pic || item?.pic || item?.thumb || item?.cover || item?.poster || item?.image || item?.img || ''
+  return {
+    ...item,
+    vod_id: item?.vod_id || item?.id || item?.player_id || name,
+    vod_name: name,
+    vod_pic: pic,
+    type_name: item?.type_name || item?.type || item?.class || '影视',
+    vod_actor: item?.vod_actor || item?.actor || item?.stars || '',
+    vod_content: item?.vod_content || item?.content || item?.desc || item?.des || item?.vod_blurb || '',
+    _srcKey: item?._srcKey || source?.key || VOD_SOURCES[src]?.key,
+    _srcName: item?._srcName || source?.name || VOD_SOURCES[src]?.name,
+    _api: item?._api || source?.api || '',
+  }
+}
+
+if (typeof window !== 'undefined') window.__tuluPosterFallback = posterFallback
+
+
 async function fetchJSONFast(url, signal) {
   const tasks = []
   tasks.push(fetchJSON(url, signal))
@@ -1006,50 +1077,59 @@ function setDebug(msg, detail) {
     // 标记超时源（>5s）
     if (_sourceHealth[source.api] > 5000) renderSrcBar()
     setDebug('结果: ' + (json.total || count) + '条', 'list.len=' + count)
-    renderVodGrid(json.list || [], json.total || count)
+    const normalized = (json.list || []).map(item => normalizeVodItem(item, source))
+    renderVodGrid(normalized, json.total || count)
   }
 
-  // 全源并发搜索（所有 VOD CMS 源同时搜，合并去重）
+  // 全源并发搜索（所有 VOD CMS 源同时搜，哪个源先返回就先渲染）
   async function searchAllSources(q) {
+    const content = el.querySelector('#t-content')
     const qe = encodeURIComponent(q)
-    const perSourceTimeout = 10000 // 每源 10 秒超时
-    const sourceResults = await Promise.allSettled(
-      VOD_SOURCES.map(async (source) => {
-        const ctrl = new AbortController()
-        const tid = setTimeout(() => ctrl.abort(), perSourceTimeout)
-        try {
-          let json = { list: [] }
-          try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal) } catch {}
-          if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
-          if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
-          clearTimeout(tid)
-          return { source, items: json.list || [] }
-        } catch {
-          clearTimeout(tid)
-          return { source, items: [] }
-        }
-      })
-    )
-    // 合并 + 按 vod_name 去重，保留源信息
+    const perSourceTimeout = 10000
     const seen = new Set()
     const merged = []
-    for (const r of sourceResults) {
-      if (r.status !== 'fulfilled') continue
-      for (const item of r.value.items) {
-          const name = item.vod_name || item.name || item.title || ''
-          if (!movieNameMatches({ ...item, vod_name: name }, q)) continue
-          const key = name || Math.random().toString()
-        if (!seen.has(key)) {
-          seen.add(key)
-          merged.push({ ...item, _srcKey: r.value.source.key, _srcName: r.value.source.name })
+    let finished = 0
+    let succeeded = 0
+    let renderedAny = false
+    content.innerHTML = '<div id="t-main-grid"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在搜索，找到资源会立即显示...</span></div></div><div id="t-pagination"></div>'
+    setDebug('全网搜索中', '0/' + VOD_SOURCES.length + '源返回')
+
+    const tasks = VOD_SOURCES.map(async (source) => {
+      const ctrl = new AbortController()
+      const tid = setTimeout(() => ctrl.abort(), perSourceTimeout)
+      try {
+        let json = { list: [] }
+        try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal) } catch {}
+        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
+        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
+        const items = (json.list || []).map(item => normalizeVodItem(item, source))
+        let added = 0
+        for (const item of items) {
+          if (!movieNameMatches(item, q)) continue
+          const key = (item.vod_name || item.vod_id || Math.random().toString()).trim()
+          if (!seen.has(key)) {
+            seen.add(key)
+            merged.push(item)
+            added++
+          }
         }
+        if (added > 0) {
+          succeeded++
+          renderedAny = true
+          renderVodGrid(merged, merged.length)
+        }
+      } catch (e) {
+        console.warn('[movie] 搜索源失败:', source.name, e?.message || e)
+      } finally {
+        clearTimeout(tid)
+        finished++
+        setDebug('全网搜索中', finished + '/' + VOD_SOURCES.length + '源返回，已显示' + merged.length + '条')
       }
-    }
-    const succeeded = sourceResults.filter(r => r.status === 'fulfilled' && r.value.items.length > 0)
-    const totalS = merged.length
-    const srcS = succeeded.map(r => r.value.source.name).join('、')
-    setDebug('全网搜索完成', succeeded.length + '/' + VOD_SOURCES.length + '源返回，精确匹配' + totalS + '条[' + srcS + ']')
-    renderVodGrid(merged, totalS)
+    })
+
+    await Promise.allSettled(tasks)
+    if (!renderedAny) renderVodGrid([], 0)
+    setDebug('全网搜索完成', succeeded + '/' + VOD_SOURCES.length + '源命中，精确匹配' + merged.length + '条')
   }
 
   async function loadSearch() {
@@ -1067,7 +1147,7 @@ function setDebug(msg, detail) {
       // 兜底：直接 fetch 搜索（部分源搜索接口不同）
       try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + q) } catch {}
     }
-    const filtered = filterSearchResults(json.list || [], query).map(item => ({ ...item, _srcKey: source.key, _srcName: source.name }))
+    const filtered = filterSearchResults((json.list || []).map(item => normalizeVodItem(item, source)), query)
     const total = filtered.length
     setDebug(total > 0 ? '搜索到' + total + '条精确结果' : '未找到相关影片', 'list.len=' + (json.list?.length || 0) + ' filtered=' + total)
     renderVodGrid(filtered, total)
@@ -1093,7 +1173,7 @@ function setDebug(msg, detail) {
     const filtered = cat !== 'all' ? all.filter(v => (v.type_name || '').includes(VOD_CATEGORIES.find(c => c.id === cat)?.name || cat)) : all
     const total = filtered.length
     const start = (page - 1) * 20
-    renderVodGrid(filtered.slice(start, start + 20), total)
+    renderVodGrid(filtered.slice(start, start + 20).map(item => normalizeVodItem(item, { key: getActiveTvboxKey(), name: getActiveTvbox()?.name || 'TVBox', api: getActiveTvbox()?.url || '' })), total)
   }
 
   async function loadTvboxSearch() {
@@ -1103,7 +1183,7 @@ function setDebug(msg, detail) {
     if (!api) { content.innerHTML = '<div class="tvbox-empty">请先选择一个 TVBox 数据源</div>'; return }
     const config = await loadTvboxConfig(api)
     if (!config) { content.innerHTML = '<div class="tvbox-empty">TVBox JSON 加载失败</div>'; return }
-    const results = filterSearchResults(await searchTvboxList(config, query, api), query)
+    const results = filterSearchResults((await searchTvboxList(config, query, api)).map(item => normalizeVodItem(item, { key: getActiveTvboxKey(), name: getActiveTvbox()?.name || 'TVBox', api: getActiveTvbox()?.url || '' })), query)
     renderVodGrid(results, results.length)
   }
 
@@ -1270,59 +1350,9 @@ function setDebug(msg, detail) {
     const sourceName = VOD_SOURCES[src]?.name || ''
     const totalPages = Math.max(1, Math.ceil(total / 20))
 
-    // 图片 URL 处理：支持多源合并搜索（item._srcKey）和当前源
-function getSrcBase(itemSrcKey, itemApi) {
-  if (itemApi) return itemApi.replace(/\/api\.php.*$/, '')
-  const key = itemSrcKey || VOD_SOURCES[src]?.key
-  const s = VOD_SOURCES.find(s => s.key === key)
-  return s?.api ? s.api.replace(/\/api\.php.*$/, '') : ''
-}
-
-function fixPic(url, itemSrcKey, itemApi) {
-  if (!url) return ''
-  if (/^https?:\/\//i.test(url)) return url
-  if (url.startsWith('//')) return 'https:' + url
-  return getSrcBase(itemSrcKey, itemApi) + (url.startsWith('/') ? url : '/' + url)
-}
-
-function buildPicCandidates(url, itemSrcKey, itemApi) {
-  const raw = String(url || '').trim()
-  if (!raw) return []
-  const base = getSrcBase(itemSrcKey, itemApi)
-  const direct = fixPic(raw, itemSrcKey, itemApi)
-  const candidates = [direct]
-  if (base && raw.startsWith('/')) candidates.push(base + raw)
-  if (base && !/^https?:\/\//i.test(raw) && !raw.startsWith('//')) candidates.push(base + '/' + raw.replace(/^\/+/, ''))
-  if (/^https?:\/\//i.test(raw)) {
-    const strip = raw.replace(/^https?:\/\//i, '')
-    candidates.push('https://images.weserv.nl/?url=' + encodeURIComponent(strip))
-    candidates.push('https://proxy.this.im/image?url=' + encodeURIComponent(raw))
-  }
-  return [...new Set(candidates.filter(Boolean))]
-}
-
-function posterFallback(img, placeholder = '🎬') {
-  if (!img) return
-  const next = img.dataset.posterCands ? img.dataset.posterCands.split('||').filter(Boolean) : []
-  if (next.length) {
-    img.dataset.posterCands = next.slice(1).join('||')
-    img.src = next[0]
-    return
-  }
-  if (img.parentElement) img.parentElement.innerHTML = '<span class="tvbox-card-placeholder">' + placeholder + '</span>'
-}
-
-function renderPosterImg(url, alt, itemSrcKey, itemApi, placeholder = '🎬') {
-  const candidates = buildPicCandidates(url, itemSrcKey, itemApi)
-  if (!candidates.length) return '<span class="tvbox-card-placeholder">' + placeholder + '</span>'
-  const first = candidates[0]
-  return '<img src="' + escHtml(first) + '" data-poster-cands="' + escHtml(candidates.slice(1).join('||')) + '" alt="' + escHtml(alt || '') + '" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this, \'' + placeholder + '\')" />'
-}
-if (typeof window !== 'undefined') window.__tuluPosterFallback = posterFallback
-
     grid.innerHTML = '<div class="tvbox-grid">' + list.map(item => {
       const itemSourceName = item._srcName || sourceName
-      const itemApi = item._tvboxApi || ''
+      const itemApi = item._tvboxApi || item._api || ''
       const histItem = history.find(h => h.id == item.vod_id && h.source === itemSourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
@@ -1495,7 +1525,7 @@ if (typeof window !== 'undefined') window.__tuluPosterFallback = posterFallback
     body.innerHTML =
       backBtn +
       '<div class="tvbox-ep-info">' +
-        '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" data-poster-cands="' + escHtml(picCands.slice(1).join('||')) + '" />' +
+        renderPosterImg(item.vod_pic, item.vod_name, sourceForPic.key || item._srcKey, sourceForPic.api || item._api || '').replace('<img ', '<img class="tvbox-ep-pic" ') +
         (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
         '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
       '</div>' +

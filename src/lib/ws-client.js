@@ -610,7 +610,7 @@ export class WsClient {
   }
 
   sessionModelSet(sessionKey, model) {
-    return this.request('chat.send', { sessionKey, message: `/model ${model}`, idempotencyKey: uuid() })
+    return this.request('chat.send', { sessionKey, message: `/model ${model}`, deliver: false, idempotencyKey: uuid() })
   }
 
   onEvent(callback) {

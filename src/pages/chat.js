@@ -101,6 +101,7 @@ let _availableModels = []
 let _primaryModel = ''
 let _selectedModel = ''
 let _isApplyingModel = false
+let _sessionModels = new Map()
 
 // ── 托管 Agent ──
 const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
@@ -622,8 +623,10 @@ async function loadModelOptions(showToast = false) {
       }
     }
     _availableModels = models
+    const runtimeModel = getSessionRuntimeModel(_sessionKey)
+    if (runtimeModel) ensureModelOption(runtimeModel)
     const saved = localStorage.getItem(STORAGE_MODEL_KEY) || ''
-    _selectedModel = models.includes(saved) ? saved : (_primaryModel || models[0] || '')
+    _selectedModel = runtimeModel || (models.includes(saved) ? saved : (_primaryModel || models[0] || ''))
     renderModelSelect()
     if (showToast) toast(`${t('chat.refreshModels')} (${models.length})`, 'success')
   } catch (e) {
@@ -649,6 +652,68 @@ function renderModelSelect(errorText = '') {
     return `<option value="${escapeAttr(full)}" ${full === _selectedModel ? 'selected' : ''}>${full}${suffix}</option>`
   }).join('')
   _modelSelectEl.title = _selectedModel || ''
+}
+
+function getSessionRuntimeModel(sessionKey) {
+  if (!sessionKey) return ''
+  return _sessionModels.get(sessionKey) || ''
+}
+
+function ensureModelOption(model) {
+  if (!model) return
+  if (!_availableModels.includes(model)) _availableModels = [model, ..._availableModels]
+}
+
+function applyRuntimeModelToSelect(sessionKey = _sessionKey) {
+  const runtimeModel = getSessionRuntimeModel(sessionKey)
+  if (!runtimeModel) return ''
+  ensureModelOption(runtimeModel)
+  _selectedModel = runtimeModel
+  _primaryModel = runtimeModel
+  localStorage.setItem(STORAGE_MODEL_KEY, runtimeModel)
+  renderModelSelect()
+  return runtimeModel
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
+  if (!sessionKey || !wsClient.gatewayReady) return ''
+  const result = await wsClient.sessionsList(100)
+  const sessions = result?.sessions || result || []
+  updateSessionModelCache(sessions)
+  const direct = sessions.find(s => (s.sessionKey || s.key || '') === sessionKey)
+  const model = direct?.model || direct?.runtimeModel || direct?.currentModel || ''
+  if (model) {
+    _sessionModels.set(sessionKey, model)
+    applyRuntimeModelToSelect(sessionKey)
+  }
+  return model || getSessionRuntimeModel(sessionKey)
+}
+
+async function waitForSessionModel(sessionKey, expectedModel, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs
+  let lastModel = ''
+  while (Date.now() < deadline) {
+    try {
+      lastModel = await refreshRuntimeModelFromSessions(sessionKey) || lastModel
+      if (lastModel && (!expectedModel || lastModel === expectedModel)) return lastModel
+    } catch (e) {
+      console.warn('[chat] waitForSessionModel failed:', e?.message || e)
+    }
+    await sleep(700)
+  }
+  return lastModel || expectedModel || ''
+}
+
+function updateSessionModelCache(sessions) {
+  for (const s of (sessions || [])) {
+    const key = s.sessionKey || s.key || ''
+    const model = s.model || s.runtimeModel || s.currentModel || ''
+    if (key && model) _sessionModels.set(key, model)
+  }
 }
 
 function escapeAttr(str) {
@@ -1064,13 +1129,20 @@ async function applySelectedModel() {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
+  const targetModel = _selectedModel
   _isApplyingModel = true
   renderModelSelect()
   try {
-    await wsClient.sessionModelSet(_sessionKey, _selectedModel)
-    _primaryModel = _selectedModel
-    localStorage.setItem(STORAGE_MODEL_KEY, _selectedModel)
-    toast(`✅ 已切换至 ${_selectedModel}`, 'success')
+    toast(`正在切换，正在预热 ${targetModel}`, 'info')
+    await wsClient.sessionModelSet(_sessionKey, targetModel)
+    const actualModel = await waitForSessionModel(_sessionKey, targetModel, 15000)
+    const finalModel = actualModel || targetModel
+    ensureModelOption(finalModel)
+    _selectedModel = finalModel
+    _primaryModel = finalModel
+    localStorage.setItem(STORAGE_MODEL_KEY, finalModel)
+    renderModelSelect()
+    toast(`切换成功，当前真实模型：${finalModel}`, 'success')
   } catch (e) {
     toast(`${t('chat.sendFailed')}${e?.message || e}`, 'error')
   } finally {
@@ -1304,6 +1376,8 @@ async function refreshSessionList() {
   try {
     const result = await wsClient.sessionsList(50)
     const sessions = result?.sessions || result || []
+    updateSessionModelCache(sessions)
+    applyRuntimeModelToSelect(_sessionKey)
     renderSessionList(sessions)
   } catch (e) {
     console.error('[chat] refreshSessionList error:', e)
@@ -1396,6 +1470,7 @@ async function switchSession(newKey, options = {}) {
   _lastHistoryHash = ''
   resetStreamState()
   updateSessionTitle()
+  applyRuntimeModelToSelect(newKey)
   clearMessages()
   loadHistory()
   refreshSessionList()
@@ -2351,7 +2426,8 @@ async function forceRefreshChat() {
     btn.disabled = true
   }
   try {
-    _lastHistoryHash = null
+    clearMessages()
+    _lastHistoryHash = ''
     _isLoadingHistory = false
     await loadHistory()
     toast('✅ 聊天数据已刷新', 'success')
