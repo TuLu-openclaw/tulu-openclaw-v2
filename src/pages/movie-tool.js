@@ -813,7 +813,7 @@ function initApp(el) {
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
       html += '<div class="tvbox-hist-card" data-id="' + item.id + '" data-source="' + item.source + '" data-name="' + item.name + '" data-pic="' + item.pic + '" data-epname="' + (item.epName || '') + '" data-epurl="' + (item.epUrl || '') + '" data-progress="' + item.progress + '" data-duration="' + (item.duration || 0) + '">' +
         '<div class="tvbox-hist-pic">' +
-        '<img src="' + escHtml(item.pic) + '" alt="' + escHtml(item.name) + '" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" />' +
+        renderPosterImg(item.pic, item.name, (VOD_SOURCES.find(s => s.name === item.source || s.key === item.source)?.key || ''), (VOD_SOURCES.find(s => s.name === item.source || s.key === item.source)?.api || '')) +
           (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + resumeLabel + '</span>' : '') +
           '<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1)"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--accent),#ec4899)"></div></div>' +
         '</div>' +
@@ -973,6 +973,23 @@ function setDebug(msg, detail) {
   console.info('[DEBUG]', msg, detail || '')
 }
 
+function normalizeVodItem(item, source) {
+  const name = item?.vod_name || item?.name || item?.title || item?.vod_title || ''
+  const pic = item?.vod_pic || item?.pic || item?.thumb || item?.cover || item?.poster || item?.image || item?.img || ''
+  return {
+    ...item,
+    vod_id: item?.vod_id || item?.id || item?.player_id || name,
+    vod_name: name,
+    vod_pic: pic,
+    type_name: item?.type_name || item?.type || item?.class || '影视',
+    vod_actor: item?.vod_actor || item?.actor || item?.stars || '',
+    vod_content: item?.vod_content || item?.content || item?.desc || item?.des || item?.vod_blurb || '',
+    _srcKey: item?._srcKey || source?.key || VOD_SOURCES[src]?.key,
+    _srcName: item?._srcName || source?.name || VOD_SOURCES[src]?.name,
+    _api: item?._api || source?.api || '',
+  }
+}
+
   async function loadList() {
     const content = el.querySelector('#t-content')
     const source = VOD_SOURCES[src]
@@ -1002,50 +1019,60 @@ function setDebug(msg, detail) {
     // 标记超时源（>5s）
     if (_sourceHealth[source.api] > 5000) renderSrcBar()
     setDebug('结果: ' + (json.total || count) + '条', 'list.len=' + count)
-    renderVodGrid(json.list || [], json.total || count)
+    const normalized = (json.list || []).map(item => normalizeVodItem(item, source))
+    renderVodGrid(normalized, json.total || count)
   }
 
-  // 全源并发搜索（所有 VOD CMS 源同时搜，合并去重）
+  // 全源并发搜索（所有 VOD CMS 源同时搜，哪个源先返回就先渲染）
   async function searchAllSources(q) {
+    const content = el.querySelector('#t-content')
     const qe = encodeURIComponent(q)
     const perSourceTimeout = 10000 // 每源 10 秒超时
-    const sourceResults = await Promise.allSettled(
-      VOD_SOURCES.map(async (source) => {
-        const ctrl = new AbortController()
-        const tid = setTimeout(() => ctrl.abort(), perSourceTimeout)
-        try {
-          let json = { list: [] }
-          try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal) } catch {}
-          if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
-          if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
-          clearTimeout(tid)
-          return { source, items: json.list || [] }
-        } catch {
-          clearTimeout(tid)
-          return { source, items: [] }
-        }
-      })
-    )
-    // 合并 + 按 vod_name 去重，保留源信息
     const seen = new Set()
     const merged = []
-    for (const r of sourceResults) {
-      if (r.status !== 'fulfilled') continue
-      for (const item of r.value.items) {
-          const name = item.vod_name || item.name || item.title || ''
-          if (!movieNameMatches({ ...item, vod_name: name }, q)) continue
-          const key = name || Math.random().toString()
-        if (!seen.has(key)) {
-          seen.add(key)
-          merged.push({ ...item, _srcKey: r.value.source.key, _srcName: r.value.source.name })
+    let finished = 0
+    let succeeded = 0
+    let renderedAny = false
+    content.innerHTML = '<div id="t-main-grid"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在搜索，找到资源会立即显示...</span></div></div><div id="t-pagination"></div>'
+    setDebug('全网搜索中', '0/' + VOD_SOURCES.length + '源返回')
+
+    const tasks = VOD_SOURCES.map(async (source) => {
+      const ctrl = new AbortController()
+      const tid = setTimeout(() => ctrl.abort(), perSourceTimeout)
+      try {
+        let json = { list: [] }
+        try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal) } catch {}
+        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
+        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
+        const items = (json.list || []).map(item => normalizeVodItem(item, source))
+        let added = 0
+        for (const item of items) {
+          const name = item.vod_name || ''
+          if (!movieNameMatches(item, q)) continue
+          const key = (name || item.vod_id || Math.random().toString()).trim()
+          if (!seen.has(key)) {
+            seen.add(key)
+            merged.push(item)
+            added++
+          }
         }
+        if (added > 0) {
+          succeeded++
+          renderedAny = true
+          renderVodGrid(merged, merged.length)
+        }
+      } catch (e) {
+        console.warn('[movie] 搜索源失败:', source.name, e?.message || e)
+      } finally {
+        clearTimeout(tid)
+        finished++
+        setDebug('全网搜索中', finished + '/' + VOD_SOURCES.length + '源返回，已显示' + merged.length + '条')
       }
-    }
-    const succeeded = sourceResults.filter(r => r.status === 'fulfilled' && r.value.items.length > 0)
-    const totalS = merged.length
-    const srcS = succeeded.map(r => r.value.source.name).join('、')
-    setDebug('全网搜索完成', succeeded.length + '/' + VOD_SOURCES.length + '源返回，精确匹配' + totalS + '条[' + srcS + ']')
-    renderVodGrid(merged, totalS)
+    })
+
+    await Promise.allSettled(tasks)
+    if (!renderedAny) renderVodGrid([], 0)
+    setDebug('全网搜索完成', succeeded + '/' + VOD_SOURCES.length + '源命中，精确匹配' + merged.length + '条')
   }
 
   async function loadSearch() {
@@ -1063,7 +1090,7 @@ function setDebug(msg, detail) {
       // 兜底：直接 fetch 搜索（部分源搜索接口不同）
       try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + q) } catch {}
     }
-    const filtered = filterSearchResults(json.list || [], query).map(item => ({ ...item, _srcKey: source.key, _srcName: source.name }))
+    const filtered = filterSearchResults((json.list || []).map(item => normalizeVodItem(item, source)), query)
     const total = filtered.length
     setDebug(total > 0 ? '搜索到' + total + '条精确结果' : '未找到相关影片', 'list.len=' + (json.list?.length || 0) + ' filtered=' + total)
     renderVodGrid(filtered, total)
@@ -1489,7 +1516,7 @@ if (typeof window !== 'undefined') window.__tuluPosterFallback = posterFallback
     body.innerHTML =
       backBtn +
       '<div class="tvbox-ep-info">' +
-        '<img src="' + escHtml(item.vod_pic) + '" class="tvbox-ep-pic" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this)" />' +
+        renderPosterImg(item.vod_pic, item.vod_name, item._srcKey, item._tvboxApi || item._api || '').replace('<img ', '<img class="tvbox-ep-pic" ') +
         (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
         '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
       '</div>' +

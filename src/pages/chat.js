@@ -166,6 +166,9 @@ export async function render() {
           <span class="status-dot" id="chat-status-dot"></span>
           <div class="chat-title-block">
             <span class="chat-title" id="chat-title">${t('chat.chatTitle')}</span>
+            <button class="btn btn-sm btn-ghost btn-refresh-chat" id="btn-refresh-chat" title="${t('chat.refreshChat')}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            </button>
           </div>
         </div>
         <div class="chat-header-actions">
@@ -459,6 +462,7 @@ function bindEvents(page) {
   }
   page.querySelector('#btn-toggle-sidebar')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
+  page.querySelector('#btn-refresh-chat')?.addEventListener('click', () => refreshChatData())
   page.querySelector('#btn-new-session').addEventListener('click', () => showNewSessionDialog())
   page.querySelector('#btn-collab').addEventListener('click', () => injectCollabTemplate())
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
@@ -1051,6 +1055,28 @@ async function saveWorkspaceCurrentFile() {
   }
 }
 
+async function refreshChatData() {
+  if (!_sessionKey || !_messagesEl || _isLoadingHistory) return
+  const btn = _page?.querySelector('#btn-refresh-chat')
+  try {
+    if (btn) {
+      btn.disabled = true
+      btn.classList.add('is-spinning')
+    }
+    clearMessages()
+    _lastHistoryHash = ''
+    await loadHistory()
+    toast(`聊天数据已刷新`, 'success')
+  } catch (e) {
+    toast(`刷新聊天数据失败: ${e?.message || e}`, 'error')
+  } finally {
+    if (btn) {
+      btn.disabled = false
+      btn.classList.remove('is-spinning')
+    }
+  }
+}
+
 async function applySelectedModel() {
   if (!_selectedModel) {
     toast(t('chat.loadingModels'), 'warning')
@@ -1060,13 +1086,15 @@ async function applySelectedModel() {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
+  const targetModel = _selectedModel
   _isApplyingModel = true
   renderModelSelect()
   try {
-    await wsClient.sessionModelSet(_sessionKey, _selectedModel)
-    _primaryModel = _selectedModel
-    localStorage.setItem(STORAGE_MODEL_KEY, _selectedModel)
-    toast(`✅ 已切换至 ${_selectedModel}`, 'success')
+    toast(`正在切换，正在预热 ${targetModel}`, 'info')
+    await wsClient.sessionModelSet(_sessionKey, targetModel)
+    _primaryModel = targetModel
+    localStorage.setItem(STORAGE_MODEL_KEY, targetModel)
+    toast(`切换成功，当前模型：${targetModel}`, 'success')
   } catch (e) {
     toast(`${t('chat.sendFailed')}${e?.message || e}`, 'error')
   } finally {
