@@ -610,7 +610,7 @@ export class WsClient {
   }
 
   sessionModelSet(sessionKey, model) {
-    return this.request('session.configure', { key: sessionKey, model })
+    return this.chatSend(sessionKey, `/model ${model}`)
   }
 
   onEvent(callback) {
