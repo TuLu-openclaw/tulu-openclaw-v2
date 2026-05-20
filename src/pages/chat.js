@@ -103,6 +103,9 @@ let _defaultModelLabel = ''
 let _selectedModel = ''
 let _isApplyingModel = false
 let _sessionModels = new Map()
+let _sessionContextTokens = new Map()
+let _sessionTokenTotals = new Map()
+let _defaultContextTokens = 0
 
 // ── 托管 Agent ──
 const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
@@ -672,6 +675,73 @@ function ensureModelOption(model) {
   if (!_availableModels.includes(full)) _availableModels = [full, ..._availableModels]
 }
 
+
+function normalizeUsage(raw = null) {
+  if (!raw || typeof raw !== 'object') return null
+  const input = Number(raw.input ?? raw.inputTokens ?? raw.input_tokens ?? raw.prompt_tokens ?? 0) || 0
+  const output = Number(raw.output ?? raw.outputTokens ?? raw.output_tokens ?? raw.completion_tokens ?? 0) || 0
+  const cacheRead = Number(raw.cacheRead ?? raw.cache_read_input_tokens ?? raw.cached_tokens ?? raw.cache_read ?? 0) || 0
+  const cacheWrite = Number(raw.cacheWrite ?? raw.cache_creation_input_tokens ?? raw.cache_write_input_tokens ?? raw.cache_write ?? 0) || 0
+  const total = Number(raw.total ?? raw.totalTokens ?? raw.total_tokens ?? (input + output + cacheRead + cacheWrite)) || 0
+  if (!input && !output && !cacheRead && !cacheWrite && !total) return null
+  return { input, output, cacheRead, cacheWrite, total }
+}
+
+function normalizeCost(raw = null) {
+  if (!raw) return 0
+  if (typeof raw === 'number') return raw
+  if (typeof raw !== 'object') return 0
+  return Number(raw.total ?? raw.amount ?? raw.cost ?? raw.usd ?? 0) || 0
+}
+
+function compactNumber(n) {
+  n = Number(n) || 0
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  return String(n)
+}
+
+function getContextWindow(sessionKey = _sessionKey) {
+  return _sessionContextTokens.get(sessionKey) || _defaultContextTokens || wsClient.snapshot?.sessionDefaults?.contextTokens || 0
+}
+
+function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cost = 0, model = '', contextWindow = 0, showCopy = true } = {}) {
+  const parts = [`<span class="msg-time">${formatTime(time)}</span>`]
+  if (durationMs > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${(durationMs / 1000).toFixed(1)}s</span>`)
+  const u = normalizeUsage(usage)
+  if (u) {
+    if (u.input) parts.push(`<span class="meta-sep">·</span><span class="msg-tokens msg-token-in" title="Input tokens">↑${compactNumber(u.input)}</span>`)
+    if (u.output) parts.push(`<span class="msg-tokens msg-token-out" title="Output tokens">↓${compactNumber(u.output)}</span>`)
+    if (u.cacheRead) parts.push(`<span class="msg-tokens msg-token-cache" title="Cache read tokens">R${compactNumber(u.cacheRead)}</span>`)
+    if (u.cacheWrite) parts.push(`<span class="msg-tokens msg-token-cache" title="Cache write tokens">W${compactNumber(u.cacheWrite)}</span>`)
+    const ctxBase = Number(contextWindow) || 0
+    const ctxUsed = u.input + u.cacheRead + u.cacheWrite
+    if (ctxBase > 0 && ctxUsed > 0) {
+      const pct = Math.min(Math.round((ctxUsed / ctxBase) * 100), 100)
+      const cls = pct >= 90 ? 'msg-context msg-context-danger' : pct >= 75 ? 'msg-context msg-context-warn' : 'msg-context'
+      parts.push(`<span class="${cls}" title="Context usage">${pct}% ctx</span>`)
+    }
+  }
+  const totalCost = normalizeCost(cost)
+  if (totalCost > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-cost" title="Cost">$${totalCost.toFixed(4)}</span>`)
+  const modelLabel = normalizeModelValue(model) || getSessionRuntimeModel(_sessionKey) || _selectedModel || _primaryModel
+  if (modelLabel) parts.push(`<span class="meta-sep">·</span><span class="msg-model" title="Model background">${escapeHtml(modelLabel)}</span>`)
+  if (showCopy) parts.push(`<button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`)
+  return parts.join('')
+}
+
+function extractMessageUsage(msg = {}) {
+  return normalizeUsage(msg.usage || msg.tokenUsage || msg.metrics?.usage || msg.message?.usage)
+}
+
+function extractMessageCost(msg = {}) {
+  return normalizeCost(msg.cost || msg.usage?.cost || msg.metrics?.cost || msg.message?.cost)
+}
+
+function extractMessageModel(msg = {}) {
+  return normalizeModelValue(msg.model || msg.runtimeModel || msg.currentModel || msg.modelId || msg.message?.model || '', msg.modelProvider || msg.provider || msg.message?.modelProvider || '')
+}
+
 function applyRuntimeModelToSelect(sessionKey = _sessionKey) {
   const runtimeModel = getSessionRuntimeModel(sessionKey)
   if (runtimeModel) ensureModelOption(runtimeModel)
@@ -692,7 +762,7 @@ async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
     includeUnknown: true,
   })
   const sessions = result?.sessions || result || []
-  updateSessionModelCache(sessions)
+  updateSessionRuntimeCache(sessions, result?.defaults)
   const defaultsModel = normalizeModelValue(result?.defaults?.model, result?.defaults?.modelProvider)
   if (defaultsModel) {
     _primaryModel = defaultsModel
@@ -702,14 +772,24 @@ async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
   return applyRuntimeModelToSelect(sessionKey)
 }
 
-function updateSessionModelCache(sessions) {
+function updateSessionRuntimeCache(sessions, defaults = null) {
+  const defaultCtx = Number(defaults?.contextTokens ?? defaults?.context_tokens ?? defaults?.contextWindow ?? 0) || 0
+  if (defaultCtx > 0) _defaultContextTokens = defaultCtx
   for (const item of (sessions || [])) {
     const key = item.sessionKey || item.key || ''
     if (!key) continue
     const model = normalizeModelValue(item.model || item.runtimeModel || item.currentModel || '', item.modelProvider || item.provider || '')
     if (model) _sessionModels.set(key, model)
     else _sessionModels.delete(key)
+    const ctx = Number(item.contextTokens ?? item.context_tokens ?? item.contextWindow ?? item.context_window ?? defaultCtx ?? 0) || 0
+    if (ctx > 0) _sessionContextTokens.set(key, ctx)
+    const total = Number(item.totalTokens ?? item.total_tokens ?? item.contextUsedTokens ?? item.usedTokens ?? 0) || 0
+    if (total > 0) _sessionTokenTotals.set(key, total)
   }
+}
+
+function updateSessionModelCache(sessions) {
+  updateSessionRuntimeCache(sessions)
 }
 
 function escapeAttr(str) {
@@ -1372,7 +1452,7 @@ async function refreshSessionList() {
   try {
     const result = await wsClient.sessionsList(50, { activeMinutes: 1, includeGlobal: true, includeUnknown: true })
     const sessions = result?.sessions || result || []
-    updateSessionModelCache(sessions)
+    updateSessionRuntimeCache(sessions, result?.defaults)
     applyRuntimeModelToSelect(_sessionKey)
     renderSessionList(sessions)
   } catch (e) {
@@ -1395,6 +1475,11 @@ function renderSessionList(sessions) {
     const timeStr = ts ? formatSessionTime(ts) : ''
     const msgCount = s.messageCount || s.messages || 0
     const agentId = parseSessionAgent(key)
+    const model = normalizeModelValue(s.model || s.runtimeModel || s.currentModel || '', s.modelProvider || s.provider || '')
+    const ctxTokens = Number(s.contextTokens ?? s.context_tokens ?? s.contextWindow ?? _sessionContextTokens.get(key) ?? _defaultContextTokens ?? 0) || 0
+    const totalTokens = Number(s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? _sessionTokenTotals.get(key) ?? 0) || 0
+    const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
+    const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
     const displayLabel = getDisplayLabel(key) || label
     return `<div class="chat-session-card${active}" data-key="${escapeAttr(key)}">
       <div class="chat-session-card-header">
@@ -1404,6 +1489,8 @@ function renderSessionList(sessions) {
       <div class="chat-session-card-meta">
         ${agentId && agentId !== 'main' ? `<span class="chat-session-agent">${escapeAttr(agentId)}</span>` : ''}
         ${msgCount > 0 ? `<span>${msgCount} msgs</span>` : ''}
+        ${model ? `<span class="chat-session-model" title="${escapeAttr(model)}">${escapeAttr(model.includes('/') ? model.split('/').pop() : model)}</span>` : ''}
+        ${ctxTokens > 0 ? `<span class="chat-session-context${ctxClass}" title="${compactNumber(totalTokens)} / ${compactNumber(ctxTokens)}">${percentUsed}% ctx</span>` : ''}
         ${timeStr ? `<span>${timeStr}</span>` : ''}
       </div>
     </div>`
@@ -1894,20 +1981,17 @@ function handleChatEvent(payload) {
         durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
       if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
-      // token 消耗（从 payload.usage 或 payload.message.usage 提取）
-      const usage = payload.usage || payload.message?.usage || null
-      if (usage) {
-        const inp = usage.input_tokens || usage.prompt_tokens || 0
-        const out = usage.output_tokens || usage.completion_tokens || 0
-        const total = usage.total_tokens || (inp + out)
-        if (total > 0) {
-          let tokenStr = `${total} tokens`
-          if (inp && out) tokenStr = `↑${inp} ↓${out}`
-          parts.push(`<span class="meta-sep">·</span><span class="msg-tokens">${tokenStr}</span>`)
-        }
+      const finalMetaSource = {
+        ...(payload.message || {}),
+        usage: payload.message?.usage || payload.usage,
+        cost: payload.message?.cost || payload.cost,
+        model: payload.message?.model || payload.model,
+        modelProvider: payload.message?.modelProvider || payload.modelProvider || payload.provider,
       }
-      parts.push(`<button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`)
-      meta.innerHTML = parts.join('')
+      const usage = extractMessageUsage(finalMetaSource)
+      const cost = extractMessageCost(finalMetaSource)
+      const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
+      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true })
       wrapper.appendChild(meta)
     }
     setReplyStatus('done', CHAT_REPLY_STATUS_TEXT.done, { runId: runId || _currentRunId })
@@ -1915,6 +1999,7 @@ function handleChatEvent(payload) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
         content: _currentAiText, timestamp: Date.now(),
+        usage: extractMessageUsage(finalMetaSource), cost: extractMessageCost(finalMetaSource), model: extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey), contextWindow: getContextWindow(_sessionKey),
         attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
       })
     }
@@ -2350,7 +2435,7 @@ async function loadHistory() {
         if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
         else if (msg.role === 'assistant') {
           const images = (msg.attachments || []).filter(a => a.category === 'image').map(a => ({ mediaType: a.mimeType, data: a.content, url: a.url }))
-          appendAiMessage(msg.content || '', msgTime, images, [], [], [], [])
+          appendAiMessage(msg.content || '', msgTime, images, [], [], [], [], { usage: msg.usage, cost: msg.cost, model: msg.model, contextWindow: msg.contextWindow, sessionKey: msg.sessionKey })
         }
       })
       scrollToBottom()
@@ -2373,7 +2458,7 @@ async function loadHistory() {
       saveMessages(result.messages.map(m => {
         const c = extractContent(m)
         const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-        return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now() }
+        return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(_sessionKey) }
       }))
       _isLoadingHistory = false
       return
@@ -2393,7 +2478,7 @@ async function loadHistory() {
         if (msg.images?.length && !userAtts.length) hasOmittedImages = true
         appendUserMessage(msg.text, userAtts, msgTime)
       } else if (msg.role === 'assistant') {
-        appendAiMessage(msg.text, msgTime, msg.images, msg.videos, msg.audios, msg.files, msg.tools)
+        appendAiMessage(msg.text, msgTime, msg.images, msg.videos, msg.audios, msg.files, msg.tools, { usage: msg.usage, cost: msg.cost, model: msg.model, contextWindow: getContextWindow(_sessionKey), sessionKey: _sessionKey })
       }
     })
     if (hasOmittedImages) {
@@ -2402,7 +2487,7 @@ async function loadHistory() {
     saveMessages(result.messages.map(m => {
       const c = extractContent(m)
       const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-      return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now() }
+      return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(_sessionKey) }
     }))
     scrollToBottom()
     restoreReplyStatus()
@@ -2461,10 +2546,13 @@ function dedupeHistory(messages) {
         last.audios = [...(last.audios || []), ...c.audios]
         last.files = [...(last.files || []), ...c.files]
         tools.forEach(t => upsertTool(last.tools, t))
+        if (!last.usage) last.usage = extractMessageUsage(msg)
+        if (!last.cost) last.cost = extractMessageCost(msg)
+        if (!last.model) last.model = extractMessageModel(msg)
         continue
       }
     }
-    deduped.push({ role, text: c.text, images: c.images, videos: c.videos, audios: c.audios, files: c.files, tools, timestamp: msg.timestamp })
+    deduped.push({ role, text: c.text, images: c.images, videos: c.videos, audios: c.audios, files: c.files, tools, timestamp: msg.timestamp, usage: extractMessageUsage(msg), cost: extractMessageCost(msg), model: extractMessageModel(msg) })
   }
   return deduped
 }
@@ -2554,7 +2642,7 @@ function extractContent(msg) {
 
 // ── DOM 操作 ──
 
-function appendUserMessage(text, attachments = [], msgTime) {
+function appendUserMessage(text, attachments = [], msgTime, metaData = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-user'
   const bubble = document.createElement('div')
@@ -2607,7 +2695,7 @@ function appendUserMessage(text, attachments = [], msgTime) {
 
   const meta = document.createElement('div')
   meta.className = 'msg-meta'
-  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
+  meta.innerHTML = buildMessageMeta({ time: msgTime || new Date(), usage: metaData.usage, cost: metaData.cost, model: metaData.model, contextWindow: metaData.contextWindow || getContextWindow(metaData.sessionKey || _sessionKey), showCopy: true })
 
   wrap.appendChild(bubble)
   wrap.appendChild(meta)
@@ -2615,7 +2703,7 @@ function appendUserMessage(text, attachments = [], msgTime) {
   scrollToBottom()
 }
 
-function appendAiMessage(text, msgTime, images, videos, audios, files, tools) {
+function appendAiMessage(text, msgTime, images, videos, audios, files, tools, metaData = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-ai'
   const bubble = document.createElement('div')

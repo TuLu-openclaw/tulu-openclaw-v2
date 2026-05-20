@@ -42,6 +42,11 @@ export async function saveMessage(message) {
       role: message.role || 'assistant',
       content: message.content || message.text || '',
       timestamp: message.timestamp || Date.now(),
+      usage: message.usage || null,
+      cost: message.cost || null,
+      model: message.model || '',
+      contextWindow: message.contextWindow || 0,
+      attachments: message.attachments || [],
       sync: true
     })
   } catch (e) {
@@ -63,6 +68,11 @@ export async function saveMessages(messages) {
         role: msg.role || 'assistant',
         content: msg.content || msg.text || '',
         timestamp: msg.timestamp || Date.now(),
+        usage: msg.usage || null,
+        cost: msg.cost || null,
+        model: msg.model || '',
+        contextWindow: msg.contextWindow || 0,
+        attachments: msg.attachments || [],
         sync: true
       })
     })

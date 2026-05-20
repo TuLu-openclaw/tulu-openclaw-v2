@@ -1215,6 +1215,36 @@
   white-space: nowrap;
 }
 
+.chat-session-model {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.chat-session-context {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success, #22c55e);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.chat-session-context.warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--warning, #f59e0b);
+}
+
+.chat-session-context.danger {
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--error, #ef4444);
+}
+
 .chat-session-agent {
   background: var(--bg-tertiary);
   padding: 0 4px;
@@ -1428,9 +1458,33 @@
   font-size: 11px;
 }
 
-.msg-meta .msg-tokens {
+.msg-meta .msg-tokens,
+.msg-meta .msg-cost,
+.msg-meta .msg-context,
+.msg-meta .msg-model {
   font-size: 10px;
-  opacity: 0.8;
+  opacity: 0.86;
+}
+
+.msg-meta .msg-token-in { color: #60a5fa; }
+.msg-meta .msg-token-out { color: #34d399; }
+.msg-meta .msg-token-cache { color: #a78bfa; }
+.msg-meta .msg-cost { color: #fbbf24; }
+.msg-meta .msg-context {
+  color: var(--success, #22c55e);
+  font-weight: 600;
+}
+.msg-meta .msg-context-warn { color: var(--warning, #f59e0b); }
+.msg-meta .msg-context-danger { color: var(--error, #ef4444); }
+.msg-meta .msg-model {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
 .msg-meta .msg-duration {
