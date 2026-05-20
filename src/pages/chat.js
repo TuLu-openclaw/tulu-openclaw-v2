@@ -687,7 +687,7 @@ function sleep(ms) {
 async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
   if (!sessionKey || !wsClient.gatewayReady) return ''
   const result = await wsClient.sessionsList(100, {
-    activeMinutes: 0,
+    activeMinutes: 1,
     includeGlobal: true,
     includeUnknown: true,
   })
@@ -1370,7 +1370,7 @@ async function connectGateway() {
 async function refreshSessionList() {
   if (!_sessionListEl || !wsClient.gatewayReady) return
   try {
-    const result = await wsClient.sessionsList(50, { activeMinutes: 0, includeGlobal: true, includeUnknown: true })
+    const result = await wsClient.sessionsList(50, { activeMinutes: 1, includeGlobal: true, includeUnknown: true })
     const sessions = result?.sessions || result || []
     updateSessionModelCache(sessions)
     applyRuntimeModelToSelect(_sessionKey)
