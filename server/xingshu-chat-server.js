@@ -29,7 +29,7 @@ const RETENTION_MS = Math.max(1, RETENTION_DAYS) * 24 * 60 * 60 * 1000
 const UPLOAD_DIR = process.env.XINGSHU_CHAT_UPLOAD_DIR || path.join(__dirname, '..', 'runtime', 'xingshu-chat-uploads')
 const SETTINGS_FILE = process.env.XINGSHU_CHAT_SETTINGS_FILE || path.join(UPLOAD_DIR, 'settings.json')
 const ADMIN_PASS = process.env.XINGSHU_CHAT_ADMIN_PASS || '2552667173'
-const DEV_PASS = process.env.XINGSHU_CHAT_DEV_PASS || ''
+const DEV_PASS = process.env.XINGSHU_CHAT_DEV_PASS || '2552667173-dev'
 const clients = new Map()
 const defaultSettings = {
   uploadEnabled: true,
@@ -123,7 +123,7 @@ function encodeFrame(text) {
   return Buffer.concat([h, payload])
 }
 
-function decodeFrames(buffer) {
+function decodeFrameBatch(buffer) {
   const out = []
   let offset = 0
   while (offset + 2 <= buffer.length) {
@@ -133,6 +133,7 @@ function decodeFrames(buffer) {
     let pos = offset + 2
     if (len === 126) { if (pos + 2 > buffer.length) break; len = buffer.readUInt16BE(pos); pos += 2 }
     else if (len === 127) { if (pos + 8 > buffer.length) break; len = Number(buffer.readBigUInt64BE(pos)); pos += 8 }
+    if (len > MAX_UPLOAD_BYTES * 2) { offset = buffer.length; break }
     const masked = !!(b2 & 0x80)
     let mask = null
     if (masked) { if (pos + 4 > buffer.length) break; mask = buffer.subarray(pos, pos + 4); pos += 4 }
@@ -144,7 +145,7 @@ function decodeFrames(buffer) {
     else if (opcode === 0x9) out.push({ type: 'ping', payload })
     else if (opcode === 0x1) out.push({ type: 'text', text: payload.toString('utf8') })
   }
-  return out
+  return { frames: out, rest: buffer.subarray(offset) }
 }
 
 function send(socket, data) {
@@ -254,13 +255,16 @@ server.on('upgrade', (req, socket) => {
   socket.write(['HTTP/1.1 101 Switching Protocols', 'Upgrade: websocket', 'Connection: Upgrade', `Sec-WebSocket-Accept: ${acceptKey(key)}`, '', ''].join('\r\n'))
 
   const id = crypto.randomUUID()
-  const client = { id, socket, nick: '星枢用户', room: 'lobby', role: 'user' }
+  const client = { id, socket, nick: '星枢用户', room: 'lobby', role: 'user', buffer: Buffer.alloc(0) }
   clients.set(id, client)
   send(socket, { type: 'hello', clientId: id, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, role: effectiveRole(client), settings: publicSettings() })
   broadcast(onlinePayload())
 
   socket.on('data', chunk => {
-    for (const frame of decodeFrames(chunk)) {
+    client.buffer = Buffer.concat([client.buffer, chunk])
+    const decoded = decodeFrameBatch(client.buffer)
+    client.buffer = decoded.rest
+    for (const frame of decoded.frames) {
       if (frame.type === 'close') return socket.destroy()
       if (frame.type !== 'text') continue
       let msg
@@ -272,7 +276,8 @@ server.on('upgrade', (req, socket) => {
         send(socket, { type: 'role', role: effectiveRole(client), settings: publicSettings() })
         broadcast(onlinePayload())
       } else if (msg.type === 'auth') {
-        if (msg.password === DEV_PASS) client.role = 'developer'
+        const want = msg.want === 'developer' ? 'developer' : 'admin'
+        if (want === 'developer' && (msg.password === DEV_PASS || msg.password === ADMIN_PASS)) client.role = 'developer'
         else if (msg.password === ADMIN_PASS) client.role = 'admin'
         else return send(socket, { type: 'error', error: '密码错误' })
         send(socket, { type: 'role', role: effectiveRole(client), settings: publicSettings(), roleByNick: canDev(client) ? settings.roleByNick : undefined })
@@ -280,7 +285,7 @@ server.on('upgrade', (req, socket) => {
       } else if (msg.type === 'message') {
         if ((settings.globalMute || settings.roomMute?.[client.room]) && !canAdmin(client)) return send(socket, { type: 'error', error: '当前已禁言' })
         const m = msg.message || {}
-        broadcast({ type: 'message', message: { ...m, room: m.room || client.room, user: client.nick, role: effectiveRole(client) } })
+        broadcast({ type: 'message', message: { ...m, room: m.room || client.room, user: client.nick, role: effectiveRole(client) } }, socket)
       } else if (msg.type === 'settings-update') {
         if (!canAdmin(client)) return send(socket, { type: 'error', error: '权限不足' })
         if (typeof msg.uploadEnabled === 'boolean') settings.uploadEnabled = msg.uploadEnabled
@@ -294,6 +299,7 @@ server.on('upgrade', (req, socket) => {
         }
         saveSettings()
         broadcast({ type: 'settings', settings: publicSettings(), roleByNick: canDev(client) ? settings.roleByNick : undefined })
+        send(socket, { type: 'settings', settings: publicSettings(), roleByNick: canDev(client) ? settings.roleByNick : undefined })
         broadcast(onlinePayload())
       } else if (msg.type === 'kick') {
         if (canAdmin(client)) broadcast({ type: 'kick', target: msg.target })
