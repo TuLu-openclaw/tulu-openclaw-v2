@@ -109,7 +109,7 @@ function buildModalHTML(initialKami, showPw, remembered, noticeText) {
       'font-size:13px;color:#a5b4fc;line-height:1.6;' +
       'display:flex;align-items:flex-start;gap:8px">' +
       '<span style="flex-shrink:0;margin-top:1px">&#x1F4E3;</span>' +
-      '<span id="kami-notice-text">' + (noticeText || '验证通过后即可使用全部功能，卡密问题请联系 QQ：2552667173') + '</span>' +
+      '<span id="kami-notice-text">' + (noticeText || '验证通过后即可使用全部功能，卡密问题请点击购买卡密或联系星枢官方') + '</span>' +
     '</div>'
 
   return '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>' +
@@ -146,7 +146,7 @@ function buildModalHTML(initialKami, showPw, remembered, noticeText) {
             ' style="width:15px;height:15px;margin-right:8px;accent-color:#6366f1;cursor:pointer">' +
           '<span style="font-size:12px;color:#888">记住卡密</span>' +
         '</label>' +
-        '<a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener"' +
+        '<a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" rel="noopener"' +
           ' style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 &#x2192;</a>' +
       '</div>' +
 
@@ -158,7 +158,7 @@ function buildModalHTML(initialKami, showPw, remembered, noticeText) {
       '<div id="kami-error" style="margin-top:12px;text-align:center;font-size:12px;color:#ef4444;min-height:16px"></div>' +
 
       '<div style="margin-top:20px;text-align:center">' +
-        '<a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener"' +
+        '<a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" rel="noopener"' +
           ' style="font-size:11px;color:#555;text-decoration:none">星枢官方 &middot; 卡密系统</a>' +
       '</div>' +
     '</div>'

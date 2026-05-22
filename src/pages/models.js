@@ -76,9 +76,16 @@ async function loadConfig(page, state) {
   try {
     state.config = await api.readOpenclawConfig()
     // 自动修复现有配置中的 baseUrl（如 Ollama 缺少 /v1），一次性迁移
-    const before = JSON.stringify(state.config?.models?.providers || {})
+    const before = JSON.stringify({
+      providers: state.config?.models?.providers || {},
+      agentModelAllowlist: state.config?.agents?.defaults?.models || {}
+    })
     normalizeProviderUrls(state.config)
-    const after = JSON.stringify(state.config?.models?.providers || {})
+    disableAgentModelAllowlist(state.config)
+    const after = JSON.stringify({
+      providers: state.config?.models?.providers || {},
+      agentModelAllowlist: state.config?.agents?.defaults?.models || {}
+    })
     if (before !== after) {
       console.log('[models] 自动修复了服务商 baseUrl，正在保存...')
       await api.writeOpenclawConfig(state.config)
@@ -110,6 +117,19 @@ function collectAllModels(config) {
 
 function getApiTypeLabel(apiType) {
   return API_TYPES.find(at => at.value === apiType)?.label || apiType || t('common.unknown')
+}
+
+function disableAgentModelAllowlist(config) {
+  const defaults = config?.agents?.defaults
+  if (!defaults) return false
+  if (defaults.models && Object.keys(defaults.models).length > 0) {
+    defaults.models = {}
+    return true
+  }
+  if (!defaults.models) {
+    defaults.models = {}
+  }
+  return false
 }
 
 // 渲染当前主模型状态栏
@@ -417,6 +437,7 @@ async function saveConfigOnly(state) {
     const primary = getCurrentPrimary(state.config)
     if (primary) applyDefaultModel(state)
     normalizeProviderUrls(state.config)
+    disableAgentModelAllowlist(state.config)
     await api.writeOpenclawConfig(state.config)
   } catch (e) {
     toast(t('models.saveFailed') + ': ' + e, 'error')
@@ -428,6 +449,7 @@ async function doAutoSave(state) {
     const primary = getCurrentPrimary(state.config)
     if (primary) applyDefaultModel(state)
     normalizeProviderUrls(state.config)
+    disableAgentModelAllowlist(state.config)
     await api.writeOpenclawConfig(state.config)
 
     // 重启 Gateway 使配置生效（Gateway 不支持 SIGHUP 热重载）
@@ -740,13 +762,11 @@ function applyDefaultModel(state) {
     const allModels = collectAllModels(state.config)
     defaults.model.fallbacks = allModels.filter(m => m.full !== primary).map(m => m.full)
   }
-  if (!defaults.models || Object.keys(defaults.models).length === 0) {
-    const allModels = collectAllModels(state.config)
-    const modelsMap = {}
-    modelsMap[primary] = {}
-    for (const m of allModels) { if (m.full !== primary) modelsMap[m.full] = {} }
-    defaults.models = modelsMap
-  }
+  // agents.defaults.models 是 OpenClaw 的模型 allowlist。
+  // 如果这里被写入非空对象，provider 中新增/同步的模型会被误判为 "model not allowed"。
+  // 面板的模型页已经通过 models.providers 管理可用模型，所以这里保持空对象，
+  // 让 OpenClaw 自动允许所有 provider 中配置的模型，避免其他用户遇到模型限制问题。
+  defaults.models = {}
 
   // 注意：不再强制同步到各 agent 的 model.primary
   // 子 Agent 的模型覆盖是 OpenClaw 正常功能（用户可通过对话为不同 Agent 设置不同模型）

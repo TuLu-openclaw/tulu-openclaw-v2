@@ -4,7 +4,7 @@
  */
 
 export default function render(el) {
-  const ANNOUNCEMENT = 'v3.3.4 更新公告：修复已知问题，优化播放体验。卡密问题联系 QQ：2552667173'
+  const ANNOUNCEMENT = 'v3.3.4 更新公告：修复已知问题，优化播放体验。卡密问题联系 星枢官方客服'
 
   el.innerHTML = `
     ${ANNOUNCEMENT ? `<div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 12px;margin:16px 16px 0;font-size:12px;color:#a5b4fc;line-height:1.6">📢 ${ANNOUNCEMENT}</div>` : ''}
