@@ -27,10 +27,40 @@ const MAX_UPLOAD_BYTES = Math.max(1, MAX_UPLOAD_MB) * 1024 * 1024
 const RETENTION_DAYS = Number(process.env.XINGSHU_CHAT_RETENTION_DAYS || 7)
 const RETENTION_MS = Math.max(1, RETENTION_DAYS) * 24 * 60 * 60 * 1000
 const UPLOAD_DIR = process.env.XINGSHU_CHAT_UPLOAD_DIR || path.join(__dirname, '..', 'runtime', 'xingshu-chat-uploads')
+const SETTINGS_FILE = process.env.XINGSHU_CHAT_SETTINGS_FILE || path.join(UPLOAD_DIR, 'settings.json')
+const ADMIN_PASS = process.env.XINGSHU_CHAT_ADMIN_PASS || '2552667173'
+const DEV_PASS = process.env.XINGSHU_CHAT_DEV_PASS || ''
 const clients = new Map()
-const settings = { uploadEnabled: true }
+const defaultSettings = {
+  uploadEnabled: true,
+  globalMute: false,
+  roomMute: {},
+  announcement: '欢迎来到星枢聊天室。请文明交流，售后问题进入「售后支持」。',
+  roleByNick: {},
+  fakeTotalOnline: null,
+  fakeRoomOnline: {}
+}
+let settings = { ...defaultSettings }
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) settings = { ...defaultSettings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }
+  } catch (e) {
+    console.warn('[xingshu-chat] failed to load settings:', e.message)
+  }
+}
+
+function saveSettings() {
+  try {
+    fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true })
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2))
+  } catch (e) {
+    console.warn('[xingshu-chat] failed to save settings:', e.message)
+  }
+}
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+loadSettings()
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -125,10 +155,40 @@ function broadcast(data, except = null) {
   for (const c of clients.values()) if (c.socket !== except) send(c.socket, data)
 }
 
+function publicSettings() {
+  return {
+    uploadEnabled: settings.uploadEnabled,
+    globalMute: settings.globalMute,
+    roomMute: settings.roomMute || {},
+    announcement: settings.announcement || '',
+    fakeTotalOnline: settings.fakeTotalOnline,
+    fakeRoomOnline: settings.fakeRoomOnline || {}
+  }
+}
+
+function effectiveRole(client) {
+  if (client.role === 'developer') return 'developer'
+  const byNick = settings.roleByNick?.[client.nick]
+  if (byNick === 'developer' || byNick === 'admin' || byNick === 'user') return byNick
+  return client.role === 'admin' ? 'admin' : 'user'
+}
+
+function canAdmin(client) {
+  return effectiveRole(client) === 'admin' || effectiveRole(client) === 'developer'
+}
+
+function canDev(client) {
+  return effectiveRole(client) === 'developer'
+}
+
 function onlinePayload() {
   const now = Date.now()
-  const users = [...clients.values()].map(c => ({ id: c.id, nick: c.nick || '星枢用户', room: c.room || 'lobby', role: c.role || 'user', last: now }))
-  return { type: 'online', total: users.length, users }
+  const users = [...clients.values()].map(c => ({ id: c.id, nick: c.nick || '星枢用户', room: c.room || 'lobby', role: effectiveRole(c), last: now }))
+  const realTotal = users.length
+  const roomCounts = {}
+  for (const u of users) roomCounts[u.room] = (roomCounts[u.room] || 0) + 1
+  const displayRoomCounts = { ...roomCounts, ...(settings.fakeRoomOnline || {}) }
+  return { type: 'online', total: realTotal, displayTotal: Number.isFinite(Number(settings.fakeTotalOnline)) ? Number(settings.fakeTotalOnline) : realTotal, roomCounts, displayRoomCounts, users, settings: publicSettings() }
 }
 
 async function readLimitedJson(req) {
@@ -167,7 +227,7 @@ const server = http.createServer(async (req, res) => {
   cors(res)
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
-  if (url.pathname === '/health') return json(res, 200, { ok: true, service: 'xingshu-chat', port: PORT, online: clients.size, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, settings })
+  if (url.pathname === '/health') return json(res, 200, { ok: true, service: 'xingshu-chat', online: clients.size, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, settings: publicSettings() })
   if (url.pathname === '/upload' && req.method === 'POST') return handleUpload(req, res)
   if (url.pathname.startsWith('/files/')) {
     const id = path.basename(decodeURIComponent(url.pathname.slice('/files/'.length)))
@@ -184,7 +244,7 @@ const server = http.createServer(async (req, res) => {
     return
   }
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
-  res.end(`XingShu Chat Server\nWebSocket: ws://HOST:${PORT}/xingshu-chat\nUpload: POST /upload\nFiles: GET /files/<id>\n`)
+  res.end('XingShu Chat Server\n')
 })
 
 server.on('upgrade', (req, socket) => {
@@ -196,7 +256,7 @@ server.on('upgrade', (req, socket) => {
   const id = crypto.randomUUID()
   const client = { id, socket, nick: '星枢用户', room: 'lobby', role: 'user' }
   clients.set(id, client)
-  send(socket, { type: 'hello', clientId: id, port: PORT, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, settings })
+  send(socket, { type: 'hello', clientId: id, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, role: effectiveRole(client), settings: publicSettings() })
   broadcast(onlinePayload())
 
   socket.on('data', chunk => {
@@ -206,20 +266,37 @@ server.on('upgrade', (req, socket) => {
       let msg
       try { msg = JSON.parse(frame.text) } catch { continue }
       if (msg.type === 'presence') {
-        client.nick = msg.nick || client.nick
-        client.room = msg.room || client.room
-        client.role = msg.role || client.role
+        client.nick = String(msg.nick || client.nick).slice(0, 40)
+        client.room = String(msg.room || client.room).slice(0, 40)
+        client.role = effectiveRole(client)
+        send(socket, { type: 'role', role: effectiveRole(client), settings: publicSettings() })
+        broadcast(onlinePayload())
+      } else if (msg.type === 'auth') {
+        if (msg.password === DEV_PASS) client.role = 'developer'
+        else if (msg.password === ADMIN_PASS) client.role = 'admin'
+        else return send(socket, { type: 'error', error: '密码错误' })
+        send(socket, { type: 'role', role: effectiveRole(client), settings: publicSettings(), roleByNick: canDev(client) ? settings.roleByNick : undefined })
         broadcast(onlinePayload())
       } else if (msg.type === 'message') {
+        if ((settings.globalMute || settings.roomMute?.[client.room]) && !canAdmin(client)) return send(socket, { type: 'error', error: '当前已禁言' })
         const m = msg.message || {}
-        broadcast({ type: 'message', message: { ...m, user: m.user || client.nick, role: m.role || client.role } })
+        broadcast({ type: 'message', message: { ...m, room: m.room || client.room, user: client.nick, role: effectiveRole(client) } })
       } else if (msg.type === 'settings-update') {
-        if (msg.role === 'admin' || msg.role === 'developer') {
-          if (typeof msg.uploadEnabled === 'boolean') settings.uploadEnabled = msg.uploadEnabled
-          broadcast({ type: 'settings', settings })
+        if (!canAdmin(client)) return send(socket, { type: 'error', error: '权限不足' })
+        if (typeof msg.uploadEnabled === 'boolean') settings.uploadEnabled = msg.uploadEnabled
+        if (typeof msg.globalMute === 'boolean') settings.globalMute = msg.globalMute
+        if (msg.roomMute && typeof msg.roomMute === 'object') settings.roomMute = { ...settings.roomMute, ...msg.roomMute }
+        if (typeof msg.announcement === 'string') settings.announcement = msg.announcement.slice(0, 500)
+        if (canDev(client)) {
+          if (msg.roleByNick && typeof msg.roleByNick === 'object') settings.roleByNick = { ...settings.roleByNick, ...msg.roleByNick }
+          if (Object.prototype.hasOwnProperty.call(msg, 'fakeTotalOnline')) settings.fakeTotalOnline = msg.fakeTotalOnline === null || msg.fakeTotalOnline === '' ? null : Number(msg.fakeTotalOnline)
+          if (msg.fakeRoomOnline && typeof msg.fakeRoomOnline === 'object') settings.fakeRoomOnline = { ...settings.fakeRoomOnline, ...msg.fakeRoomOnline }
         }
+        saveSettings()
+        broadcast({ type: 'settings', settings: publicSettings(), roleByNick: canDev(client) ? settings.roleByNick : undefined })
+        broadcast(onlinePayload())
       } else if (msg.type === 'kick') {
-        broadcast({ type: 'kick', target: msg.target })
+        if (canAdmin(client)) broadcast({ type: 'kick', target: msg.target })
       }
     }
   })
@@ -228,6 +305,6 @@ server.on('upgrade', (req, socket) => {
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`[xingshu-chat] listening on ws://${HOST}:${PORT}/xingshu-chat`)
+  console.log('[xingshu-chat] listening')
   console.log(`[xingshu-chat] upload max ${MAX_UPLOAD_MB}MB, retention ${RETENTION_DAYS} days, dir ${UPLOAD_DIR}`)
 })
