@@ -523,9 +523,11 @@ export const api = {
   dockerClusterOverview: () => invoke('docker_cluster_overview', {}),
 
 
-  // 前端热更新
+  // 前端热更新 + 全量客户端更新
   checkFrontendUpdate: () => invoke('check_frontend_update'),
   downloadFrontendUpdate: (url, expectedHash) => invoke('download_frontend_update', { url, expectedHash: expectedHash || '' }),
+  checkFullAppUpdate: () => invoke('check_full_app_update'),
+  downloadFullAppUpdate: (url, expectedHash, filename) => invoke('download_full_app_update', { url, expectedHash: expectedHash || '', filename: filename || null }),
   rollbackFrontendUpdate: () => invoke('rollback_frontend_update'),
   getUpdateStatus: () => invoke('get_update_status'),
 

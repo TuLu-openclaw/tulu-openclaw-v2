@@ -278,9 +278,11 @@ pub fn run() {
             skills::skillhub_install,
             skills::hermes_skillhub_install,
             hermes::check_hermes_update,
-            // 前端热更新
+            // 前端热更新 + 全量客户端更新（只改这两项；OpenClaw CLI/Gateway、Hermes、Web部署更新不动）
             update::check_frontend_update,
             update::download_frontend_update,
+            update::check_full_app_update,
+            update::download_full_app_update,
             update::rollback_frontend_update,
             update::get_update_status,
             // TVBox 框架接口

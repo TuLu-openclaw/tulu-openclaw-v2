@@ -1014,19 +1014,22 @@ async function checkGlobalUpdate() {
   if (!banner) return
 
   try {
-    const info = await api.checkFrontendUpdate()
-    if (!info.hasUpdate) return
+    const info = await api.checkFrontendUpdate().catch(() => ({}))
+    const fullInfo = isTauriRuntime() ? await api.checkFullAppUpdate().catch(() => null) : null
+    const hasFrontendUpdate = !!info.hasUpdate
+    const hasFullUpdate = !!fullInfo?.hasUpdate
+    if (!hasFrontendUpdate && !hasFullUpdate) return
 
-    const ver = info.latestVersion || info.manifest?.version || ''
+    const ver = info.latestVersion || fullInfo?.latestVersion || info.manifest?.version || ''
     if (!ver) return
 
     // 用户已忽略过该版本，不再打扰
     const dismissed = localStorage.getItem('星枢OpenClaw_update_dismissed')
     if (dismissed === ver) return
 
-    // 热更新已下载并重载过，不再重复提示同一版本
+    // 热更新已下载并重载过，不再重复提示同一前端版本；但不能挡住全量更新提示
     const hotApplied = localStorage.getItem('星枢OpenClaw_hot_update_applied')
-    if (hotApplied === ver) return
+    if (hasFrontendUpdate && !hasFullUpdate && hotApplied === ver) return
 
     const changelog = info.manifest?.changelog || ''
     const isWeb = !isTauriRuntime()
@@ -1041,9 +1044,10 @@ async function checkGlobalUpdate() {
         </div>
         ${isWeb
           ? `<button class="btn btn-sm" id="btn-update-show-cmd">${t('about.updateMethod')}</button>
-             <a class="btn btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
-          : `<button class="btn btn-sm" id="btn-update-hot">${t('about.hotUpdate')}</button>
-             <a class="btn btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/releases" target="_blank" rel="noopener">${t('about.fullInstaller')}</a>`
+             <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
+          : `${hasFrontendUpdate ? `<button class="btn btn-sm" id="btn-update-hot">前端热更新</button>` : ''}
+             ${hasFullUpdate ? `<button class="btn btn-sm" id="btn-update-full">全量更新</button>` : ''}
+             <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">Release</a>`
         }
         <button class="update-banner-close" id="btn-update-dismiss" title="${t('about.dismissVersion')}">✕</button>
       </div>
@@ -1064,11 +1068,12 @@ async function checkGlobalUpdate() {
           <div class="modal-title">${t('about.updateToVersion', { version: ver })}</div>
           <div style="font-size:var(--font-size-sm);line-height:1.8">
             <p style="margin-bottom:12px">${t('about.runOnServer')}</p>
-            <pre style="background:var(--bg-tertiary);padding:12px 16px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;user-select:all">cd /opt/星枢OpenClaw
+            <pre style="background:var(--bg-tertiary);padding:12px 16px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;user-select:all">cd /opt/tulu-openclaw-v2
 git pull origin main
 npm install
 npm run build
-sudo systemctl restart 星枢OpenClaw</pre>
+sudo systemctl restart xingshu-chat
+sudo systemctl reload nginx</pre>
             <p style="margin-top:12px;color:var(--text-tertiary);font-size:var(--font-size-xs)">
               ${t('about.updateCommandHint')}
             </p>
