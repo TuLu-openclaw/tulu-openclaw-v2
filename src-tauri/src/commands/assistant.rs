@@ -1123,7 +1123,7 @@ pub async fn open_xingshu_chat_window(app: tauri::AppHandle) -> Result<String, S
         .unwrap_or_default()
         .as_millis();
     let window_label = format!("xingshu_chat_{}", ts);
-    let chat_url = "/index.html#/xingshu-chat?window=1";
+    let chat_url = "/xingshu-chat.html";
 
     WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(chat_url.into()))
         .title("星枢聊天室")

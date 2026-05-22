@@ -28,6 +28,7 @@
     "tauri": "tauri",
     "icon:regen": "tauri icon docs/logo.png -o src-tauri/icons",
     "serve": "node scripts/serve.js",
+    "chat-server": "node server/xingshu-chat-server.js",
     "version:sync": "node scripts/sync-version.js",
     "version:set": "node scripts/sync-version.js"
   },

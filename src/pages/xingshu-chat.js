@@ -4,7 +4,7 @@
  */
 
 const STORAGE_KEY = 'xingshu_chat_state_v1'
-const DEFAULT_SERVER = 'ws://124.220.22.11:18789/xingshu-chat'
+const DEFAULT_SERVER = 'ws://124.220.22.11:18888/xingshu-chat'
 const ADMIN_PASS = '2552667173'
 
 const ROOMS = [
