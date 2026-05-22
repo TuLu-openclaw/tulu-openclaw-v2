@@ -4,7 +4,7 @@
  */
 
 const STORAGE_KEY = 'xingshu_chat_state_v1'
-const DEFAULT_SERVER = 'ws://124.220.22.11:18888/xingshu-chat'
+const DEFAULT_SERVER = 'wss://www.aiyu.jx.cn/xingshu-chat'
 const ADMIN_PASS = '2552667173'
 
 const ROOMS = [
@@ -144,7 +144,7 @@ function render(el) {
         <div>
           <div class="xs-eyebrow">售卖版 · 独立聊天室</div>
           <h1>星枢聊天室</h1>
-          <p>多房间、管理员控制、公告、禁言、清屏、导出、本地持久化，并预留服务器 WebSocket：<b>124.220.22.11</b></p>
+          <p>多房间、管理员控制、公告、禁言、清屏、导出、本地持久化，默认通过域名 WSS 安全中继连接。</p>
         </div>
         <div class="xs-hero-actions">
           <span class="xs-status ${socketStatus === '在线' ? 'online' : ''}">${socketStatus}</span>

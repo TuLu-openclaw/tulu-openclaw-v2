@@ -29,7 +29,7 @@ const RETENTION_MS = Math.max(1, RETENTION_DAYS) * 24 * 60 * 60 * 1000
 const UPLOAD_DIR = process.env.XINGSHU_CHAT_UPLOAD_DIR || path.join(__dirname, '..', 'runtime', 'xingshu-chat-uploads')
 const SETTINGS_FILE = process.env.XINGSHU_CHAT_SETTINGS_FILE || path.join(UPLOAD_DIR, 'settings.json')
 const ADMIN_PASS = process.env.XINGSHU_CHAT_ADMIN_PASS || '2552667173'
-const DEV_PASS = process.env.XINGSHU_CHAT_DEV_PASS || '2552667173-dev'
+const DEV_PASS = process.env.XINGSHU_CHAT_DEV_PASS || '2552667173'
 const clients = new Map()
 const defaultSettings = {
   uploadEnabled: true,
@@ -77,6 +77,10 @@ function json(res, code, data) {
 function safeName(name = 'file') {
   const base = path.basename(String(name)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 120)
   return base || 'file'
+}
+
+function safeHeaderName(name = 'file') {
+  return safeName(name).replace(/[\r\n\"]/g, '_')
 }
 
 function contentType(name, fallback = 'application/octet-stream') {
@@ -214,10 +218,10 @@ async function handleUpload(req, res) {
     if (!buffer.length) return json(res, 400, { ok: false, error: '空文件' })
     if (buffer.length > MAX_UPLOAD_BYTES) return json(res, 413, { ok: false, error: `文件超过 ${MAX_UPLOAD_MB}MB 限制` })
     const ext = path.extname(originalName)
-    const stored = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext || '.bin'}`
+    const stored = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${originalName || `file${ext || '.bin'}`}`
     const full = path.join(UPLOAD_DIR, stored)
     fs.writeFileSync(full, buffer)
-    const file = { id: stored, name: originalName, size: buffer.length, mime, url: `/files/${encodeURIComponent(stored)}`, uploadedAt: Date.now(), expiresInDays: RETENTION_DAYS }
+    const file = { id: stored, name: originalName, size: buffer.length, mime, url: `/files/${encodeURIComponent(stored)}`, downloadUrl: `/download/${encodeURIComponent(stored)}`, uploadedAt: Date.now(), expiresInDays: RETENTION_DAYS }
     json(res, 200, { ok: true, file })
   } catch (e) {
     json(res, 400, { ok: false, error: e.message || String(e) })
@@ -230,16 +234,19 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
   if (url.pathname === '/health') return json(res, 200, { ok: true, service: 'xingshu-chat', online: clients.size, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, settings: publicSettings() })
   if (url.pathname === '/upload' && req.method === 'POST') return handleUpload(req, res)
-  if (url.pathname.startsWith('/files/')) {
-    const id = path.basename(decodeURIComponent(url.pathname.slice('/files/'.length)))
+  if (url.pathname.startsWith('/files/') || url.pathname.startsWith('/download/')) {
+    const isDownload = url.pathname.startsWith('/download/') || url.searchParams.get('download') === '1'
+    const prefix = isDownload && url.pathname.startsWith('/download/') ? '/download/' : '/files/'
+    const id = path.basename(decodeURIComponent(url.pathname.slice(prefix.length)))
     const full = path.join(UPLOAD_DIR, id)
     if (!fs.existsSync(full)) return json(res, 404, { ok: false, error: '文件不存在或已过期清理' })
-    const name = id.replace(/^\d+-[a-f0-9]+/, '') || id
+    const name = safeHeaderName(id.replace(/^\d+-[a-f0-9]+-/, '') || id)
     res.writeHead(200, {
       'content-type': contentType(name),
-      'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
+      'content-disposition': `${isDownload ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(name)}`,
       'cache-control': 'public, max-age=86400',
-      'access-control-allow-origin': '*'
+      'access-control-allow-origin': '*',
+      'x-content-type-options': 'nosniff'
     })
     fs.createReadStream(full).pipe(res)
     return
@@ -277,7 +284,7 @@ server.on('upgrade', (req, socket) => {
         broadcast(onlinePayload())
       } else if (msg.type === 'auth') {
         const want = msg.want === 'developer' ? 'developer' : 'admin'
-        if (want === 'developer' && (msg.password === DEV_PASS || msg.password === ADMIN_PASS)) client.role = 'developer'
+        if (want === 'developer' && msg.password === DEV_PASS) client.role = 'developer'
         else if (msg.password === ADMIN_PASS) client.role = 'admin'
         else return send(socket, { type: 'error', error: '密码错误' })
         send(socket, { type: 'role', role: effectiveRole(client), settings: publicSettings(), roleByNick: canDev(client) ? settings.roleByNick : undefined })
