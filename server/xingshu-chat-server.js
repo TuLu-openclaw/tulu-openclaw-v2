@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * 星枢聊天室 WebSocket + 文件服务端
- * - 默认监听 18888，避免占用 OpenClaw Gateway 18789
+ * - 默认仅监听 127.0.0.1:18888，由 Nginx 通过 WSS 反向代理，避免源站端口暴露
  * - 支持远程多人在线聊天、在线人数广播、文件/图片上传下载
  * - 文件写入磁盘，不常驻内存；默认单文件 20MB，默认 7 天自动清理
  *
  * 启动：npm run chat-server
  * 环境变量：
  *   XINGSHU_CHAT_PORT=18888
- *   XINGSHU_CHAT_HOST=0.0.0.0
+ *   XINGSHU_CHAT_HOST=127.0.0.1
  *   XINGSHU_CHAT_MAX_UPLOAD_MB=20
  *   XINGSHU_CHAT_RETENTION_DAYS=7
  *   XINGSHU_CHAT_UPLOAD_DIR=/data/xingshu-chat-uploads
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.XINGSHU_CHAT_PORT || 18888)
-const HOST = process.env.XINGSHU_CHAT_HOST || '0.0.0.0'
+const HOST = process.env.XINGSHU_CHAT_HOST || '127.0.0.1'
 const MAX_UPLOAD_MB = Number(process.env.XINGSHU_CHAT_MAX_UPLOAD_MB || 20)
 const MAX_UPLOAD_BYTES = Math.max(1, MAX_UPLOAD_MB) * 1024 * 1024
 const RETENTION_DAYS = Number(process.env.XINGSHU_CHAT_RETENTION_DAYS || 7)
