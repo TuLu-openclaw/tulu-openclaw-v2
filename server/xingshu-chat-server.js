@@ -28,6 +28,7 @@ const RETENTION_DAYS = Number(process.env.XINGSHU_CHAT_RETENTION_DAYS || 7)
 const RETENTION_MS = Math.max(1, RETENTION_DAYS) * 24 * 60 * 60 * 1000
 const UPLOAD_DIR = process.env.XINGSHU_CHAT_UPLOAD_DIR || path.join(__dirname, '..', 'runtime', 'xingshu-chat-uploads')
 const clients = new Map()
+const settings = { uploadEnabled: true }
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 
@@ -142,6 +143,7 @@ async function readLimitedJson(req) {
 }
 
 async function handleUpload(req, res) {
+  if (!settings.uploadEnabled) return json(res, 403, { ok: false, error: '管理员已关闭文件/图片上传' })
   try {
     const body = await readLimitedJson(req)
     const originalName = safeName(body.name || 'file')
@@ -165,7 +167,7 @@ const server = http.createServer(async (req, res) => {
   cors(res)
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
-  if (url.pathname === '/health') return json(res, 200, { ok: true, service: 'xingshu-chat', port: PORT, online: clients.size, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS })
+  if (url.pathname === '/health') return json(res, 200, { ok: true, service: 'xingshu-chat', port: PORT, online: clients.size, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, settings })
   if (url.pathname === '/upload' && req.method === 'POST') return handleUpload(req, res)
   if (url.pathname.startsWith('/files/')) {
     const id = path.basename(decodeURIComponent(url.pathname.slice('/files/'.length)))
@@ -194,7 +196,7 @@ server.on('upgrade', (req, socket) => {
   const id = crypto.randomUUID()
   const client = { id, socket, nick: '星枢用户', room: 'lobby', role: 'user' }
   clients.set(id, client)
-  send(socket, { type: 'hello', clientId: id, port: PORT, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS })
+  send(socket, { type: 'hello', clientId: id, port: PORT, maxUploadMb: MAX_UPLOAD_MB, retentionDays: RETENTION_DAYS, settings })
   broadcast(onlinePayload())
 
   socket.on('data', chunk => {
@@ -211,6 +213,11 @@ server.on('upgrade', (req, socket) => {
       } else if (msg.type === 'message') {
         const m = msg.message || {}
         broadcast({ type: 'message', message: { ...m, user: m.user || client.nick, role: m.role || client.role } })
+      } else if (msg.type === 'settings-update') {
+        if (msg.role === 'admin' || msg.role === 'developer') {
+          if (typeof msg.uploadEnabled === 'boolean') settings.uploadEnabled = msg.uploadEnabled
+          broadcast({ type: 'settings', settings })
+        }
       } else if (msg.type === 'kick') {
         broadcast({ type: 'kick', target: msg.target })
       }
