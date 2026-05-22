@@ -56,6 +56,7 @@ import './style/debug.css'
 import './style/assistant.css'
 import './style/ai-drawer.css'
 import './styles/music-player.css'
+import './styles/xingshu-chat.css'
 import './engines/hermes/style/hermes.css'
 import './engines/hermes/style/skills-hub.css'
 
@@ -136,7 +137,7 @@ function showBackendDownOverlay() {
       </button>
       <div id="backend-retry-status" style="font-size:12px;color:var(--text-tertiary);margin-top:12px"></div>
       <div style="margin-top:16px;font-size:11px;color:#aaa">
-        <a href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
         <span style="margin:0 6px">&middot;</span>v${APP_VERSION}
       </div>
     </div>
@@ -212,7 +213,7 @@ function showKamiFallbackModal() {
           <input id="kami-fb-remember" type="checkbox" style="width:15px;height:15px;margin-right:8px;accent-color:#6366f1;cursor:pointer" />
           <span style="font-size:12px;color:#888">记住卡密</span>
         </label>
-        <a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 →</a>
+        <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 →</a>
       </div>
       <button id="kami-fb-btn" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,0.35)">验证卡密</button>
       <div id="kami-fb-error" style="margin-top:12px;text-align:center;font-size:12px;color:#ef4444;min-height:16px"></div>
@@ -308,7 +309,7 @@ function showLoginOverlay(defaultPw) {
         </div>
       </details>` : ''}
       <div style="margin-top:${hasDefault ? '20' : '12'}px;font-size:11px;color:#aaa;text-align:center">
-        <a href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
         <span style="margin:0 6px">·</span>v${APP_VERSION}
       </div>
     </div>
@@ -437,6 +438,7 @@ async function boot() {
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
   registerRoute('/music-player', () => import('./pages/music-player.js'))
+registerRoute('/xingshu-chat', () => import('./pages/xingshu-chat.js'))
 // ── 龙虾办公室状态同步 ─────────────────────────────────
 // 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
 const LOBSTER_PHASE_PRESETS = {

@@ -25,6 +25,18 @@ async function _openGlobalBuiltinInIndependentWindow() {
   }
 }
 
+async function _openXingshuChatInIndependentWindow() {
+  try {
+    await api.openXingshuChatWindow()
+    toast('已打开星枢聊天室独立窗口', 'success')
+    return true
+  } catch (err) {
+    toast(err?.message || '星枢聊天室窗口打开失败', 'error')
+    navigate('/xingshu-chat')
+    return false
+  }
+}
+
 // === 引擎切换器 ===
 function _renderEngineSwitcher() {
   const engines = listEngines()
@@ -97,6 +109,7 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
       { route: '/movie-tool', label: '星枢影视', icon: 'movie' },
       { route: '/music-player', label: t('sidebar.musicPlayer'), icon: 'music' },
+      { dataAction: 'open-xingshu-chat', label: '星枢聊天室', icon: 'chatroom' },
       { route: '/lobster-office', label: '龙虾办公室', icon: 'lobster' },
       { route: '/coming-soon', label: '全球内置', icon: 'lock' },
       { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
@@ -167,6 +180,7 @@ const ICONS = {
   setup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+  chatroom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16a2 2 0 012 2v8a2 2 0 01-2 2H9l-5 5v-5H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M8 9h8M8 12h5"/></svg>',
   services: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>',
   logs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
   models: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>',
@@ -310,7 +324,7 @@ export function renderSidebar(el) {
         </div>
       </div>
       <div class="sidebar-meta">
-        <a href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener" class="sidebar-link">反馈交流群</a>
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" class="sidebar-link">反馈交流群</a>
         <span class="sidebar-version">v${APP_VERSION}</span>
       </div>
     </div>
@@ -345,6 +359,8 @@ export function renderSidebar(el) {
             navigate('/h/setup')
             renderSidebar(el)
           }
+        } else if (dataAction === 'open-xingshu-chat') {
+          _openXingshuChatInIndependentWindow()
         } else if (route) {
           if (route === GLOBAL_BUILTIN_ROUTE) {
             _openGlobalBuiltinInIndependentWindow()

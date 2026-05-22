@@ -181,6 +181,7 @@ pub fn run() {
             assistant::open_player_window,
             #[cfg(target_os = "windows")]
             assistant::open_lobster_office,
+            assistant::open_xingshu_chat_window,
             #[cfg(target_os = "windows")]
             assistant::open_global_builtin_window,
             assistant::fetch_live_sources,

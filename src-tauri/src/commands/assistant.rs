@@ -1112,6 +1112,32 @@ pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String
     Ok("ok".into())
 }
 
+/// 打开星枢聊天室独立窗口
+#[tauri::command]
+pub async fn open_xingshu_chat_window(app: tauri::AppHandle) -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let window_label = format!("xingshu_chat_{}", ts);
+    let chat_url = "/index.html#/xingshu-chat?window=1";
+
+    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(chat_url.into()))
+        .title("星枢聊天室")
+        .inner_size(1280.0, 820.0)
+        .min_inner_size(980.0, 640.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建星枢聊天室窗口失败: {}", e))?;
+
+    Ok("ok".into())
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {

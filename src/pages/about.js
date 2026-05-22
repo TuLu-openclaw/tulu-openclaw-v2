@@ -20,7 +20,7 @@ export async function render() {
       <img src="/images/logo-brand.png" alt="星枢OpenClaw" style="height:48px;width:auto">
       <div>
         <h1 class="page-title" style="margin:0">星枢OpenClaw</h1>
-        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">联系QQ：2552667173</a></p>
+        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">联系星枢官方</a></p>
       </div>
     </div>
     <div class="stat-cards" id="version-cards">
@@ -673,14 +673,14 @@ async function checkHotUpdate(cards, panelVersion) {
         }
       })
     } else if (!info.compatible) {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系QQ：2552667173</span>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系星枢官方</span>`
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
     }
   } catch (err) {
     const meta = el()
     if (!meta) return
-    meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <span style="color:var(--text-secondary);font-size:var(--font-size-xs)">联系QQ：2552667173</span>`
+    meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <span style="color:var(--text-secondary);font-size:var(--font-size-xs)">联系星枢官方</span>`
   }
 }
 
@@ -701,14 +701,14 @@ function renderCommunity(page) {
   el.innerHTML = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
       <div style="text-align:center">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" alt="反馈交流群" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
+        <img src="/images/OpenClaw-QQ.png" alt="反馈交流群" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
         <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">反馈交流群</div>
       </div>
       <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;padding-top:4px">
         <div style="font-size:var(--font-size-md);color:var(--text-primary);font-weight:600">交流反馈请联系QQ群</div>
         <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">遇到问题或有建议，欢迎加群交流</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          <a class="btn btn-primary btn-sm" href="http://wpa.qq.com/msgrd?v=3&uin=916149901&site=qq&menu=yes" target="_blank" rel="noopener">加群交流</a>
+          <a class="btn btn-primary btn-sm" href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener">加群交流</a>
         </div>
       </div>
     </div>
@@ -786,7 +786,7 @@ function renderProjects(page) {
 }
 
 const LINKS = [
-  { label: '联系作者', url: 'http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes' },
+  { label: '联系作者', url: 'https://qm.qq.com/q/FF8D891UWc' },
   { label: t('about.linkOpenClawZh'), url: 'https://github.com/1186258278/OpenClawChineseTranslation' },
 ]
 
@@ -869,11 +869,11 @@ function renderCompany(page) {
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:var(--font-size-sm)">
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">联系作者</div>
-          <a href="http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" target="_blank" rel="noopener" style="color:var(--accent)">QQ：2552667173</a>
+          <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" rel="noopener" style="color:var(--accent)">星枢官方客服</a>
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary);text-align:center">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">扫码添加作者</div>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=http://wpa.qq.com/msgrd?v=3&uin=2552667173&site=qq&menu=yes" alt="QQ二维码" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, 'QQ: 2552667173')">
+          <img src="/images/xingshu-contact-qq.png" alt="QQ二维码" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, '星枢官方客服')">
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">
