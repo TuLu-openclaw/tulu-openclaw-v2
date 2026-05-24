@@ -18,6 +18,8 @@ const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
 const STORAGE_SESSION_NAMES_KEY = '星枢OpenClaw-chat-session-names'
 const STORAGE_WORKSPACE_PANEL_KEY = '星枢OpenClaw-chat-workspace-open'
+const STORAGE_VOICE_BROADCAST_KEY = '星枢OpenClaw-chat-voice-broadcast'
+const STORAGE_VOICE_NAME_KEY = '星枢OpenClaw-chat-voice-name'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -61,6 +63,9 @@ const COMMANDS = [
 
 let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
+let _avatarPanelEl = null, _avatarOrbEl = null, _avatarTitleEl = null, _avatarSubtitleEl = null, _avatarBadgesEl = null
+let _avatarBadgeStateEl = null, _avatarBadgeDetailEl = null
+let _voiceBroadcastBtn = null
 let _replyStatusRowEl = null
 let _replyStatusTextEl = null
 const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
@@ -79,6 +84,8 @@ const CHAT_REPLY_STATUS_TEXT = {
 }
 const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '' }
 let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
+let _lastVoiceStatusSpoken = ''
+let _lastVoiceStatusAt = 0
 let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
@@ -199,6 +206,31 @@ export async function render() {
           <button class="btn btn-sm btn-ghost" id="btn-reset-session" title="${t('chat.resetSession')}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
           </button>
+          <button class="btn btn-sm btn-ghost chat-voice-toggle" id="chat-voice-toggle" title="语音播报：关闭" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a4 4 0 010 7"/><path d="M18.5 5.5a8 8 0 010 13"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="chat-avatar-panel" id="chat-avatar-panel" aria-live="polite">
+        <div class="chat-avatar-orb" id="chat-avatar-orb">
+          <span class="chat-avatar-core"></span>
+          <span class="chat-avatar-face" aria-hidden="true">
+            <span class="chat-avatar-eye left"></span>
+            <span class="chat-avatar-eye right"></span>
+            <span class="chat-avatar-mouth"></span>
+            <span class="chat-avatar-wave wave-1"></span>
+            <span class="chat-avatar-wave wave-2"></span>
+            <span class="chat-avatar-wave wave-3"></span>
+          </span>
+        </div>
+        <div class="chat-avatar-copy">
+          <div class="chat-avatar-title" id="chat-avatar-title">默认内置</div>
+          <div class="chat-avatar-subtitle" id="chat-avatar-subtitle">状态同步 · 待机中</div>
+          <div class="chat-avatar-badges" id="chat-avatar-badges">
+            <span class="chat-avatar-badge">自动运行</span>
+            <span class="chat-avatar-badge" id="chat-avatar-badge-state">状态同步</span>
+            <span class="chat-avatar-badge" id="chat-avatar-badge-detail">OpenClaw</span>
+          </div>
         </div>
       </div>
       <div class="chat-reply-status-row" id="chat-reply-status-row" aria-live="polite" hidden>
@@ -332,8 +364,14 @@ export async function render() {
   _textarea = page.querySelector('#chat-input')
   _sendBtn = page.querySelector('#chat-send-btn')
   _statusDot = page.querySelector('#chat-status-dot')
-  _typingEl = page.querySelector('#typing-indicator')
-  _scrollBtn = page.querySelector('#chat-scroll-btn')
+  _avatarPanelEl = page.querySelector('#chat-avatar-panel')
+  _avatarOrbEl = page.querySelector('#chat-avatar-orb')
+  _avatarTitleEl = page.querySelector('#chat-avatar-title')
+  _avatarSubtitleEl = page.querySelector('#chat-avatar-subtitle')
+  _avatarBadgesEl = page.querySelector('#chat-avatar-badges')
+  _avatarBadgeStateEl = page.querySelector('#chat-avatar-badge-state')
+  _avatarBadgeDetailEl = page.querySelector('#chat-avatar-badge-detail')
+  _voiceBroadcastBtn = page.querySelector('#chat-voice-toggle')
   _replyStatusRowEl = page.querySelector('#chat-reply-status-row')
   _replyStatusTextEl = page.querySelector('#chat-reply-status-text')
   _sessionListEl = page.querySelector('#chat-session-list')
@@ -377,6 +415,9 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
+  syncChatAvatarState()
+  loadVoiceBroadcastPrefs()
+  refreshVoiceBroadcastButton()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -470,6 +511,7 @@ function bindEvents(page) {
   page.querySelector('#btn-collab').addEventListener('click', () => injectCollabTemplate())
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
   page.querySelector('#btn-reset-session').addEventListener('click', () => resetCurrentSession())
+  _voiceBroadcastBtn?.addEventListener('click', () => toggleVoiceBroadcast())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))
   _workspaceBtn?.addEventListener('click', async (e) => {
     e.stopPropagation()
@@ -1767,6 +1809,7 @@ function emitLobsterPhase(phase, message) {
     }))
     if (phase === 'done') window.dispatchEvent(new CustomEvent('lobster-work-end'))
   } catch {}
+  syncChatAvatarState(phase, message)
 }
 
 function injectCollabTemplate() {
@@ -1870,11 +1913,13 @@ function handleEvent(msg) {
     }
     // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
+    const toolSummary = summarizeToolInput(payload.data?.args || payload.data?.meta || payload.data?.input)
     if (toolName && !_isStreaming) {
       emitLobsterPhase('tool', `调用工具：${toolName}`)
       showTyping(true, t('chat.usingTool', { name: toolName }))
       setReplyStatus('tool', t('chat.usingTool', { name: toolName }), { runId: payload.runId })
     }
+    if (toolName && _avatarBadgeDetailEl) _avatarBadgeDetailEl.textContent = toolSummary ? `${toolName} · ${toolSummary}` : toolName
   }
 
   if (event === 'chat') handleChatEvent(payload)
@@ -1927,6 +1972,7 @@ function handleChatEvent(payload) {
       }
       _currentAiText = c.text
       setReplyStatus('streaming', CHAT_REPLY_STATUS_TEXT.streaming, { runId: payload.runId })
+      if (_avatarBadgeDetailEl) _avatarBadgeDetailEl.textContent = _currentAiText.slice(-24) || 'OpenClaw'
       // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
       clearTimeout(_streamSafetyTimer)
       _streamSafetyTimer = setTimeout(() => {
@@ -2024,8 +2070,9 @@ function handleChatEvent(payload) {
         usage: extractMessageUsage(finalMetaSource), cost: extractMessageCost(finalMetaSource), model: extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey), contextWindow: getContextWindow(_sessionKey),
         attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
       })
+      maybeSpeakAssistantText(_currentAiText)
+      if (_avatarBadgeDetailEl) _avatarBadgeDetailEl.textContent = finalTools?.[0]?.name || (_currentAiText.slice(-24) || 'OpenClaw')
     }
-    // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
     if (shouldCaptureHostedTarget(payload)) {
       const capturedText = finalText || _currentAiText || ''
       if (capturedText) {
@@ -2280,6 +2327,119 @@ function createStreamBubble() {
   return bubble
 }
 
+function getVoiceBroadcastPrefs() {
+  if (!isStorageAvailable()) return { enabled: false, voiceName: '' }
+  try {
+    const enabled = localStorage.getItem(STORAGE_VOICE_BROADCAST_KEY) === '1'
+    const voiceName = localStorage.getItem(STORAGE_VOICE_NAME_KEY) || ''
+    return { enabled, voiceName }
+  } catch {
+    return { enabled: false, voiceName: '' }
+  }
+}
+
+function loadVoiceBroadcastPrefs() {
+  return getVoiceBroadcastPrefs()
+}
+
+function persistVoiceBroadcastPrefs(next = {}) {
+  if (!isStorageAvailable()) return
+  try {
+    localStorage.setItem(STORAGE_VOICE_BROADCAST_KEY, next.enabled ? '1' : '0')
+    if (next.voiceName != null) localStorage.setItem(STORAGE_VOICE_NAME_KEY, next.voiceName)
+  } catch {}
+}
+
+function refreshVoiceBroadcastButton() {
+  if (!_voiceBroadcastBtn) return
+  const prefs = getVoiceBroadcastPrefs()
+  _voiceBroadcastBtn.setAttribute('aria-pressed', prefs.enabled ? 'true' : 'false')
+  _voiceBroadcastBtn.classList.toggle('is-on', prefs.enabled)
+  _voiceBroadcastBtn.title = prefs.enabled ? '语音播报：开启' : '语音播报：关闭'
+}
+
+function toggleVoiceBroadcast() {
+  const prefs = getVoiceBroadcastPrefs()
+  persistVoiceBroadcastPrefs({ enabled: !prefs.enabled, voiceName: prefs.voiceName || '' })
+  refreshVoiceBroadcastButton()
+  toast(prefs.enabled ? '已关闭语音播报' : '已开启语音播报', prefs.enabled ? 'info' : 'success')
+}
+
+function pickNiceVoice(voices = []) {
+  if (!voices?.length) return null
+  const prefs = getVoiceBroadcastPrefs()
+  if (prefs.voiceName) {
+    const matched = voices.find(v => v.name === prefs.voiceName)
+    if (matched) return matched
+  }
+  const preferred = voices.find(v => /female|woman|girl|xiaoxiao|xiaoyi|cissy|yaoyao|meimei|zh-CN|zh-TW/i.test(`${v.name} ${v.lang}`))
+  return preferred || voices.find(v => /^zh/i.test(v.lang)) || voices[0] || null
+}
+
+function speakVoice(text, options = {}) {
+  const prefs = getVoiceBroadcastPrefs()
+  if (!prefs.enabled || !text || typeof window === 'undefined' || !window.speechSynthesis) return false
+  try {
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    const voices = window.speechSynthesis.getVoices?.() || []
+    const voice = pickNiceVoice(voices)
+    if (voice) {
+      utterance.voice = voice
+      utterance.lang = voice.lang || 'zh-CN'
+      persistVoiceBroadcastPrefs({ enabled: true, voiceName: voice.name || prefs.voiceName || '' })
+      refreshVoiceBroadcastButton()
+    } else {
+      utterance.lang = 'zh-CN'
+    }
+    utterance.rate = options.rate || 0.95
+    utterance.pitch = options.pitch || 1.16
+    utterance.volume = options.volume || 1
+    window.speechSynthesis.speak(utterance)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function voiceTextForStatus(state, detail = '') {
+  switch (state) {
+    case 'queued': return '我已经收到你的消息，正在排队处理。'
+    case 'sending': return '消息已发出，我正在接收。'
+    case 'thinking': return '我正在思考，请稍等。'
+    case 'tool': return detail ? `我正在调用工具，${detail}` : '我正在调用工具。'
+    case 'streaming': return '我正在输出回复。'
+    case 'finalizing': return '我正在整理最终答案。'
+    case 'done': return '回复已经完成。'
+    case 'error': return '处理失败了。'
+    case 'aborted': return '生成已经停止。'
+    case 'waiting': return '当前会话空闲。'
+    default: return detail || ''
+  }
+}
+
+function maybeSpeakReplyStatus(state, detail = '') {
+  const prefs = getVoiceBroadcastPrefs()
+  if (!prefs.enabled) return
+  const text = voiceTextForStatus(state, detail)
+  if (!text) return
+  const key = `${state}:${text}`
+  const now = Date.now()
+  if (_lastVoiceStatusSpoken === key && now - _lastVoiceStatusAt < 5000) return
+  _lastVoiceStatusSpoken = key
+  _lastVoiceStatusAt = now
+  speakVoice(text)
+}
+
+function maybeSpeakAssistantText(text = '') {
+  const prefs = getVoiceBroadcastPrefs()
+  if (!prefs.enabled) return
+  const clean = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!clean) return
+  const speech = clean.length > 120 ? `${clean.slice(0, 120)}……` : clean
+  speakVoice(speech, { rate: 0.96, pitch: 1.12, volume: 1 })
+}
+
 function getReplyStatusKey(sessionKey = _sessionKey) {
   return CHAT_REPLY_STATUS_STORE_PREFIX + (sessionKey || 'default')
 }
@@ -2312,6 +2472,7 @@ function renderReplyStatus(status = _replyStatusState) {
   if (!_replyStatusRowEl || !_replyStatusTextEl) return
   if (!status || !status.state) {
     _replyStatusRowEl.hidden = true
+    syncChatAvatarState()
     return
   }
   _replyStatusRowEl.hidden = false
@@ -2319,6 +2480,8 @@ function renderReplyStatus(status = _replyStatusState) {
   _replyStatusRowEl.dataset.sessionKey = status.sessionKey || _sessionKey || ''
   _replyStatusRowEl.title = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || ''
   _replyStatusTextEl.textContent = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || CHAT_REPLY_STATUS_TEXT.waiting
+  syncChatAvatarState()
+  if (status.state && status.state !== 'waiting') maybeSpeakReplyStatus(status.state, status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || '')
 }
 
 function setReplyStatus(state, detail = '', options = {}) {
@@ -2334,6 +2497,74 @@ function setReplyStatus(state, detail = '', options = {}) {
   persistReplyStatus(next)
   renderReplyStatus(next)
   return next
+}
+
+function syncChatAvatarState(phase = '', message = '') {
+  if (!_avatarPanelEl) return
+  const state = _replyStatusState?.state || 'waiting'
+  const streaming = !!_isStreaming
+  const sending = !!_isSending
+  let avatarState = 'idle'
+  let avatarMood = 'calm'
+  let title = '默认内置'
+  let subtitle = '状态同步 · 待机中'
+  let badges = ['自动运行', '状态同步', 'OpenClaw']
+  const stateLabel = state || phase || 'waiting'
+  const detailLabel = message || ''
+  if (state === 'error' || state === 'aborted') {
+    avatarState = 'error'
+    avatarMood = 'surprised'
+    title = '默认内置 · 需检查'
+    subtitle = state === 'error' ? '状态同步 · 出现错误' : '状态同步 · 已中断'
+    badges = ['异常', stateLabel, detailLabel || 'OpenClaw']
+  } else if (streaming || state === 'streaming' || state === 'finalizing') {
+    avatarState = 'streaming'
+    avatarMood = 'speaking'
+    title = '默认内置 · 输出中'
+    subtitle = 'OpenClaw 正在输出回复'
+    badges = ['流式输出', stateLabel, detailLabel || 'OpenClaw']
+  } else if (state === 'tool') {
+    avatarState = 'tool'
+    avatarMood = 'focused'
+    title = '默认内置 · 工具调用'
+    subtitle = message ? `OpenClaw 正在调用工具 · ${message}` : 'OpenClaw 正在调用工具'
+    badges = ['工具调用', stateLabel, detailLabel || 'OpenClaw']
+  } else if (sending || state === 'sending' || state === 'queued' || state === 'thinking') {
+    avatarState = 'thinking'
+    avatarMood = 'thinking'
+    title = '默认内置 · 思考中'
+    subtitle = message ? `OpenClaw 正在思考 · ${message}` : 'OpenClaw 正在思考…'
+    badges = ['思考中', stateLabel, detailLabel || 'OpenClaw']
+  } else if (phase === 'working') {
+    avatarState = 'working'
+    avatarMood = 'active'
+    title = '默认内置 · 协同中'
+    subtitle = message || '执行双引擎协同任务'
+    badges = ['协同任务', stateLabel, detailLabel || 'OpenClaw']
+  } else if (state === 'done' || state === 'waiting') {
+    avatarState = 'idle'
+    avatarMood = 'calm'
+    title = '默认内置'
+    subtitle = '状态同步 · 待机中'
+    badges = ['自动运行', stateLabel, detailLabel || 'OpenClaw']
+  }
+  _avatarPanelEl.dataset.state = avatarState
+  _avatarPanelEl.dataset.phase = phase || state || 'idle'
+  _avatarPanelEl.dataset.mood = avatarMood
+  _avatarPanelEl.title = subtitle
+  if (_avatarTitleEl) _avatarTitleEl.textContent = title
+  if (_avatarSubtitleEl) _avatarSubtitleEl.textContent = subtitle
+  if (_avatarOrbEl) {
+    _avatarOrbEl.dataset.state = avatarState
+    _avatarOrbEl.dataset.mood = avatarMood
+  }
+  if (_avatarBadgesEl) {
+    _avatarBadgesEl.dataset.state = avatarState
+    const badgeEls = Array.from(_avatarBadgesEl.querySelectorAll('.chat-avatar-badge'))
+    badgeEls.forEach((el, idx) => { if (el && badges[idx]) el.textContent = badges[idx] })
+  }
+  if (_avatarBadgeStateEl) _avatarBadgeStateEl.textContent = stateLabel
+  if (_avatarBadgeDetailEl) _avatarBadgeDetailEl.textContent = detailLabel || 'OpenClaw'
 }
 
 function restoreReplyStatus(sessionKey = _sessionKey) {
@@ -2837,17 +3068,57 @@ function appendFilesToEl(el, files) {
   })
 }
 
-function mergeToolEventData(entry) {
-  const id = entry?.id || entry?.tool_call_id
-  if (!id) return entry
-  const extra = _toolEventData.get(id)
-  if (!extra) return entry
-  if (entry.input == null && extra.input != null) entry.input = extra.input
-  if (entry.output == null && extra.output != null) entry.output = extra.output
-  if (entry.status == null && extra.status != null) entry.status = extra.status
-  if (entry.time == null) entry.time = extra.time || _toolEventTimes.get(id) || null
-  return entry
+function summarizeToolInput(input) {
+  if (input == null) return ''
+  const pickFromObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return ''
+    const preferredKeys = ['name', 'tool', 'toolName', 'action', 'mode', 'query', 'prompt', 'text', 'message', 'target', 'url', 'path', 'model', 'title']
+    const parts = []
+    for (const key of preferredKeys) {
+      const value = obj[key]
+      if (typeof value === 'string' && value.trim()) {
+        parts.push(value.trim())
+      } else if (typeof value === 'number' || typeof value === 'boolean') {
+        parts.push(String(value))
+      }
+      if (parts.length >= 2) break
+    }
+    if (!parts.length) {
+      for (const [key, value] of Object.entries(obj)) {
+        if (value == null) continue
+        if (typeof value === 'object') continue
+        const text = String(value).trim()
+        if (!text) continue
+        parts.push(`${key}: ${text}`)
+        if (parts.length >= 2) break
+      }
+    }
+    return parts.join('，').replace(/\s+/g, ' ').trim().slice(0, 64)
+  }
+  if (typeof input === 'string') {
+    const compact = input.replace(/\s+/g, ' ').trim()
+    if (!compact) return ''
+    if ((compact.startsWith('{') && compact.endsWith('}')) || (compact.startsWith('[') && compact.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(compact)
+        const picked = pickFromObject(parsed)
+        if (picked) return picked
+      } catch {}
+    }
+    return compact.slice(0, 64)
+  }
+  if (typeof input === 'object') {
+    const picked = pickFromObject(input)
+    if (picked) return picked
+    try {
+      return JSON.stringify(input).replace(/\s+/g, ' ').trim().slice(0, 64)
+    } catch {
+      return String(input).replace(/\s+/g, ' ').trim().slice(0, 64)
+    }
+  }
+  return String(input).replace(/\s+/g, ' ').trim().slice(0, 64)
 }
+
 
 function upsertTool(tools, entry) {
   if (!entry) return

@@ -232,8 +232,8 @@ function createStore() {
     liveTools: [],             // [{ id, name, status, preview, args, result }]
 
     // UI prefs (persisted).
-    pinned: new Set(loadJson(STORAGE_PINNED_PREFIX + profileKey(safeGet(STORAGE_PROFILE) || 'default')) || []),
-    collapsed: new Set(loadJson(STORAGE_COLLAPSED_PREFIX + profileKey(safeGet(STORAGE_PROFILE) || 'default')) || []),
+    pinned: new Set(),
+    collapsed: new Set(),
   }
 
   // --- subscription ---
@@ -302,8 +302,10 @@ function createStore() {
   }
 
   function loadProfilePrefs() {
-    state.pinned = new Set(loadJson(pinnedKey()) || [])
-    state.collapsed = new Set(loadJson(collapsedKey()) || [])
+    const pinned = loadJson(pinnedKey())
+    const collapsed = loadJson(collapsedKey())
+    state.pinned = new Set(Array.isArray(pinned) ? pinned : [])
+    state.collapsed = new Set(Array.isArray(collapsed) ? collapsed : [])
   }
 
   function savePinned() { saveJson(pinnedKey(), [...state.pinned]) }
