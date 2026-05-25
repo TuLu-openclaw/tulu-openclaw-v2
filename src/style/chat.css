@@ -2122,3 +2122,53 @@
   .openclaw-dh-stage { height: 176px; }
   .openclaw-dh-person { transform: translateX(-50%) scale(.78); transform-origin: center bottom; }
 }
+
+.openclaw-dh.is-hidden { display: none; }
+#btn-digital-human.active { border-color: rgba(34,197,94,.5); color: #22c55e; background: rgba(34,197,94,.1); }
+.openclaw-dh-mini-btn {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.openclaw-dh-controls {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 7px;
+  align-items: center;
+  margin-top: 10px;
+}
+.openclaw-dh-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 800;
+}
+.openclaw-dh-volume input { width: 82px; accent-color: #22c55e; }
+.openclaw-dh-controls button {
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.05);
+  color: #cbd5e1;
+  border-radius: 9px;
+  padding: 5px 7px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.openclaw-dh-controls button:hover,
+.openclaw-dh-mini-btn:hover { border-color: rgba(34,197,94,.42); background: rgba(34,197,94,.11); color: #dcfce7; }
+.openclaw-dh.is-low-power *,
+.openclaw-dh.is-low-power *::before,
+.openclaw-dh.is-low-power *::after { animation: none !important; transition-duration: .08s !important; }
+.openclaw-dh.is-low-power .openclaw-dh-avatar-img { transform: translateX(-50%) translateZ(18px); }
+@media (max-width: 760px) {
+  .openclaw-dh-controls { grid-template-columns: 1fr; }
+  .openclaw-dh-volume input { width: 100%; }
+}

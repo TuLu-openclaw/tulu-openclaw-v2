@@ -166,6 +166,7 @@ let _digitalHumanLastVoiceKey = ''
 let _digitalHumanDragging = false
 let _digitalHumanDragOffset = { x: 0, y: 0 }
 let _digitalHumanProgressTimer = null
+let _digitalHumanConfig = { visible: true, voice: true, volume: 0.86, lowPower: false }
 
 export async function render() {
   const page = document.createElement('div')
@@ -215,6 +216,9 @@ export async function render() {
             ${svgIcon('folder', 16)}
             <span class="chat-workspace-trigger-label">${t('chat.workspace')}</span>
             <span class="chat-workspace-trigger-agent" id="chat-workspace-trigger-agent">main</span>
+          </button>
+          <button class="btn btn-sm btn-ghost" id="btn-digital-human" title="显示/隐藏 OpenClaw 数字人">
+            数字人
           </button>
           <button class="btn btn-sm btn-ghost" id="btn-collab" title="${t('chat.collabActionHint')}">
             ${t('chat.collabAction')}
@@ -444,11 +448,33 @@ function saveDhPosition(x, y) {
 }
 
 function loadDhVoiceEnabled() {
-  try { return localStorage.getItem(dhGlobalKey('voice')) !== '0' } catch { return true }
+  _digitalHumanConfig = loadDigitalHumanConfig()
+  return _digitalHumanConfig.voice !== false
+}
+
+function loadDigitalHumanConfig() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(dhGlobalKey('config')) || 'null') || {}
+    return {
+      visible: raw.visible !== false,
+      voice: raw.voice !== false,
+      volume: Math.max(0, Math.min(1, Number.isFinite(raw.volume) ? raw.volume : 0.86)),
+      lowPower: raw.lowPower === true,
+    }
+  } catch {
+    return { visible: true, voice: true, volume: 0.86, lowPower: false }
+  }
+}
+
+function saveDigitalHumanConfig(patch = {}) {
+  _digitalHumanConfig = { ...loadDigitalHumanConfig(), ...patch }
+  try { localStorage.setItem(dhGlobalKey('config'), JSON.stringify(_digitalHumanConfig)) } catch {}
+  applyDigitalHumanConfig()
+  return _digitalHumanConfig
 }
 
 function saveDhVoiceEnabled(value) {
-  try { localStorage.setItem(dhGlobalKey('voice'), value ? '1' : '0') } catch {}
+  saveDigitalHumanConfig({ voice: !!value })
 }
 
 function normalizeDigitalHumanState(state = 'waiting', detail = '', options = {}) {
@@ -471,12 +497,14 @@ function renderOpenclawDigitalHuman() {
   const pos = getDhPosition()
   const style = pos ? `left:${pos.x}px;top:${pos.y}px;right:auto;bottom:auto;` : ''
   const voiceOn = loadDhVoiceEnabled()
+  const cfg = loadDigitalHumanConfig()
   return `
-    <section class="openclaw-dh is-waiting" id="openclaw-digital-human" data-state="waiting" data-emotion="calm" style="${style}" aria-label="OpenClaw 数字人状态面板">
+    <section class="openclaw-dh is-waiting ${cfg.visible ? '' : 'is-hidden'} ${cfg.lowPower ? 'is-low-power' : ''}" id="openclaw-digital-human" data-state="waiting" data-emotion="calm" style="${style}" aria-label="OpenClaw 数字人状态面板">
       <div class="openclaw-dh-drag" id="openclaw-dh-drag" title="拖动数字人">
         <span class="openclaw-dh-live-dot"></span>
         <span class="openclaw-dh-drag-title">OpenClaw 数字人</span>
         <button class="openclaw-dh-voice ${voiceOn ? 'is-on' : ''}" id="openclaw-dh-voice" type="button" title="内置语音播报开关">${voiceOn ? '声开' : '静音'}</button>
+        <button class="openclaw-dh-mini-btn" id="openclaw-dh-low-power" type="button" title="低性能模式">${cfg.lowPower ? '省电' : '动效'}</button>
       </div>
       <div class="openclaw-dh-stage" aria-hidden="true">
         <div class="openclaw-dh-light"></div>
@@ -510,6 +538,11 @@ function renderOpenclawDigitalHuman() {
         <div class="openclaw-dh-subtitle" id="openclaw-dh-subtitle">等待新的任务</div>
         <div class="openclaw-dh-detail" id="openclaw-dh-detail">状态与 OpenClaw Agent 实时同步</div>
         <div class="openclaw-dh-progress"><span id="openclaw-dh-progress"></span></div>
+        <div class="openclaw-dh-controls">
+          <label class="openclaw-dh-volume">音量 <input id="openclaw-dh-volume" type="range" min="0" max="100" value="${Math.round((cfg.volume ?? 0.86) * 100)}"></label>
+          <button id="openclaw-dh-reset" type="button">重置位置</button>
+          <button id="openclaw-dh-hide" type="button">隐藏</button>
+        </div>
       </div>
       <audio id="openclaw-dh-audio" preload="none"></audio>
     </section>
@@ -527,6 +560,10 @@ function bindOpenclawDigitalHuman() {
   if (!_digitalHumanEl) return
   const handle = _digitalHumanEl.querySelector('#openclaw-dh-drag')
   const voiceBtn = _digitalHumanEl.querySelector('#openclaw-dh-voice')
+  const lowPowerBtn = _digitalHumanEl.querySelector('#openclaw-dh-low-power')
+  const volumeEl = _digitalHumanEl.querySelector('#openclaw-dh-volume')
+  const resetBtn = _digitalHumanEl.querySelector('#openclaw-dh-reset')
+  const hideBtn = _digitalHumanEl.querySelector('#openclaw-dh-hide')
   handle?.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return
     _digitalHumanDragging = true
@@ -547,6 +584,31 @@ function bindOpenclawDigitalHuman() {
       playDigitalHumanVoice(_digitalHumanState)
     }
   })
+  lowPowerBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const cfg = loadDigitalHumanConfig()
+    saveDigitalHumanConfig({ lowPower: !cfg.lowPower })
+  })
+  volumeEl?.addEventListener('input', () => {
+    const volume = Math.max(0, Math.min(1, Number(volumeEl.value || 0) / 100))
+    saveDigitalHumanConfig({ volume })
+    if (_digitalHumanAudioEl) _digitalHumanAudioEl.volume = volume
+  })
+  resetBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    try { localStorage.removeItem(dhGlobalKey('position')) } catch {}
+    if (_digitalHumanEl) {
+      _digitalHumanEl.style.left = ''
+      _digitalHumanEl.style.top = ''
+      _digitalHumanEl.style.right = '22px'
+      _digitalHumanEl.style.bottom = '96px'
+    }
+  })
+  hideBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    saveDigitalHumanConfig({ visible: false })
+  })
+  applyDigitalHumanConfig()
 }
 
 function onDigitalHumanDragMove(e) {
@@ -598,13 +660,32 @@ function updateDigitalHumanVoiceButton() {
   btn.textContent = _digitalHumanVoiceEnabled ? '声开' : '静音'
 }
 
+function applyDigitalHumanConfig() {
+  const cfg = loadDigitalHumanConfig()
+  _digitalHumanConfig = cfg
+  _digitalHumanVoiceEnabled = cfg.voice !== false
+  if (_digitalHumanEl) {
+    _digitalHumanEl.classList.toggle('is-hidden', cfg.visible === false)
+    _digitalHumanEl.classList.toggle('is-low-power', cfg.lowPower === true)
+    const lowPowerBtn = _digitalHumanEl.querySelector('#openclaw-dh-low-power')
+    if (lowPowerBtn) lowPowerBtn.textContent = cfg.lowPower ? '省电' : '动效'
+    const volumeEl = _digitalHumanEl.querySelector('#openclaw-dh-volume')
+    if (volumeEl && Number(volumeEl.value) !== Math.round(cfg.volume * 100)) volumeEl.value = String(Math.round(cfg.volume * 100))
+  }
+  const topBtn = _page?.querySelector('#btn-digital-human')
+  if (topBtn) topBtn.classList.toggle('active', cfg.visible !== false)
+  if (_digitalHumanAudioEl) _digitalHumanAudioEl.volume = cfg.volume
+  updateDigitalHumanVoiceButton()
+}
+
 function setOpenclawDigitalHumanState(state, detail = '', options = {}) {
   const next = normalizeDigitalHumanState(state, detail, options)
   _digitalHumanState = next
   if (!_digitalHumanEl) return next
+  const cfg = loadDigitalHumanConfig()
   _digitalHumanEl.dataset.state = next.state
   _digitalHumanEl.dataset.emotion = next.emotion
-  _digitalHumanEl.className = `openclaw-dh is-${next.state}`
+  _digitalHumanEl.className = `openclaw-dh is-${next.state}${cfg.visible === false ? ' is-hidden' : ''}${cfg.lowPower ? ' is-low-power' : ''}`
   const titleEl = _digitalHumanEl.querySelector('#openclaw-dh-title')
   const subtitleEl = _digitalHumanEl.querySelector('#openclaw-dh-subtitle')
   const detailEl = _digitalHumanEl.querySelector('#openclaw-dh-detail')
@@ -631,6 +712,7 @@ function playDigitalHumanVoice(state) {
   try {
     _digitalHumanAudioEl.pause()
     _digitalHumanAudioEl.currentTime = 0
+    _digitalHumanAudioEl.volume = Math.max(0, Math.min(1, loadDigitalHumanConfig().volume ?? 0.86))
     _digitalHumanAudioEl.src = src
     _digitalHumanAudioEl.play().catch(() => {})
   } catch {}
@@ -725,6 +807,10 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
+  page.querySelector('#btn-digital-human')?.addEventListener('click', () => {
+    const cfg = loadDigitalHumanConfig()
+    saveDigitalHumanConfig({ visible: !cfg.visible })
+  })
   page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
   page.querySelector('#btn-collab')?.addEventListener('click', () => injectCollabTemplate())
   page.querySelector('#btn-cmd')?.addEventListener('click', () => toggleCmdPanel())
