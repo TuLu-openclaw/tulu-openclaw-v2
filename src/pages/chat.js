@@ -178,7 +178,7 @@ let _digitalHumanLastVoiceKey = ''
 let _digitalHumanDragging = false
 let _digitalHumanDragOffset = { x: 0, y: 0 }
 let _digitalHumanProgressTimer = null
-let _digitalHumanConfig = { visible: true, voice: true, volume: 0.86, lowPower: false }
+let _digitalHumanConfig = { visible: true, voice: false, volume: 0.86, lowPower: true }
 let _digitalHuman3d = null
 let _digitalHumanPreloaded = false
 
@@ -469,12 +469,12 @@ function loadDigitalHumanConfig() {
     const raw = JSON.parse(localStorage.getItem(dhGlobalKey('config')) || 'null') || {}
     return {
       visible: raw.visible !== false,
-      voice: raw.voice !== false,
+      voice: raw.voice === true,
       volume: Math.max(0, Math.min(1, Number.isFinite(raw.volume) ? raw.volume : 0.86)),
-      lowPower: raw.lowPower === true,
+      lowPower: raw.lowPower !== false,
     }
   } catch {
-    return { visible: true, voice: true, volume: 0.86, lowPower: false }
+    return { visible: true, voice: false, volume: 0.86, lowPower: true }
   }
 }
 
@@ -521,7 +521,7 @@ function renderOpenclawDigitalHuman() {
       <div class="openclaw-dh-stage" aria-hidden="true">
         <div class="openclaw-dh-light"></div>
         <div class="openclaw-dh-model-stage" id="openclaw-dh-model-stage"></div>
-        <video class="openclaw-dh-video" id="openclaw-dh-video" src="/digital-human/video/waiting.mp4" autoplay muted loop playsinline preload="auto"></video>
+        <video class="openclaw-dh-video" id="openclaw-dh-video" autoplay muted loop playsinline preload="none"></video>
         <img class="openclaw-dh-avatar-img" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
         <img class="openclaw-dh-avatar-head-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
         <img class="openclaw-dh-avatar-arm-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
@@ -575,7 +575,6 @@ function initOpenclawDigitalHuman() {
   _digitalHumanVoiceEnabled = loadDhVoiceEnabled()
   bindOpenclawDigitalHuman()
   restoreDigitalHumanState()
-  preloadDigitalHumanAssets()
   exposeDigitalHumanDebugBridge()
 }
 
@@ -587,21 +586,8 @@ function exposeDigitalHumanDebugBridge() {
 }
 
 function preloadDigitalHumanAssets() {
-  if (_digitalHumanPreloaded) return
-  _digitalHumanPreloaded = true
-  try {
-    Object.keys(DH_VIDEO_BY_STATE).forEach(state => {
-      const video = document.createElement('video')
-      video.preload = 'metadata'
-      video.muted = true
-      video.playsInline = true
-      video.src = resolveDigitalHumanVideoSrc(state)
-    })
-    Object.keys(DH_STATE_TEXT).forEach(state => {
-      const audio = new Audio(`${DH_VOICE_BASE}${state}.wav`)
-      audio.preload = 'metadata'
-    })
-  } catch {}
+  // Disabled on startup: eager video/audio metadata preloading caused severe chat-page jank in Tauri/WebView.
+  // Keep this placeholder for future idle, batched, cancellable preloading only.
 }
 function bindOpenclawDigitalHuman() {
   if (!_digitalHumanEl) return
@@ -740,6 +726,7 @@ function applyDigitalHumanConfig() {
   if (cfg.lowPower || cfg.visible === false) disposeOpenclawDigitalHumanModel()
   else if (!_digitalHuman3d) mountOpenclawDigitalHumanModel()
   else resizeOpenclawDigitalHumanModel()
+  updateDigitalHumanVideo(_digitalHumanState.state)
   updateDigitalHumanVoiceButton()
 }
 
@@ -784,6 +771,15 @@ function fallbackDigitalHumanVideoSrc(state = 'waiting') {
 
 function updateDigitalHumanVideo(state = 'waiting') {
   if (!_digitalHumanVideoEl) return
+  const cfg = loadDigitalHumanConfig()
+  if (cfg.visible === false || cfg.lowPower === true) {
+    try { _digitalHumanVideoEl.pause() } catch {}
+    if (_digitalHumanVideoEl.getAttribute('src')) {
+      _digitalHumanVideoEl.removeAttribute('src')
+      try { _digitalHumanVideoEl.load() } catch {}
+    }
+    return
+  }
   const src = resolveDigitalHumanVideoSrc(state)
   const current = _digitalHumanVideoEl.getAttribute('src') || ''
   if (current !== src) {
