@@ -219,6 +219,19 @@ export function markVerified(kami, serverTime) {
   localStorage.setItem(KAMI_TIME_KEY, String(serverTime || getUnixTimestamp()))
 }
 
+export function isLocallyVerified(maxAgeSeconds = 7 * 24 * 60 * 60) {
+  try {
+    if (localStorage.getItem(KAMI_VERIFIED_KEY) !== '1') return false
+    const kami = getStoredKami()
+    const verifiedAt = getLastVerifiedTime()
+    if (!kami || !verifiedAt) return false
+    const age = Math.abs(getUnixTimestamp() - verifiedAt)
+    return age <= maxAgeSeconds
+  } catch {
+    return false
+  }
+}
+
 /**
  * 获取真实公告
  * 公告 API 返回 RC4 加密的 JSON，统一使用 textContent 渲染（浏览器自动处理所有实体编码）

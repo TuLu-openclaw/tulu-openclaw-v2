@@ -11,8 +11,6 @@ import { toast } from '../components/toast.js'
 import { showModal, showConfirm } from '../components/modal.js'
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
-import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 const RENDER_THROTTLE = 30
 const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
@@ -146,7 +144,14 @@ let _workspaceLoadSeq = 0, _workspaceOpenSeq = 0
 // ── OpenClaw 主引擎数字人（注意：只服务 src/pages/chat.js，不接 Hermes）──
 const DH_STORAGE_PREFIX = '星枢Open_digital_human_'
 const DH_VOICE_BASE = '/digital-human/voice/'
-const DH_MODEL_URL = '/digital-human/model/openclaw-avatar.glb'
+const DH_VIDEO_BASE = '/digital-human/video/'
+const DH_LIPSYNC_VIDEO_BASE = '/digital-human/lipsync/'
+const DH_LIPSYNC_BY_STATE = {
+  streaming: 'streaming-lipsync.mp4', finalizing: 'finalizing-lipsync.mp4', done: 'done-lipsync.mp4', error: 'error-lipsync.mp4', aborted: 'aborted-lipsync.mp4'
+}
+const DH_VIDEO_BY_STATE = {
+  idle: 'idle-hailuo-real.mp4', waiting: 'waiting-hailuo-real.mp4', queued: 'queued-hailuo-real.mp4', sending: 'sending-hailuo-real.mp4', thinking: 'thinking-hailuo-real.mp4', tool: 'tool-hailuo-real-v2.mp4', streaming: 'streaming-hailuo-real-v2.mp4', finalizing: 'finalizing-hailuo-real.mp4', done: 'done-hailuo-real.mp4', error: 'error-v3-hailuo-real-v2.mp4', aborted: 'aborted-v3-hailuo-real-v2.mp4'
+}
 const DH_ANIMATION_BY_STATE = {
   waiting: 'idle', queued: 'idle', sending: 'walk', thinking: 'headShake', tool: 'walk', streaming: 'agree', finalizing: 'agree', done: 'agree', error: 'sad_pose', aborted: 'sad_pose'
 }
@@ -166,6 +171,7 @@ const DH_STATE_TEXT = {
 const DH_DEFAULT_STATE = { state: 'waiting', title: '待机中', subtitle: '等待新的任务', detail: '', emotion: 'calm', progress: 0, runId: '', sessionKey: '' }
 let _digitalHumanEl = null
 let _digitalHumanAudioEl = null
+let _digitalHumanVideoEl = null
 let _digitalHumanState = { ...DH_DEFAULT_STATE }
 let _digitalHumanVoiceEnabled = false
 let _digitalHumanLastVoiceKey = ''
@@ -174,6 +180,7 @@ let _digitalHumanDragOffset = { x: 0, y: 0 }
 let _digitalHumanProgressTimer = null
 let _digitalHumanConfig = { visible: true, voice: true, volume: 0.86, lowPower: false }
 let _digitalHuman3d = null
+let _digitalHumanPreloaded = false
 
 export async function render() {
   const page = document.createElement('div')
@@ -403,6 +410,7 @@ export async function render() {
   _workspacePreviewBtn = page.querySelector('#chat-workspace-preview-toggle')
   _digitalHumanEl = page.querySelector('#openclaw-digital-human')
   _digitalHumanAudioEl = page.querySelector('#openclaw-dh-audio')
+  _digitalHumanVideoEl = page.querySelector('#openclaw-dh-video')
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
 
   bindEvents(page)
@@ -513,7 +521,16 @@ function renderOpenclawDigitalHuman() {
       <div class="openclaw-dh-stage" aria-hidden="true">
         <div class="openclaw-dh-light"></div>
         <div class="openclaw-dh-model-stage" id="openclaw-dh-model-stage"></div>
-        <img class="openclaw-dh-avatar-img" src="/digital-human/openclaw-avatar.svg" alt="" draggable="false">
+        <video class="openclaw-dh-video" id="openclaw-dh-video" src="/digital-human/video/waiting.mp4" autoplay muted loop playsinline preload="auto"></video>
+        <img class="openclaw-dh-avatar-img" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
+        <img class="openclaw-dh-avatar-head-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
+        <img class="openclaw-dh-avatar-arm-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
+        <div class="openclaw-dh-expression" aria-hidden="true">
+          <span class="openclaw-dh-expression-eye left"></span>
+          <span class="openclaw-dh-expression-eye right"></span>
+          <span class="openclaw-dh-expression-mouth" data-mouth="rest"></span>
+          <span class="openclaw-dh-expression-breath"></span>
+        </div>
         <div class="openclaw-dh-person">
           <div class="openclaw-dh-hair"></div>
           <div class="openclaw-dh-neck"></div>
@@ -558,9 +575,34 @@ function initOpenclawDigitalHuman() {
   _digitalHumanVoiceEnabled = loadDhVoiceEnabled()
   bindOpenclawDigitalHuman()
   restoreDigitalHumanState()
-  startDigitalHumanProgressPulse()
+  preloadDigitalHumanAssets()
+  exposeDigitalHumanDebugBridge()
 }
 
+function exposeDigitalHumanDebugBridge() {
+  try {
+    window.__openclawSetDigitalHumanState = (state = 'waiting', detail = '', options = {}) =>
+      setOpenclawDigitalHumanState(state, detail, { ...options, persist: options.persist === true, speak: options.speak === true })
+  } catch {}
+}
+
+function preloadDigitalHumanAssets() {
+  if (_digitalHumanPreloaded) return
+  _digitalHumanPreloaded = true
+  try {
+    Object.keys(DH_VIDEO_BY_STATE).forEach(state => {
+      const video = document.createElement('video')
+      video.preload = 'metadata'
+      video.muted = true
+      video.playsInline = true
+      video.src = resolveDigitalHumanVideoSrc(state)
+    })
+    Object.keys(DH_STATE_TEXT).forEach(state => {
+      const audio = new Audio(`${DH_VOICE_BASE}${state}.wav`)
+      audio.preload = 'metadata'
+    })
+  } catch {}
+}
 function bindOpenclawDigitalHuman() {
   if (!_digitalHumanEl) return
   const handle = _digitalHumanEl.querySelector('#openclaw-dh-drag')
@@ -617,166 +659,19 @@ function bindOpenclawDigitalHuman() {
 }
 
 function disposeOpenclawDigitalHumanModel() {
-  const ctx = _digitalHuman3d
-  if (!ctx) return
-  try { cancelAnimationFrame(ctx.raf) } catch {}
-  try {
-    ctx.scene?.traverse?.((obj) => {
-      if (obj.geometry) obj.geometry.dispose?.()
-      if (obj.material) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        mats.forEach(m => {
-          Object.values(m).forEach(v => v?.isTexture && v.dispose?.())
-          m.dispose?.()
-        })
-      }
-    })
-    ctx.renderer?.dispose?.()
-    ctx.renderer?.domElement?.remove?.()
-  } catch {}
   _digitalHuman3d = null
 }
 
 function mountOpenclawDigitalHumanModel() {
-  const stage = _digitalHumanEl?.querySelector('#openclaw-dh-model-stage')
-  if (!stage || loadDigitalHumanConfig().lowPower) return
+  // 数字人售卖版只使用内置 PNG + 本地 WAV；旧 3D/GLB 入口已禁用，避免任何未使用运行时依赖。
   disposeOpenclawDigitalHumanModel()
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
-  renderer.setSize(stage.clientWidth || 260, stage.clientHeight || 300)
-  renderer.outputColorSpace = THREE.SRGBColorSpace
-  renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.18
-  stage.appendChild(renderer.domElement)
-
-  const scene = new THREE.Scene()
-  const camera = new THREE.PerspectiveCamera(20, (stage.clientWidth || 260) / (stage.clientHeight || 300), 0.01, 100)
-  camera.position.set(0, 1.45, 4.7)
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x172033, 2.4))
-  const key = new THREE.DirectionalLight(0xffffff, 2.8)
-  key.position.set(2.5, 3.8, 3)
-  scene.add(key)
-  const rim = new THREE.DirectionalLight(0x8bd3ff, 1.25)
-  rim.position.set(-2.6, 2.2, -1.4)
-  scene.add(rim)
-  const fill = new THREE.DirectionalLight(0xffd9c2, 0.82)
-  fill.position.set(-1.5, 1.2, 2.6)
-  scene.add(fill)
-
-  const ctx = {
-    stage, renderer, scene, camera, model: null, mixer: null, clock: new THREE.Clock(), raf: 0,
-    missing: false, actions: {}, currentAction: null, bones: {}, baseBoneRotations: {}, blinkUntil: 0, nextBlink: performance.now() + 2600
-  }
-  _digitalHuman3d = ctx
-
-  const loader = new GLTFLoader()
-  loader.load(DH_MODEL_URL, (gltf) => {
-    if (_digitalHuman3d !== ctx) return
-    const model = gltf.scene
-    model.traverse((obj) => {
-      if (obj.isBone && obj.name) ctx.bones[obj.name] = obj
-      if (obj.isMesh) {
-        obj.castShadow = false
-        obj.frustumCulled = false
-        if (obj.material) {
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-          mats.forEach((m) => {
-            m.roughness = Math.min(0.92, m.roughness ?? 0.72)
-            m.metalness = Math.min(0.08, m.metalness ?? 0)
-            m.needsUpdate = true
-          })
-        }
-      }
-    })
-    ;['mixamorig:Head', 'mixamorig:Neck', 'mixamorig:Spine', 'mixamorig:Spine1', 'mixamorig:Spine2', 'mixamorig:LeftArm', 'mixamorig:RightArm', 'mixamorig:LeftForeArm', 'mixamorig:RightForeArm'].forEach((name) => {
-      const b = ctx.bones[name]
-      if (b) ctx.baseBoneRotations[name] = b.rotation.clone()
-    })
-    const box = new THREE.Box3().setFromObject(model)
-    const size = box.getSize(new THREE.Vector3())
-    const center = box.getCenter(new THREE.Vector3())
-    const scale = 3.05 / Math.max(size.y || 1, size.x || 1)
-    model.scale.setScalar(scale)
-    model.position.set(-center.x * scale, -center.y * scale + 1.42, -center.z * scale)
-    model.rotation.y = -0.1
-    scene.add(model)
-    ctx.model = model
-    ctx.mixer = gltf.animations?.length ? new THREE.AnimationMixer(model) : null
-    if (ctx.mixer) {
-      gltf.animations.forEach((clip) => { ctx.actions[clip.name] = ctx.mixer.clipAction(clip) })
-      playDigitalHumanAnimation(DH_ANIMATION_BY_STATE[_digitalHumanState.state] || 'idle')
-    }
-    _digitalHumanEl?.classList.add('is-3d-ready', 'is-skeletal-ready')
-  }, undefined, () => {
-    if (_digitalHuman3d !== ctx) return
-    ctx.missing = true
-    _digitalHumanEl?.classList.remove('is-3d-ready', 'is-skeletal-ready')
-  })
-
-  const tick = () => {
-    if (_digitalHuman3d !== ctx || !_pageActive) return
-    const cfg = loadDigitalHumanConfig()
-    if (cfg.lowPower || cfg.visible === false) { ctx.raf = requestAnimationFrame(tick); return }
-    const dt = Math.min(ctx.clock.getDelta(), 0.05)
-    ctx.mixer?.update?.(dt)
-    applyDigitalHumanBonePose(ctx)
-    renderer.render(scene, camera)
-    ctx.raf = requestAnimationFrame(tick)
-  }
-  tick()
 }
 
 function playDigitalHumanAnimation(name) {
-  const ctx = _digitalHuman3d
-  if (!ctx?.mixer || !ctx.actions) return
-  const next = ctx.actions[name] || ctx.actions.idle || Object.values(ctx.actions)[0]
-  if (!next || ctx.currentAction === next) return
-  next.reset().setEffectiveWeight(1).setEffectiveTimeScale(name === 'walk' ? 0.72 : 0.9).fadeIn(0.28).play()
-  if (ctx.currentAction) ctx.currentAction.fadeOut(0.22)
-  ctx.currentAction = next
+  // 2D 可动层由 CSS 状态驱动。
 }
 
-function applyDigitalHumanBonePose(ctx) {
-  if (!ctx?.model) return
-  const now = performance.now()
-  const t = now / 1000
-  const state = _digitalHumanState.state
-  const active = ['thinking', 'tool', 'streaming', 'finalizing', 'sending'].includes(state)
-  const talking = state === 'streaming'
-  ctx.model.rotation.y = -0.1 + Math.sin(t * (active ? 1.35 : 0.55)) * (active ? 0.09 : 0.035)
-  ctx.model.position.y += Math.sin(t * 2.1) * 0.00042
-
-  const setBone = (name, rx = 0, ry = 0, rz = 0) => {
-    const b = ctx.bones[name]
-    const base = ctx.baseBoneRotations[name]
-    if (!b || !base) return
-    b.rotation.x = base.x + rx
-    b.rotation.y = base.y + ry
-    b.rotation.z = base.z + rz
-  }
-  const headNod = Math.sin(t * (talking ? 4.8 : 1.8)) * (talking ? 0.09 : 0.035)
-  const look = Math.sin(t * 0.85) * 0.055
-  setBone('mixamorig:Head', headNod, look, Math.sin(t * 1.1) * 0.025)
-  setBone('mixamorig:Neck', headNod * 0.45, look * 0.45, 0)
-  setBone('mixamorig:Spine2', Math.sin(t * 1.6) * 0.018, 0, Math.sin(t * 1.1) * 0.02)
-  if (state === 'tool' || state === 'sending') {
-    setBone('mixamorig:RightArm', -0.2 + Math.sin(t * 4.2) * 0.16, 0.1, -0.42)
-    setBone('mixamorig:RightForeArm', -0.35 + Math.sin(t * 4.2) * 0.11, 0, -0.18)
-  } else if (state === 'thinking') {
-    setBone('mixamorig:LeftArm', -0.14, 0.08, 0.3)
-    setBone('mixamorig:RightArm', -0.12, -0.08, -0.3)
-  }
-}
-
-function resizeOpenclawDigitalHumanModel() {
-  const ctx = _digitalHuman3d
-  if (!ctx?.stage || !ctx.renderer || !ctx.camera) return
-  const w = ctx.stage.clientWidth || 220
-  const h = ctx.stage.clientHeight || 230
-  ctx.camera.aspect = w / h
-  ctx.camera.updateProjectionMatrix()
-  ctx.renderer.setSize(w, h)
-}
+function resizeOpenclawDigitalHumanModel() {}
 
 function onDigitalHumanDragMove(e) {
   if (!_digitalHumanDragging || !_digitalHumanEl) return
@@ -861,12 +756,13 @@ function setOpenclawDigitalHumanState(state, detail = '', options = {}) {
   const subtitleEl = _digitalHumanEl.querySelector('#openclaw-dh-subtitle')
   const detailEl = _digitalHumanEl.querySelector('#openclaw-dh-detail')
   const progressEl = _digitalHumanEl.querySelector('#openclaw-dh-progress')
-  const mouthEl = _digitalHumanEl.querySelector('.openclaw-dh-mouth')
+  const mouthEl = _digitalHumanEl.querySelector('.openclaw-dh-expression-mouth') || _digitalHumanEl.querySelector('.openclaw-dh-mouth')
   if (titleEl) titleEl.textContent = next.title
   if (subtitleEl) subtitleEl.textContent = next.subtitle
   if (detailEl) detailEl.textContent = next.detail || next.subtitle
   if (progressEl) progressEl.style.width = `${Math.max(0, Math.min(100, next.progress || 0))}%`
   if (mouthEl) mouthEl.dataset.mouth = next.state === 'streaming' ? 'talk' : next.state === 'done' ? 'smile' : next.state === 'error' ? 'sad' : 'rest'
+  updateDigitalHumanVideo(next.state)
   updateDigitalHumanVoiceButton()
   playDigitalHumanAnimation(DH_ANIMATION_BY_STATE[next.state] || 'idle')
   if (options.persist !== false) persistDigitalHumanState(next)
@@ -874,18 +770,73 @@ function setOpenclawDigitalHumanState(state, detail = '', options = {}) {
   return next
 }
 
+function resolveDigitalHumanVideoSrc(state = 'waiting') {
+  const lipFile = DH_LIPSYNC_BY_STATE[state]
+  if (lipFile) return `${DH_LIPSYNC_VIDEO_BASE}${lipFile}`
+  const file = DH_VIDEO_BY_STATE[state] || DH_VIDEO_BY_STATE.waiting
+  return `${DH_VIDEO_BASE}${file}`
+}
+
+function fallbackDigitalHumanVideoSrc(state = 'waiting') {
+  const file = DH_VIDEO_BY_STATE[state] || DH_VIDEO_BY_STATE.waiting
+  return `${DH_VIDEO_BASE}${file}`
+}
+
+function updateDigitalHumanVideo(state = 'waiting') {
+  if (!_digitalHumanVideoEl) return
+  const src = resolveDigitalHumanVideoSrc(state)
+  const current = _digitalHumanVideoEl.getAttribute('src') || ''
+  if (current !== src) {
+    _digitalHumanVideoEl.onerror = () => {
+      const fallback = fallbackDigitalHumanVideoSrc(state)
+      if ((_digitalHumanVideoEl?.getAttribute('src') || '') !== fallback) {
+        _digitalHumanVideoEl?.setAttribute('src', fallback)
+        try { _digitalHumanVideoEl?.load() } catch {}
+        _digitalHumanVideoEl?.play?.().catch(() => {})
+      }
+    }
+    _digitalHumanVideoEl.setAttribute('src', src)
+    try { _digitalHumanVideoEl.load() } catch {}
+    try { _digitalHumanVideoEl.currentTime = 0 } catch {}
+  }
+  try {
+    _digitalHumanVideoEl.muted = true
+    _digitalHumanVideoEl.loop = true
+    if (current === src && ['done', 'error', 'aborted'].includes(state)) {
+      try { _digitalHumanVideoEl.currentTime = 0 } catch {}
+    }
+    _digitalHumanVideoEl.play?.().catch(() => {})
+  } catch {}
+}
+
 function playDigitalHumanVoice(state) {
   if (!_digitalHumanVoiceEnabled || !_digitalHumanAudioEl || !state?.state) return
   const voiceKey = `${state.sessionKey}:${state.runId || ''}:${state.state}`
   if (_digitalHumanLastVoiceKey === voiceKey) return
   _digitalHumanLastVoiceKey = voiceKey
-  // 售卖版内置语音策略：优先播放应用打包的状态语音文件；不使用浏览器 SpeechSynthesis。
+  // 售卖版内置语音策略：只播放应用打包的本地状态语音文件。
   const src = `${DH_VOICE_BASE}${state.state}.wav`
   try {
     _digitalHumanAudioEl.pause()
     _digitalHumanAudioEl.currentTime = 0
     _digitalHumanAudioEl.volume = Math.max(0, Math.min(1, loadDigitalHumanConfig().volume ?? 0.86))
     _digitalHumanAudioEl.src = src
+    _digitalHumanAudioEl.onplay = () => {
+      _digitalHumanEl?.classList.add('is-voice-speaking')
+      if (_digitalHumanVideoEl) {
+        _digitalHumanVideoEl.dataset.voice = 'speaking'
+        try { _digitalHumanVideoEl.play?.().catch(() => {}) } catch {}
+      }
+      const mouth = _digitalHumanEl?.querySelector('.openclaw-dh-expression-mouth') || _digitalHumanEl?.querySelector('.openclaw-dh-mouth')
+      if (mouth) mouth.dataset.mouth = 'talk'
+    }
+    _digitalHumanAudioEl.onended = () => {
+      _digitalHumanEl?.classList.remove('is-voice-speaking')
+      if (_digitalHumanVideoEl) delete _digitalHumanVideoEl.dataset.voice
+      const mouth = _digitalHumanEl?.querySelector('.openclaw-dh-expression-mouth') || _digitalHumanEl?.querySelector('.openclaw-dh-mouth')
+      if (mouth) mouth.dataset.mouth = state.state === 'done' ? 'smile' : state.state === 'error' ? 'sad' : 'rest'
+    }
+    _digitalHumanAudioEl.onerror = _digitalHumanAudioEl.onended
     _digitalHumanAudioEl.play().catch(() => {})
   } catch {}
 }
@@ -3984,6 +3935,7 @@ export function cleanup() {
   document.removeEventListener('pointerup', onDigitalHumanDragEnd)
   try { _digitalHumanAudioEl?.pause() } catch {}
   disposeOpenclawDigitalHumanModel()
+  try { delete window.__openclawSetDigitalHumanState } catch {}
   if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
   _sessionKey = null
   _page = null
@@ -4053,6 +4005,7 @@ export function cleanup() {
   _workspaceOpenSeq = 0
   _digitalHumanEl = null
   _digitalHumanAudioEl = null
+  _digitalHumanVideoEl = null
   _digitalHumanState = { ...DH_DEFAULT_STATE }
   _digitalHumanVoiceEnabled = false
   _digitalHumanLastVoiceKey = ''

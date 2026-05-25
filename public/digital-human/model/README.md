@@ -1,28 +1,27 @@
-# OpenClaw 数字人模型目录
+# 自制半写实数字人模型
 
-方案 C 使用这里的本地模型进行售卖版打包。
+本目录中的 `openclaw-avatar.glb` 可由仓库脚本生成：
+
+```powershell
+& "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe" --background --python scripts/create_aiyu_avatar.py
+```
 
 ## 当前默认模型
 
 - `openclaw-avatar.glb`
-  - 当前默认：Xbot 全身骨骼模型
-  - 来源：three.js examples `examples/models/gltf/Xbot.glb`
-  - 仓库：https://github.com/mrdoob/three.js
-  - 许可：three.js 仓库 MIT License（见 `THREEJS-MIT-LICENSE.txt`）
-  - 说明：这是带骨骼和动画的全身 GLB，当前用于真实 3D 数字人的骨骼驱动、姿态切换和状态动作。
+  - 名称：爱羽 / OpenClaw 自制半写实数字人
+  - 生成工具：Blender LTS 4.5 + `scripts/create_aiyu_avatar.py`
+  - 许可：项目自制资产，见 `OPENCLAW-AIYU-AVATAR-LICENSE.txt`
+  - 说明：包含人脸、眼睛、鼻子、嘴、头发、上半身、衣服、手臂、手部、分段动作节点。不是外部下载素材。
 
-## 高质量候选模型
+## 备用/候选模型
+
+- `openclaw-avatar-xbot.glb`
+  - 来源：three.js examples `examples/models/gltf/Xbot.glb`
+  - 许可：three.js 仓库 MIT License（见 `THREEJS-MIT-LICENSE.txt`）
+  - 说明：免费全身骨骼测试模型，质量较低，不再作为售卖默认模型。
 
 - `openclaw-avatar-head.glb`
   - 名称：Lee Perry-Smith / Infinite 3D Head Scan
-  - 来源：three.js examples `examples/models/gltf/LeePerrySmith/LeePerrySmith.glb`
-  - 原始来源：www.triplegangers.com
   - 许可：Creative Commons Attribution 3.0 Unported（见 `LeePerrySmith_License.txt`）
-  - 说明：真实感更强，但只有头部且没有骨骼，不适合作为默认“真实数字人”。保留为高质量头像候选。
-
-## 替换规则
-
-1. 如获得更高质量且可商用再分发的全身/半身骨骼模型，替换为同名 `openclaw-avatar.glb` 即可。
-2. 必须保留对应 LICENSE / 来源说明。
-3. 不要提交来源不明、禁止再分发的模型。
-4. 模型不存在或加载失败时，OpenClaw 主聊天页会自动回退到 `public/digital-human/openclaw-avatar.svg`，不会影响应用启动。
+  - 说明：真实感更强，但只有头部且没有骨骼，保留为候选。

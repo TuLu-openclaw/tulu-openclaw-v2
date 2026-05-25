@@ -1150,11 +1150,16 @@ function startUpdateChecker() {
     }
   }
 
-  // === 微验卡密验证（启动时必须通过，失败时循环重试，最多3次内置模块，之后显示 fallback）===
+  // === 微验卡密验证（启动时必须通过；已验证且未过期时直接进入，避免刷新反复弹窗）===
   let kamiVerified = false
   let kamiFailCount = 0
   while (!kamiVerified) {
     try {
+      const { isLocallyVerified } = await import('./lib/kami.js')
+      if (isLocallyVerified()) {
+        kamiVerified = true
+        break
+      }
       const { showKamiVerifyModal } = await import('./components/kami-modal.js')
       await showKamiVerifyModal()
       kamiVerified = true

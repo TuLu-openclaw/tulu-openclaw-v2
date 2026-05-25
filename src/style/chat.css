@@ -1972,7 +1972,7 @@
 }
 .openclaw-dh-voice.is-on { color: #bbf7d0; border-color: rgba(34,197,94,.45); background: rgba(34,197,94,.16); }
 .openclaw-dh-stage {
-  height: 230px;
+  height: 300px;
   position: relative;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,.12);
@@ -1991,20 +1991,82 @@
   filter: blur(10px);
   animation: openclaw-dh-light 4s ease-in-out infinite;
 }
-.openclaw-dh-avatar-img {
+.openclaw-dh-avatar-img,
+.openclaw-dh-avatar-head-layer,
+.openclaw-dh-avatar-arm-layer {
   position: absolute;
   left: 50%;
-  bottom: -8px;
-  width: 218px;
+  bottom: -48px;
+  width: 162px;
   height: auto;
   transform: translateX(-50%) translateZ(18px);
-  transform-origin: center bottom;
-  opacity: .98;
+  transform-origin: center 62%;
+  opacity: 1;
   pointer-events: none;
-  filter: drop-shadow(0 20px 30px rgba(2,6,23,.38));
+  filter: drop-shadow(0 22px 32px rgba(2,6,23,.42));
   animation: openclaw-dh-avatar-breathe 3.4s ease-in-out infinite;
 }
+.openclaw-dh-avatar-head-layer {
+  z-index: 3;
+  clip-path: inset(0 0 58% 0);
+  transform-origin: 50% 16%;
+  filter: none;
+  animation: openclaw-dh-head-layer-idle 4.2s ease-in-out infinite;
+}
+.openclaw-dh-avatar-arm-layer {
+  z-index: 2;
+  clip-path: polygon(56% 38%, 100% 38%, 100% 100%, 58% 100%);
+  transform-origin: 72% 48%;
+  filter: none;
+  opacity: 0;
+}
+.openclaw-dh-expression {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 162px;
+  height: 300px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: .92;
+}
+.openclaw-dh-expression-eye {
+  position: absolute;
+  top: 70px;
+  width: 30px;
+  height: 12px;
+  border-radius: 999px;
+  border-top: 2px solid rgba(14, 165, 233, .42);
+  opacity: 0;
+}
+.openclaw-dh-expression-eye.left { left: 67px; }
+.openclaw-dh-expression-eye.right { right: 67px; }
+.openclaw-dh-expression-mouth {
+  position: absolute;
+  left: 50%;
+  top: 108px;
+  width: 26px;
+  height: 7px;
+  margin-left: -13px;
+  border-radius: 999px;
+  background: rgba(127, 29, 29, .0);
+  border-bottom: 2px solid rgba(248, 113, 113, .0);
+  transition: all .18s ease;
+}
+.openclaw-dh-expression-breath {
+  position: absolute;
+  left: 50%;
+  top: 156px;
+  width: 74px;
+  height: 42px;
+  margin-left: -37px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(96,165,250,.16), transparent 68%);
+  filter: blur(2px);
+  animation: openclaw-dh-chest-breath 3.4s ease-in-out infinite;
+}
 .openclaw-dh-person {
+  display: none;
   position: absolute;
   left: 50%;
   bottom: -18px;
@@ -2098,6 +2160,38 @@
 .openclaw-dh-detail { margin-top: 6px; min-height: 32px; color: #94a3b8; font-size: 12px; line-height: 1.35; }
 .openclaw-dh-progress { height: 6px; margin-top: 10px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
 .openclaw-dh-progress span { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #22c55e, #38bdf8, #a78bfa); transition: width .35s ease; }
+.openclaw-dh.is-thinking .openclaw-dh-avatar-img,
+.openclaw-dh.is-tool .openclaw-dh-avatar-img,
+.openclaw-dh.is-finalizing .openclaw-dh-avatar-img { animation-duration: 2.2s; filter: drop-shadow(0 22px 32px rgba(2,6,23,.42)) saturate(1.08); }
+.openclaw-dh.is-thinking .openclaw-dh-avatar-head-layer { animation: openclaw-dh-head-thinking 1.9s ease-in-out infinite; }
+.openclaw-dh.action-think .openclaw-dh-avatar-img { animation: openclaw-dh-think-body 2.4s ease-in-out infinite; }
+.openclaw-dh.action-lean-in .openclaw-dh-avatar-img,
+.openclaw-dh.action-ack .openclaw-dh-avatar-img { animation: openclaw-dh-lean-in 1.6s ease-in-out infinite; }
+.openclaw-dh.action-organize .openclaw-dh-avatar-img { animation: openclaw-dh-organize 1.45s ease-in-out infinite; }
+.openclaw-dh.is-streaming .openclaw-dh-avatar-img { animation: openclaw-dh-speaking 1.35s ease-in-out infinite; }
+.openclaw-dh.is-streaming .openclaw-dh-avatar-head-layer { animation: openclaw-dh-head-speaking 1.35s ease-in-out infinite; }
+.openclaw-dh.is-tool .openclaw-dh-avatar-img { animation: openclaw-dh-agent-tool 1.2s ease-in-out infinite; }
+.openclaw-dh.is-tool .openclaw-dh-avatar-arm-layer,
+.openclaw-dh.is-streaming .openclaw-dh-avatar-arm-layer,
+.openclaw-dh.is-done .openclaw-dh-avatar-arm-layer,
+.openclaw-dh.action-ack .openclaw-dh-avatar-arm-layer,
+.openclaw-dh.action-lean-in .openclaw-dh-avatar-arm-layer,
+.openclaw-dh.action-organize .openclaw-dh-avatar-arm-layer,
+.openclaw-dh.action-concern .openclaw-dh-avatar-arm-layer { opacity: .72; animation: openclaw-dh-arm-layer-gesture 1.25s ease-in-out infinite; }
+.openclaw-dh.action-ack .openclaw-dh-avatar-arm-layer { animation-name: openclaw-dh-arm-ack; }
+.openclaw-dh.action-organize .openclaw-dh-avatar-arm-layer { animation-name: openclaw-dh-arm-organize; }
+.openclaw-dh.action-concern .openclaw-dh-avatar-arm-layer { animation-name: openclaw-dh-arm-concern; animation-duration: 1.8s; opacity: .5; }
+.openclaw-dh.is-done .openclaw-dh-avatar-img { filter: drop-shadow(0 22px 32px rgba(2,6,23,.42)) brightness(1.06) saturate(1.08); }
+.openclaw-dh.is-done .openclaw-dh-avatar-head-layer { animation: openclaw-dh-head-done 2s ease-in-out infinite; }
+.openclaw-dh.is-error .openclaw-dh-avatar-img { filter: drop-shadow(0 22px 32px rgba(2,6,23,.42)) grayscale(.18) brightness(.86); transform: translateX(-50%) translateY(4px) rotate(-1.3deg); }
+.openclaw-dh.is-error .openclaw-dh-avatar-head-layer { animation: openclaw-dh-head-error 2.4s ease-in-out infinite; filter: grayscale(.18) brightness(.86); }
+.openclaw-dh.is-thinking .openclaw-dh-expression-eye,
+.openclaw-dh.is-tool .openclaw-dh-expression-eye { opacity: .9; animation: openclaw-dh-eye-focus 1.4s ease-in-out infinite; }
+.openclaw-dh.is-streaming .openclaw-dh-expression-mouth,
+.openclaw-dh.is-voice-speaking .openclaw-dh-expression-mouth { opacity: .95; background: rgba(127, 29, 29, .42); border-bottom-color: rgba(248, 113, 113, .62); animation: openclaw-dh-live-mouth .34s ease-in-out infinite; }
+.openclaw-dh.is-voice-speaking .openclaw-dh-avatar-head-layer { animation: openclaw-dh-head-speaking 1.35s ease-in-out infinite; }
+.openclaw-dh.is-done .openclaw-dh-expression-mouth { opacity: .8; width: 34px; height: 12px; margin-left: -17px; background: transparent; border-bottom: 3px solid rgba(248,113,113,.66); border-radius: 0 0 999px 999px; }
+.openclaw-dh.is-error .openclaw-dh-expression-mouth { opacity: .78; width: 30px; height: 10px; margin-left: -15px; background: transparent; border-top: 3px solid rgba(248,113,113,.55); border-radius: 999px 999px 0 0; }
 .openclaw-dh.is-thinking .openclaw-dh-person,
 .openclaw-dh.is-tool .openclaw-dh-person,
 .openclaw-dh.is-finalizing .openclaw-dh-person { --dh-y: -4deg; animation-duration: 2.2s; }
@@ -2116,6 +2210,23 @@
 @keyframes openclaw-dh-speak-head { 0%,100% { transform: translateX(-50%) translateZ(28px) rotateZ(-.6deg); } 50% { transform: translateX(-50%) translateZ(28px) rotateZ(.8deg) translateY(-1px); } }
 @keyframes openclaw-dh-blink { 0%, 92%, 100% { transform: scaleY(1); } 94%, 96% { transform: scaleY(.1); } }
 @keyframes openclaw-dh-talk { 0%,100% { width: 16px; height: 4px; } 45% { width: 13px; height: 13px; border-radius: 50%; } 72% { width: 21px; height: 6px; } }
+@keyframes openclaw-dh-chest-breath { 0%,100% { transform: scale(.92); opacity: .30; } 50% { transform: scale(1.18); opacity: .72; } }
+@keyframes openclaw-dh-speaking { 0%,100% { transform: translateX(-50%) translateY(-2px) scale(1.01); } 50% { transform: translateX(-50%) translateY(-7px) scale(1.018); } }
+@keyframes openclaw-dh-think-body { 0%,100% { transform: translateX(-50%) translateY(0) rotate(-.4deg) scale(1.006); } 50% { transform: translateX(-50%) translateY(-5px) rotate(.8deg) scale(1.012); } }
+@keyframes openclaw-dh-lean-in { 0%,100% { transform: translateX(-50%) translateY(0) scale(1); } 50% { transform: translateX(-50%) translateY(-6px) scale(1.028); } }
+@keyframes openclaw-dh-organize { 0%,100% { transform: translateX(-50%) translateY(-1px) rotate(.4deg) scale(1.008); } 33% { transform: translateX(-50%) translateY(-5px) rotate(-.8deg) scale(1.012); } 66% { transform: translateX(-50%) translateY(-3px) rotate(.9deg) scale(1.014); } }
+@keyframes openclaw-dh-agent-tool { 0%,100% { transform: translateX(-50%) translateY(0) rotate(.5deg) scale(1.006); } 50% { transform: translateX(-50%) translateY(-4px) rotate(-1.2deg) scale(1.014); } }
+@keyframes openclaw-dh-eye-focus { 0%,100% { transform: translateY(0) scaleX(.8); opacity: .35; } 50% { transform: translateY(-2px) scaleX(1.12); opacity: .95; } }
+@keyframes openclaw-dh-live-mouth { 0%,100% { width: 19px; height: 5px; margin-left: -9.5px; } 45% { width: 17px; height: 17px; margin-left: -8.5px; border-radius: 50%; } }
+@keyframes openclaw-dh-head-layer-idle { 0%,100% { transform: translateX(-50%) translateY(0) rotate(0deg); } 50% { transform: translateX(-50%) translateY(-2px) rotate(.45deg); } }
+@keyframes openclaw-dh-head-thinking { 0%,100% { transform: translateX(-50%) translateY(-1px) rotate(-1.2deg); } 50% { transform: translateX(-50%) translateY(-4px) rotate(1deg); } }
+@keyframes openclaw-dh-head-speaking { 0%,100% { transform: translateX(-50%) translateY(-2px) rotate(-.6deg); } 50% { transform: translateX(-50%) translateY(-6px) rotate(.9deg); } }
+@keyframes openclaw-dh-head-done { 0%,100% { transform: translateX(-50%) translateY(-1px) rotate(.5deg); } 50% { transform: translateX(-50%) translateY(-4px) rotate(-.4deg); } }
+@keyframes openclaw-dh-head-error { 0%,100% { transform: translateX(-50%) translateY(2px) rotate(-1.4deg); } 50% { transform: translateX(-50%) translateY(0) rotate(-.7deg); } }
+@keyframes openclaw-dh-arm-layer-gesture { 0%,100% { transform: translateX(-50%) translateY(0) rotate(0deg); } 50% { transform: translateX(-50%) translateY(-7px) rotate(-4deg); } }
+@keyframes openclaw-dh-arm-ack { 0%,100% { transform: translateX(-50%) translateY(0) rotate(0deg); } 40% { transform: translateX(-50%) translateY(-5px) rotate(3deg); } 70% { transform: translateX(-50%) translateY(-2px) rotate(-2deg); } }
+@keyframes openclaw-dh-arm-organize { 0%,100% { transform: translateX(-50%) translateY(0) rotate(0deg); } 33% { transform: translateX(-50%) translateY(-4px) rotate(-3deg); } 66% { transform: translateX(-50%) translateY(-7px) rotate(4deg); } }
+@keyframes openclaw-dh-arm-concern { 0%,100% { transform: translateX(-50%) translateY(1px) rotate(-1deg); } 50% { transform: translateX(-50%) translateY(-3px) rotate(2deg); } }
 @keyframes openclaw-dh-gesture-right { 0%,100% { transform: rotate(-11deg); } 50% { transform: rotate(-35deg) translateY(-5px); } }
 @media (max-width: 760px) {
   .openclaw-dh { width: 246px; right: 10px; bottom: 86px; }
@@ -2216,4 +2327,116 @@
 @keyframes openclaw-dh-3d-focus {
   0%,100% { filter: drop-shadow(0 28px 28px rgba(0,0,0,.45)) saturate(1); }
   50% { filter: drop-shadow(0 30px 34px rgba(56,189,248,.34)) saturate(1.16); }
+}
+.openclaw-dh.has-real-face .openclaw-dh-model-stage::after {
+  content: "真人脸部层";
+  position: absolute;
+  right: 18px;
+  top: 16px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: #dcfce7;
+  background: rgba(22,163,74,.20);
+  border: 1px solid rgba(134,239,172,.28);
+  box-shadow: 0 0 18px rgba(34,197,94,.16);
+}
+
+/* Digital human final polish: no tearing layers, visible mouth sync */
+.openclaw-dh-avatar-img,
+.openclaw-dh-avatar-head-layer,
+.openclaw-dh-avatar-arm-layer {
+  width: 150px;
+  bottom: -4px;
+}
+.openclaw-dh-avatar-head-layer,
+.openclaw-dh-avatar-arm-layer {
+  display: none !important;
+  opacity: 0 !important;
+  animation: none !important;
+}
+.openclaw-dh-expression {
+  z-index: 6;
+}
+.openclaw-dh-expression-mouth {
+  top: 60px;
+  width: 18px;
+  height: 5px;
+  margin-left: -9px;
+  box-shadow: 0 0 8px rgba(248,113,113,.28);
+}
+.openclaw-dh-expression-breath {
+  top: 126px;
+  opacity: .45;
+}
+.openclaw-dh.is-voice-speaking .openclaw-dh-expression-mouth,
+.openclaw-dh.is-streaming .openclaw-dh-expression-mouth {
+  opacity: 1;
+  background: rgba(127, 29, 29, .5);
+  border-bottom-color: rgba(248, 113, 113, .75);
+  animation: openclaw-dh-live-mouth .28s ease-in-out infinite;
+}
+
+/* Digital human final correction: remove fake detached mouth overlay */
+.openclaw-dh-expression-mouth {
+  display: none !important;
+}
+.openclaw-dh.is-voice-speaking .openclaw-dh-avatar-img,
+.openclaw-dh.is-streaming .openclaw-dh-avatar-img {
+  animation: openclaw-dh-speaking 1.2s ease-in-out infinite;
+}
+
+/* Video-driven digital human: local mp4 state loops */
+.openclaw-dh-video {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(214px, 68%);
+  height: 304px;
+  transform: translateX(-50%);
+  object-fit: contain;
+  object-position: center bottom;
+  border-radius: 28px 28px 18px 18px;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(125,211,252,.16), transparent 34%),
+    linear-gradient(180deg, rgba(8,18,36,.58), rgba(2,6,23,.78));
+  box-shadow:
+    inset 0 0 0 1px rgba(148,163,184,.18),
+    inset 0 18px 40px rgba(255,255,255,.04),
+    0 24px 46px rgba(2,6,23,.52),
+    0 0 36px rgba(56,189,248,.16);
+  filter: saturate(1.08) contrast(1.03);
+}
+.openclaw-dh-video::selection { background: transparent; }
+.openclaw-dh-stage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 224px;
+  height: 24px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(ellipse at center, rgba(14,165,233,.28), transparent 70%);
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 3;
+}
+.openclaw-dh .openclaw-dh-avatar-img,
+.openclaw-dh .openclaw-dh-avatar-head-layer,
+.openclaw-dh .openclaw-dh-avatar-arm-layer,
+.openclaw-dh .openclaw-dh-expression,
+.openclaw-dh .openclaw-dh-person {
+  display: none !important;
+}
+.openclaw-dh-stage {
+  height: 334px;
+  overflow: visible;
+}
+.openclaw-dh.is-low-power .openclaw-dh-video {
+  animation: none !important;
 }

@@ -324,26 +324,30 @@ export async function refreshGatewayStatus() {
   return _gatewayRunning
 }
 
+let _gatewayPollInterval = 0
+
 /** 启动 Gateway 状态轮询（启动/修复窗口内 1 秒轮询，稳定后退回 15 秒） */
 export function startGatewayPoll() {
   if (_pollTimer) return
   const tick = async () => {
     await refreshGatewayStatus()
     const desiredInterval = Date.now() < _fastPollUntil ? GATEWAY_FAST_POLL_INTERVAL : GATEWAY_POLL_INTERVAL
-    const currentInterval = _pollTimer?._openclawInterval || 0
+    const currentInterval = _gatewayPollInterval || 0
     if (currentInterval !== desiredInterval) {
       clearInterval(_pollTimer)
       _pollTimer = null
+      _gatewayPollInterval = 0
       startGatewayPoll()
     }
   }
   const interval = Date.now() < _fastPollUntil ? GATEWAY_FAST_POLL_INTERVAL : GATEWAY_POLL_INTERVAL
   _pollTimer = setInterval(tick, interval)
-  _pollTimer._openclawInterval = interval
+  _gatewayPollInterval = interval
   tick()
 }
 export function stopGatewayPoll() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null }
+  _gatewayPollInterval = 0
 }
 
 export function boostGatewayPolling(durationMs = GATEWAY_FAST_POLL_WINDOW) {
