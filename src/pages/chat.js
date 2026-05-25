@@ -352,7 +352,7 @@ export async function render() {
         <div class="hosted-agent-footer" id="hosted-agent-status">${t('chat.ready')}</div>
       </div>
       <div class="chat-disconnect-bar" id="chat-disconnect-bar" style="display:none">${t('chat.disconnected')}</div>
-      ${renderOpenclawDigitalHuman()}
+      ${''}
       <div class="chat-connect-overlay" id="chat-connect-overlay" style="display:none">
         <div class="chat-connect-card">
           <div class="chat-connect-icon">
@@ -422,7 +422,9 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
-  initOpenclawDigitalHuman()
+  // 数字人运行时面板暂时禁用：当前版本会导致聊天页严重卡顿，先确保聊天核心可用。
+  // 后续需要做成懒加载独立组件，不允许在聊天页首屏挂载大量媒体/动画 DOM。
+  if (_digitalHumanEl) initOpenclawDigitalHuman()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -927,8 +929,7 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-digital-human')?.addEventListener('click', () => {
-    const cfg = loadDigitalHumanConfig()
-    saveDigitalHumanConfig({ visible: !cfg.visible })
+    toast('数字人面板已临时禁用，先恢复聊天页性能', 'warning')
   })
   page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
   page.querySelector('#btn-cmd')?.addEventListener('click', () => toggleCmdPanel())
