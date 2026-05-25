@@ -11,6 +11,8 @@ import { toast } from '../components/toast.js'
 import { showModal, showConfirm } from '../components/modal.js'
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 const RENDER_THROTTLE = 30
 const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
@@ -144,6 +146,7 @@ let _workspaceLoadSeq = 0, _workspaceOpenSeq = 0
 // ── OpenClaw 主引擎数字人（注意：只服务 src/pages/chat.js，不接 Hermes）──
 const DH_STORAGE_PREFIX = '星枢Open_digital_human_'
 const DH_VOICE_BASE = '/digital-human/voice/'
+const DH_MODEL_URL = '/digital-human/model/openclaw-avatar.glb'
 const DH_STATE_TEXT = {
   idle: ['待机中', '等待新的任务', 'calm'],
   waiting: ['待机中', '等待新的任务', 'calm'],
@@ -167,6 +170,7 @@ let _digitalHumanDragging = false
 let _digitalHumanDragOffset = { x: 0, y: 0 }
 let _digitalHumanProgressTimer = null
 let _digitalHumanConfig = { visible: true, voice: true, volume: 0.86, lowPower: false }
+let _digitalHuman3d = null
 
 export async function render() {
   const page = document.createElement('div')
@@ -508,6 +512,7 @@ function renderOpenclawDigitalHuman() {
       </div>
       <div class="openclaw-dh-stage" aria-hidden="true">
         <div class="openclaw-dh-light"></div>
+        <div class="openclaw-dh-model-stage" id="openclaw-dh-model-stage"></div>
         <img class="openclaw-dh-avatar-img" src="/digital-human/openclaw-avatar.svg" alt="" draggable="false">
         <div class="openclaw-dh-person">
           <div class="openclaw-dh-hair"></div>
@@ -611,6 +616,107 @@ function bindOpenclawDigitalHuman() {
   applyDigitalHumanConfig()
 }
 
+function disposeOpenclawDigitalHumanModel() {
+  const ctx = _digitalHuman3d
+  if (!ctx) return
+  try { cancelAnimationFrame(ctx.raf) } catch {}
+  try {
+    ctx.scene?.traverse?.((obj) => {
+      if (obj.geometry) obj.geometry.dispose?.()
+      if (obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach(m => {
+          Object.values(m).forEach(v => v?.isTexture && v.dispose?.())
+          m.dispose?.()
+        })
+      }
+    })
+    ctx.renderer?.dispose?.()
+    ctx.renderer?.domElement?.remove?.()
+  } catch {}
+  _digitalHuman3d = null
+}
+
+function mountOpenclawDigitalHumanModel() {
+  const stage = _digitalHumanEl?.querySelector('#openclaw-dh-model-stage')
+  if (!stage || loadDigitalHumanConfig().lowPower) return
+  disposeOpenclawDigitalHumanModel()
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
+  renderer.setSize(stage.clientWidth || 220, stage.clientHeight || 230)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  stage.appendChild(renderer.domElement)
+
+  const scene = new THREE.Scene()
+  const camera = new THREE.PerspectiveCamera(24, (stage.clientWidth || 220) / (stage.clientHeight || 230), 0.01, 100)
+  camera.position.set(0, 1.35, 4.1)
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x1e293b, 2.1))
+  const key = new THREE.DirectionalLight(0xffffff, 2.2)
+  key.position.set(2.2, 3, 2.4)
+  scene.add(key)
+  const fill = new THREE.DirectionalLight(0x38bdf8, 0.8)
+  fill.position.set(-2, 1.6, 2)
+  scene.add(fill)
+
+  const ctx = { stage, renderer, scene, camera, model: null, mixer: null, clock: new THREE.Clock(), raf: 0, missing: false }
+  _digitalHuman3d = ctx
+
+  const loader = new GLTFLoader()
+  loader.load(DH_MODEL_URL, (gltf) => {
+    if (_digitalHuman3d !== ctx) return
+    const model = gltf.scene
+    model.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.castShadow = false
+        obj.frustumCulled = false
+        if (obj.material) obj.material.needsUpdate = true
+      }
+    })
+    const box = new THREE.Box3().setFromObject(model)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    const scale = 2.35 / Math.max(size.y || 1, size.x || 1)
+    model.scale.setScalar(scale)
+    model.position.set(-center.x * scale, -center.y * scale + 1.02, -center.z * scale)
+    scene.add(model)
+    ctx.model = model
+    ctx.mixer = gltf.animations?.length ? new THREE.AnimationMixer(model) : null
+    if (ctx.mixer && gltf.animations[0]) ctx.mixer.clipAction(gltf.animations[0]).play()
+    _digitalHumanEl?.classList.add('is-3d-ready')
+  }, undefined, () => {
+    if (_digitalHuman3d !== ctx) return
+    ctx.missing = true
+    _digitalHumanEl?.classList.remove('is-3d-ready')
+  })
+
+  const tick = () => {
+    if (_digitalHuman3d !== ctx || !_pageActive) return
+    const cfg = loadDigitalHumanConfig()
+    if (cfg.lowPower || cfg.visible === false) { ctx.raf = requestAnimationFrame(tick); return }
+    const dt = ctx.clock.getDelta()
+    ctx.mixer?.update?.(dt)
+    if (ctx.model) {
+      const t = performance.now() / 1000
+      const active = ['thinking', 'tool', 'streaming', 'finalizing'].includes(_digitalHumanState.state)
+      ctx.model.rotation.y = Math.sin(t * (active ? 1.4 : 0.55)) * (active ? 0.08 : 0.035)
+      ctx.model.position.y += Math.sin(t * 2.2) * 0.0006
+    }
+    renderer.render(scene, camera)
+    ctx.raf = requestAnimationFrame(tick)
+  }
+  tick()
+}
+
+function resizeOpenclawDigitalHumanModel() {
+  const ctx = _digitalHuman3d
+  if (!ctx?.stage || !ctx.renderer || !ctx.camera) return
+  const w = ctx.stage.clientWidth || 220
+  const h = ctx.stage.clientHeight || 230
+  ctx.camera.aspect = w / h
+  ctx.camera.updateProjectionMatrix()
+  ctx.renderer.setSize(w, h)
+}
+
 function onDigitalHumanDragMove(e) {
   if (!_digitalHumanDragging || !_digitalHumanEl) return
   const maxX = Math.max(12, window.innerWidth - _digitalHumanEl.offsetWidth - 12)
@@ -675,6 +781,9 @@ function applyDigitalHumanConfig() {
   const topBtn = _page?.querySelector('#btn-digital-human')
   if (topBtn) topBtn.classList.toggle('active', cfg.visible !== false)
   if (_digitalHumanAudioEl) _digitalHumanAudioEl.volume = cfg.volume
+  if (cfg.lowPower || cfg.visible === false) disposeOpenclawDigitalHumanModel()
+  else if (!_digitalHuman3d) mountOpenclawDigitalHumanModel()
+  else resizeOpenclawDigitalHumanModel()
   updateDigitalHumanVoiceButton()
 }
 
@@ -3812,6 +3921,7 @@ export function cleanup() {
   document.removeEventListener('pointermove', onDigitalHumanDragMove)
   document.removeEventListener('pointerup', onDigitalHumanDragEnd)
   try { _digitalHumanAudioEl?.pause() } catch {}
+  disposeOpenclawDigitalHumanModel()
   if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
   _sessionKey = null
   _page = null

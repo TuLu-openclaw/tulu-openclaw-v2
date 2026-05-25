@@ -2172,3 +2172,18 @@
   .openclaw-dh-controls { grid-template-columns: 1fr; }
   .openclaw-dh-volume input { width: 100%; }
 }
+
+.openclaw-dh-model-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .35s ease;
+  z-index: 4;
+}
+.openclaw-dh-model-stage canvas { width: 100% !important; height: 100% !important; }
+.openclaw-dh.is-3d-ready .openclaw-dh-model-stage { opacity: 1; }
+.openclaw-dh.is-3d-ready .openclaw-dh-avatar-img { opacity: 0; }
+.openclaw-dh.is-3d-ready .openclaw-dh-person { opacity: 0; }
