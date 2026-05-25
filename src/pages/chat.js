@@ -147,6 +147,9 @@ let _workspaceLoadSeq = 0, _workspaceOpenSeq = 0
 const DH_STORAGE_PREFIX = '星枢Open_digital_human_'
 const DH_VOICE_BASE = '/digital-human/voice/'
 const DH_MODEL_URL = '/digital-human/model/openclaw-avatar.glb'
+const DH_ANIMATION_BY_STATE = {
+  waiting: 'idle', queued: 'idle', sending: 'walk', thinking: 'headShake', tool: 'walk', streaming: 'agree', finalizing: 'agree', done: 'agree', error: 'sad_pose', aborted: 'sad_pose'
+}
 const DH_STATE_TEXT = {
   idle: ['待机中', '等待新的任务', 'calm'],
   waiting: ['待机中', '等待新的任务', 'calm'],
@@ -223,9 +226,6 @@ export async function render() {
           </button>
           <button class="btn btn-sm btn-ghost" id="btn-digital-human" title="显示/隐藏 OpenClaw 数字人">
             数字人
-          </button>
-          <button class="btn btn-sm btn-ghost" id="btn-collab" title="${t('chat.collabActionHint')}">
-            ${t('chat.collabAction')}
           </button>
           <button class="btn btn-sm btn-ghost" id="btn-cmd" title="${t('chat.shortcuts')}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z"/></svg>
@@ -643,22 +643,30 @@ function mountOpenclawDigitalHumanModel() {
   disposeOpenclawDigitalHumanModel()
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
-  renderer.setSize(stage.clientWidth || 220, stage.clientHeight || 230)
+  renderer.setSize(stage.clientWidth || 260, stage.clientHeight || 300)
   renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.18
   stage.appendChild(renderer.domElement)
 
   const scene = new THREE.Scene()
-  const camera = new THREE.PerspectiveCamera(24, (stage.clientWidth || 220) / (stage.clientHeight || 230), 0.01, 100)
-  camera.position.set(0, 1.35, 4.1)
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x1e293b, 2.1))
-  const key = new THREE.DirectionalLight(0xffffff, 2.2)
-  key.position.set(2.2, 3, 2.4)
+  const camera = new THREE.PerspectiveCamera(20, (stage.clientWidth || 260) / (stage.clientHeight || 300), 0.01, 100)
+  camera.position.set(0, 1.45, 4.7)
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x172033, 2.4))
+  const key = new THREE.DirectionalLight(0xffffff, 2.8)
+  key.position.set(2.5, 3.8, 3)
   scene.add(key)
-  const fill = new THREE.DirectionalLight(0x38bdf8, 0.8)
-  fill.position.set(-2, 1.6, 2)
+  const rim = new THREE.DirectionalLight(0x8bd3ff, 1.25)
+  rim.position.set(-2.6, 2.2, -1.4)
+  scene.add(rim)
+  const fill = new THREE.DirectionalLight(0xffd9c2, 0.82)
+  fill.position.set(-1.5, 1.2, 2.6)
   scene.add(fill)
 
-  const ctx = { stage, renderer, scene, camera, model: null, mixer: null, clock: new THREE.Clock(), raf: 0, missing: false }
+  const ctx = {
+    stage, renderer, scene, camera, model: null, mixer: null, clock: new THREE.Clock(), raf: 0,
+    missing: false, actions: {}, currentAction: null, bones: {}, baseBoneRotations: {}, blinkUntil: 0, nextBlink: performance.now() + 2600
+  }
   _digitalHuman3d = ctx
 
   const loader = new GLTFLoader()
@@ -666,45 +674,98 @@ function mountOpenclawDigitalHumanModel() {
     if (_digitalHuman3d !== ctx) return
     const model = gltf.scene
     model.traverse((obj) => {
+      if (obj.isBone && obj.name) ctx.bones[obj.name] = obj
       if (obj.isMesh) {
         obj.castShadow = false
         obj.frustumCulled = false
-        if (obj.material) obj.material.needsUpdate = true
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+          mats.forEach((m) => {
+            m.roughness = Math.min(0.92, m.roughness ?? 0.72)
+            m.metalness = Math.min(0.08, m.metalness ?? 0)
+            m.needsUpdate = true
+          })
+        }
       }
+    })
+    ;['mixamorig:Head', 'mixamorig:Neck', 'mixamorig:Spine', 'mixamorig:Spine1', 'mixamorig:Spine2', 'mixamorig:LeftArm', 'mixamorig:RightArm', 'mixamorig:LeftForeArm', 'mixamorig:RightForeArm'].forEach((name) => {
+      const b = ctx.bones[name]
+      if (b) ctx.baseBoneRotations[name] = b.rotation.clone()
     })
     const box = new THREE.Box3().setFromObject(model)
     const size = box.getSize(new THREE.Vector3())
     const center = box.getCenter(new THREE.Vector3())
-    const scale = 2.35 / Math.max(size.y || 1, size.x || 1)
+    const scale = 3.05 / Math.max(size.y || 1, size.x || 1)
     model.scale.setScalar(scale)
-    model.position.set(-center.x * scale, -center.y * scale + 1.02, -center.z * scale)
+    model.position.set(-center.x * scale, -center.y * scale + 1.42, -center.z * scale)
+    model.rotation.y = -0.1
     scene.add(model)
     ctx.model = model
     ctx.mixer = gltf.animations?.length ? new THREE.AnimationMixer(model) : null
-    if (ctx.mixer && gltf.animations[0]) ctx.mixer.clipAction(gltf.animations[0]).play()
-    _digitalHumanEl?.classList.add('is-3d-ready')
+    if (ctx.mixer) {
+      gltf.animations.forEach((clip) => { ctx.actions[clip.name] = ctx.mixer.clipAction(clip) })
+      playDigitalHumanAnimation(DH_ANIMATION_BY_STATE[_digitalHumanState.state] || 'idle')
+    }
+    _digitalHumanEl?.classList.add('is-3d-ready', 'is-skeletal-ready')
   }, undefined, () => {
     if (_digitalHuman3d !== ctx) return
     ctx.missing = true
-    _digitalHumanEl?.classList.remove('is-3d-ready')
+    _digitalHumanEl?.classList.remove('is-3d-ready', 'is-skeletal-ready')
   })
 
   const tick = () => {
     if (_digitalHuman3d !== ctx || !_pageActive) return
     const cfg = loadDigitalHumanConfig()
     if (cfg.lowPower || cfg.visible === false) { ctx.raf = requestAnimationFrame(tick); return }
-    const dt = ctx.clock.getDelta()
+    const dt = Math.min(ctx.clock.getDelta(), 0.05)
     ctx.mixer?.update?.(dt)
-    if (ctx.model) {
-      const t = performance.now() / 1000
-      const active = ['thinking', 'tool', 'streaming', 'finalizing'].includes(_digitalHumanState.state)
-      ctx.model.rotation.y = Math.sin(t * (active ? 1.4 : 0.55)) * (active ? 0.08 : 0.035)
-      ctx.model.position.y += Math.sin(t * 2.2) * 0.0006
-    }
+    applyDigitalHumanBonePose(ctx)
     renderer.render(scene, camera)
     ctx.raf = requestAnimationFrame(tick)
   }
   tick()
+}
+
+function playDigitalHumanAnimation(name) {
+  const ctx = _digitalHuman3d
+  if (!ctx?.mixer || !ctx.actions) return
+  const next = ctx.actions[name] || ctx.actions.idle || Object.values(ctx.actions)[0]
+  if (!next || ctx.currentAction === next) return
+  next.reset().setEffectiveWeight(1).setEffectiveTimeScale(name === 'walk' ? 0.72 : 0.9).fadeIn(0.28).play()
+  if (ctx.currentAction) ctx.currentAction.fadeOut(0.22)
+  ctx.currentAction = next
+}
+
+function applyDigitalHumanBonePose(ctx) {
+  if (!ctx?.model) return
+  const now = performance.now()
+  const t = now / 1000
+  const state = _digitalHumanState.state
+  const active = ['thinking', 'tool', 'streaming', 'finalizing', 'sending'].includes(state)
+  const talking = state === 'streaming'
+  ctx.model.rotation.y = -0.1 + Math.sin(t * (active ? 1.35 : 0.55)) * (active ? 0.09 : 0.035)
+  ctx.model.position.y += Math.sin(t * 2.1) * 0.00042
+
+  const setBone = (name, rx = 0, ry = 0, rz = 0) => {
+    const b = ctx.bones[name]
+    const base = ctx.baseBoneRotations[name]
+    if (!b || !base) return
+    b.rotation.x = base.x + rx
+    b.rotation.y = base.y + ry
+    b.rotation.z = base.z + rz
+  }
+  const headNod = Math.sin(t * (talking ? 4.8 : 1.8)) * (talking ? 0.09 : 0.035)
+  const look = Math.sin(t * 0.85) * 0.055
+  setBone('mixamorig:Head', headNod, look, Math.sin(t * 1.1) * 0.025)
+  setBone('mixamorig:Neck', headNod * 0.45, look * 0.45, 0)
+  setBone('mixamorig:Spine2', Math.sin(t * 1.6) * 0.018, 0, Math.sin(t * 1.1) * 0.02)
+  if (state === 'tool' || state === 'sending') {
+    setBone('mixamorig:RightArm', -0.2 + Math.sin(t * 4.2) * 0.16, 0.1, -0.42)
+    setBone('mixamorig:RightForeArm', -0.35 + Math.sin(t * 4.2) * 0.11, 0, -0.18)
+  } else if (state === 'thinking') {
+    setBone('mixamorig:LeftArm', -0.14, 0.08, 0.3)
+    setBone('mixamorig:RightArm', -0.12, -0.08, -0.3)
+  }
 }
 
 function resizeOpenclawDigitalHumanModel() {
@@ -794,7 +855,8 @@ function setOpenclawDigitalHumanState(state, detail = '', options = {}) {
   const cfg = loadDigitalHumanConfig()
   _digitalHumanEl.dataset.state = next.state
   _digitalHumanEl.dataset.emotion = next.emotion
-  _digitalHumanEl.className = `openclaw-dh is-${next.state}${cfg.visible === false ? ' is-hidden' : ''}${cfg.lowPower ? ' is-low-power' : ''}`
+  const readyClass = _digitalHuman3d?.model ? ' is-3d-ready is-skeletal-ready' : ''
+  _digitalHumanEl.className = `openclaw-dh is-${next.state}${readyClass}${cfg.visible === false ? ' is-hidden' : ''}${cfg.lowPower ? ' is-low-power' : ''}`
   const titleEl = _digitalHumanEl.querySelector('#openclaw-dh-title')
   const subtitleEl = _digitalHumanEl.querySelector('#openclaw-dh-subtitle')
   const detailEl = _digitalHumanEl.querySelector('#openclaw-dh-detail')
@@ -806,6 +868,7 @@ function setOpenclawDigitalHumanState(state, detail = '', options = {}) {
   if (progressEl) progressEl.style.width = `${Math.max(0, Math.min(100, next.progress || 0))}%`
   if (mouthEl) mouthEl.dataset.mouth = next.state === 'streaming' ? 'talk' : next.state === 'done' ? 'smile' : next.state === 'error' ? 'sad' : 'rest'
   updateDigitalHumanVoiceButton()
+  playDigitalHumanAnimation(DH_ANIMATION_BY_STATE[next.state] || 'idle')
   if (options.persist !== false) persistDigitalHumanState(next)
   if (options.speak !== false) playDigitalHumanVoice(next)
   return next
@@ -921,7 +984,6 @@ function bindEvents(page) {
     saveDigitalHumanConfig({ visible: !cfg.visible })
   })
   page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
-  page.querySelector('#btn-collab')?.addEventListener('click', () => injectCollabTemplate())
   page.querySelector('#btn-cmd')?.addEventListener('click', () => toggleCmdPanel())
   page.querySelector('#btn-reset-session')?.addEventListener('click', () => resetCurrentSession())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))

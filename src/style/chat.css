@@ -2187,3 +2187,33 @@
 .openclaw-dh.is-3d-ready .openclaw-dh-model-stage { opacity: 1; }
 .openclaw-dh.is-3d-ready .openclaw-dh-avatar-img { opacity: 0; }
 .openclaw-dh.is-3d-ready .openclaw-dh-person { opacity: 0; }
+
+/* 3D skeletal digital human: make the real GLB obvious and primary. */
+.openclaw-dh.is-skeletal-ready {
+  width: 318px;
+  box-shadow: 0 28px 80px rgba(2,6,23,.72), 0 0 0 1px rgba(56,189,248,.26), inset 0 0 42px rgba(14,165,233,.08);
+}
+.openclaw-dh.is-skeletal-ready .openclaw-dh-stage {
+  height: 318px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255,255,255,.20), transparent 25%),
+    radial-gradient(circle at 50% 75%, rgba(14,165,233,.22), transparent 48%),
+    linear-gradient(180deg, rgba(15,23,42,.2), rgba(2,6,23,.74));
+}
+.openclaw-dh.is-skeletal-ready .openclaw-dh-model-stage {
+  inset: -18px -14px -6px -14px;
+  filter: drop-shadow(0 28px 28px rgba(0,0,0,.45));
+}
+.openclaw-dh.is-skeletal-ready .openclaw-dh-light {
+  opacity: .95;
+  transform: scale(1.18);
+}
+.openclaw-dh.is-skeletal-ready.is-thinking .openclaw-dh-model-stage,
+.openclaw-dh.is-skeletal-ready.is-tool .openclaw-dh-model-stage,
+.openclaw-dh.is-skeletal-ready.is-streaming .openclaw-dh-model-stage {
+  animation: openclaw-dh-3d-focus 1.7s ease-in-out infinite;
+}
+@keyframes openclaw-dh-3d-focus {
+  0%,100% { filter: drop-shadow(0 28px 28px rgba(0,0,0,.45)) saturate(1); }
+  50% { filter: drop-shadow(0 30px 34px rgba(56,189,248,.34)) saturate(1.16); }
+}
