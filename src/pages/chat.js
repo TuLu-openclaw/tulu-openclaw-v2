@@ -141,6 +141,32 @@ let _workspaceCurrentAgentId = 'main', _workspaceCurrentFile = null, _workspaceP
 let _workspaceLoadedContent = '', _workspaceLoading = false
 let _workspaceLoadSeq = 0, _workspaceOpenSeq = 0
 
+// ── OpenClaw 主引擎数字人（注意：只服务 src/pages/chat.js，不接 Hermes）──
+const DH_STORAGE_PREFIX = '星枢Open_digital_human_'
+const DH_VOICE_BASE = '/digital-human/voice/'
+const DH_STATE_TEXT = {
+  idle: ['待机中', '等待新的任务', 'calm'],
+  waiting: ['待机中', '等待新的任务', 'calm'],
+  queued: ['已接收', '任务进入队列', 'alert'],
+  sending: ['正在接收', 'OpenClaw 正在接收消息', 'attentive'],
+  thinking: ['正在思考', 'Agent 正在分析上下文', 'focused'],
+  tool: ['调用工具', '正在执行工具链', 'working'],
+  streaming: ['正在回复', '正在生成实时回答', 'speaking'],
+  finalizing: ['整理结果', '正在收尾和保存状态', 'focused'],
+  done: ['完成', '任务已完成', 'happy'],
+  error: ['异常', '任务遇到错误', 'concerned'],
+  aborted: ['已停止', '生成已停止', 'calm'],
+}
+const DH_DEFAULT_STATE = { state: 'waiting', title: '待机中', subtitle: '等待新的任务', detail: '', emotion: 'calm', progress: 0, runId: '', sessionKey: '' }
+let _digitalHumanEl = null
+let _digitalHumanAudioEl = null
+let _digitalHumanState = { ...DH_DEFAULT_STATE }
+let _digitalHumanVoiceEnabled = false
+let _digitalHumanLastVoiceKey = ''
+let _digitalHumanDragging = false
+let _digitalHumanDragOffset = { x: 0, y: 0 }
+let _digitalHumanProgressTimer = null
+
 export async function render() {
   const page = document.createElement('div')
   page.className = 'page chat-page'
@@ -311,6 +337,7 @@ export async function render() {
         <div class="hosted-agent-footer" id="hosted-agent-status">${t('chat.ready')}</div>
       </div>
       <div class="chat-disconnect-bar" id="chat-disconnect-bar" style="display:none">${t('chat.disconnected')}</div>
+      ${renderOpenclawDigitalHuman()}
       <div class="chat-connect-overlay" id="chat-connect-overlay" style="display:none">
         <div class="chat-connect-card">
           <div class="chat-connect-icon">
@@ -366,6 +393,8 @@ export async function render() {
   _workspaceSaveBtn = page.querySelector('#chat-workspace-save')
   _workspaceReloadBtn = page.querySelector('#chat-workspace-reload')
   _workspacePreviewBtn = page.querySelector('#chat-workspace-preview-toggle')
+  _digitalHumanEl = page.querySelector('#openclaw-digital-human')
+  _digitalHumanAudioEl = page.querySelector('#openclaw-dh-audio')
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
 
   bindEvents(page)
@@ -377,6 +406,7 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
+  initOpenclawDigitalHuman()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -386,6 +416,234 @@ export async function render() {
 }
 
 const GUIDE_KEY = '星枢OpenClaw-guide-chat-dismissed'
+
+function dhSessionKey() {
+  return _sessionKey || _replyStatusState?.sessionKey || 'default'
+}
+
+function dhStorageKey(name, sessionKey = dhSessionKey()) {
+  return `${DH_STORAGE_PREFIX}${name}_${encodeURIComponent(sessionKey || 'default')}`
+}
+
+function dhGlobalKey(name) {
+  return `${DH_STORAGE_PREFIX}${name}`
+}
+
+function getDhPosition() {
+  try {
+    const raw = localStorage.getItem(dhGlobalKey('position'))
+    if (!raw) return null
+    const v = JSON.parse(raw)
+    if (!Number.isFinite(v?.x) || !Number.isFinite(v?.y)) return null
+    return { x: Math.max(12, v.x), y: Math.max(12, v.y) }
+  } catch { return null }
+}
+
+function saveDhPosition(x, y) {
+  try { localStorage.setItem(dhGlobalKey('position'), JSON.stringify({ x: Math.max(12, x), y: Math.max(12, y) })) } catch {}
+}
+
+function loadDhVoiceEnabled() {
+  try { return localStorage.getItem(dhGlobalKey('voice')) === '1' } catch { return false }
+}
+
+function saveDhVoiceEnabled(value) {
+  try { localStorage.setItem(dhGlobalKey('voice'), value ? '1' : '0') } catch {}
+}
+
+function normalizeDigitalHumanState(state = 'waiting', detail = '', options = {}) {
+  const base = DH_STATE_TEXT[state] || DH_STATE_TEXT.waiting
+  const progressMap = { waiting: 0, queued: 10, sending: 18, thinking: 34, tool: 58, streaming: 76, finalizing: 92, done: 100, error: 100, aborted: 100 }
+  return {
+    state,
+    title: base[0],
+    subtitle: base[1],
+    emotion: base[2],
+    detail: String(detail || base[1] || '').replace(/\s+/g, ' ').slice(0, 96),
+    progress: Number.isFinite(options.progress) ? options.progress : (progressMap[state] ?? 0),
+    runId: options.runId || _currentRunId || '',
+    sessionKey: options.sessionKey || dhSessionKey(),
+    ts: options.ts || Date.now(),
+  }
+}
+
+function renderOpenclawDigitalHuman() {
+  const pos = getDhPosition()
+  const style = pos ? `left:${pos.x}px;top:${pos.y}px;right:auto;bottom:auto;` : ''
+  const voiceOn = loadDhVoiceEnabled()
+  return `
+    <section class="openclaw-dh is-waiting" id="openclaw-digital-human" data-state="waiting" data-emotion="calm" style="${style}" aria-label="OpenClaw 数字人状态面板">
+      <div class="openclaw-dh-drag" id="openclaw-dh-drag" title="拖动数字人">
+        <span class="openclaw-dh-live-dot"></span>
+        <span class="openclaw-dh-drag-title">OpenClaw 数字人</span>
+        <button class="openclaw-dh-voice ${voiceOn ? 'is-on' : ''}" id="openclaw-dh-voice" type="button" title="本地离线语音素材播报开关">${voiceOn ? '声开' : '静音'}</button>
+      </div>
+      <div class="openclaw-dh-stage" aria-hidden="true">
+        <div class="openclaw-dh-light"></div>
+        <div class="openclaw-dh-person">
+          <div class="openclaw-dh-hair"></div>
+          <div class="openclaw-dh-neck"></div>
+          <div class="openclaw-dh-head">
+            <span class="openclaw-dh-brow left"></span>
+            <span class="openclaw-dh-brow right"></span>
+            <span class="openclaw-dh-eye left"></span>
+            <span class="openclaw-dh-eye right"></span>
+            <span class="openclaw-dh-nose"></span>
+            <span class="openclaw-dh-mouth" data-mouth="rest"></span>
+            <span class="openclaw-dh-cheek left"></span>
+            <span class="openclaw-dh-cheek right"></span>
+          </div>
+          <div class="openclaw-dh-torso">
+            <span class="openclaw-dh-shoulder left"></span>
+            <span class="openclaw-dh-shoulder right"></span>
+            <span class="openclaw-dh-arm left"></span>
+            <span class="openclaw-dh-arm right"></span>
+            <span class="openclaw-dh-hand left"></span>
+            <span class="openclaw-dh-hand right"></span>
+            <span class="openclaw-dh-core"></span>
+          </div>
+        </div>
+      </div>
+      <div class="openclaw-dh-info">
+        <div class="openclaw-dh-title" id="openclaw-dh-title">待机中</div>
+        <div class="openclaw-dh-subtitle" id="openclaw-dh-subtitle">等待新的任务</div>
+        <div class="openclaw-dh-detail" id="openclaw-dh-detail">状态与 OpenClaw Agent 实时同步</div>
+        <div class="openclaw-dh-progress"><span id="openclaw-dh-progress"></span></div>
+      </div>
+      <audio id="openclaw-dh-audio" preload="none"></audio>
+    </section>
+  `
+}
+
+function initOpenclawDigitalHuman() {
+  _digitalHumanVoiceEnabled = loadDhVoiceEnabled()
+  bindOpenclawDigitalHuman()
+  restoreDigitalHumanState()
+  startDigitalHumanProgressPulse()
+}
+
+function bindOpenclawDigitalHuman() {
+  if (!_digitalHumanEl) return
+  const handle = _digitalHumanEl.querySelector('#openclaw-dh-drag')
+  const voiceBtn = _digitalHumanEl.querySelector('#openclaw-dh-voice')
+  handle?.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    _digitalHumanDragging = true
+    const rect = _digitalHumanEl.getBoundingClientRect()
+    _digitalHumanDragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    _digitalHumanEl.setPointerCapture?.(e.pointerId)
+    document.addEventListener('pointermove', onDigitalHumanDragMove)
+    document.addEventListener('pointerup', onDigitalHumanDragEnd)
+  })
+  voiceBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    _digitalHumanVoiceEnabled = !_digitalHumanVoiceEnabled
+    saveDhVoiceEnabled(_digitalHumanVoiceEnabled)
+    updateDigitalHumanVoiceButton()
+    if (!_digitalHumanVoiceEnabled) {
+      try { _digitalHumanAudioEl?.pause() } catch {}
+    } else {
+      playDigitalHumanVoice(_digitalHumanState)
+    }
+  })
+}
+
+function onDigitalHumanDragMove(e) {
+  if (!_digitalHumanDragging || !_digitalHumanEl) return
+  const maxX = Math.max(12, window.innerWidth - _digitalHumanEl.offsetWidth - 12)
+  const maxY = Math.max(12, window.innerHeight - _digitalHumanEl.offsetHeight - 12)
+  const x = Math.min(maxX, Math.max(12, e.clientX - _digitalHumanDragOffset.x))
+  const y = Math.min(maxY, Math.max(12, e.clientY - _digitalHumanDragOffset.y))
+  _digitalHumanEl.style.left = `${x}px`
+  _digitalHumanEl.style.top = `${y}px`
+  _digitalHumanEl.style.right = 'auto'
+  _digitalHumanEl.style.bottom = 'auto'
+}
+
+function onDigitalHumanDragEnd() {
+  if (!_digitalHumanDragging || !_digitalHumanEl) return
+  _digitalHumanDragging = false
+  const rect = _digitalHumanEl.getBoundingClientRect()
+  saveDhPosition(rect.left, rect.top)
+  document.removeEventListener('pointermove', onDigitalHumanDragMove)
+  document.removeEventListener('pointerup', onDigitalHumanDragEnd)
+}
+
+function startDigitalHumanProgressPulse() {
+  clearInterval(_digitalHumanProgressTimer)
+  _digitalHumanProgressTimer = setInterval(() => {
+    if (!_pageActive || !_digitalHumanEl) return
+    if (!['thinking', 'tool', 'streaming', 'finalizing'].includes(_digitalHumanState.state)) return
+    const next = Math.min(96, (_digitalHumanState.progress || 20) + 1)
+    setOpenclawDigitalHumanState(_digitalHumanState.state, _digitalHumanState.detail, { ..._digitalHumanState, progress: next, speak: false, persist: false })
+  }, 1600)
+}
+
+function restoreDigitalHumanState(sessionKey = dhSessionKey()) {
+  let saved = null
+  try { saved = JSON.parse(localStorage.getItem(dhStorageKey('state', sessionKey)) || 'null') } catch {}
+  const state = saved?.state ? saved : normalizeDigitalHumanState('waiting', '等待新的任务', { sessionKey })
+  setOpenclawDigitalHumanState(state.state, state.detail, { ...state, speak: false, persist: false })
+}
+
+function persistDigitalHumanState(state) {
+  try { localStorage.setItem(dhStorageKey('state', state.sessionKey), JSON.stringify(state)) } catch {}
+}
+
+function updateDigitalHumanVoiceButton() {
+  const btn = _digitalHumanEl?.querySelector('#openclaw-dh-voice')
+  if (!btn) return
+  btn.classList.toggle('is-on', _digitalHumanVoiceEnabled)
+  btn.textContent = _digitalHumanVoiceEnabled ? '声开' : '静音'
+}
+
+function setOpenclawDigitalHumanState(state, detail = '', options = {}) {
+  const next = normalizeDigitalHumanState(state, detail, options)
+  _digitalHumanState = next
+  if (!_digitalHumanEl) return next
+  _digitalHumanEl.dataset.state = next.state
+  _digitalHumanEl.dataset.emotion = next.emotion
+  _digitalHumanEl.className = `openclaw-dh is-${next.state}`
+  const titleEl = _digitalHumanEl.querySelector('#openclaw-dh-title')
+  const subtitleEl = _digitalHumanEl.querySelector('#openclaw-dh-subtitle')
+  const detailEl = _digitalHumanEl.querySelector('#openclaw-dh-detail')
+  const progressEl = _digitalHumanEl.querySelector('#openclaw-dh-progress')
+  const mouthEl = _digitalHumanEl.querySelector('.openclaw-dh-mouth')
+  if (titleEl) titleEl.textContent = next.title
+  if (subtitleEl) subtitleEl.textContent = next.subtitle
+  if (detailEl) detailEl.textContent = next.detail || next.subtitle
+  if (progressEl) progressEl.style.width = `${Math.max(0, Math.min(100, next.progress || 0))}%`
+  if (mouthEl) mouthEl.dataset.mouth = next.state === 'streaming' ? 'talk' : next.state === 'done' ? 'smile' : next.state === 'error' ? 'sad' : 'rest'
+  updateDigitalHumanVoiceButton()
+  if (options.persist !== false) persistDigitalHumanState(next)
+  if (options.speak !== false) playDigitalHumanVoice(next)
+  return next
+}
+
+function playDigitalHumanVoice(state) {
+  if (!_digitalHumanVoiceEnabled || !_digitalHumanAudioEl || !state?.state) return
+  const voiceKey = `${state.sessionKey}:${state.runId || ''}:${state.state}`
+  if (_digitalHumanLastVoiceKey === voiceKey) return
+  _digitalHumanLastVoiceKey = voiceKey
+  // 严格离线策略：只播放应用本地附带的短音频素材；没有素材就静音，不使用浏览器 SpeechSynthesis/外部服务。
+  const src = `${DH_VOICE_BASE}${state.state}.wav`
+  try {
+    _digitalHumanAudioEl.pause()
+    _digitalHumanAudioEl.currentTime = 0
+    _digitalHumanAudioEl.src = src
+    _digitalHumanAudioEl.play().catch(() => {})
+  } catch {}
+}
+
+function syncDigitalHumanFromReplyStatus(status) {
+  if (!status?.state) return
+  setOpenclawDigitalHumanState(status.state, status.detail, { runId: status.runId, sessionKey: status.sessionKey, ts: status.ts })
+}
+
+function syncDigitalHumanSession(sessionKey) {
+  if (!sessionKey) return
+  restoreDigitalHumanState(sessionKey)
+}
 
 function showPageGuide(container) {
   if (localStorage.getItem(GUIDE_KEY)) return
@@ -466,10 +724,10 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
-  page.querySelector('#btn-new-session').addEventListener('click', () => showNewSessionDialog())
-  page.querySelector('#btn-collab').addEventListener('click', () => injectCollabTemplate())
-  page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
-  page.querySelector('#btn-reset-session').addEventListener('click', () => resetCurrentSession())
+  page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
+  page.querySelector('#btn-collab')?.addEventListener('click', () => injectCollabTemplate())
+  page.querySelector('#btn-cmd')?.addEventListener('click', () => toggleCmdPanel())
+  page.querySelector('#btn-reset-session')?.addEventListener('click', () => resetCurrentSession())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))
   _workspaceBtn?.addEventListener('click', async (e) => {
     e.stopPropagation()
@@ -550,8 +808,8 @@ function bindEvents(page) {
   _workspaceSaveBtn?.addEventListener('click', () => saveWorkspaceCurrentFile())
 
   // 文件上传
-  page.querySelector('#chat-attach-btn').addEventListener('click', () => _fileInputEl.click())
-  _fileInputEl.addEventListener('change', handleFileSelect)
+  page.querySelector('#chat-attach-btn')?.addEventListener('click', () => _fileInputEl?.click())
+  _fileInputEl?.addEventListener('change', handleFileSelect)
   // 粘贴图片（Ctrl+V）
   _textarea.addEventListener('paste', handlePaste)
 
@@ -2333,6 +2591,7 @@ function setReplyStatus(state, detail = '', options = {}) {
   _replyStatusState = next
   persistReplyStatus(next)
   renderReplyStatus(next)
+  syncDigitalHumanFromReplyStatus(next)
   return next
 }
 
@@ -2345,6 +2604,8 @@ function restoreReplyStatus(sessionKey = _sessionKey) {
     persistReplyStatus(_replyStatusState)
   }
   renderReplyStatus(_replyStatusState)
+  syncDigitalHumanSession(sessionKey)
+  syncDigitalHumanFromReplyStatus(_replyStatusState)
 }
 
 function updateStreamingStatus(state, detail = '', options = {}) {
@@ -3459,6 +3720,11 @@ export function cleanup() {
   _cancelResponseWatchdog()
   clearTimeout(_postFinalCheck)
   _postFinalCheck = null
+  clearInterval(_digitalHumanProgressTimer)
+  _digitalHumanProgressTimer = null
+  document.removeEventListener('pointermove', onDigitalHumanDragMove)
+  document.removeEventListener('pointerup', onDigitalHumanDragEnd)
+  try { _digitalHumanAudioEl?.pause() } catch {}
   if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
   _sessionKey = null
   _page = null
@@ -3526,4 +3792,10 @@ export function cleanup() {
   _workspaceLoading = false
   _workspaceLoadSeq = 0
   _workspaceOpenSeq = 0
+  _digitalHumanEl = null
+  _digitalHumanAudioEl = null
+  _digitalHumanState = { ...DH_DEFAULT_STATE }
+  _digitalHumanVoiceEnabled = false
+  _digitalHumanLastVoiceKey = ''
+  _digitalHumanDragging = false
 }
