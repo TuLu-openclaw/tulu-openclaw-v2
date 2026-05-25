@@ -444,7 +444,7 @@ function saveDhPosition(x, y) {
 }
 
 function loadDhVoiceEnabled() {
-  try { return localStorage.getItem(dhGlobalKey('voice')) === '1' } catch { return false }
+  try { return localStorage.getItem(dhGlobalKey('voice')) !== '0' } catch { return true }
 }
 
 function saveDhVoiceEnabled(value) {
@@ -476,7 +476,7 @@ function renderOpenclawDigitalHuman() {
       <div class="openclaw-dh-drag" id="openclaw-dh-drag" title="拖动数字人">
         <span class="openclaw-dh-live-dot"></span>
         <span class="openclaw-dh-drag-title">OpenClaw 数字人</span>
-        <button class="openclaw-dh-voice ${voiceOn ? 'is-on' : ''}" id="openclaw-dh-voice" type="button" title="本地离线语音素材播报开关">${voiceOn ? '声开' : '静音'}</button>
+        <button class="openclaw-dh-voice ${voiceOn ? 'is-on' : ''}" id="openclaw-dh-voice" type="button" title="内置语音播报开关">${voiceOn ? '声开' : '静音'}</button>
       </div>
       <div class="openclaw-dh-stage" aria-hidden="true">
         <div class="openclaw-dh-light"></div>
@@ -625,7 +625,7 @@ function playDigitalHumanVoice(state) {
   const voiceKey = `${state.sessionKey}:${state.runId || ''}:${state.state}`
   if (_digitalHumanLastVoiceKey === voiceKey) return
   _digitalHumanLastVoiceKey = voiceKey
-  // 严格离线策略：只播放应用本地附带的短音频素材；没有素材就静音，不使用浏览器 SpeechSynthesis/外部服务。
+  // 售卖版内置语音策略：优先播放应用打包的状态语音文件；不使用浏览器 SpeechSynthesis。
   const src = `${DH_VOICE_BASE}${state.state}.wav`
   try {
     _digitalHumanAudioEl.pause()
