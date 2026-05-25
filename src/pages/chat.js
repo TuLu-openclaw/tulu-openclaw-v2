@@ -480,6 +480,7 @@ function renderOpenclawDigitalHuman() {
       </div>
       <div class="openclaw-dh-stage" aria-hidden="true">
         <div class="openclaw-dh-light"></div>
+        <img class="openclaw-dh-avatar-img" src="/digital-human/openclaw-avatar.svg" alt="" draggable="false">
         <div class="openclaw-dh-person">
           <div class="openclaw-dh-hair"></div>
           <div class="openclaw-dh-neck"></div>
