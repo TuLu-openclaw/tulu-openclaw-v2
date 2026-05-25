@@ -94,7 +94,7 @@ async function loadRoute() {
   let page
   try {
     const renderFn = mod.render || mod.default
-    page = renderFn ? await withTimeout(renderFn(_contentEl), 15000, '页面渲染超时') : mod
+    page = renderFn ? await withTimeout(renderFn(_contentEl), 45000, '页面渲染超时') : mod
   } catch (e) {
     console.error('[router] 页面渲染失败:', routePath, e)
     // 渲染失败时清除缓存，下次重试时重新加载模块
@@ -128,7 +128,7 @@ async function loadRoute() {
 async function retryLoad(loader, maxRetries, delayMs) {
   for (let i = 0; i <= maxRetries; i++) {
     try {
-      return await withTimeout(loader(), 15000, '模块加载超时')
+      return await withTimeout(loader(), 60000, '模块加载超时')
     } catch (e) {
       const isNetworkError = /fetch|network|connection|ERR_/i.test(String(e?.message || e))
       if (i < maxRetries && isNetworkError) {

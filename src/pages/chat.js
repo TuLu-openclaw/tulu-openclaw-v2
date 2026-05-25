@@ -352,7 +352,7 @@ export async function render() {
         <div class="hosted-agent-footer" id="hosted-agent-status">${t('chat.ready')}</div>
       </div>
       <div class="chat-disconnect-bar" id="chat-disconnect-bar" style="display:none">${t('chat.disconnected')}</div>
-      ${''}
+      <div id="openclaw-digital-human-mount"></div>
       <div class="chat-connect-overlay" id="chat-connect-overlay" style="display:none">
         <div class="chat-connect-card">
           <div class="chat-connect-icon">
@@ -408,9 +408,9 @@ export async function render() {
   _workspaceSaveBtn = page.querySelector('#chat-workspace-save')
   _workspaceReloadBtn = page.querySelector('#chat-workspace-reload')
   _workspacePreviewBtn = page.querySelector('#chat-workspace-preview-toggle')
-  _digitalHumanEl = page.querySelector('#openclaw-digital-human')
-  _digitalHumanAudioEl = page.querySelector('#openclaw-dh-audio')
-  _digitalHumanVideoEl = page.querySelector('#openclaw-dh-video')
+  _digitalHumanEl = null
+  _digitalHumanAudioEl = null
+  _digitalHumanVideoEl = null
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
 
   bindEvents(page)
@@ -422,9 +422,9 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
-  // 数字人运行时面板暂时禁用：当前版本会导致聊天页严重卡顿，先确保聊天核心可用。
-  // 后续需要做成懒加载独立组件，不允许在聊天页首屏挂载大量媒体/动画 DOM。
-  if (_digitalHumanEl) initOpenclawDigitalHuman()
+  // 数字人不能禁用，但不能阻塞聊天页首屏。
+  // 先返回聊天 DOM，数字人面板在下一轮空闲时间懒挂载，避免触发 router 的模块/渲染超时。
+  scheduleDigitalHumanMount()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -524,9 +524,9 @@ function renderOpenclawDigitalHuman() {
         <div class="openclaw-dh-light"></div>
         <div class="openclaw-dh-model-stage" id="openclaw-dh-model-stage"></div>
         <video class="openclaw-dh-video" id="openclaw-dh-video" autoplay muted loop playsinline preload="none"></video>
-        <img class="openclaw-dh-avatar-img" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
-        <img class="openclaw-dh-avatar-head-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
-        <img class="openclaw-dh-avatar-arm-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false">
+        <img class="openclaw-dh-avatar-img" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false" loading="lazy" decoding="async">
+        <img class="openclaw-dh-avatar-head-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false" loading="lazy" decoding="async">
+        <img class="openclaw-dh-avatar-arm-layer" src="/digital-human/states/transparent/openclaw-avatar-waiting-clean.png" alt="" draggable="false" loading="lazy" decoding="async">
         <div class="openclaw-dh-expression" aria-hidden="true">
           <span class="openclaw-dh-expression-eye left"></span>
           <span class="openclaw-dh-expression-eye right"></span>
@@ -571,6 +571,28 @@ function renderOpenclawDigitalHuman() {
       <audio id="openclaw-dh-audio" preload="none"></audio>
     </section>
   `
+}
+
+function scheduleDigitalHumanMount() {
+  if (!_pageActive) return
+  const mount = () => ensureDigitalHumanMounted()
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    window.requestIdleCallback(mount, { timeout: 2500 })
+  } else {
+    setTimeout(mount, 800)
+  }
+}
+
+function ensureDigitalHumanMounted() {
+  if (!_pageActive || !_page) return
+  if (_digitalHumanEl) return
+  const mountEl = _page.querySelector('#openclaw-digital-human-mount')
+  if (!mountEl) return
+  mountEl.innerHTML = renderOpenclawDigitalHuman()
+  _digitalHumanEl = mountEl.querySelector('#openclaw-digital-human')
+  _digitalHumanAudioEl = mountEl.querySelector('#openclaw-dh-audio')
+  _digitalHumanVideoEl = mountEl.querySelector('#openclaw-dh-video')
+  initOpenclawDigitalHuman()
 }
 
 function initOpenclawDigitalHuman() {
@@ -929,7 +951,9 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-digital-human')?.addEventListener('click', () => {
-    toast('数字人面板已临时禁用，先恢复聊天页性能', 'warning')
+    const cfg = loadDigitalHumanConfig()
+    saveDigitalHumanConfig({ visible: !cfg.visible })
+    ensureDigitalHumanMounted()
   })
   page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
   page.querySelector('#btn-cmd')?.addEventListener('click', () => toggleCmdPanel())
