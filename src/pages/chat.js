@@ -178,7 +178,7 @@ let _digitalHumanLastVoiceKey = ''
 let _digitalHumanDragging = false
 let _digitalHumanDragOffset = { x: 0, y: 0 }
 let _digitalHumanProgressTimer = null
-let _digitalHumanConfig = { visible: true, voice: false, volume: 0.86, lowPower: true }
+let _digitalHumanConfig = { visible: false, voice: false, volume: 0.86, lowPower: true }
 let _digitalHuman3d = null
 let _digitalHumanPreloaded = false
 
@@ -470,13 +470,13 @@ function loadDigitalHumanConfig() {
   try {
     const raw = JSON.parse(localStorage.getItem(dhGlobalKey('config')) || 'null') || {}
     return {
-      visible: raw.visible !== false,
+      visible: raw.visible === true,
       voice: raw.voice === true,
       volume: Math.max(0, Math.min(1, Number.isFinite(raw.volume) ? raw.volume : 0.86)),
       lowPower: raw.lowPower !== false,
     }
   } catch {
-    return { visible: true, voice: false, volume: 0.86, lowPower: true }
+    return { visible: false, voice: false, volume: 0.86, lowPower: true }
   }
 }
 
