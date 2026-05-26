@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "XingShu"
-version = "3.2.8"
+version = "3.2.11"
 dependencies = [
  "async-recursion",
  "base64 0.22.1",
@@ -31,6 +31,7 @@ dependencies = [
  "url",
  "urlencoding",
  "which",
+ "windows-sys 0.59.0",
  "winreg 0.55.0",
  "zip",
 ]

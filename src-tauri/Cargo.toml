@@ -1,6 +1,6 @@
 [package]
 name = "XingShu"
-version = "3.2.8"
+version = "3.2.11"
 edition = "2021"
 description = "星枢OpenClaw - OpenClaw 可视化管理面板"
 authors = ["qingchencloud"]
@@ -44,6 +44,7 @@ flate2 = "1.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2"

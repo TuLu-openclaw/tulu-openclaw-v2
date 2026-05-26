@@ -10,7 +10,29 @@ use commands::{
     messaging, music, pairing, proxy, service, skills, tvbox, update,
 };
 
+#[cfg(target_os = "windows")]
+fn configure_webview2_runtime() {
+    const KEY: &str = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
+    const GPU_ARGS: &str = "--enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-features=VaapiVideoDecoder,CanvasOopRasterization";
+    let merged = match std::env::var(KEY) {
+        Ok(existing) if !existing.trim().is_empty() => {
+            if existing.contains("enable-gpu-rasterization") {
+                existing
+            } else {
+                format!("{existing} {GPU_ARGS}")
+            }
+        }
+        _ => GPU_ARGS.to_string(),
+    };
+    std::env::set_var(KEY, merged);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn configure_webview2_runtime() {}
+
 pub fn run() {
+    configure_webview2_runtime();
+
     let hot_update_dir = commands::openclaw_dir()
         .join("TuLuOpenClaw")
         .join("web-update");

@@ -178,6 +178,7 @@ let _digitalHumanLastVoiceKey = ''
 let _digitalHumanDragging = false
 let _digitalHumanDragOffset = { x: 0, y: 0 }
 let _digitalHumanProgressTimer = null
+let _digitalHumanAutoOpenTimer = null
 let _digitalHumanConfig = { visible: false, voice: false, volume: 0.86, lowPower: true }
 let _digitalHuman3d = null
 let _digitalHumanPreloaded = false
@@ -422,10 +423,17 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
-  // 每次进入聊天页都强制关闭数字人，避免旧 localStorage 的 visible:true 让它默认开启。
-  // 用户需要时点击顶部“数字人”按钮，本次页面生命周期内手动开启。
+  // 每次进入聊天页先重置为关闭，避免旧 localStorage 的 visible:true 立刻抢占首屏。
+  // 页面稳定 5 秒后自动开启数字人，便于定位应用内数字人启动后的性能问题。
   _digitalHumanConfig = { ...loadDigitalHumanConfig(), visible: false }
   applyDigitalHumanConfig()
+  clearTimeout(_digitalHumanAutoOpenTimer)
+  _digitalHumanAutoOpenTimer = setTimeout(() => {
+    if (!_pageActive || !_page || _digitalHumanConfig.visible === true) return
+    _digitalHumanConfig = { ...loadDigitalHumanConfig(), ..._digitalHumanConfig, visible: true }
+    saveDigitalHumanConfig(_digitalHumanConfig)
+    ensureDigitalHumanMounted()
+  }, 5000)
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -3964,6 +3972,8 @@ export function cleanup() {
   _postFinalCheck = null
   clearInterval(_digitalHumanProgressTimer)
   _digitalHumanProgressTimer = null
+  clearTimeout(_digitalHumanAutoOpenTimer)
+  _digitalHumanAutoOpenTimer = null
   document.removeEventListener('pointermove', onDigitalHumanDragMove)
   document.removeEventListener('pointerup', onDigitalHumanDragEnd)
   try { _digitalHumanAudioEl?.pause() } catch {}

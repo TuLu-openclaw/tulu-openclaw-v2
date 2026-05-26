@@ -822,11 +822,30 @@ mod platform {
     use std::process::Stdio;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, SetPriorityClass, HIGH_PRIORITY_CLASS, PROCESS_SET_INFORMATION,
+    };
 
     /// 缓存 is_cli_installed 结果，避免每 15 秒 polling 都 spawn cmd.exe
     static CLI_CACHE: Mutex<Option<(bool, std::time::Instant)>> = Mutex::new(None);
     const CLI_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
     const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    fn set_gateway_high_priority(pid: u32) -> Result<(), String> {
+        unsafe {
+            let handle = OpenProcess(PROCESS_SET_INFORMATION, 0, pid);
+            if handle.is_null() {
+                return Err(format!("打开 Gateway 进程 PID {pid} 失败，无法设置高优先级"));
+            }
+            let ok = SetPriorityClass(handle, HIGH_PRIORITY_CLASS);
+            let _ = CloseHandle(handle);
+            if ok == 0 {
+                return Err(format!("设置 Gateway PID {pid} 为 HIGH_PRIORITY_CLASS 失败"));
+            }
+            Ok(())
+        }
+    }
 
     /// 记录最后一次成功启动的 Gateway PID，避免误判旧进程为新进程
     static LAST_KNOWN_GATEWAY_PID: Mutex<Option<u32>> = Mutex::new(None);
@@ -1208,6 +1227,9 @@ mod platform {
             if let Some(p) = pid {
                 let mut known = LAST_KNOWN_GATEWAY_PID.lock().unwrap();
                 *known = Some(p);
+                if let Err(e) = set_gateway_high_priority(p) {
+                    eprintln!("[Gateway priority] {e}");
+                }
             }
             return Ok(());
         }
@@ -1226,6 +1248,9 @@ mod platform {
 
         let child = cmd.spawn().map_err(|e| format!("启动 Gateway 失败: {e}"))?;
         let spawned_pid = child.id();
+        if let Err(e) = set_gateway_high_priority(spawned_pid) {
+            eprintln!("[Gateway priority] {e}");
+        }
 
         // 记录活跃子进程 PID（用于 stop 时精确 kill）
         {
@@ -1246,6 +1271,9 @@ mod platform {
                 if is_new || is_spawned {
                     // 验证这个 PID 确实还活着
                     if is_process_alive(current_pid) {
+                        if let Err(e) = set_gateway_high_priority(current_pid) {
+                            eprintln!("[Gateway priority] {e}");
+                        }
                         return Ok(());
                     }
                 }
