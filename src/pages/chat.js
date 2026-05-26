@@ -66,21 +66,39 @@ let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
 let _replyStatusRowEl = null
 let _replyStatusTextEl = null
+let _replyStatusPhaseEl = null
+let _replyStatusDetailEl = null
+let _replyStatusMetaEl = null
+let _replyStatusToolsEl = null
+let _replyStatusElapsedEl = null
+let _replyStatusTimer = null
 const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
 const CHAT_REPLY_STATUS_STORE_PREFIX = '星枢Open_chat_reply_status_'
 const CHAT_REPLY_STATUS_TEXT = {
-  queued: '✅ 已收到任务，正在进入处理队列…',
-  sending: '📨 消息已发送，OpenClaw 正在接收…',
-  thinking: '🧠 OpenClaw 正在思考，请稍候…',
-  tool: '🛠️ OpenClaw 正在调用工具处理任务…',
-  streaming: '✍️ OpenClaw 正在生成回复…',
-  finalizing: '📦 OpenClaw 正在整理最终答案…',
-  done: '✅ 回复已完成，状态已保存。',
-  waiting: '🟢 当前会话空闲，等待你的下一条指令。',
-  error: '⚠️ 处理失败，状态已保存，可切换页面后继续查看。',
-  aborted: '⏹️ 生成已停止，状态已保存。',
+  queued: '任务已进入队列，等待系统调度执行',
+  sending: '正在向 OpenClaw 网关发送用户指令和附件',
+  thinking: 'Agent 正在分析任务目标、上下文和下一步操作',
+  tool: 'Agent 正在调用工具处理任务，请等待工具返回结果',
+  streaming: 'Agent 正在生成回复，内容正在持续返回',
+  finalizing: '正在整理最终回复、附件、工具结果和状态记录',
+  done: '回复已完成，任务状态和轮次已保存',
+  waiting: '当前会话空闲，等待新的任务指令',
+  error: '处理失败，错误状态已保存，可查看详情后重试',
+  aborted: '生成已停止，当前状态已保存',
 }
-const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '' }
+const CHAT_REPLY_STATUS_PHASE = {
+  queued: '排队调度',
+  sending: '发送指令',
+  thinking: '分析任务',
+  tool: '工具执行',
+  streaming: '生成回复',
+  finalizing: '结果整理',
+  done: '已完成',
+  waiting: '待机',
+  error: '异常',
+  aborted: '已中止',
+}
+const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '', runId: '', toolName: '', toolCount: 0, lastToolAt: 0, activity: '' }
 let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
 let _sessionListEl = null, _sessionListNormalEl = null, _sessionListGroupsEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
@@ -226,8 +244,17 @@ export async function render() {
         </div>
       </div>
       <div class="chat-reply-status-row" id="chat-reply-status-row" aria-live="polite" hidden>
-        <span class="chat-reply-status-dot"></span>
-        <span class="chat-reply-status-text" id="chat-reply-status-text"></span>
+        <div class="chat-reply-status-head">
+          <span class="chat-reply-status-dot"></span>
+          <span class="chat-reply-status-phase" id="chat-reply-status-phase">待机</span>
+          <span class="chat-reply-status-elapsed" id="chat-reply-status-elapsed">--</span>
+        </div>
+        <div class="chat-reply-status-body">
+          <div class="chat-reply-status-text" id="chat-reply-status-text"></div>
+          <div class="chat-reply-status-detail" id="chat-reply-status-detail"></div>
+          <div class="chat-reply-status-tools" id="chat-reply-status-tools"></div>
+        </div>
+        <div class="chat-reply-status-meta" id="chat-reply-status-meta"></div>
       </div>
       <div class="chat-workspace-panel" id="chat-workspace-panel" style="display:none">
         <div class="chat-workspace-header">
@@ -360,6 +387,11 @@ export async function render() {
   _scrollBtn = page.querySelector('#chat-scroll-btn')
   _replyStatusRowEl = page.querySelector('#chat-reply-status-row')
   _replyStatusTextEl = page.querySelector('#chat-reply-status-text')
+  _replyStatusPhaseEl = page.querySelector('#chat-reply-status-phase')
+  _replyStatusDetailEl = page.querySelector('#chat-reply-status-detail')
+  _replyStatusMetaEl = page.querySelector('#chat-reply-status-meta')
+  _replyStatusToolsEl = page.querySelector('#chat-reply-status-tools')
+  _replyStatusElapsedEl = page.querySelector('#chat-reply-status-elapsed')
   _sessionListEl = page.querySelector('#chat-session-list')
   _sessionListNormalEl = page.querySelector('#chat-session-list-normal')
   _sessionListGroupsEl = page.querySelector('#chat-session-list-groups')
@@ -2241,7 +2273,7 @@ async function doSend(text, attachments = []) {
   showTyping(true)
   _isSending = true
   updateSendState()
-  setReplyStatus('sending', CHAT_REPLY_STATUS_TEXT.sending, { runId: _currentRunId || '' })
+  setReplyStatus('sending', CHAT_REPLY_STATUS_TEXT.sending, { runId: _currentRunId || '', activity: '正在提交消息和附件' })
   _startResponseWatchdog()
   let sendFailed = false
   try {
@@ -2251,14 +2283,14 @@ async function doSend(text, attachments = []) {
     showTyping(false)
     _cancelResponseWatchdog()
     appendSystemMessage(`${t('chat.sendFailed')}${err.message}`)
-    setReplyStatus('error', `⚠️ ${t('chat.sendFailed')}${err.message}`, { runId: _currentRunId || '' })
+    setReplyStatus('error', `${t('chat.sendFailed')}${err.message}`, { runId: _currentRunId || '', activity: '发送失败，未进入模型处理' })
     updateTask(currentTask.id, { status: 'error', progress: 100, error: err.message })
   } finally {
     _isSending = false
     if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
     if (!sendFailed && !_isStreaming) {
-      setReplyStatus('thinking', CHAT_REPLY_STATUS_TEXT.thinking, { runId: _currentRunId || '' })
+      setReplyStatus('thinking', CHAT_REPLY_STATUS_TEXT.thinking, { runId: _currentRunId || '', activity: '等待 Gateway 返回队列/工具/生成事件' })
       updateTask(currentTask.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
     }
   }
@@ -2303,8 +2335,9 @@ function handleEvent(msg) {
     const toolName = payload.data?.name || payload.data?.toolName || ''
     if (toolName && !_isStreaming) {
       emitLobsterPhase('tool', `调用工具：${toolName}`)
-      showTyping(true, t('chat.usingTool', { name: toolName }))
-      setReplyStatus('tool', t('chat.usingTool', { name: toolName }), { runId: payload.runId })
+      showTyping(true, `正在调用工具：${toolName}`)
+      const count = payload.runId ? (_toolRunIndex.get(payload.runId) || []).length : 1
+      setReplyStatus('tool', `正在调用工具：${toolName}`, { runId: payload.runId, toolName, toolCount: count, lastToolAt: Date.now(), activity: '等待工具返回结果' })
     }
   }
 
@@ -2371,10 +2404,10 @@ function handleChatEvent(payload) {
         _isStreaming = true
         _streamStartTime = Date.now()
         updateSendState()
-        setReplyStatus('queued', CHAT_REPLY_STATUS_TEXT.queued, { runId: payload.runId })
+        setReplyStatus('queued', CHAT_REPLY_STATUS_TEXT.queued, { runId: payload.runId, activity: '已创建流式回复通道' })
       }
       _currentAiText = c.text
-      setReplyStatus('streaming', CHAT_REPLY_STATUS_TEXT.streaming, { runId: payload.runId })
+      setReplyStatus('streaming', `正在生成回复：已收到 ${_currentAiText.length} 个字符`, { runId: payload.runId, activity: '持续接收模型输出' })
       // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
       clearTimeout(_streamSafetyTimer)
       _streamSafetyTimer = setTimeout(() => {
@@ -2429,7 +2462,7 @@ function handleChatEvent(payload) {
       _currentAiText = finalText
     }
     if (_currentAiBubble) {
-      setReplyStatus('finalizing', CHAT_REPLY_STATUS_TEXT.finalizing, { runId: runId || _currentRunId })
+      setReplyStatus('finalizing', CHAT_REPLY_STATUS_TEXT.finalizing, { runId: runId || _currentRunId, activity: `整理文本、附件和 ${finalTools.length || _currentAiTools.length || 0} 个工具结果` })
       if (_currentAiText) _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
       appendImagesToEl(_currentAiBubble, _currentAiImages)
       appendVideosToEl(_currentAiBubble, _currentAiVideos)
@@ -2466,7 +2499,7 @@ function handleChatEvent(payload) {
     }
     const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
     completeTaskRound(doneTask)
-    setReplyStatus('done', CHAT_REPLY_STATUS_TEXT.done, { runId: runId || _currentRunId })
+    setReplyStatus('done', CHAT_REPLY_STATUS_TEXT.done, { runId: runId || _currentRunId, activity: '本轮响应完成，等待下一条任务' })
     refreshSessionList()
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
@@ -2502,7 +2535,7 @@ function handleChatEvent(payload) {
     }
     appendSystemMessage(t('chat.generationStopped'))
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'aborted', progress: 100 })
-    setReplyStatus('aborted', CHAT_REPLY_STATUS_TEXT.aborted, { runId: _currentRunId })
+    setReplyStatus('aborted', CHAT_REPLY_STATUS_TEXT.aborted, { runId: _currentRunId, activity: '用户或系统停止了本轮生成' })
     resetStreamState()
     processMessageQueue()
     return
@@ -2541,7 +2574,7 @@ function handleChatEvent(payload) {
     showTyping(false)
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
-    setReplyStatus('error', `⚠️ ${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId })
+    setReplyStatus('error', `${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId, activity: '请查看错误信息或重试任务' })
     resetStreamState()
     processMessageQueue()
     return
@@ -2745,6 +2778,12 @@ function normalizeReplyStatus(raw = {}, sessionKey = _sessionKey) {
     ts: raw.ts || Date.now(),
     sessionKey: raw.sessionKey || sessionKey || 'default',
     runId: raw.runId || '',
+    toolName: raw.toolName || '',
+    toolCount: Number(raw.toolCount || 0),
+    lastToolAt: raw.lastToolAt || 0,
+    activity: raw.activity || '',
+    model: raw.model || '',
+    agentId: raw.agentId || '',
   }
 }
 
@@ -2761,6 +2800,39 @@ function loadReplyStatus(sessionKey = _sessionKey) {
   } catch { return null }
 }
 
+function formatStatusElapsed(status = _replyStatusState) {
+  if (!status?.ts) return '--'
+  const seconds = Math.max(0, Math.floor((Date.now() - status.ts) / 1000))
+  if (status.state === 'waiting') return '空闲'
+  if (seconds < 60) return `${seconds}s`
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}m ${String(s).padStart(2, '0')}s`
+}
+
+function scheduleReplyStatusTimer(status = _replyStatusState) {
+  if (_replyStatusTimer) {
+    clearInterval(_replyStatusTimer)
+    _replyStatusTimer = null
+  }
+  if (!['queued','sending','thinking','tool','streaming','finalizing'].includes(status?.state)) return
+  _replyStatusTimer = setInterval(() => {
+    if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(_replyStatusState)
+    if (_replyStatusDetailEl) _replyStatusDetailEl.textContent = buildReplyStatusDetail(_replyStatusState)
+  }, 1000)
+}
+
+function buildReplyStatusDetail(status = _replyStatusState) {
+  const parts = []
+  const model = status.model || getSessionDisplayModel(status.sessionKey || _sessionKey) || getSessionRuntimeModel(status.sessionKey || _sessionKey) || _selectedModel || _primaryModel || ''
+  const agent = status.agentId || parseSessionAgent(status.sessionKey || _sessionKey) || 'main'
+  if (agent) parts.push(`Agent：${agent}`)
+  if (model) parts.push(`模型：${shortModelName(model)}`)
+  if (status.runId) parts.push(`Run：${String(status.runId).slice(0, 8)}`)
+  if (status.activity) parts.push(`当前动作：${status.activity}`)
+  return parts.join(' · ')
+}
+
 function renderReplyStatus(status = _replyStatusState) {
   if (!_replyStatusRowEl || !_replyStatusTextEl) return
   if (!status || !status.state) {
@@ -2771,17 +2843,40 @@ function renderReplyStatus(status = _replyStatusState) {
   _replyStatusRowEl.dataset.state = status.state
   _replyStatusRowEl.dataset.sessionKey = status.sessionKey || _sessionKey || ''
   _replyStatusRowEl.title = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || ''
+  const phase = CHAT_REPLY_STATUS_PHASE[status.state] || status.state
+  if (_replyStatusPhaseEl) _replyStatusPhaseEl.textContent = phase
   _replyStatusTextEl.textContent = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || CHAT_REPLY_STATUS_TEXT.waiting
+  if (_replyStatusDetailEl) _replyStatusDetailEl.textContent = buildReplyStatusDetail(status)
+  if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(status)
+  if (_replyStatusMetaEl) {
+    const hint = ['queued','sending','thinking','tool','streaming','finalizing'].includes(status.state)
+      ? '状态持续更新中，不是卡死；如果长时间无变化，系统会自动进入超时保护。'
+      : (status.state === 'done' ? '本轮已完成，可继续输入新的任务。' : '等待新的任务。')
+    _replyStatusMetaEl.textContent = hint
+  }
+  if (_replyStatusToolsEl) {
+    _replyStatusToolsEl.textContent = status.toolName
+      ? `工具：${status.toolName}${status.toolCount ? ` · 第 ${status.toolCount} 次工具事件` : ''}`
+      : (status.state === 'tool' ? '工具：等待工具名称回传' : '')
+  }
+  scheduleReplyStatusTimer(status)
 }
 
 function setReplyStatus(state, detail = '', options = {}) {
   const sessionKey = options.sessionKey || _sessionKey || _replyStatusState.sessionKey || 'default'
+  const previous = _replyStatusState || {}
   const next = normalizeReplyStatus({
     state,
     detail,
-    ts: options.ts || Date.now(),
+    ts: options.ts || (state === previous.state && previous.ts ? previous.ts : Date.now()),
     sessionKey,
-    runId: options.runId || _currentRunId || _replyStatusState.runId || '',
+    runId: options.runId || _currentRunId || previous.runId || '',
+    toolName: options.toolName || previous.toolName || '',
+    toolCount: options.toolCount ?? previous.toolCount ?? 0,
+    lastToolAt: options.lastToolAt || previous.lastToolAt || 0,
+    activity: options.activity || '',
+    model: options.model || getSessionDisplayModel(sessionKey) || getSessionRuntimeModel(sessionKey) || previous.model || '',
+    agentId: options.agentId || parseSessionAgent(sessionKey) || previous.agentId || 'main',
   }, sessionKey)
   _replyStatusState = next
   persistReplyStatus(next)
@@ -3420,7 +3515,7 @@ function showTyping(show, hint) {
   if (_typingEl) {
     _typingEl.style.display = show ? 'flex' : 'none'
     const hintEl = _typingEl.querySelector('.typing-hint')
-    if (hintEl) hintEl.textContent = hint || (show ? (t('chat.thinking') || 'OpenClaw 正在思考…') : '')
+    if (hintEl) hintEl.textContent = hint || (show ? 'Agent 正在处理，请稍候…' : '')
   }
 }
 
