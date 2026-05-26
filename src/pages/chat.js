@@ -422,9 +422,10 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
-  // 数字人默认关闭时必须完全不挂载，避免隐藏状态仍创建视频/图片 DOM 导致聊天模块超时。
-  // 只有用户点击顶部“数字人”按钮手动开启时，才调用 ensureDigitalHumanMounted() 初始化。
-  if (loadDigitalHumanConfig().visible === true) scheduleDigitalHumanMount()
+  // 每次进入聊天页都强制关闭数字人，避免旧 localStorage 的 visible:true 让它默认开启。
+  // 用户需要时点击顶部“数字人”按钮，本次页面生命周期内手动开启。
+  _digitalHumanConfig = { ...loadDigitalHumanConfig(), visible: false }
+  applyDigitalHumanConfig()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -462,7 +463,7 @@ function saveDhPosition(x, y) {
 }
 
 function loadDhVoiceEnabled() {
-  _digitalHumanConfig = loadDigitalHumanConfig()
+  _digitalHumanConfig = { ...loadDigitalHumanConfig(), ..._digitalHumanConfig }
   return _digitalHumanConfig.voice !== false
 }
 
@@ -482,7 +483,10 @@ function loadDigitalHumanConfig() {
 
 function saveDigitalHumanConfig(patch = {}) {
   _digitalHumanConfig = { ...loadDigitalHumanConfig(), ...patch }
-  try { localStorage.setItem(dhGlobalKey('config'), JSON.stringify(_digitalHumanConfig)) } catch {}
+  try {
+    const { visible: _visible, ...persisted } = _digitalHumanConfig
+    localStorage.setItem(dhGlobalKey('config'), JSON.stringify(persisted))
+  } catch {}
   applyDigitalHumanConfig()
   return _digitalHumanConfig
 }
@@ -511,7 +515,7 @@ function renderOpenclawDigitalHuman() {
   const pos = getDhPosition()
   const style = pos ? `left:${pos.x}px;top:${pos.y}px;right:auto;bottom:auto;` : ''
   const voiceOn = loadDhVoiceEnabled()
-  const cfg = loadDigitalHumanConfig()
+  const cfg = { ...loadDigitalHumanConfig(), ..._digitalHumanConfig }
   return `
     <section class="openclaw-dh is-waiting ${cfg.visible ? '' : 'is-hidden'} ${cfg.lowPower ? 'is-low-power' : ''}" id="openclaw-digital-human" data-state="waiting" data-emotion="calm" style="${style}" aria-label="OpenClaw 数字人状态面板">
       <div class="openclaw-dh-drag" id="openclaw-dh-drag" title="拖动数字人">
@@ -739,7 +743,7 @@ function updateDigitalHumanVoiceButton() {
 }
 
 function applyDigitalHumanConfig() {
-  const cfg = loadDigitalHumanConfig()
+  const cfg = { ...loadDigitalHumanConfig(), ..._digitalHumanConfig }
   _digitalHumanConfig = cfg
   _digitalHumanVoiceEnabled = cfg.voice !== false
   if (_digitalHumanEl) {
@@ -957,9 +961,10 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-digital-human')?.addEventListener('click', () => {
-    const cfg = loadDigitalHumanConfig()
+    const cfg = _digitalHumanConfig || loadDigitalHumanConfig()
     const nextVisible = !cfg.visible
-    saveDigitalHumanConfig({ visible: nextVisible })
+    _digitalHumanConfig = { ...cfg, visible: nextVisible }
+    saveDigitalHumanConfig(_digitalHumanConfig)
     if (nextVisible) ensureDigitalHumanMounted()
   })
   page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
