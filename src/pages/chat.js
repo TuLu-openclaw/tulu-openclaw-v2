@@ -231,7 +231,7 @@ export async function render() {
             <span class="chat-workspace-trigger-label">${t('chat.workspace')}</span>
             <span class="chat-workspace-trigger-agent" id="chat-workspace-trigger-agent">main</span>
           </button>
-          <button class="btn btn-sm btn-ghost" id="btn-digital-human" title="显示/隐藏 OpenClaw 数字人">
+          <button class="btn btn-sm btn-ghost btn-digital-human-highlight" id="btn-digital-human" title="数字人默认关闭；点击手动开启/隐藏 OpenClaw 数字人">
             数字人
           </button>
           <button class="btn btn-sm btn-ghost" id="btn-cmd" title="${t('chat.shortcuts')}">
@@ -517,6 +517,7 @@ function renderOpenclawDigitalHuman() {
       <div class="openclaw-dh-drag" id="openclaw-dh-drag" title="拖动数字人">
         <span class="openclaw-dh-live-dot"></span>
         <span class="openclaw-dh-drag-title">OpenClaw 数字人</span>
+        <button class="openclaw-dh-close" id="openclaw-dh-close" type="button" title="关闭数字人">×</button>
         <button class="openclaw-dh-voice ${voiceOn ? 'is-on' : ''}" id="openclaw-dh-voice" type="button" title="内置语音播报开关">${voiceOn ? '声开' : '静音'}</button>
         <button class="openclaw-dh-mini-btn" id="openclaw-dh-low-power" type="button" title="低性能模式">${cfg.lowPower ? '省电' : '动效'}</button>
       </div>
@@ -621,6 +622,7 @@ function bindOpenclawDigitalHuman() {
   const volumeEl = _digitalHumanEl.querySelector('#openclaw-dh-volume')
   const resetBtn = _digitalHumanEl.querySelector('#openclaw-dh-reset')
   const hideBtn = _digitalHumanEl.querySelector('#openclaw-dh-hide')
+  const closeBtn = _digitalHumanEl.querySelector('#openclaw-dh-close')
   handle?.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return
     _digitalHumanDragging = true
@@ -662,6 +664,10 @@ function bindOpenclawDigitalHuman() {
     }
   })
   hideBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    saveDigitalHumanConfig({ visible: false })
+  })
+  closeBtn?.addEventListener('click', (e) => {
     e.stopPropagation()
     saveDigitalHumanConfig({ visible: false })
   })
@@ -745,7 +751,7 @@ function applyDigitalHumanConfig() {
     if (volumeEl && Number(volumeEl.value) !== Math.round(cfg.volume * 100)) volumeEl.value = String(Math.round(cfg.volume * 100))
   }
   const topBtn = _page?.querySelector('#btn-digital-human')
-  if (topBtn) topBtn.classList.toggle('active', cfg.visible !== false)
+  if (topBtn) topBtn.classList.toggle('active', cfg.visible === true)
   if (_digitalHumanAudioEl) _digitalHumanAudioEl.volume = cfg.volume
   if (cfg.lowPower || cfg.visible === false) disposeOpenclawDigitalHumanModel()
   else if (!_digitalHuman3d) mountOpenclawDigitalHumanModel()
