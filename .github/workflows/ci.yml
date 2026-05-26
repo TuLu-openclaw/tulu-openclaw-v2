@@ -32,9 +32,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
-        with:
-          components: rustfmt, clippy
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
 
       - name: Rust 版本
         run: rustc --version && cargo --version
@@ -74,7 +74,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
 
       - name: Rust 版本
         run: rustc --version && cargo --version
@@ -244,9 +246,9 @@ jobs:
           cache: npm
 
       - name: 安装 Rust 工具链
-        uses: dtolnay/rust-toolchain@1.94.0
-        with:
-          targets: ${{ matrix.platform.target }}
+        run: |
+          rustup toolchain install stable --profile minimal --target ${{ matrix.platform.target }}
+          rustup default stable
 
       - name: Rust 缓存
         uses: swatinem/rust-cache@v2
