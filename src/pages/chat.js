@@ -1705,7 +1705,7 @@ function parseSessionLabel(key) {
 
 async function switchSession(newKey, options = {}) {
   const { forceWorkspace = false } = options
-  if (newKey === _sessionKey) return false
+  if (!_currentGroupId && newKey === _sessionKey) return false
   const nextAgentId = parseSessionAgent(newKey) || 'main'
   if (!forceWorkspace && _workspaceDirty && nextAgentId !== _workspaceCurrentAgentId) {
     const yes = await confirmWorkspaceDiscardIfNeeded()
@@ -1717,6 +1717,7 @@ async function switchSession(newKey, options = {}) {
   _sessionKey = newKey
   localStorage.removeItem(ACTIVE_GROUP_KEY)
   localStorage.setItem(STORAGE_SESSION_KEY, newKey)
+  updateSessionListActiveState()
   _lastHistoryHash = ''
   resetStreamState()
   updateSessionTitle()
@@ -2223,6 +2224,7 @@ async function switchGroupSession(groupId, options = {}) {
   if (!group) return
   if (_sessionKey && !_currentGroupId) _lastDirectSessionKey = _sessionKey
   _currentGroupId = groupId
+  updateSessionListActiveState()
   localStorage.setItem(ACTIVE_GROUP_KEY, groupId)
   if (!_sessionKey) _sessionKey = getGroupFallbackSessionKey(group)
   updateSessionTitle()
@@ -3080,12 +3082,9 @@ function scheduleReplyStatusTimer(status = _replyStatusState) {
 }
 
 function markStatusMarquee() {
-  for (const el of [_replyStatusTextEl, _replyStatusDetailEl, _replyStatusToolsEl]) {
+  for (const el of [_replyStatusTextEl, _replyStatusDetailEl, _replyStatusToolsEl, _replyStatusMetaEl]) {
     if (!el) continue
     el.classList.remove('status-marquee')
-  }
-  if (_replyStatusMetaEl) {
-    _replyStatusMetaEl.classList.toggle('status-marquee', _replyStatusMetaEl.scrollWidth > _replyStatusMetaEl.clientWidth + 24)
   }
 }
 
