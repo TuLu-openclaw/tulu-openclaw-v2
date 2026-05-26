@@ -264,18 +264,19 @@
   display: none;
 }
 
-.chat-reply-status-text.status-marquee,
-.chat-reply-status-detail.status-marquee,
-.chat-reply-status-tools.status-marquee,
 .chat-reply-status-meta.status-marquee {
   display: inline-block;
   min-width: max-content;
   padding-left: 100%;
-  animation: chat-status-marquee 14s linear infinite;
+  text-align: left;
+  animation: chat-status-marquee 26s linear infinite;
 }
 
-.chat-reply-status-meta.status-marquee {
-  text-align: left;
+@media (prefers-reduced-motion: reduce) {
+  .chat-reply-status-meta.status-marquee {
+    animation: none;
+    padding-left: 0;
+  }
 }
 
 @keyframes chat-status-marquee {

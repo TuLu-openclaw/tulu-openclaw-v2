@@ -19,6 +19,7 @@ const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
 const STORAGE_SESSION_NAMES_KEY = '星枢OpenClaw-chat-session-names'
 const STORAGE_WORKSPACE_PANEL_KEY = '星枢OpenClaw-chat-workspace-open'
 const GROUP_SESSIONS_KEY = '星枢OpenClaw-group-sessions-v1'
+const ACTIVE_GROUP_KEY = '星枢OpenClaw-active-group-v1'
 const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
 
@@ -62,7 +63,7 @@ const COMMANDS = [
   ]},
 ]
 
-let _sessionKey = null, _page = null, _messagesEl = null, _textarea = null
+let _sessionKey = null, _lastDirectSessionKey = '', _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
 let _replyStatusRowEl = null
 let _replyStatusTextEl = null
@@ -132,6 +133,7 @@ let _chatGroups = []
 let _taskBoard = []
 let _taskContexts = {}
 let _currentGroupId = ''
+let _groupTranscripts = new Map()
 let _pendingTaskByRunId = new Map()
 let _lastSentTaskId = ''
 let _lastSessionList = []
@@ -936,10 +938,14 @@ function discardWorkspaceChanges() {
 }
 
 function getCurrentWorkspaceAgentId() {
+  const group = getActiveGroup()
+  if (group) return 'group'
   return parseSessionAgent(_sessionKey) || wsClient.snapshot?.sessionDefaults?.defaultAgentId || 'main'
 }
 
 function getWorkspaceAgentTitle() {
+  const group = getActiveGroup()
+  if (group) return `群聊：${group.name}`
   if (_sessionKey) return getDisplayLabel(_sessionKey)
   if (_workspaceCurrentAgentId === 'main') return t('chat.mainSession')
   return _workspaceCurrentAgentId || t('chat.workspace')
@@ -1477,9 +1483,14 @@ async function connectGateway() {
       // 重连后恢复：保留当前 sessionKey，不重复加载历史
       if (!_sessionKey) {
         const saved = localStorage.getItem(STORAGE_SESSION_KEY)
+        const savedGroupId = localStorage.getItem(ACTIVE_GROUP_KEY) || ''
         _sessionKey = saved || sessionKey
-        updateSessionTitle()
-        loadHistory()
+        if (savedGroupId && _chatGroups.some(g => g.id === savedGroupId)) {
+          switchGroupSession(savedGroupId, { restore: true })
+        } else {
+          updateSessionTitle()
+          loadHistory()
+        }
       } else {
         syncWorkspaceContext(false)
       }
@@ -1495,11 +1506,16 @@ async function connectGateway() {
     // 如果已连接且 Gateway 就绪，直接复用
     if (wsClient.connected && wsClient.gatewayReady) {
       const saved = localStorage.getItem(STORAGE_SESSION_KEY)
+      const savedGroupId = localStorage.getItem(ACTIVE_GROUP_KEY) || ''
       _sessionKey = saved || wsClient.sessionKey
       updateStatusDot('ready')
       showTyping(false)  // 确保关闭加载动画
-      updateSessionTitle()
-      loadHistory()
+      if (savedGroupId && _chatGroups.some(g => g.id === savedGroupId)) {
+        switchGroupSession(savedGroupId, { restore: true })
+      } else {
+        updateSessionTitle()
+        loadHistory()
+      }
       refreshSessionList()
       return
     }
@@ -1680,7 +1696,9 @@ async function switchSession(newKey, options = {}) {
     discardWorkspaceChanges()
   }
   _currentGroupId = ''
+  _lastDirectSessionKey = newKey
   _sessionKey = newKey
+  localStorage.removeItem(ACTIVE_GROUP_KEY)
   localStorage.setItem(STORAGE_SESSION_KEY, newKey)
   _lastHistoryHash = ''
   resetStreamState()
@@ -2051,12 +2069,21 @@ function getActiveGroup() {
   return _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
 }
 
+function getGroupStorageKey(group) {
+  return group?.id ? `group:${group.id}` : ''
+}
+
+function getGroupFallbackSessionKey(group) {
+  return (group?.members || []).find(m => m.sessionKey)?.sessionKey || _lastDirectSessionKey || _sessionKey || 'agent:main:main'
+}
+
 function getGroupMemberBySession(group, sessionKey) {
   return (group?.members || []).find(m => m.sessionKey === sessionKey) || null
 }
 
 function getGroupMemberLabel(member, sessionKey = '') {
-  return member?.label || member?.agentId || parseSessionAgent(sessionKey) || getDisplayLabel(sessionKey) || sessionKey || 'Agent'
+  const label = member?.label || getDisplayLabel(sessionKey) || member?.agentId || parseSessionAgent(sessionKey) || sessionKey || 'Agent'
+  return label === 'Agent' && sessionKey ? (getDisplayLabel(sessionKey) || sessionKey) : label
 }
 
 function hideMentionPanel() {
@@ -2103,7 +2130,7 @@ function insertMention(name) {
   hideMentionPanel()
 }
 
-function appendGroupAssistantMessage(group, sessionKey, payload) {
+function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   const member = getGroupMemberBySession(group, sessionKey)
   const label = getGroupMemberLabel(member, sessionKey)
   const c = extractChatContent(payload.message)
@@ -2114,11 +2141,14 @@ function appendGroupAssistantMessage(group, sessionKey, payload) {
   const files = c?.files || []
   const tools = c?.tools || []
   if (!text && !images.length && !videos.length && !audios.length && !files.length && !tools.length) return
-  appendAiMessage(text, new Date(), images, videos, audios, files, tools, { agentLabel: label, sessionKey, model: extractMessageModel(payload.message || {}) || getSessionRuntimeModel(sessionKey), contextWindow: getContextWindow(sessionKey) })
-  saveMessage({
-    id: payload.runId || uuid(), sessionKey: `group:${group.id}`, role: 'assistant', content: text, timestamp: Date.now(), agentLabel: label, sourceSessionKey: sessionKey,
+  const shouldRender = options.render !== false
+  if (shouldRender) appendAiMessage(text, new Date(), images, videos, audios, files, tools, { agentLabel: label, sessionKey, model: extractMessageModel(payload.message || {}) || getSessionRuntimeModel(sessionKey), contextWindow: getContextWindow(sessionKey) })
+  const stored = {
+    id: payload.runId || uuid(), sessionKey: getGroupStorageKey(group), role: 'assistant', content: text, timestamp: Date.now(), agentLabel: label, sourceSessionKey: sessionKey,
     attachments: images.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
-  })
+  }
+  rememberGroupMessage(group, stored)
+  saveMessage(stored)
 }
 
 function showGroupEditor(groupId = '') {
@@ -2171,29 +2201,31 @@ async function deleteGroupSession(groupId) {
   renderGroupSessionList()
 }
 
-async function switchGroupSession(groupId) {
+async function switchGroupSession(groupId, options = {}) {
   const group = _chatGroups.find(g => g.id === groupId)
   if (!group) return
+  if (_sessionKey && !_currentGroupId) _lastDirectSessionKey = _sessionKey
   _currentGroupId = groupId
-  const first = group.members?.[0]?.sessionKey
-  if (first) _sessionKey = first
-  localStorage.setItem(STORAGE_SESSION_KEY, _sessionKey || '')
+  localStorage.setItem(ACTIVE_GROUP_KEY, groupId)
+  if (!_sessionKey) _sessionKey = getGroupFallbackSessionKey(group)
   updateSessionTitle()
   clearMessages()
   if (isStorageAvailable()) {
-    const local = await getLocalMessages(`group:${group.id}`, 80)
+    const local = await getLocalMessages(getGroupStorageKey(group), 80)
+    _groupTranscripts.set(getGroupStorageKey(group), local)
     local.forEach(msg => {
       if (!msg.content && !msg.attachments?.length) return
       const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
-      if (msg.role === 'user') appendUserMessage(`[${group.name}] ${msg.content || ''}`, msg.attachments || null, msgTime)
+      if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
       else if (msg.role === 'assistant') appendAiMessage(msg.content || '', msgTime, (msg.attachments || []).filter(a => a.category === 'image').map(a => ({ mediaType: a.mimeType, data: a.content, url: a.url })), [], [], [], [], { agentLabel: msg.agentLabel || 'Agent', sessionKey: msg.sourceSessionKey || '' })
       else appendSystemMessage(msg.content || '')
     })
   }
-  appendSystemMessage(`已进入 Agent 群聊：${group.name}
-成员：${(group.members || []).map(m => m.label || m.agentId || m.sessionKey).join('、')}
-提示：可使用 @Agent、@会话名 或 @全部 定向下达任务。`)
+  if (!options.restore) appendSystemMessage(`已进入 Agent 群聊：${group.name}
+成员：${(group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、')}
+提示：群聊对话会在本界面聚合显示；成员之间可见群聊上下文，但各自真实会话记忆仍保持隔离。`)
   renderSessionList(_lastSessionList)
+  applyRuntimeModelToSelect(getGroupFallbackSessionKey(group))
 }
 
 function toggleTaskBoard() {
@@ -2348,24 +2380,72 @@ function sendMessage() {
   doSend(text, attachments)
 }
 
+
+function getGroupTranscript(group, limit = 12) {
+  const key = getGroupStorageKey(group)
+  const list = key ? (_groupTranscripts.get(key) || []) : []
+  return list.slice(-limit)
+}
+
+function rememberGroupMessage(group, message) {
+  const key = getGroupStorageKey(group)
+  if (!key || !message) return
+  const list = _groupTranscripts.get(key) || []
+  list.push(message)
+  _groupTranscripts.set(key, list.slice(-80))
+}
+
+function buildGroupMemberPrompt(group, target, cleanText, originalText = '') {
+  const memberLabel = getGroupMemberLabel(target, target?.sessionKey)
+  const members = (group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、') || '暂无成员'
+  const transcript = getGroupTranscript(group, 14)
+    .map(msg => {
+      const who = msg.role === 'assistant' ? (msg.agentLabel || 'Agent') : (msg.role === 'user' ? '用户' : '系统')
+      const content = String(msg.content || '').replace(/\s+/g, ' ').trim()
+      return content ? `${who}：${content.slice(0, 500)}` : ''
+    })
+    .filter(Boolean)
+    .join('\n')
+  return `【OpenClaw Agent 群聊任务】
+群聊名称：${group.name}
+本轮发言者：${memberLabel}
+群聊成员：${members}
+
+重要规则：
+1. 你正在 Agent 群聊里发言，回复会显示在群聊界面，不要说“只有你和我”。
+2. 你可以看到下面的群聊上下文，但不要把它写入长期记忆；只用于本轮群聊协作，真实会话记忆必须保持隔离。
+3. 如果需要回应其他 Agent，请直接点名对方；如果用户 @ 了特定 Agent，只有被点名者需要重点回复。
+4. 回复要标明自己的观点，不要冒充其他 Agent。
+
+最近群聊上下文：
+${transcript || '暂无历史群聊上下文'}
+
+用户原始输入：${originalText || cleanText}
+
+请以“${memberLabel}”的身份在群聊中回复：${cleanText}`
+}
+
 async function doGroupSend(group, text, attachments = []) {
   const { targets, cleanText } = parseGroupMentions(text, group)
   if (!targets.length) { toast('群聊没有可发送成员', 'warning'); return }
   _isSending = true
   updateSendState()
-  appendUserMessage(`[${group.name}] ${text}`, attachments)
-  saveMessage({
-    id: uuid(), sessionKey: `group:${group.id}`, role: 'user', content: text, timestamp: Date.now(),
+  appendUserMessage(text, attachments)
+  const storedUser = {
+    id: uuid(), sessionKey: getGroupStorageKey(group), role: 'user', content: text, timestamp: Date.now(),
     attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
-  })
+  }
+  rememberGroupMessage(group, storedUser)
+  saveMessage(storedUser)
   appendSystemMessage(`群聊任务已发送给：${targets.map(t => t.label || t.agentId || t.sessionKey).join('、')}`)
   try {
     for (const target of targets) {
       const sessionKey = target.sessionKey
       const model = getSessionDisplayModel(sessionKey)
+      const groupPrompt = buildGroupMemberPrompt(group, target, cleanText, text)
       const task = createTaskRecord({ sessionKey, agentId: target.agentId, model, prompt: cleanText, source: 'group', groupId: group.id, title: cleanText.slice(0, 48) })
       try {
-        await wsClient.chatSend(sessionKey, cleanText, attachments.length ? attachments : undefined)
+        await wsClient.chatSend(sessionKey, groupPrompt, attachments.length ? attachments : undefined)
         updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
       } catch (err) {
         updateTask(task.id, { status: 'error', progress: 100, error: err.message })
@@ -2488,16 +2568,19 @@ function handleChatEvent(payload) {
     : null
 
   const activeGroup = getActiveGroup()
-  if (activeGroup && getGroupMemberBySession(activeGroup, eventSessionKey) && state !== 'delta') {
+  const taskGroup = trackedTask?.groupId ? _chatGroups.find(g => g.id === trackedTask.groupId) : null
+  const eventGroup = (activeGroup && getGroupMemberBySession(activeGroup, eventSessionKey)) ? activeGroup : (taskGroup && getGroupMemberBySession(taskGroup, eventSessionKey) ? taskGroup : null)
+  if (eventGroup && state !== 'delta') {
+    const renderIntoCurrentGroup = activeGroup?.id === eventGroup.id
     if (state === 'final') {
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
       completeTaskRound(doneTask)
-      appendGroupAssistantMessage(activeGroup, eventSessionKey, payload)
+      appendGroupAssistantMessage(eventGroup, eventSessionKey, payload, { render: renderIntoCurrentGroup })
       refreshSessionList()
     } else if (state === 'error') {
       const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
-      appendSystemMessage(`${getGroupMemberLabel(getGroupMemberBySession(activeGroup, eventSessionKey), eventSessionKey)} 回复失败：${errMsg}`)
+      if (renderIntoCurrentGroup) appendSystemMessage(`${getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey)} 回复失败：${errMsg}`)
       setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: '群聊成员回复失败' })
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
@@ -2979,9 +3062,12 @@ function scheduleReplyStatusTimer(status = _replyStatusState) {
 }
 
 function markStatusMarquee() {
-  for (const el of [_replyStatusTextEl, _replyStatusDetailEl, _replyStatusToolsEl, _replyStatusMetaEl]) {
+  for (const el of [_replyStatusTextEl, _replyStatusDetailEl, _replyStatusToolsEl]) {
     if (!el) continue
-    el.classList.toggle('status-marquee', el.scrollWidth > el.clientWidth + 8)
+    el.classList.remove('status-marquee')
+  }
+  if (_replyStatusMetaEl) {
+    _replyStatusMetaEl.classList.toggle('status-marquee', _replyStatusMetaEl.scrollWidth > _replyStatusMetaEl.clientWidth + 24)
   }
 }
 

@@ -47,7 +47,9 @@ export async function saveMessage(message) {
       model: message.model || '',
       contextWindow: message.contextWindow || 0,
       attachments: message.attachments || [],
-      sync: true
+      sync: true,
+      agentLabel: message.agentLabel || '',
+      sourceSessionKey: message.sourceSessionKey || ''
     })
   } catch (e) {
     console.error('[db] saveMessage error:', e)
@@ -73,7 +75,9 @@ export async function saveMessages(messages) {
         model: msg.model || '',
         contextWindow: msg.contextWindow || 0,
         attachments: msg.attachments || [],
-        sync: true
+        sync: true,
+        agentLabel: msg.agentLabel || '',
+        sourceSessionKey: msg.sourceSessionKey || ''
       })
     })
   } catch (e) {
