@@ -98,7 +98,7 @@ const CHAT_REPLY_STATUS_PHASE = {
   error: '异常',
   aborted: '已中止',
 }
-const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '', runId: '', toolName: '', toolCount: 0, lastToolAt: 0, activity: '' }
+const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '', runId: '', toolName: '', toolInput: '', toolCount: 0, lastToolAt: 0, activity: '' }
 let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
 let _sessionListEl = null, _sessionListNormalEl = null, _sessionListGroupsEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
@@ -2334,10 +2334,12 @@ function handleEvent(msg) {
     // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
     if (toolName && !_isStreaming) {
-      emitLobsterPhase('tool', `调用工具：${toolName}`)
-      showTyping(true, `正在调用工具：${toolName}`)
+      const toolLabel = formatToolDisplayName(toolName)
+      const toolInput = summarizeToolInput(payload.data?.args || payload.data?.input || payload.data?.parameters || '')
+      emitLobsterPhase('tool', `调用工具：${toolLabel}`)
+      showTyping(true, `正在调用工具：${toolLabel}`)
       const count = payload.runId ? (_toolRunIndex.get(payload.runId) || []).length : 1
-      setReplyStatus('tool', `正在调用工具：${toolName}`, { runId: payload.runId, toolName, toolCount: count, lastToolAt: Date.now(), activity: '等待工具返回结果' })
+      setReplyStatus('tool', `正在调用工具：${toolLabel}`, { runId: payload.runId, toolName, toolInput, toolCount: count, lastToolAt: Date.now(), activity: toolInput ? `工具参数：${toolInput}` : '等待工具返回结果' })
     }
   }
 
@@ -2779,6 +2781,7 @@ function normalizeReplyStatus(raw = {}, sessionKey = _sessionKey) {
     sessionKey: raw.sessionKey || sessionKey || 'default',
     runId: raw.runId || '',
     toolName: raw.toolName || '',
+    toolInput: raw.toolInput || '',
     toolCount: Number(raw.toolCount || 0),
     lastToolAt: raw.lastToolAt || 0,
     activity: raw.activity || '',
@@ -2822,6 +2825,30 @@ function scheduleReplyStatusTimer(status = _replyStatusState) {
   }, 1000)
 }
 
+function formatToolDisplayName(name = '') {
+  const raw = String(name || '').trim()
+  const lower = raw.toLowerCase()
+  const map = {
+    exec: '执行命令', shell: '执行命令', read: '读取文件', write: '写入文件', edit: '修改文件',
+    web_search: '联网搜索', web_fetch: '读取网页', image: '图像分析', pdf: 'PDF 分析',
+    message: '发送消息', cron: '定时任务', nodes: '设备节点', canvas: '界面预览',
+    sessions_spawn: '启动子任务', sessions_send: '会话协作', gateway: '网关配置',
+  }
+  return map[lower] || raw || '工具'
+}
+
+function summarizeToolInput(input) {
+  if (input == null || input === '') return ''
+  let text = ''
+  if (typeof input === 'string') text = input
+  else {
+    try { text = JSON.stringify(input) } catch { text = String(input) }
+  }
+  text = text.replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > 96 ? text.slice(0, 96) + '…' : text
+}
+
 function buildReplyStatusDetail(status = _replyStatusState) {
   const parts = []
   const model = status.model || getSessionDisplayModel(status.sessionKey || _sessionKey) || getSessionRuntimeModel(status.sessionKey || _sessionKey) || _selectedModel || _primaryModel || ''
@@ -2850,13 +2877,13 @@ function renderReplyStatus(status = _replyStatusState) {
   if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(status)
   if (_replyStatusMetaEl) {
     const hint = ['queued','sending','thinking','tool','streaming','finalizing'].includes(status.state)
-      ? '状态持续更新中，不是卡死；如果长时间无变化，系统会自动进入超时保护。'
+      ? '系统正在持续接收执行进度，连接保持正常；若长时间无新事件，将自动进入超时保护。'
       : (status.state === 'done' ? '本轮已完成，可继续输入新的任务。' : '等待新的任务。')
     _replyStatusMetaEl.textContent = hint
   }
   if (_replyStatusToolsEl) {
     _replyStatusToolsEl.textContent = status.toolName
-      ? `工具：${status.toolName}${status.toolCount ? ` · 第 ${status.toolCount} 次工具事件` : ''}`
+      ? `工具：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · 第 ${status.toolCount} 次工具事件` : ''}${status.toolInput ? ` · 参数：${status.toolInput}` : ''}`
       : (status.state === 'tool' ? '工具：等待工具名称回传' : '')
   }
   scheduleReplyStatusTimer(status)
@@ -2872,6 +2899,7 @@ function setReplyStatus(state, detail = '', options = {}) {
     sessionKey,
     runId: options.runId || _currentRunId || previous.runId || '',
     toolName: options.toolName || previous.toolName || '',
+    toolInput: options.toolInput || previous.toolInput || '',
     toolCount: options.toolCount ?? previous.toolCount ?? 0,
     lastToolAt: options.lastToolAt || previous.lastToolAt || 0,
     activity: options.activity || '',
