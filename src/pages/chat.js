@@ -101,6 +101,7 @@ const CHAT_REPLY_STATUS_PHASE = {
 const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '', runId: '', toolName: '', toolInput: '', toolCount: 0, lastToolAt: 0, activity: '' }
 let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
 let _sessionListEl = null, _sessionListNormalEl = null, _sessionListGroupsEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
+let _mentionPanelEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
@@ -194,12 +195,14 @@ export async function render() {
         <div class="chat-session-section">
           <div class="chat-session-section-title">
             <span>普通会话</span>
-            <button class="chat-session-section-btn" id="btn-new-group" title="新建群聊">+ 群聊</button>
           </div>
           <div class="chat-session-list-pane" id="chat-session-list-normal"></div>
         </div>
         <div class="chat-session-section chat-session-section-groups">
-          <div class="chat-session-section-title"><span>群聊会话</span></div>
+          <div class="chat-session-section-title">
+            <span>群聊会话</span>
+            <button class="chat-session-section-btn" id="btn-new-group" title="新建群聊">新建群聊</button>
+          </div>
           <div class="chat-session-list-pane" id="chat-session-list-groups"></div>
         </div>
       </div>
@@ -314,6 +317,7 @@ export async function render() {
         </button>
         <div class="chat-input-wrapper">
           <textarea id="chat-input" rows="1" placeholder="${t('chat.inputPlaceholder')}"></textarea>
+          <div class="chat-mention-panel" id="chat-mention-panel" style="display:none"></div>
         </div>
         <button class="chat-send-btn" id="chat-send-btn" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -398,6 +402,7 @@ export async function render() {
   _cmdPanelEl = page.querySelector('#chat-cmd-panel')
   _attachPreviewEl = page.querySelector('#chat-attachments-preview')
   _fileInputEl = page.querySelector('#chat-file-input')
+  _mentionPanelEl = page.querySelector('#chat-mention-panel')
   _modelSelectEl = page.querySelector('#chat-model-select')
   _hostedBtn = page.querySelector('#chat-hosted-btn')
   _hostedBadgeEl = page.querySelector('#chat-hosted-badge')
@@ -487,14 +492,20 @@ function bindEvents(page) {
     _textarea.style.height = 'auto'
     _textarea.style.height = Math.min(_textarea.scrollHeight, 150) + 'px'
     updateSendState()
-    // 输入 / 时显示指令面板
+    // 输入 / 时显示指令面板；群聊里输入 @ 时显示成员快捷选择
     if (_textarea.value === '/') showCmdPanel()
     else if (!_textarea.value.startsWith('/')) hideCmdPanel()
+    updateMentionPanel()
   })
 
   _textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); sendMessage() }
-    if (e.key === 'Escape') hideCmdPanel()
+    if (e.key === 'Escape') { hideCmdPanel(); hideMentionPanel() }
+  })
+  _mentionPanelEl?.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-mention]')
+    if (!item) return
+    insertMention(item.dataset.mention || '')
   })
 
   _sendBtn.addEventListener('click', () => {
@@ -2036,6 +2047,80 @@ function parseGroupMentions(text, group) {
   return { targets: targets.length ? targets : members, cleanText: cleanText.trim() || text }
 }
 
+function getActiveGroup() {
+  return _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+}
+
+function getGroupMemberBySession(group, sessionKey) {
+  return (group?.members || []).find(m => m.sessionKey === sessionKey) || null
+}
+
+function getGroupMemberLabel(member, sessionKey = '') {
+  return member?.label || member?.agentId || parseSessionAgent(sessionKey) || getDisplayLabel(sessionKey) || sessionKey || 'Agent'
+}
+
+function hideMentionPanel() {
+  if (_mentionPanelEl) _mentionPanelEl.style.display = 'none'
+}
+
+function getMentionTokenInfo() {
+  const value = _textarea?.value || ''
+  const pos = _textarea?.selectionStart ?? value.length
+  const before = value.slice(0, pos)
+  const match = before.match(/(^|\s)@([^@\s：:]*)$/)
+  if (!match) return null
+  return { start: before.length - match[2].length - 1, end: pos, query: match[2] || '' }
+}
+
+function updateMentionPanel() {
+  const group = getActiveGroup()
+  if (!_mentionPanelEl || !group) { hideMentionPanel(); return }
+  const info = getMentionTokenInfo()
+  if (!info) { hideMentionPanel(); return }
+  const q = info.query.toLowerCase()
+  const entries = [{ label: '全部', value: '全部', hint: '通知群聊内全部 Agent' }]
+  for (const m of group.members || []) {
+    const label = getGroupMemberLabel(m, m.sessionKey)
+    entries.push({ label, value: label, hint: m.agentId || parseSessionAgent(m.sessionKey) || 'Agent' })
+  }
+  const filtered = entries.filter(e => !q || e.label.toLowerCase().includes(q) || String(e.hint || '').toLowerCase().includes(q))
+  if (!filtered.length) { hideMentionPanel(); return }
+  _mentionPanelEl.innerHTML = filtered.map(e => `<button type="button" class="chat-mention-item" data-mention="${escapeAttr(e.value)}"><strong>@${escapeAttr(e.label)}</strong><span>${escapeAttr(e.hint || '')}</span></button>`).join('')
+  _mentionPanelEl.style.display = 'block'
+}
+
+function insertMention(name) {
+  if (!_textarea || !name) return
+  const value = _textarea.value || ''
+  const pos = _textarea.selectionStart ?? value.length
+  const info = getMentionTokenInfo() || { start: pos, end: pos }
+  const insert = `@${name} `
+  _textarea.value = value.slice(0, info.start) + insert + value.slice(info.end)
+  const nextPos = info.start + insert.length
+  _textarea.focus()
+  _textarea.setSelectionRange(nextPos, nextPos)
+  _textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  hideMentionPanel()
+}
+
+function appendGroupAssistantMessage(group, sessionKey, payload) {
+  const member = getGroupMemberBySession(group, sessionKey)
+  const label = getGroupMemberLabel(member, sessionKey)
+  const c = extractChatContent(payload.message)
+  const text = c?.text || ''
+  const images = c?.images || []
+  const videos = c?.videos || []
+  const audios = c?.audios || []
+  const files = c?.files || []
+  const tools = c?.tools || []
+  if (!text && !images.length && !videos.length && !audios.length && !files.length && !tools.length) return
+  appendAiMessage(text, new Date(), images, videos, audios, files, tools, { agentLabel: label, sessionKey, model: extractMessageModel(payload.message || {}) || getSessionRuntimeModel(sessionKey), contextWindow: getContextWindow(sessionKey) })
+  saveMessage({
+    id: payload.runId || uuid(), sessionKey: `group:${group.id}`, role: 'assistant', content: text, timestamp: Date.now(), agentLabel: label, sourceSessionKey: sessionKey,
+    attachments: images.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
+  })
+}
+
 function showGroupEditor(groupId = '') {
   const group = _chatGroups.find(g => g.id === groupId) || null
   const existingMembers = new Set((group?.members || []).map(m => m.sessionKey))
@@ -2101,6 +2186,7 @@ async function switchGroupSession(groupId) {
       if (!msg.content && !msg.attachments?.length) return
       const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
       if (msg.role === 'user') appendUserMessage(`[${group.name}] ${msg.content || ''}`, msg.attachments || null, msgTime)
+      else if (msg.role === 'assistant') appendAiMessage(msg.content || '', msgTime, (msg.attachments || []).filter(a => a.category === 'image').map(a => ({ mediaType: a.mimeType, data: a.content, url: a.url })), [], [], [], [], { agentLabel: msg.agentLabel || 'Agent', sessionKey: msg.sourceSessionKey || '' })
       else appendSystemMessage(msg.content || '')
     })
   }
@@ -2111,9 +2197,19 @@ async function switchGroupSession(groupId) {
 }
 
 function toggleTaskBoard() {
-  const overlay = showContentModal({ title: '任务清单', width: 860, content: '<div id="chat-task-board-modal"></div>', buttons: [{ id: 'chat-task-new', label: '新建任务', className: 'btn btn-secondary btn-sm' }] })
+  const overlay = showContentModal({
+    title: '任务清单', width: 900,
+    content: '<div class="chat-task-toolbar"><button class="btn btn-sm btn-ghost" id="chat-task-select-all">全选</button><button class="btn btn-sm btn-danger" id="chat-task-delete-selected">删除选中</button></div><div id="chat-task-board-modal"></div>',
+    buttons: [{ id: 'chat-task-new', label: '新建任务', className: 'btn btn-secondary btn-sm' }]
+  })
   overlay.classList.add('chat-task-board-overlay')
   overlay.querySelector('#chat-task-new')?.addEventListener('click', () => showTaskEditor(null, overlay))
+  overlay.querySelector('#chat-task-select-all')?.addEventListener('click', () => {
+    const boxes = Array.from(overlay.querySelectorAll('[data-task-select]'))
+    const allChecked = boxes.length && boxes.every(b => b.checked)
+    boxes.forEach(b => { b.checked = !allChecked })
+  })
+  overlay.querySelector('#chat-task-delete-selected')?.addEventListener('click', () => deleteSelectedTasks(overlay))
   updateTaskBoardModal(overlay)
 }
 
@@ -2143,18 +2239,43 @@ function updateTaskBoardModal(overlay) {
     if (edit) { showTaskEditor(edit.dataset.taskEdit, overlay); return }
     const rerun = e.target.closest('[data-task-rerun]')
     if (rerun) { rerunTask(rerun.dataset.taskRerun); return }
+    const del = e.target.closest('[data-task-delete]')
+    if (del) { deleteTask(del.dataset.taskDelete); return }
   }
 }
 
 function renderTaskCard(task) {
   const statusLabel = ({ sending:'发送中', queued:'排队中', thinking:'思考中', streaming:'生成中', tool:'工具调用', finalizing:'整理中', done:'已完成', error:'失败', aborted:'已中止', running:'执行中' })[task.status] || task.status
   return `<div class="chat-task-card ${escapeAttr(task.status)} ${task.highlighted ? 'highlight' : ''}">
-    <div class="chat-task-head"><strong>${escapeAttr(task.title || task.prompt || '任务')}</strong><span>${escapeAttr(statusLabel)}</span></div>
+    <div class="chat-task-head"><label class="chat-task-title"><input type="checkbox" data-task-select value="${escapeAttr(task.id)}"><strong>${escapeAttr(task.title || task.prompt || '任务')}</strong></label><span>${escapeAttr(statusLabel)}</span></div>
     <div class="chat-task-meta">Agent：${escapeAttr(task.agentId || 'main')} · 会话：${escapeAttr(getDisplayLabel(task.sessionKey))} · 模型：${escapeAttr(shortModelName(task.model))} · 当前任务 ${Number(task.roundCount || 0)}轮</div>
     <div class="chat-task-prompt">${escapeAttr(task.prompt || '')}</div>
     <div class="chat-task-progress"><div style="width:${Math.max(0, Math.min(100, Number(task.progress || 0)))}%"></div></div>
-    <div class="chat-task-actions"><button class="btn btn-sm btn-ghost" data-task-edit="${escapeAttr(task.id)}">编辑</button><button class="btn btn-sm btn-primary" data-task-rerun="${escapeAttr(task.id)}">提交重新执行</button></div>
+    <div class="chat-task-actions"><button class="btn btn-sm btn-ghost" data-task-edit="${escapeAttr(task.id)}">编辑</button><button class="btn btn-sm btn-primary" data-task-rerun="${escapeAttr(task.id)}">提交重新执行</button><button class="btn btn-sm btn-danger" data-task-delete="${escapeAttr(task.id)}">删除</button></div>
   </div>`
+}
+
+async function deleteTask(taskId) {
+  const task = _taskBoard.find(t => t.id === taskId)
+  if (!task) return
+  const yes = await showConfirm(`确认删除任务“${task.title || task.prompt || '任务'}”？`)
+  if (!yes) return
+  _taskBoard = _taskBoard.filter(t => t.id !== taskId)
+  saveTaskBoard()
+  updateOpenTaskBoardModal()
+  toast('任务已删除', 'success')
+}
+
+async function deleteSelectedTasks(overlay) {
+  const ids = Array.from(overlay?.querySelectorAll('[data-task-select]:checked') || []).map(i => i.value).filter(Boolean)
+  if (!ids.length) { toast('请先选择要删除的任务', 'warning'); return }
+  const yes = await showConfirm(`确认删除选中的 ${ids.length} 个任务？`)
+  if (!yes) return
+  const idSet = new Set(ids)
+  _taskBoard = _taskBoard.filter(t => !idSet.has(t.id))
+  saveTaskBoard()
+  updateOpenTaskBoardModal()
+  toast(`已删除 ${ids.length} 个任务`, 'success')
 }
 
 function showTaskEditor(taskId, parentOverlay = null) {
@@ -2282,9 +2403,10 @@ async function doSend(text, attachments = []) {
     sendFailed = true
     showTyping(false)
     _cancelResponseWatchdog()
-    appendSystemMessage(`${t('chat.sendFailed')}${err.message}`)
-    setReplyStatus('error', `${t('chat.sendFailed')}${err.message}`, { runId: _currentRunId || '', activity: '发送失败，未进入模型处理' })
-    updateTask(currentTask.id, { status: 'error', progress: 100, error: err.message })
+    const errText = translateGatewayError(err.message)
+    appendSystemMessage(`${t('chat.sendFailed')}${errText}`)
+    setReplyStatus('error', `${t('chat.sendFailed')}${errText}`, { runId: _currentRunId || '', activity: '发送失败，未进入模型处理' })
+    updateTask(currentTask.id, { status: 'error', progress: 100, error: errText })
   } finally {
     _isSending = false
     if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
@@ -2365,6 +2487,24 @@ function handleChatEvent(payload) {
     ? updateTaskByRunOrSession(runId, eventSessionKey, { status: taskPatchState, progress: TASK_PROGRESS[taskPatchState] || TASK_PROGRESS[state] || 50 })
     : null
 
+  const activeGroup = getActiveGroup()
+  if (activeGroup && getGroupMemberBySession(activeGroup, eventSessionKey) && state !== 'delta') {
+    if (state === 'final') {
+      const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
+      completeTaskRound(doneTask)
+      appendGroupAssistantMessage(activeGroup, eventSessionKey, payload)
+      refreshSessionList()
+    } else if (state === 'error') {
+      const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
+      updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
+      appendSystemMessage(`${getGroupMemberLabel(getGroupMemberBySession(activeGroup, eventSessionKey), eventSessionKey)} 回复失败：${errMsg}`)
+      setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: '群聊成员回复失败' })
+    } else if (state === 'aborted') {
+      updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
+    }
+    return
+  }
+
   // 群聊会同时把任务发给多个真实会话；非当前会话的事件只更新任务清单和轮次，不渲染到当前聊天窗口，避免串流。
   if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) {
     if (state === 'final') {
@@ -2374,7 +2514,7 @@ function handleChatEvent(payload) {
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
     } else if (state === 'error') {
-      const errMsg = payload.errorMessage || payload.error?.message || t('common.error')
+      const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
     }
     return
@@ -2544,16 +2684,17 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'error') {
-    const errMsg = payload.errorMessage || payload.error?.message || t('common.error')
+    const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
 
     // 连接级错误（origin/pairing/auth）拦截，不作为聊天消息显示
-    if (/origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|auth.*fail/i.test(errMsg)) {
+    if (/origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity changed|auth.*fail/i.test(errMsg)) {
       console.warn('[chat] 拦截连接级错误，不显示为聊天消息:', errMsg)
+      setReplyStatus('error', errMsg, { runId: _currentRunId, activity: '设备连接需要重新批准' })
       const overlay = document.getElementById('chat-connect-overlay')
       if (overlay) {
         overlay.style.display = 'flex'
         const desc = document.getElementById('chat-connect-desc')
-        if (desc) desc.textContent = t('chat.connectionRejected')
+        if (desc) desc.textContent = errMsg
       }
       return
     }
@@ -2581,6 +2722,17 @@ function handleChatEvent(payload) {
     processMessageQueue()
     return
   }
+}
+
+function translateGatewayError(message = '') {
+  const raw = String(message || '')
+  const req = raw.match(/requestId:\s*([^)\s]+)/i)?.[1]
+  if (/pairing required|PAIRING_REQUIRED|device identity changed/i.test(raw)) {
+    return `设备配对已失效：检测到设备身份变化，需要重新批准本机连接${req ? `（请求ID：${req}` : ''}${req ? '）' : ''}。请点击“修复并重连”自动重新配对，或到网关设置中重新批准设备。`
+  }
+  if (/origin not allowed/i.test(raw)) return '连接来源未被网关允许，请点击“修复并重连”自动写入本机来源并重连。'
+  if (/NOT_PAIRED/i.test(raw)) return '当前设备尚未与网关配对，请点击“修复并重连”完成自动配对。'
+  return raw
 }
 
 /** 从 Gateway message 对象提取文本和所有媒体（参照 clawapp extractContent） */
@@ -2822,7 +2974,15 @@ function scheduleReplyStatusTimer(status = _replyStatusState) {
   _replyStatusTimer = setInterval(() => {
     if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(_replyStatusState)
     if (_replyStatusDetailEl) _replyStatusDetailEl.textContent = buildReplyStatusDetail(_replyStatusState)
+    markStatusMarquee()
   }, 1000)
+}
+
+function markStatusMarquee() {
+  for (const el of [_replyStatusTextEl, _replyStatusDetailEl, _replyStatusToolsEl, _replyStatusMetaEl]) {
+    if (!el) continue
+    el.classList.toggle('status-marquee', el.scrollWidth > el.clientWidth + 8)
+  }
 }
 
 function formatToolDisplayName(name = '') {
@@ -2886,6 +3046,7 @@ function renderReplyStatus(status = _replyStatusState) {
       ? `工具：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · 第 ${status.toolCount} 次工具事件` : ''}${status.toolInput ? ` · 参数：${status.toolInput}` : ''}`
       : (status.state === 'tool' ? '工具：等待工具名称回传' : '')
   }
+  markStatusMarquee()
   scheduleReplyStatusTimer(status)
 }
 
@@ -3240,6 +3401,21 @@ function extractContent(msg) {
 
 // ── DOM 操作 ──
 
+function attachAgentMentionGesture(el, label) {
+  if (!el || !label) return
+  let timer = null
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null } }
+  el.addEventListener('pointerdown', () => {
+    clear()
+    timer = setTimeout(() => insertMention(label), 520)
+  })
+  el.addEventListener('pointerup', clear)
+  el.addEventListener('pointerleave', clear)
+  el.addEventListener('click', () => {
+    if (getActiveGroup()) insertMention(label)
+  })
+}
+
 function appendUserMessage(text, attachments = [], msgTime, metaData = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-user'
@@ -3304,6 +3480,15 @@ function appendUserMessage(text, attachments = [], msgTime, metaData = {}) {
 function appendAiMessage(text, msgTime, images, videos, audios, files, tools, metaData = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-ai'
+  if (metaData.agentLabel) {
+    const name = document.createElement('button')
+    name.type = 'button'
+    name.className = 'msg-agent-name'
+    name.textContent = metaData.agentLabel
+    name.title = `长按 @${metaData.agentLabel}`
+    attachAgentMentionGesture(name, metaData.agentLabel)
+    wrap.appendChild(name)
+  }
   const bubble = document.createElement('div')
   bubble.className = 'msg-bubble'
   appendToolsToEl(bubble, tools)
