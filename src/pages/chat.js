@@ -8,7 +8,7 @@ import { wsClient, uuid } from '../lib/ws-client.js'
 import { renderMarkdown } from '../lib/markdown.js'
 import { saveMessage, saveMessages, getLocalMessages, isStorageAvailable } from '../lib/message-db.js'
 import { toast } from '../components/toast.js'
-import { showModal, showConfirm } from '../components/modal.js'
+import { showModal, showConfirm, showContentModal } from '../components/modal.js'
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
@@ -18,6 +18,9 @@ const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
 const STORAGE_SESSION_NAMES_KEY = '星枢OpenClaw-chat-session-names'
 const STORAGE_WORKSPACE_PANEL_KEY = '星枢OpenClaw-chat-workspace-open'
+const GROUP_SESSIONS_KEY = '星枢OpenClaw-group-sessions-v1'
+const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
+const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -79,7 +82,7 @@ const CHAT_REPLY_STATUS_TEXT = {
 }
 const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '' }
 let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
-let _sessionListEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
+let _sessionListEl = null, _sessionListNormalEl = null, _sessionListGroupsEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
@@ -106,6 +109,15 @@ let _sessionModels = new Map()
 let _sessionContextTokens = new Map()
 let _sessionTokenTotals = new Map()
 let _defaultContextTokens = 0
+let _chatGroups = []
+let _taskBoard = []
+let _taskContexts = {}
+let _currentGroupId = ''
+let _pendingTaskByRunId = new Map()
+let _lastSentTaskId = ''
+let _lastSessionList = []
+const TASK_PROGRESS = { queued: 5, sending: 10, thinking: 25, streaming: 45, tool: 65, finalizing: 90, done: 100, error: 100, aborted: 100 }
+
 
 // ── 托管 Agent ──
 const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
@@ -160,7 +172,19 @@ export async function render() {
         </button>
         </div>
       </div>
-      <div class="chat-session-list" id="chat-session-list"></div>
+      <div class="chat-session-list chat-session-sections" id="chat-session-list">
+        <div class="chat-session-section">
+          <div class="chat-session-section-title">
+            <span>普通会话</span>
+            <button class="chat-session-section-btn" id="btn-new-group" title="新建群聊">+ 群聊</button>
+          </div>
+          <div class="chat-session-list-pane" id="chat-session-list-normal"></div>
+        </div>
+        <div class="chat-session-section chat-session-section-groups">
+          <div class="chat-session-section-title"><span>群聊会话</span></div>
+          <div class="chat-session-list-pane" id="chat-session-list-groups"></div>
+        </div>
+      </div>
     </div>
     <div class="chat-main">
       <div class="chat-header">
@@ -190,8 +214,8 @@ export async function render() {
             <span class="chat-workspace-trigger-label">${t('chat.workspace')}</span>
             <span class="chat-workspace-trigger-agent" id="chat-workspace-trigger-agent">main</span>
           </button>
-          <button class="btn btn-sm btn-ghost" id="btn-collab" title="${t('chat.collabActionHint')}">
-            ${t('chat.collabAction')}
+          <button class="btn btn-sm btn-ghost" id="btn-task-board" title="查看所有 Agent / 会话任务清单">
+            任务清单
           </button>
           <button class="btn btn-sm btn-ghost" id="btn-cmd" title="${t('chat.shortcuts')}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z"/></svg>
@@ -337,6 +361,8 @@ export async function render() {
   _replyStatusRowEl = page.querySelector('#chat-reply-status-row')
   _replyStatusTextEl = page.querySelector('#chat-reply-status-text')
   _sessionListEl = page.querySelector('#chat-session-list')
+  _sessionListNormalEl = page.querySelector('#chat-session-list-normal')
+  _sessionListGroupsEl = page.querySelector('#chat-session-list-groups')
   _cmdPanelEl = page.querySelector('#chat-cmd-panel')
   _attachPreviewEl = page.querySelector('#chat-attachments-preview')
   _fileInputEl = page.querySelector('#chat-file-input')
@@ -377,6 +403,9 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
+  loadGroupSessions()
+  loadTaskBoard()
+  loadTaskContexts()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -467,7 +496,8 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-new-session').addEventListener('click', () => showNewSessionDialog())
-  page.querySelector('#btn-collab').addEventListener('click', () => injectCollabTemplate())
+  page.querySelector('#btn-task-board').addEventListener('click', () => toggleTaskBoard())
+  page.querySelector('#btn-new-group')?.addEventListener('click', () => showGroupEditor())
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
   page.querySelector('#btn-reset-session').addEventListener('click', () => resetCurrentSession())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))
@@ -1454,6 +1484,7 @@ async function refreshSessionList() {
     // 不传 activeMinutes，避免只返回活跃会话；includeGlobal/includeUnknown 保持与原生面板一致，防止跨入口会话丢失。
     const result = await wsClient.sessionsList(200, { includeGlobal: true, includeUnknown: true })
     const sessions = normalizeSessionList(result?.sessions || result || [])
+    _lastSessionList = sessions
     updateSessionRuntimeCache(sessions, result?.defaults)
     applyRuntimeModelToSelect(_sessionKey)
     renderSessionList(sessions)
@@ -1485,42 +1516,20 @@ function normalizeSessionList(rawSessions = []) {
 function renderSessionList(sessions) {
   if (!_sessionListEl) return
   sessions = normalizeSessionList(sessions)
-  if (!sessions.length) {
-    _sessionListEl.innerHTML = `<div class="chat-session-empty">${t('chat.noSessions')}</div>`
-    return
-  }
-  _sessionListEl.innerHTML = sessions.map(s => {
-    const key = s.sessionKey || s.key || ''
-    const active = key === _sessionKey ? ' active' : ''
-    const label = parseSessionLabel(key)
-    const ts = s.updatedAt || s.lastActivity || s.createdAt || 0
-    const timeStr = ts ? formatSessionTime(ts) : ''
-    const msgCount = s.messageCount || s.messages || 0
-    const agentId = parseSessionAgent(key)
-    const model = normalizeModelValue(s.model || s.runtimeModel || s.currentModel || '', s.modelProvider || s.provider || '')
-    const ctxTokens = Number(s.contextTokens ?? s.context_tokens ?? s.contextWindow ?? _sessionContextTokens.get(key) ?? _defaultContextTokens ?? 0) || 0
-    const totalTokens = Number(s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? _sessionTokenTotals.get(key) ?? 0) || 0
-    const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
-    const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
-    const displayLabel = getDisplayLabel(key) || label
-    return `<div class="chat-session-card${active}" data-key="${escapeAttr(key)}">
-      <div class="chat-session-card-header">
-        <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
-        <button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>
-      </div>
-      <div class="chat-session-card-meta">
-        ${agentId && agentId !== 'main' ? `<span class="chat-session-agent">${escapeAttr(agentId)}</span>` : ''}
-        ${msgCount > 0 ? `<span>${msgCount} msgs</span>` : ''}
-        ${model ? `<span class="chat-session-model" title="${escapeAttr(model)}">${escapeAttr(model.includes('/') ? model.split('/').pop() : model)}</span>` : ''}
-        ${ctxTokens > 0 ? `<span class="chat-session-context${ctxClass}" title="${compactNumber(totalTokens)} / ${compactNumber(ctxTokens)}">${percentUsed}% ctx</span>` : ''}
-        ${timeStr ? `<span>${timeStr}</span>` : ''}
-      </div>
-    </div>`
-  }).join('')
+  const normalHtml = sessions.length ? sessions.map(s => renderSessionCard(s)).join('') : `<div class="chat-session-empty">${t('chat.noSessions')}</div>`
+  if (_sessionListNormalEl) _sessionListNormalEl.innerHTML = normalHtml
+  else _sessionListEl.innerHTML = normalHtml
+  renderGroupSessionList()
 
   _sessionListEl.onclick = (e) => {
     const delBtn = e.target.closest('[data-del]')
     if (delBtn) { e.stopPropagation(); deleteSession(delBtn.dataset.del); return }
+    const groupEdit = e.target.closest('[data-group-edit]')
+    if (groupEdit) { e.stopPropagation(); showGroupEditor(groupEdit.dataset.groupEdit); return }
+    const groupDel = e.target.closest('[data-group-del]')
+    if (groupDel) { e.stopPropagation(); deleteGroupSession(groupDel.dataset.groupDel); return }
+    const groupItem = e.target.closest('[data-group-key]')
+    if (groupItem) { e.stopPropagation(); switchGroupSession(groupItem.dataset.groupKey); return }
     const item = e.target.closest('[data-key]')
     if (item) void switchSession(item.dataset.key)
   }
@@ -1532,6 +1541,63 @@ function renderSessionList(sessions) {
     e.stopPropagation()
     renameSession(card.dataset.key, labelEl)
   }
+}
+
+function renderSessionCard(s) {
+  const key = s.sessionKey || s.key || ''
+  const active = !_currentGroupId && key === _sessionKey ? ' active' : ''
+  const ts = s.updatedAt || s.lastActivity || s.createdAt || 0
+  const timeStr = ts ? formatSessionTime(ts) : ''
+  const msgCount = s.messageCount || s.messages || 0
+  const agentId = parseSessionAgent(key)
+  const model = getSessionDisplayModel(key, s)
+  const taskInfo = getCurrentTaskRoundInfo(key, model)
+  const ctxTokens = Number(s.contextTokens ?? s.context_tokens ?? s.contextWindow ?? _sessionContextTokens.get(key) ?? _defaultContextTokens ?? 0) || 0
+  const totalTokens = Number(s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? _sessionTokenTotals.get(key) ?? 0) || 0
+  const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
+  const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
+  const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
+  return `<div class="chat-session-card${active}" data-key="${escapeAttr(key)}">
+    <div class="chat-session-card-header">
+      <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
+      <button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>
+    </div>
+    <div class="chat-session-card-meta">
+      ${agentId && agentId !== 'main' ? `<span class="chat-session-agent">${escapeAttr(agentId)}</span>` : ''}
+      ${msgCount > 0 ? `<span>${msgCount} msgs</span>` : ''}
+      ${model ? `<span class="chat-session-model" title="${escapeAttr(model)}">${escapeAttr(shortModelName(model))}</span>` : ''}
+      <span class="chat-session-rounds" title="${escapeAttr(taskInfo.title)}">${escapeAttr(taskInfo.label)}</span>
+      ${ctxTokens > 0 ? `<span class="chat-session-context${ctxClass}" title="${compactNumber(totalTokens)} / ${compactNumber(ctxTokens)}">${percentUsed}% ctx</span>` : ''}
+      ${timeStr ? `<span>${timeStr}</span>` : ''}
+    </div>
+  </div>`
+}
+
+function renderGroupSessionList() {
+  if (!_sessionListGroupsEl) return
+  if (!_chatGroups.length) {
+    _sessionListGroupsEl.innerHTML = `<div class="chat-session-empty">暂无群聊，点击上方“+ 群聊”创建</div>`
+    return
+  }
+  _sessionListGroupsEl.innerHTML = _chatGroups.map(g => {
+    const active = _currentGroupId === g.id ? ' active' : ''
+    const members = Array.isArray(g.members) ? g.members : []
+    const roundSummary = getGroupRoundSummary(g)
+    return `<div class="chat-session-card chat-group-card${active}" data-group-key="${escapeAttr(g.id)}">
+      <div class="chat-session-card-header">
+        <span class="chat-session-label" title="群聊：${escapeAttr(g.name)}">${escapeAttr(g.name)}</span>
+        <span class="chat-group-actions">
+          <button class="chat-session-mini" data-group-edit="${escapeAttr(g.id)}" title="编辑群聊">编</button>
+          <button class="chat-session-del" data-group-del="${escapeAttr(g.id)}" title="删除群聊">×</button>
+        </span>
+      </div>
+      <div class="chat-session-card-meta">
+        <span class="chat-session-agent">群聊</span>
+        <span>${members.length}成员</span>
+        <span class="chat-session-rounds" title="${escapeAttr(roundSummary.title)}">${escapeAttr(roundSummary.label)}</span>
+      </div>
+    </div>`
+  }).join('')
 }
 
 function formatSessionTime(ts) {
@@ -1570,6 +1636,7 @@ async function switchSession(newKey, options = {}) {
     if (!yes) return false
     discardWorkspaceChanges()
   }
+  _currentGroupId = ''
   _sessionKey = newKey
   localStorage.setItem(STORAGE_SESSION_KEY, newKey)
   _lastHistoryHash = ''
@@ -1659,8 +1726,9 @@ async function resetCurrentSession() {
     await wsClient.sessionsReset(_sessionKey)
     clearMessages()
     _lastHistoryHash = ''
+    resetTaskContext(_sessionKey, getSessionDisplayModel(_sessionKey), '重置会话后重新对话')
     appendSystemMessage(t('chat.sessionResetDone'))
-    toast(t('chat.sessionResetDone'), 'success')
+    toast(`${t('chat.sessionResetDone')}，当前任务轮次已清零`, 'success')
   } catch (e) {
     toast(`${t('common.operationFailed')}: ${e.message}`, 'error')
   }
@@ -1769,14 +1837,293 @@ function emitLobsterPhase(phase, message) {
   } catch {}
 }
 
-function injectCollabTemplate() {
-  if (!_textarea) return
-  _textarea.value = t('chat.collabTemplate')
-  emitLobsterPhase('thinking', '准备协同任务模板')
-  _textarea.focus()
-  _textarea.style.height = 'auto'
-  _textarea.style.height = Math.min(_textarea.scrollHeight, 150) + 'px'
-  updateSendState()
+function loadGroupSessions() {
+  try { _chatGroups = JSON.parse(localStorage.getItem(GROUP_SESSIONS_KEY) || '[]') || [] } catch { _chatGroups = [] }
+}
+
+function saveGroupSessions() {
+  localStorage.setItem(GROUP_SESSIONS_KEY, JSON.stringify(_chatGroups))
+}
+
+function loadTaskBoard() {
+  try { _taskBoard = JSON.parse(localStorage.getItem(TASK_BOARD_KEY) || '[]') || [] } catch { _taskBoard = [] }
+}
+
+function saveTaskBoard() {
+  localStorage.setItem(TASK_BOARD_KEY, JSON.stringify(_taskBoard.slice(0, 200)))
+}
+
+function loadTaskContexts() {
+  try { _taskContexts = JSON.parse(localStorage.getItem(TASK_CONTEXT_KEY) || '{}') || {} } catch { _taskContexts = {} }
+}
+
+function saveTaskContexts() {
+  localStorage.setItem(TASK_CONTEXT_KEY, JSON.stringify(_taskContexts))
+}
+
+function shortModelName(model) {
+  const value = normalizeModelValue(model) || ''
+  return value.includes('/') ? value.split('/').pop() : value
+}
+
+function getSessionDisplayModel(sessionKey, source = {}) {
+  return normalizeModelValue(source.model || source.runtimeModel || source.currentModel || getSessionRuntimeModel(sessionKey) || _selectedModel || _primaryModel || '', source.modelProvider || source.provider || '')
+}
+
+function taskContextKey(sessionKey, model) {
+  return `${sessionKey || ''}@@${normalizeModelValue(model) || 'unknown'}`
+}
+
+function ensureTaskContext(sessionKey, model, prompt = '') {
+  const key = taskContextKey(sessionKey, model)
+  let ctx = _taskContexts[key]
+  if (!ctx) {
+    ctx = { taskId: uuid(), sessionKey, model: normalizeModelValue(model) || 'unknown', prompt: prompt || '当前任务', roundCount: 0, createdAt: Date.now(), updatedAt: Date.now() }
+    _taskContexts[key] = ctx
+    saveTaskContexts()
+  }
+  return ctx
+}
+
+function resetTaskContext(sessionKey, model, prompt = '重新对话') {
+  const key = taskContextKey(sessionKey, model)
+  const ctx = { taskId: uuid(), sessionKey, model: normalizeModelValue(model) || 'unknown', prompt, roundCount: 0, createdAt: Date.now(), updatedAt: Date.now() }
+  _taskContexts[key] = ctx
+  saveTaskContexts()
+  refreshSessionList()
+  return ctx
+}
+
+function getCurrentTaskRoundInfo(sessionKey, model) {
+  const normalized = normalizeModelValue(model) || getSessionRuntimeModel(sessionKey) || _selectedModel || _primaryModel || 'unknown'
+  const ctx = _taskContexts[taskContextKey(sessionKey, normalized)]
+  const rounds = Number(ctx?.roundCount || 0)
+  const modelLabel = shortModelName(normalized) || '模型'
+  return { label: `${modelLabel} · 当前任务 ${rounds}轮`, title: ctx?.prompt ? `当前任务：${ctx.prompt}\n模型：${normalized}\n轮次：${rounds}` : `当前任务未开始\n模型：${normalized}\n轮次：${rounds}`, rounds }
+}
+
+function getGroupRoundSummary(group) {
+  const members = Array.isArray(group?.members) ? group.members : []
+  const lines = []
+  let total = 0
+  for (const m of members) {
+    const model = getSessionDisplayModel(m.sessionKey)
+    const info = getCurrentTaskRoundInfo(m.sessionKey, model)
+    total += info.rounds
+    lines.push(`${m.label || getDisplayLabel(m.sessionKey)} / ${shortModelName(model)}：${info.rounds}轮`)
+  }
+  return { label: `当前任务 ${total}轮`, title: lines.join('\n') || '暂无成员轮次' }
+}
+
+function createTaskRecord({ sessionKey, agentId = '', model = '', prompt = '', source = 'single', groupId = '', title = '' }) {
+  const normalizedModel = normalizeModelValue(model) || getSessionDisplayModel(sessionKey)
+  const ctx = ensureTaskContext(sessionKey, normalizedModel, prompt)
+  const task = {
+    id: uuid(), taskId: ctx.taskId, sessionKey, agentId: agentId || parseSessionAgent(sessionKey) || 'main', model: normalizedModel,
+    title: title || prompt.slice(0, 48) || '新任务', prompt, status: 'sending', progress: TASK_PROGRESS.sending,
+    runId: '', error: '', source, groupId, roundCount: ctx.roundCount || 0, createdAt: Date.now(), updatedAt: Date.now(), completedAt: null, highlighted: false,
+  }
+  _taskBoard.unshift(task)
+  saveTaskBoard()
+  _lastSentTaskId = task.id
+  return task
+}
+
+function updateTask(taskId, patch = {}) {
+  const task = _taskBoard.find(t => t.id === taskId)
+  if (!task) return null
+  Object.assign(task, patch, { updatedAt: Date.now() })
+  saveTaskBoard()
+  updateOpenTaskBoardModal()
+  return task
+}
+
+function updateTaskByRunOrSession(runId, sessionKey, patch = {}) {
+  let task = runId ? _taskBoard.find(t => t.runId === runId) : null
+  if (!task && runId && _pendingTaskByRunId.has(runId)) task = _taskBoard.find(t => t.id === _pendingTaskByRunId.get(runId))
+  if (!task && sessionKey) task = _taskBoard.find(t => t.sessionKey === sessionKey && ['sending', 'queued', 'thinking', 'streaming', 'tool', 'finalizing', 'running'].includes(t.status))
+  if (!task && _lastSentTaskId) task = _taskBoard.find(t => t.id === _lastSentTaskId)
+  if (!task) return null
+  if (runId && !task.runId) {
+    task.runId = runId
+    _pendingTaskByRunId.set(runId, task.id)
+  }
+  return updateTask(task.id, patch)
+}
+
+function completeTaskRound(task) {
+  if (!task || task._roundCounted) return
+  const ctx = ensureTaskContext(task.sessionKey, task.model, task.prompt)
+  ctx.roundCount = Number(ctx.roundCount || 0) + 1
+  ctx.updatedAt = Date.now()
+  task.roundCount = ctx.roundCount
+  task._roundCounted = true
+  saveTaskContexts()
+}
+
+function escapeRegExp(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function parseGroupMentions(text, group) {
+  const members = Array.isArray(group?.members) ? group.members : []
+  if (!members.length) return { targets: [], cleanText: text }
+  if (/@(全部|all)(?=\s|$|：|:)/i.test(text)) return { targets: members, cleanText: text.replace(/@(全部|all)(?=\s|$|：|:)/ig, '').trim() }
+  const targets = []
+  let cleanText = text
+  for (const m of members) {
+    const names = [m.agentId, m.label, parseSessionAgent(m.sessionKey), parseSessionLabel(m.sessionKey), getDisplayLabel(m.sessionKey)].filter(Boolean)
+    if (names.some(name => new RegExp(`@${escapeRegExp(name)}(?=\\s|$|：|:)`, 'i').test(text))) {
+      targets.push(m)
+      names.forEach(name => { cleanText = cleanText.replace(new RegExp(`@${escapeRegExp(name)}(?=\\s|$|：|:)`, 'ig'), '') })
+    }
+  }
+  return { targets: targets.length ? targets : members, cleanText: cleanText.trim() || text }
+}
+
+function showGroupEditor(groupId = '') {
+  const group = _chatGroups.find(g => g.id === groupId) || null
+  const existingMembers = new Set((group?.members || []).map(m => m.sessionKey))
+  wsClient.sessionsList(200, { includeGlobal: true, includeUnknown: true }).then(result => {
+    const sessions = normalizeSessionList(result?.sessions || result || [])
+    const options = sessions.map(s => {
+      const key = s.sessionKey || s.key
+      const checked = existingMembers.has(key) ? 'checked' : ''
+      return `<label class="chat-group-member-option"><input type="checkbox" value="${escapeAttr(key)}" ${checked}> <span>${escapeAttr(getDisplayLabel(key))}</span><small>${escapeAttr(parseSessionAgent(key) || 'main')}</small></label>`
+    }).join('')
+    const overlay = showContentModal({
+      title: group ? '编辑 Agent 群聊' : '新建 Agent 群聊',
+      width: 620,
+      content: `<div class="chat-group-editor">
+        <label class="form-label">群聊名称</label>
+        <input class="form-input" id="chat-group-name" value="${escapeAttr(group?.name || '')}" placeholder="例如：开发讨论组">
+        <div class="form-hint">选择要拉入群聊的 Agent 会话；群聊中可用 @Agent、@会话名 或 @全部 定向下达任务。</div>
+        <div class="chat-group-member-list">${options || '<div class="chat-session-empty">暂无可选会话</div>'}</div>
+      </div>`,
+      buttons: [{ id: 'chat-group-save', label: '保存群聊', className: 'btn btn-primary btn-sm' }]
+    })
+    overlay.querySelector('#chat-group-save')?.addEventListener('click', () => {
+      const name = overlay.querySelector('#chat-group-name')?.value.trim()
+      if (!name) { toast('请输入群聊名称', 'warning'); return }
+      const selected = Array.from(overlay.querySelectorAll('.chat-group-member-list input:checked')).map(input => {
+        const key = input.value
+        return { type: 'session', sessionKey: key, agentId: parseSessionAgent(key) || 'main', label: getDisplayLabel(key) }
+      })
+      if (!selected.length) { toast('至少选择一个 Agent 会话', 'warning'); return }
+      if (group) Object.assign(group, { name, members: selected, updatedAt: Date.now() })
+      else _chatGroups.unshift({ id: uuid(), name, members: selected, createdAt: Date.now(), updatedAt: Date.now() })
+      saveGroupSessions()
+      renderGroupSessionList()
+      overlay.close()
+      toast('群聊已保存', 'success')
+    })
+  }).catch(e => toast(`加载会话失败: ${e.message}`, 'error'))
+}
+
+async function deleteGroupSession(groupId) {
+  const group = _chatGroups.find(g => g.id === groupId)
+  if (!group) return
+  const yes = await showConfirm(`确认删除群聊“${group.name}”？不会删除真实 Agent 会话。`)
+  if (!yes) return
+  _chatGroups = _chatGroups.filter(g => g.id !== groupId)
+  if (_currentGroupId === groupId) _currentGroupId = ''
+  saveGroupSessions()
+  renderGroupSessionList()
+}
+
+function switchGroupSession(groupId) {
+  const group = _chatGroups.find(g => g.id === groupId)
+  if (!group) return
+  _currentGroupId = groupId
+  const first = group.members?.[0]?.sessionKey
+  if (first) _sessionKey = first
+  localStorage.setItem(STORAGE_SESSION_KEY, _sessionKey || '')
+  updateSessionTitle()
+  clearMessages()
+  appendSystemMessage(`已进入 Agent 群聊：${group.name}\n成员：${(group.members || []).map(m => m.label || m.agentId || m.sessionKey).join('、')}\n提示：可使用 @Agent、@会话名 或 @全部 定向下达任务。`)
+  renderSessionList(_lastSessionList)
+}
+
+function toggleTaskBoard() {
+  const overlay = showContentModal({ title: '任务清单', width: 860, content: '<div id="chat-task-board-modal"></div>', buttons: [{ id: 'chat-task-new', label: '新建任务', className: 'btn btn-secondary btn-sm' }] })
+  overlay.classList.add('chat-task-board-overlay')
+  overlay.querySelector('#chat-task-new')?.addEventListener('click', () => showTaskEditor(null, overlay))
+  updateTaskBoardModal(overlay)
+}
+
+function updateOpenTaskBoardModal() {
+  const overlay = document.querySelector('.chat-task-board-overlay')
+  if (overlay) updateTaskBoardModal(overlay)
+}
+
+function updateTaskBoardModal(overlay) {
+  const box = overlay?.querySelector('#chat-task-board-modal')
+  if (!box) return
+  if (!_taskBoard.length) {
+    box.innerHTML = '<div class="chat-task-empty">暂无任务。发送消息或新建任务后会自动记录。</div>'
+    return
+  }
+  const groups = [
+    ['running', '执行中', t => ['sending','queued','thinking','streaming','tool','finalizing','running'].includes(t.status)],
+    ['done', '已完成', t => t.status === 'done'],
+    ['error', '失败/中止', t => ['error','aborted'].includes(t.status)],
+  ]
+  box.innerHTML = groups.map(([cls, title, pred]) => {
+    const tasks = _taskBoard.filter(pred)
+    return `<div class="chat-task-section"><h4>${title}</h4>${tasks.length ? tasks.map(renderTaskCard).join('') : '<div class="chat-task-empty small">暂无</div>'}</div>`
+  }).join('')
+  box.onclick = (e) => {
+    const edit = e.target.closest('[data-task-edit]')
+    if (edit) { showTaskEditor(edit.dataset.taskEdit, overlay); return }
+    const rerun = e.target.closest('[data-task-rerun]')
+    if (rerun) { rerunTask(rerun.dataset.taskRerun); return }
+  }
+}
+
+function renderTaskCard(task) {
+  const statusLabel = ({ sending:'发送中', queued:'排队中', thinking:'思考中', streaming:'生成中', tool:'工具调用', finalizing:'整理中', done:'已完成', error:'失败', aborted:'已中止', running:'执行中' })[task.status] || task.status
+  return `<div class="chat-task-card ${escapeAttr(task.status)} ${task.highlighted ? 'highlight' : ''}">
+    <div class="chat-task-head"><strong>${escapeAttr(task.title || task.prompt || '任务')}</strong><span>${escapeAttr(statusLabel)}</span></div>
+    <div class="chat-task-meta">Agent：${escapeAttr(task.agentId || 'main')} · 会话：${escapeAttr(getDisplayLabel(task.sessionKey))} · 模型：${escapeAttr(shortModelName(task.model))} · 当前任务 ${Number(task.roundCount || 0)}轮</div>
+    <div class="chat-task-prompt">${escapeAttr(task.prompt || '')}</div>
+    <div class="chat-task-progress"><div style="width:${Math.max(0, Math.min(100, Number(task.progress || 0)))}%"></div></div>
+    <div class="chat-task-actions"><button class="btn btn-sm btn-ghost" data-task-edit="${escapeAttr(task.id)}">编辑</button><button class="btn btn-sm btn-primary" data-task-rerun="${escapeAttr(task.id)}">提交重新执行</button></div>
+  </div>`
+}
+
+function showTaskEditor(taskId, parentOverlay = null) {
+  const task = _taskBoard.find(t => t.id === taskId)
+  wsClient.sessionsList(200, { includeGlobal: true, includeUnknown: true }).then(result => {
+    const sessions = normalizeSessionList(result?.sessions || result || [])
+    const options = sessions.map(s => `<option value="${escapeAttr(s.sessionKey || s.key)}" ${(s.sessionKey || s.key) === (task?.sessionKey || _sessionKey) ? 'selected' : ''}>${escapeAttr(getDisplayLabel(s.sessionKey || s.key))}</option>`).join('')
+    const overlay = showContentModal({ title: task ? '编辑任务' : '新建任务', width: 620, content: `<div class="chat-task-editor">
+      <label class="form-label">目标会话 / Agent</label><select class="form-input" id="task-session">${options}</select>
+      <label class="form-label">任务内容</label><textarea class="form-input" id="task-prompt" rows="6" style="resize:vertical">${escapeAttr(task?.prompt || '')}</textarea>
+      <div class="form-hint">提交后会为目标会话开启新的当前任务上下文，轮次从 0 重新计算。</div>
+    </div>`, buttons: [{ id: 'task-save-run', label: '提交执行', className: 'btn btn-primary btn-sm' }] })
+    overlay.querySelector('#task-save-run')?.addEventListener('click', () => {
+      const sessionKey = overlay.querySelector('#task-session')?.value
+      const prompt = overlay.querySelector('#task-prompt')?.value.trim()
+      if (!sessionKey || !prompt) { toast('请选择会话并填写任务内容', 'warning'); return }
+      overlay.close()
+      parentOverlay?.close?.()
+      submitTaskToSession(sessionKey, prompt, task)
+    })
+  })
+}
+
+function submitTaskToSession(sessionKey, prompt, oldTask = null) {
+  const model = getSessionDisplayModel(sessionKey)
+  resetTaskContext(sessionKey, model, prompt)
+  const task = createTaskRecord({ sessionKey, model, prompt, title: prompt.slice(0, 48), source: 'task-board' })
+  if (oldTask) updateTask(oldTask.id, { status: 'aborted', progress: 100, error: '已重新提交为新任务' })
+  wsClient.chatSend(sessionKey, prompt).then(() => toast('任务已提交', 'success')).catch(e => updateTask(task.id, { status: 'error', progress: 100, error: e.message }))
+}
+
+function rerunTask(taskId) {
+  const task = _taskBoard.find(t => t.id === taskId)
+  if (!task) return
+  submitTaskToSession(task.sessionKey, task.prompt, task)
 }
 
 // ── 消息发送 ──
@@ -1796,8 +2143,30 @@ function sendMessage() {
   const attachments = [..._attachments]
   _attachments = []
   renderAttachments()
+  const activeGroup = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+  if (activeGroup) { doGroupSend(activeGroup, text, attachments); return }
   if (_isSending || _isStreaming) { _messageQueue.push({ text, attachments }); return }
   doSend(text, attachments)
+}
+
+async function doGroupSend(group, text, attachments = []) {
+  const { targets, cleanText } = parseGroupMentions(text, group)
+  if (!targets.length) { toast('群聊没有可发送成员', 'warning'); return }
+  appendUserMessage(`[${group.name}] ${text}`, attachments)
+  appendSystemMessage(`群聊任务已发送给：${targets.map(t => t.label || t.agentId || t.sessionKey).join('、')}`)
+  for (const target of targets) {
+    const sessionKey = target.sessionKey
+    const model = getSessionDisplayModel(sessionKey)
+    const task = createTaskRecord({ sessionKey, agentId: target.agentId, model, prompt: cleanText, source: 'group', groupId: group.id, title: cleanText.slice(0, 48) })
+    try {
+      await wsClient.chatSend(sessionKey, cleanText, attachments.length ? attachments : undefined)
+      updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
+    } catch (err) {
+      updateTask(task.id, { status: 'error', progress: 100, error: err.message })
+      appendSystemMessage(`发送给 ${target.label || sessionKey} 失败：${err.message}`)
+    }
+  }
+  refreshSessionList()
 }
 
 async function doSend(text, attachments = []) {
@@ -1811,6 +2180,7 @@ async function doSend(text, attachments = []) {
     id: uuid(), sessionKey: _sessionKey, role: 'user', content: text, timestamp: Date.now(),
     attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
   })
+  const currentTask = createTaskRecord({ sessionKey: _sessionKey, model: getSessionDisplayModel(_sessionKey), prompt: text, source: 'single', title: text.slice(0, 48) })
   showTyping(true)
   _isSending = true
   updateSendState()
@@ -1825,11 +2195,15 @@ async function doSend(text, attachments = []) {
     _cancelResponseWatchdog()
     appendSystemMessage(`${t('chat.sendFailed')}${err.message}`)
     setReplyStatus('error', `⚠️ ${t('chat.sendFailed')}${err.message}`, { runId: _currentRunId || '' })
+    updateTask(currentTask.id, { status: 'error', progress: 100, error: err.message })
   } finally {
     _isSending = false
     if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
-    if (!sendFailed && !_isStreaming) setReplyStatus('thinking', CHAT_REPLY_STATUS_TEXT.thinking, { runId: _currentRunId || '' })
+    if (!sendFailed && !_isStreaming) {
+      setReplyStatus('thinking', CHAT_REPLY_STATUS_TEXT.thinking, { runId: _currentRunId || '' })
+      updateTask(currentTask.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
+    }
   }
 }
 
@@ -1891,11 +2265,28 @@ function handleEvent(msg) {
 }
 
 function handleChatEvent(payload) {
-  // sessionKey 过滤
-  if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) return
-
   const { state } = payload
   const runId = payload.runId
+  const eventSessionKey = payload.sessionKey || _sessionKey
+  const taskPatchState = state === 'delta' ? 'streaming' : (state === 'final' ? 'finalizing' : state)
+  const trackedTask = ['queued', 'delta', 'final', 'aborted', 'error'].includes(state)
+    ? updateTaskByRunOrSession(runId, eventSessionKey, { status: taskPatchState, progress: TASK_PROGRESS[taskPatchState] || TASK_PROGRESS[state] || 50 })
+    : null
+
+  // 群聊会同时把任务发给多个真实会话；非当前会话的事件只更新任务清单和轮次，不渲染到当前聊天窗口，避免串流。
+  if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) {
+    if (state === 'final') {
+      const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
+      completeTaskRound(doneTask)
+      refreshSessionList()
+    } else if (state === 'aborted') {
+      updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
+    } else if (state === 'error') {
+      const errMsg = payload.errorMessage || payload.error?.message || t('common.error')
+      updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
+    }
+    return
+  }
 
   // 重复 run 过滤：跳过已完成的 runId 的后续事件（Gateway 可能对同一消息触发多个 run）
   if (runId && state === 'final' && _seenRunIds.has(runId)) {
@@ -2016,7 +2407,10 @@ function handleChatEvent(payload) {
       meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true })
       wrapper.appendChild(meta)
     }
+    const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
+    completeTaskRound(doneTask)
     setReplyStatus('done', CHAT_REPLY_STATUS_TEXT.done, { runId: runId || _currentRunId })
+    refreshSessionList()
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
@@ -2050,6 +2444,7 @@ function handleChatEvent(payload) {
       _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
     }
     appendSystemMessage(t('chat.generationStopped'))
+    updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'aborted', progress: 100 })
     setReplyStatus('aborted', CHAT_REPLY_STATUS_TEXT.aborted, { runId: _currentRunId })
     resetStreamState()
     processMessageQueue()
@@ -2088,6 +2483,7 @@ function handleChatEvent(payload) {
 
     showTyping(false)
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
+    updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
     setReplyStatus('error', `⚠️ ${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId })
     resetStreamState()
     processMessageQueue()
