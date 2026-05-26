@@ -1688,9 +1688,12 @@
     top: 0;
     z-index: 850;
     height: 100vh;
-    width: 220px;
-    min-width: 220px;
+    width: min(260px, 82vw);
+    min-width: min(260px, 82vw);
     box-shadow: 4px 0 24px rgba(0,0,0,.15);
+  }
+  .chat-sidebar:not(.open) > * {
+    visibility: hidden;
   }
   .chat-input-area {
     padding: var(--space-sm);
@@ -1699,6 +1702,31 @@
   .chat-header {
     padding: var(--space-sm) var(--space-sm);
     gap: 6px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .chat-status {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .chat-header-actions {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .chat-model-group {
+    flex-shrink: 0;
+  }
+  #chat-model-select {
+    width: 160px !important;
+    max-width: 42vw !important;
+  }
+  #btn-task-board {
+    min-width: 58px;
+    white-space: nowrap;
   }
   .chat-workspace-trigger-label {
     display: none;
