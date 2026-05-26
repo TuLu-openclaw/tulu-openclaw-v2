@@ -1719,10 +1719,25 @@ async function deleteSession(key) {
 
 async function resetCurrentSession() {
   if (!_sessionKey) return
-  const label = getDisplayLabel(_sessionKey)
-  const yes = await showConfirm(t('chat.confirmResetSession', { label }))
+  const group = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+  const label = group ? `群聊：${group.name}` : getDisplayLabel(_sessionKey)
+  const yes = await showConfirm(group ? `确认重置${label}？
+这会重置群聊内所有成员会话，并清零每个成员的当前任务轮次。` : t('chat.confirmResetSession', { label }))
   if (!yes) return
   try {
+    if (group) {
+      const members = Array.isArray(group.members) ? group.members : []
+      for (const member of members) {
+        if (!member.sessionKey) continue
+        await wsClient.sessionsReset(member.sessionKey)
+        resetTaskContext(member.sessionKey, getSessionDisplayModel(member.sessionKey), '群聊重置后重新对话')
+      }
+      clearMessages()
+      _lastHistoryHash = ''
+      appendSystemMessage(`群聊“${group.name}”已重置，所有成员当前任务轮次已清零。`)
+      toast('群聊已重置，当前任务轮次已清零', 'success')
+      return
+    }
     await wsClient.sessionsReset(_sessionKey)
     clearMessages()
     _lastHistoryHash = ''
@@ -1736,7 +1751,10 @@ async function resetCurrentSession() {
 
 function updateSessionTitle() {
   const el = _page?.querySelector('#chat-title')
-  if (el) el.textContent = getDisplayLabel(_sessionKey)
+  if (el) {
+    const group = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+    el.textContent = group ? `群聊：${group.name}` : getDisplayLabel(_sessionKey)
+  }
   syncWorkspaceContext(false)
 }
 
@@ -1842,7 +1860,7 @@ function loadGroupSessions() {
 }
 
 function saveGroupSessions() {
-  localStorage.setItem(GROUP_SESSIONS_KEY, JSON.stringify(_chatGroups))
+  try { localStorage.setItem(GROUP_SESSIONS_KEY, JSON.stringify(_chatGroups)) } catch (e) { console.warn('[chat] 保存群聊失败:', e) }
 }
 
 function loadTaskBoard() {
@@ -1850,7 +1868,7 @@ function loadTaskBoard() {
 }
 
 function saveTaskBoard() {
-  localStorage.setItem(TASK_BOARD_KEY, JSON.stringify(_taskBoard.slice(0, 200)))
+  try { localStorage.setItem(TASK_BOARD_KEY, JSON.stringify(_taskBoard.slice(0, 200))) } catch (e) { console.warn('[chat] 保存任务清单失败:', e) }
 }
 
 function loadTaskContexts() {
@@ -1858,7 +1876,7 @@ function loadTaskContexts() {
 }
 
 function saveTaskContexts() {
-  localStorage.setItem(TASK_CONTEXT_KEY, JSON.stringify(_taskContexts))
+  try { localStorage.setItem(TASK_CONTEXT_KEY, JSON.stringify(_taskContexts)) } catch (e) { console.warn('[chat] 保存任务上下文失败:', e) }
 }
 
 function shortModelName(model) {
@@ -1942,7 +1960,10 @@ function updateTaskByRunOrSession(runId, sessionKey, patch = {}) {
   let task = runId ? _taskBoard.find(t => t.runId === runId) : null
   if (!task && runId && _pendingTaskByRunId.has(runId)) task = _taskBoard.find(t => t.id === _pendingTaskByRunId.get(runId))
   if (!task && sessionKey) task = _taskBoard.find(t => t.sessionKey === sessionKey && ['sending', 'queued', 'thinking', 'streaming', 'tool', 'finalizing', 'running'].includes(t.status))
-  if (!task && _lastSentTaskId) task = _taskBoard.find(t => t.id === _lastSentTaskId)
+  if (!task && _lastSentTaskId) {
+    const lastTask = _taskBoard.find(t => t.id === _lastSentTaskId)
+    if (lastTask && (!sessionKey || lastTask.sessionKey === sessionKey)) task = lastTask
+  }
   if (!task) return null
   if (runId && !task.runId) {
     task.runId = runId
@@ -1959,6 +1980,8 @@ function completeTaskRound(task) {
   task.roundCount = ctx.roundCount
   task._roundCounted = true
   saveTaskContexts()
+  saveTaskBoard()
+  updateOpenTaskBoardModal()
 }
 
 function escapeRegExp(str) {
@@ -2031,7 +2054,7 @@ async function deleteGroupSession(groupId) {
   renderGroupSessionList()
 }
 
-function switchGroupSession(groupId) {
+async function switchGroupSession(groupId) {
   const group = _chatGroups.find(g => g.id === groupId)
   if (!group) return
   _currentGroupId = groupId
@@ -2040,7 +2063,18 @@ function switchGroupSession(groupId) {
   localStorage.setItem(STORAGE_SESSION_KEY, _sessionKey || '')
   updateSessionTitle()
   clearMessages()
-  appendSystemMessage(`已进入 Agent 群聊：${group.name}\n成员：${(group.members || []).map(m => m.label || m.agentId || m.sessionKey).join('、')}\n提示：可使用 @Agent、@会话名 或 @全部 定向下达任务。`)
+  if (isStorageAvailable()) {
+    const local = await getLocalMessages(`group:${group.id}`, 80)
+    local.forEach(msg => {
+      if (!msg.content && !msg.attachments?.length) return
+      const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
+      if (msg.role === 'user') appendUserMessage(`[${group.name}] ${msg.content || ''}`, msg.attachments || null, msgTime)
+      else appendSystemMessage(msg.content || '')
+    })
+  }
+  appendSystemMessage(`已进入 Agent 群聊：${group.name}
+成员：${(group.members || []).map(m => m.label || m.agentId || m.sessionKey).join('、')}
+提示：可使用 @Agent、@会话名 或 @全部 定向下达任务。`)
   renderSessionList(_lastSessionList)
 }
 
@@ -2117,7 +2151,12 @@ function submitTaskToSession(sessionKey, prompt, oldTask = null) {
   resetTaskContext(sessionKey, model, prompt)
   const task = createTaskRecord({ sessionKey, model, prompt, title: prompt.slice(0, 48), source: 'task-board' })
   if (oldTask) updateTask(oldTask.id, { status: 'aborted', progress: 100, error: '已重新提交为新任务' })
-  wsClient.chatSend(sessionKey, prompt).then(() => toast('任务已提交', 'success')).catch(e => updateTask(task.id, { status: 'error', progress: 100, error: e.message }))
+  wsClient.chatSend(sessionKey, prompt)
+    .then(() => toast('任务已提交', 'success'))
+    .catch(e => {
+      updateTask(task.id, { status: 'error', progress: 100, error: e.message })
+      toast(`任务提交失败：${e.message}`, 'error')
+    })
 }
 
 function rerunTask(taskId) {
@@ -2136,6 +2175,11 @@ function sendMessage() {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
+  const activeGroup = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+  if (activeGroup && _isSending) {
+    toast('群聊任务正在分发中，请稍后再发送', 'warning')
+    return
+  }
   hideCmdPanel()
   _textarea.value = ''
   _textarea.style.height = 'auto'
@@ -2143,8 +2187,10 @@ function sendMessage() {
   const attachments = [..._attachments]
   _attachments = []
   renderAttachments()
-  const activeGroup = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
-  if (activeGroup) { doGroupSend(activeGroup, text, attachments); return }
+  if (activeGroup) {
+    doGroupSend(activeGroup, text, attachments)
+    return
+  }
   if (_isSending || _isStreaming) { _messageQueue.push({ text, attachments }); return }
   doSend(text, attachments)
 }
@@ -2152,21 +2198,32 @@ function sendMessage() {
 async function doGroupSend(group, text, attachments = []) {
   const { targets, cleanText } = parseGroupMentions(text, group)
   if (!targets.length) { toast('群聊没有可发送成员', 'warning'); return }
+  _isSending = true
+  updateSendState()
   appendUserMessage(`[${group.name}] ${text}`, attachments)
+  saveMessage({
+    id: uuid(), sessionKey: `group:${group.id}`, role: 'user', content: text, timestamp: Date.now(),
+    attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
+  })
   appendSystemMessage(`群聊任务已发送给：${targets.map(t => t.label || t.agentId || t.sessionKey).join('、')}`)
-  for (const target of targets) {
-    const sessionKey = target.sessionKey
-    const model = getSessionDisplayModel(sessionKey)
-    const task = createTaskRecord({ sessionKey, agentId: target.agentId, model, prompt: cleanText, source: 'group', groupId: group.id, title: cleanText.slice(0, 48) })
-    try {
-      await wsClient.chatSend(sessionKey, cleanText, attachments.length ? attachments : undefined)
-      updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
-    } catch (err) {
-      updateTask(task.id, { status: 'error', progress: 100, error: err.message })
-      appendSystemMessage(`发送给 ${target.label || sessionKey} 失败：${err.message}`)
+  try {
+    for (const target of targets) {
+      const sessionKey = target.sessionKey
+      const model = getSessionDisplayModel(sessionKey)
+      const task = createTaskRecord({ sessionKey, agentId: target.agentId, model, prompt: cleanText, source: 'group', groupId: group.id, title: cleanText.slice(0, 48) })
+      try {
+        await wsClient.chatSend(sessionKey, cleanText, attachments.length ? attachments : undefined)
+        updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
+      } catch (err) {
+        updateTask(task.id, { status: 'error', progress: 100, error: err.message })
+        appendSystemMessage(`发送给 ${target.label || sessionKey} 失败：${err.message}`)
+      }
     }
+  } finally {
+    _isSending = false
+    updateSendState()
+    refreshSessionList()
   }
-  refreshSessionList()
 }
 
 async function doSend(text, attachments = []) {
