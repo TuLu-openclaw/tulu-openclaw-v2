@@ -422,9 +422,9 @@ export async function render() {
   // 首次使用引导提示
   showPageGuide(_messagesEl)
   restoreReplyStatus()
-  // 数字人不能禁用，但不能阻塞聊天页首屏。
-  // 先返回聊天 DOM，数字人面板在下一轮空闲时间懒挂载，避免触发 router 的模块/渲染超时。
-  scheduleDigitalHumanMount()
+  // 数字人默认关闭时必须完全不挂载，避免隐藏状态仍创建视频/图片 DOM 导致聊天模块超时。
+  // 只有用户点击顶部“数字人”按钮手动开启时，才调用 ensureDigitalHumanMounted() 初始化。
+  if (loadDigitalHumanConfig().visible === true) scheduleDigitalHumanMount()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
   loadModelOptions()
@@ -958,8 +958,9 @@ function bindEvents(page) {
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-digital-human')?.addEventListener('click', () => {
     const cfg = loadDigitalHumanConfig()
-    saveDigitalHumanConfig({ visible: !cfg.visible })
-    ensureDigitalHumanMounted()
+    const nextVisible = !cfg.visible
+    saveDigitalHumanConfig({ visible: nextVisible })
+    if (nextVisible) ensureDigitalHumanMounted()
   })
   page.querySelector('#btn-new-session')?.addEventListener('click', () => showNewSessionDialog())
   page.querySelector('#btn-cmd')?.addEventListener('click', () => toggleCmdPanel())
