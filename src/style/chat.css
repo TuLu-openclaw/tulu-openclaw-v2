@@ -1956,7 +1956,7 @@
 
 /* Agent 群聊 / 任务清单 */
 .chat-session-sections {
-  gap: 4px;
+  gap: 2px;
 }
 
 .chat-session-section {
@@ -1966,23 +1966,25 @@
 }
 
 .chat-session-section:first-child {
-  flex: 1 1 72%;
+  flex: 1 1 auto;
 }
 
 .chat-session-section-groups {
-  flex: 0 0 26%;
-  min-height: 110px;
+  flex: 0 0 118px;
+  min-height: 92px;
+  max-height: 30%;
   border-top: 1px solid var(--border);
-  padding-top: 3px;
+  padding-top: 1px;
 }
 
 .chat-session-section-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 2px 6px;
-  min-height: 22px;
+  gap: 4px;
+  padding: 0 5px;
+  min-height: 18px;
+  line-height: 16px;
   color: var(--text-tertiary);
   font-size: 10px;
   font-weight: 700;
@@ -1995,9 +1997,9 @@
   background: var(--bg-secondary);
   color: var(--text-secondary);
   border-radius: 4px;
-  padding: 0 5px;
-  min-height: 18px;
-  line-height: 16px;
+  padding: 0 4px;
+  min-height: 16px;
+  line-height: 14px;
   font-size: 10px;
   cursor: pointer;
 }
