@@ -1572,6 +1572,22 @@ function normalizeSessionList(rawSessions = []) {
   return Array.from(byKey.values()).sort((a, b) => (b.updatedAt || b.lastActivity || b.createdAt || 0) - (a.updatedAt || a.lastActivity || a.createdAt || 0))
 }
 
+
+function updateSessionListActiveState() {
+  if (!_sessionListEl) return
+  _sessionListEl.querySelectorAll('.chat-session-card[data-key]').forEach(card => {
+    card.classList.toggle('active', !_currentGroupId && card.dataset.key === _sessionKey)
+  })
+  _sessionListEl.querySelectorAll('.chat-session-card[data-group-key]').forEach(card => {
+    card.classList.toggle('active', !!_currentGroupId && card.dataset.groupKey === _currentGroupId)
+  })
+}
+
+function refreshSessionListSoon() {
+  renderSessionList(_lastSessionList || [])
+  Promise.resolve().then(() => refreshSessionList())
+}
+
 function renderSessionList(sessions) {
   if (!_sessionListEl) return
   sessions = normalizeSessionList(sessions)
@@ -1579,6 +1595,7 @@ function renderSessionList(sessions) {
   if (_sessionListNormalEl) _sessionListNormalEl.innerHTML = normalHtml
   else _sessionListEl.innerHTML = normalHtml
   renderGroupSessionList()
+  updateSessionListActiveState()
 
   _sessionListEl.onclick = (e) => {
     const delBtn = e.target.closest('[data-del]')
@@ -1706,7 +1723,7 @@ async function switchSession(newKey, options = {}) {
   applyRuntimeModelToSelect(newKey)
   clearMessages()
   loadHistory()
-  refreshSessionList()
+  refreshSessionListSoon()
   return true
 }
 
@@ -2225,6 +2242,7 @@ async function switchGroupSession(groupId, options = {}) {
 成员：${(group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、')}
 提示：群聊对话会在本界面聚合显示；成员之间可见群聊上下文，但各自真实会话记忆仍保持隔离。`)
   renderSessionList(_lastSessionList)
+  updateSessionListActiveState()
   applyRuntimeModelToSelect(getGroupFallbackSessionKey(group))
 }
 
