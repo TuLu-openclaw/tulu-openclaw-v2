@@ -644,7 +644,7 @@ async function checkHotUpdate(cards, panelVersion) {
         <span style="color:var(--accent)">${t('about.newVersion')}: v${ver}</span>
         ${changelog ? `<span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${changelog}</span>` : ''}
         <button class="btn btn-primary btn-sm" id="btn-hot-download" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.hotUpdate')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.fullInstaller')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">${t('about.fullInstaller')}</a>
       `
       meta.querySelector('#btn-hot-download')?.addEventListener('click', async () => {
         const btn = meta.querySelector('#btn-hot-download')
@@ -673,7 +673,7 @@ async function checkHotUpdate(cards, panelVersion) {
         }
       })
     } else if (!info.compatible) {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系星枢官方</span>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系星枢官方</span>`
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
     }
@@ -729,18 +729,18 @@ const PROJECTS = [
   {
     name: '星枢OpenClaw',
     desc: t('about.project星枢OpenClaw'),
-    url: 'https://github.com/qingchencloud/星枢OpenClaw',
+    url: 'https://github.com/TuLu-openclaw/tulu-openclaw-v2',
     gitee: 'https://gitee.com/QtCodeCreators/星枢OpenClaw',
   },
   {
     name: 'ClawApp',
     desc: t('about.projectClawApp'),
-    url: 'https://github.com/qingchencloud/clawapp',
+    url: 'https://github.com/TuLu-openclaw/clawpanel',
   },
   {
     name: 'cftunnel',
     desc: t('about.projectCftunnel'),
-    url: 'https://github.com/qingchencloud/cftunnel',
+    url: 'https://github.com/TuLu-openclaw/cftunnel',
   },
 ]
 
@@ -803,10 +803,10 @@ function renderContribute(page) {
     <div id="contribute-content" style="display:none">
       <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:12px">${t('about.contributeDesc')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        <a class="btn btn-primary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/星枢OpenClaw/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
+        <a class="btn btn-primary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new" target="_blank" rel="noopener">${t('about.submitIssue')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/pulls" target="_blank" rel="noopener">${t('about.submitPR')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
       </div>
       <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('about.domesticMirrorHint')}</div>
     </div>

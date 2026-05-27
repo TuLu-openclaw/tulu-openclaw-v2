@@ -130,7 +130,7 @@ fn normalize_binding_match_value(value: &Value) -> Option<Value> {
                 .filter_map(normalize_binding_match_value)
                 .collect();
             if normalized.iter().all(|item| item.as_str().is_some()) {
-                normalized.sort_by(|a, b| a.as_str().unwrap().cmp(b.as_str().unwrap()));
+                normalized.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
             }
             Some(Value::Array(normalized))
         }
@@ -1272,76 +1272,72 @@ pub async fn run_channel_action(
 
     // weixin install 走 npx 而非 openclaw CLI
     if platform == "weixin" && action == "install" {
-        // 微信 CLI 版本号独立于 OpenClaw（1.0.x / 2.0.x），不能用 OpenClaw 版本号 pin
-        // v2.0.1 需要 OpenClaw >= 2026.3.22 的 SDK，旧版用 v1.0.3（最后兼容版）
-        let weixin_spec = if version.as_deref().is_some_and(|v| !v.is_empty()) {
-            format!(
+        // 版本参数校验：None 或空字符串都降级为 latest
+        let weixin_spec = match version.as_deref() {
+            Some(v) if !v.is_empty() => format!(
                 "@tencent-weixin/openclaw-weixin-cli@{}",
-                version.as_deref().unwrap()
-            )
-        } else {
-            // 检测 OpenClaw 版本，决定装哪个
-            let oc_ver = crate::utils::resolve_openclaw_cli_path()
-                .and_then(|_| {
-                    let out = crate::utils::openclaw_command()
-                        .arg("--version")
-                        .output()
-                        .ok()?;
-                    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                    // 输出格式: "OpenClaw 2026.3.24 (hash)" → 取第二个词（版本号）
-                    raw.split_whitespace()
-                        .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))
-                        .map(String::from)
-                })
-                .unwrap_or_default();
-            let oc_nums: Vec<u32> = oc_ver
-                .split(|c: char| !c.is_ascii_digit())
-                .filter_map(|s| s.parse().ok())
-                .collect();
-            let needs_legacy = oc_nums < vec![2026, 3, 22];
-            if needs_legacy {
-                // 微信插件所有版本都依赖 OpenClaw >= 2026.3.22 的 SDK
-                // 给用户两个选择：升级 OpenClaw 或手动尝试安装
-                let _ = app.emit(
-                    "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "error",
-                        "message": format!("⚠ 微信插件要求 OpenClaw >= 2026.3.22，当前版本 {}。", oc_ver) }),
-                );
-                let _ = app.emit(
-                    "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "info",
-                        "message": "建议方案 1（推荐）：先升级 OpenClaw，再安装微信插件" }),
-                );
-                let _ = app.emit(
-                    "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "info",
-                        "message": "  → 前往「服务管理」页面点击升级" }),
-                );
-                let _ = app.emit(
-                    "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "info",
-                        "message": "建议方案 2：在终端手动尝试安装（可能存在兼容问题）" }),
-                );
-                let _ = app.emit(
-                    "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "info",
-                        "message": "  → npx -y @tencent-weixin/openclaw-weixin-cli@latest install" }),
-                );
-                let _ = app.emit(
-                    "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "info",
-                        "message": "后续版本将升级推荐内核到最新版以完整支持微信插件。" }),
-                );
-                let _ = app.emit(
-                    "channel-action-progress",
-                    json!({ "platform": &platform, "action": &action, "progress": 100 }),
-                );
-                return Err(format!(
-                    "微信插件要求 OpenClaw >= 2026.3.22（当前 {}），请先升级 OpenClaw 或在终端手动安装",
-                    oc_ver
-                ));
+                v
+            ),
+            _ => {
+                // 检测 OpenClaw 版本，决定装哪个
+                let oc_ver = crate::utils::resolve_openclaw_cli_path()
+                    .and_then(|_| {
+                        let out = crate::utils::openclaw_command()
+                            .arg("--version")
+                            .output()
+                            .ok()?;
+                        let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                        raw.split_whitespace()
+                            .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))
+                            .map(String::from)
+                    })
+                    .unwrap_or_default();
+                let oc_nums: Vec<u32> = oc_ver
+                    .split(|c: char| !c.is_ascii_digit())
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+                if oc_nums < vec![2026, 3, 22] {
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "error",
+                            "message": format!("⚠ 微信插件要求 OpenClaw >= 2026.3.22，当前版本 {}。", oc_ver) }),
+                    );
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info",
+                            "message": "建议方案 1（推荐）：先升级 OpenClaw，再安装微信插件" }),
+                    );
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info",
+                            "message": "  → 前往「服务管理」页面点击升级" }),
+                    );
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info",
+                            "message": "建议方案 2：在终端手动尝试安装（可能存在兼容问题）" }),
+                    );
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info",
+                            "message": "  → npx -y @tencent-weixin/openclaw-weixin-cli@latest install" }),
+                    );
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info",
+                            "message": "后续版本将升级推荐内核到最新版以完整支持微信插件。" }),
+                    );
+                    let _ = app.emit(
+                        "channel-action-progress",
+                        json!({ "platform": &platform, "action": &action, "progress": 100 }),
+                    );
+                    return Err(format!(
+                        "微信插件要求 OpenClaw >= 2026.3.22（当前 {}），请先升级 OpenClaw 或在终端手动安装",
+                        oc_ver
+                    ));
+                }
+                "@tencent-weixin/openclaw-weixin-cli@latest".to_string()
             }
-            "@tencent-weixin/openclaw-weixin-cli@latest".to_string()
         };
         // 先清理旧的不兼容插件目录 + openclaw.json 中的残留配置
         // （否则 OpenClaw 配置校验会报 unknown channel / plugin not found）

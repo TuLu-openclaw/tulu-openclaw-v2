@@ -249,7 +249,7 @@ function inlineFormat(text) {
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
       const safe = /^https?:|^mailto:/i.test(url.trim()) ? url : '#'
-      return `<a href="${safe}" target="_blank" rel="noopener">${label}</a>`
+      return `<a href="${safe}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`
     })
 }
 

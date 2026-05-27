@@ -3,14 +3,14 @@ name = "XingShu"
 version = "3.4.2"
 edition = "2021"
 description = "星枢OpenClaw - OpenClaw 可视化管理面板"
-authors = ["qingchencloud"]
-repository = "https://github.com/qingchencloud/TuLuOpenClaw"
-homepage = "https://github.com/qingchencloud/TuLuOpenClaw"
+authors = ["TuLu"]
+repository = "https://github.com/TuLu-openclaw/tulu-openclaw-v2"
+homepage = "https://github.com/TuLu-openclaw/tulu-openclaw-v2"
 license = "AGPL-3.0"
 
 [lib]
 name = "tu_lu_open_claw_lib"
-crate-type = ["lib", "cdylib", "staticlib"]
+crate-type = ["lib", "cdylib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

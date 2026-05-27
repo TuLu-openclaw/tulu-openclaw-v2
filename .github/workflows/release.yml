@@ -1,4 +1,6 @@
-# 灞犳埉OpenClaw 鍙戝竷鏋勫缓宸ヤ綔娴?# 鎺ㄩ€?main 鍒嗘敮鏃惰嚜鍔ㄦ瀯寤鸿法骞冲彴浜х墿锛堝叏閮ㄤ笂浼燼rtifact锛?# 鎺ㄩ€?v* 鏍囩鏃跺悓鏃跺垱寤?GitHub Release
+# TuLuOpenClaw Release Build Workflow
+# Builds all platforms automatically when pushing to main branch
+# Creates GitHub Release when pushing a v* tag
 name: Release
 
 on:
@@ -10,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "鍙戝竷鐗堟湰鍙?(渚嬪: v1.0.0)"
+        description: "Release version (e.g.: v1.0.0)"
         required: false
         type: string
         default: ""
@@ -19,7 +21,7 @@ env:
   TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
 
 jobs:
-  # 鈹€鈹€ Windows x64 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────── Windows x64 ────────────────────────────────────────
   build-windows-x64:
     name: Build (Windows x64)
     runs-on: windows-latest
@@ -71,7 +73,7 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*.exe
 
 
-  # 鈹€鈹€ Windows ARM64 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────── Windows ARM64 ───────────────────────────────────────
   build-windows-arm64:
     name: Build (Windows ARM64)
     runs-on: windows-latest
@@ -126,7 +128,7 @@ jobs:
           path: src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
 
 
-  # 鈹€鈹€ macOS ARM64 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────── macOS ARM64 ────────────────────────────────────────
   build-macos-arm64:
     name: Build (macOS ARM64)
     runs-on: macos-latest
@@ -185,7 +187,7 @@ jobs:
           name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-ARM64-dmg
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
 
-  # 鈹€鈹€ macOS Intel 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────── macOS Intel ────────────────────────────────────────
   build-macos-intel:
     name: Build (macOS Intel)
     runs-on: macos-latest
@@ -244,7 +246,7 @@ jobs:
           name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-Intel-dmg
           path: src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.dmg
 
-  # 鈹€鈹€ Linux x64 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+  # ─────────── Linux x64 ───────────────────────────────────────────
   build-linux-x64:
     name: Build (Linux x64)
     runs-on: ubuntu-latest
@@ -316,7 +318,7 @@ jobs:
           name: TuLuOpenClaw-${{ env.SAFE_TAG_NAME }}-Linux-x64-deb
           path: src-tauri/target/release/bundle/deb/*.deb
 
-  # 鈹€鈹€ GitHub Release锛堟帹閫佹爣绛炬椂瑙﹀彂锛屼笂浼犲叏閮ㄥ钩鍙?artifact锛夆攢鈹€鈹€鈹€鈹€鈹€
+  # ─────────── GitHub Release (triggered on tag push) ──────────────
   release:
     name: Create Release
     needs: [build-windows-x64, build-windows-arm64, build-linux-x64, build-macos-arm64, build-macos-intel]

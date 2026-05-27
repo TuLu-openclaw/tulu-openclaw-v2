@@ -801,9 +801,10 @@ fn add_agent_to_config(id: &str, model: &str, workspace: &std::path::Path) -> Re
         "workspace": workspace.to_string_lossy(),
     });
     if !model.is_empty() {
+        // SAFETY: serde_json::json! always produces an Object
         agent
             .as_object_mut()
-            .unwrap()
+            .expect("serde_json::json! always produces an Object")
             .insert("model".to_string(), serde_json::json!({ "primary": model }));
     }
     list.push(agent);

@@ -4,7 +4,7 @@
   "private": true,
   "description": "星枢OpenClaw - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
   "type": "module",
-  "author": "qingchencloud",
+  "author": "TuLu",
   "license": "AGPL-3.0",
   "homepage": "https://github.com/TuLu-openclaw/tulu-openclaw-v2",
   "repository": {

@@ -3381,9 +3381,7 @@ async fn try_r2_install(
             a.get("sha256").and_then(|v| v.as_str()).unwrap_or(""),
             a.get("size").and_then(|v| v.as_u64()).unwrap_or(0),
         )
-    } else if use_tarball {
-        // 其次通用 tarball（需要 npm install，仍有网络依赖）
-        let t = tarball.unwrap();
+    } else if let Some(t) = tarball {
         (
             t.get("url")
                 .and_then(|v| v.as_str())

@@ -1,5 +1,5 @@
-# 星枢OpenClaw OpenClaw 持续集成工作流
-# 完整功能版：代码检查 + 测试 + 构建
+# TuLuOpenClaw Continuous Integration Workflow
+# Full feature version: lint + test + build
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
     types: [trigger-ci]
   workflow_dispatch:
 
-# 同一分支的新提交会取消正在运行的旧工作流
+# New commits on the same branch cancel in-progress workflows
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -19,45 +19,46 @@ env:
   RUST_BACKTRACE: 1
   NODE_VERSION: '22'
   CARGO_TERM_COLOR: always
+  DO_NOT_SKIP_OPENCLAW_CI_SKIP: "true"
 
 jobs:
   # ─────────────────────────────────────────────────────────────
-  # Job 1: 代码质量检查（Rust format + clippy）
+  # Job 1: Code Quality Check (Rust format + clippy)
   # ─────────────────────────────────────────────────────────────
   lint:
-    name: 代码质量检查
+    name: Code Quality Check
     runs-on: ubuntu-latest
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 安装 Rust 工具链
+      - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
 
-      - name: Rust 版本
+      - name: Rust version
         run: rustc --version && cargo --version
 
-      - name: Rust 缓存
+      - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
 
-      - name: Rust 格式化检查
+      - name: Rust formatting check
         working-directory: src-tauri
         run: cargo fmt --all -- --check
 
-      - name: Rust Clippy 检查
+      - name: Rust Clippy check
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings 2>&1 | head -50
 
   # ─────────────────────────────────────────────────────────────
-  # Job 2: Rust 编译检查
+  # Job 2: Rust Compile Check
   # ─────────────────────────────────────────────────────────────
   rust-check:
-    name: Rust 编译检查
+    name: Rust Compile Check
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -70,18 +71,18 @@ jobs:
           - name: Windows (x64)
             os: windows-latest
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 安装 Rust 工具链
+      - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
 
-      - name: Rust 版本
+      - name: Rust version
         run: rustc --version && cargo --version
 
-      - name: Linux 系统依赖
+      - name: Linux system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -93,15 +94,15 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: Rust 编译检查
+      - name: Rust compile check
         working-directory: src-tauri
         run: cargo check --all-targets 2>&1 | tee rust-check.log; echo "EXIT:$?"
 
   # ─────────────────────────────────────────────────────────────
-  # Job 3: 前端检查 + 单元测试
+  # Job 3: Frontend Check + Unit Tests
   # ─────────────────────────────────────────────────────────────
   frontend:
-    name: 前端检查 (${{ matrix.node-version }})
+    name: Frontend Check (${{ matrix.node-version }})
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -110,28 +111,28 @@ jobs:
       matrix:
         node-version: ['20', '22']
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js ${{ matrix.node-version }}
+      - name: Install Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: npm install
 
-      - name: TypeScript 类型检查
+      - name: TypeScript type check
         run: npx tsc --noEmit 2>&1 || true
 
-      - name: 前端构建验证
+      - name: Frontend build verification
         run: npm run build
 
-      - name: 运行单元测试
+      - name: Run unit tests
         run: node --test tests/*.test.js 2>&1 || echo "NO_TESTS"
 
-      - name: 上传测试覆盖率
+      - name: Upload test coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -140,31 +141,31 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────────────────────────
-  # Job 4: Playwright E2E 测试
+  # Job 4: Playwright E2E Tests
   # ─────────────────────────────────────────────────────────────
   e2e:
-    name: E2E 测试
+    name: E2E Tests
     runs-on: macos-latest
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: npm install
 
-      - name: 安装 Playwright
+      - name: Install Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: 启动 Tauri dev 服务器并运行 E2E
+      - name: Start Tauri dev server and run E2E
         run: |
           npx concurrently --success first --kill-others -p "[{name}]" -n "DEV,PLAYWRIGHT" -c "yellow,blue" \
             "npm run dev" \
@@ -172,32 +173,32 @@ jobs:
         timeout-minutes: 20
 
   # ─────────────────────────────────────────────────────────────
-  # Job 5: 安全扫描
+  # Job 5: Security Scan
   # ─────────────────────────────────────────────────────────────
   security:
-    name: 安全扫描
+    name: Security Scan
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       security-events: write
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: 安装 npm audit
+      - name: Install npm audit
         run: npm install
 
-      - name: npm 依赖安全审计
+      - name: npm dependency security audit
         run: npx npm-audit-ci --moderate || true
 
-      - name: 运行 Trivy 容器镜像扫描
+      - name: Run Trivy container image scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
@@ -207,16 +208,16 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
 
-      - name: 上传 Trivy 扫描结果
+      - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
   # ─────────────────────────────────────────────────────────────
-  # Job 6: Tauri 应用构建（多平台 Release）
+  # Job 6: Tauri App Build (Multi-platform Release)
   # ─────────────────────────────────────────────────────────────
   build:
-    name: 构建应用 (${{ matrix.platform.name }})
+    name: Build App (${{ matrix.platform.name }})
     runs-on: ${{ matrix.platform.os }}
     needs: [lint, frontend]
     env:
@@ -236,26 +237,26 @@ jobs:
             target: x86_64-unknown-linux-gnu
 
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 安装 Node.js
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: 安装 Rust 工具链
+      - name: Install Rust toolchain
         run: |
           rustup toolchain install stable --profile minimal --target ${{ matrix.platform.target }}
           rustup default stable
 
-      - name: Rust 缓存
+      - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
 
-      - name: Linux 系统依赖
+      - name: Linux system dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -267,17 +268,17 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: 安装前端依赖
+      - name: Install frontend dependencies
         run: npm install
 
-      - name: 前端构建
+      - name: Frontend build
         run: npm run build
 
-      - name: Rust 编译 (Release)
+      - name: Rust compile (Release)
         working-directory: src-tauri
         run: cargo build --release --target ${{ matrix.platform.target }}
 
-      - name: 上传构建产物
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.platform.name }}
@@ -288,25 +289,25 @@ jobs:
           retention-days: 5
 
   # ─────────────────────────────────────────────────────────────
-  # Job 7: GitHub Releases 发布（仅在 tag 时触发）
+  # Job 7: GitHub Releases Publish (triggered only on tag push)
   # ─────────────────────────────────────────────────────────────
   release:
-    name: 发布 Release
+    name: Publish Release
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build]
     permissions:
       contents: write
     steps:
-      - name: 签出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 下载所有构建产物
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: 创建 Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*

@@ -421,21 +421,21 @@ fn clean_cli_output(text: &str) -> String {
 
     // 1. Remove ANSI escape sequences
     // Common patterns: \x1b[...m, \x1b[...;...m, ESC[...m
-    let ansi_regex = regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap();
+    let ansi_regex = regex::Regex::new(r"\x1b\[[0-9;]*m").expect("invalid ANSI regex");
     result = ansi_regex.replace_all(&result, "").to_string();
 
     // 2. Remove npm/node progress bar characters
     // Pattern: ████░░░░░░ 50% | some info
-    let progress_regex = regex::Regex::new(r"[█▓▒░│┼┤├┬┴]+[│].*?\r?\n").unwrap();
+    let progress_regex = regex::Regex::new(r"[█▓▒░│┼┤├┬┴]+[│].*?\r?\n").expect("invalid progress bar regex");
     result = progress_regex.replace_all(&result, "").to_string();
 
     // 3. Remove lines that are purely ANSI cursor control sequences
     // Like \r (carriage return for overwriting), \x1b[?25l (hide cursor), etc.
-    let cursor_regex = regex::Regex::new(r"\x1b\[[?][0-9]+[a-zA-Z]").unwrap();
+    let cursor_regex = regex::Regex::new(r"\x1b\[[?][0-9]+[a-zA-Z]").expect("invalid cursor regex");
     result = cursor_regex.replace_all(&result, "").to_string();
 
     // 4. Remove "Download" / "Installing" progress prefixes common in npm
-    let npm_progress_regex = regex::Regex::new(r"^\s*(added|removed|changed|up to date)?\s*\d+\s*(package)?s?\s*(in\s+\d+s)?\s*(✓|✔|:)?\s*\r?$").unwrap();
+    let npm_progress_regex = regex::Regex::new(r"^\s*(added|removed|changed|up to date)?\s*\d+\s*(package)?s?\s*(in\s+\d+s)?\s*(✓|✔|:)?\s*\r?$").expect("invalid npm progress regex");
     result = npm_progress_regex.replace_all(&result, "").to_string();
 
     // 5. Normalize line endings and remove empty lines at the start

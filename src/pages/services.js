@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 服务管理页面
  * 服务启停 + 更新检测 + 配置备份管理
  */
@@ -149,7 +149,7 @@ async function loadVersion(page) {
     const sourceTag = isChinese ? t('services.chineseEdition') : t('services.officialEdition')
     const switchLabel = isChinese ? t('services.switchToOfficial') : t('services.switchToChinese')
     const switchTarget = isChinese ? 'official' : 'chinese'
-    const dockerImage = (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/qingchencloud/openclaw'
+    const dockerImage = (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/TuLu-openclaw/tulu-openclaw'
     const policyNote = aheadOfRecommended
       ? t('services.policyAhead', { ver, recommended: info.recommended })
       : t('services.policyDefault')
@@ -200,7 +200,7 @@ async function loadVersion(page) {
 }
 
 function configuredDockerImage(panelConfig) {
-  return (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/qingchencloud/openclaw'
+  return (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/TuLu-openclaw/tulu-openclaw'
 }
 
 function formatDockerBytes(bytes) {
@@ -229,7 +229,8 @@ async function hasDockerManagerBackend() {
     })
     const ct = (resp.headers.get('content-type') || '').toLowerCase()
     return resp.ok && !ct.includes('text/html') && !ct.includes('text/plain')
-  } catch {
+  } catch (e) {
+    console.warn('[services] hasDockerManagerBackend check failed:', e)
     return false
   }
 }
@@ -378,7 +379,7 @@ async function openDockerPullImage(page) {
             lastMessage = status.message
             modal.appendLog(status.message)
           }
-        } catch {}
+        } catch (e) { console.warn('[services] docker pull status poll failed:', e) }
       }, 800)
 
       try {
@@ -520,7 +521,7 @@ function renderServices(container, services) {
         ${cliMissing
           ? `<div style="display:flex;flex-direction:column;gap:var(--space-xs);align-items:flex-end">
                <div style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('services.installCliHint')}</div>
-               <code style="font-size:var(--font-size-xs);background:var(--bg-tertiary);padding:2px 8px;border-radius:4px;user-select:all">npm install -g @qingchencloud/openclaw-zh</code>
+               <code style="font-size:var(--font-size-xs);background:var(--bg-tertiary);padding:2px 8px;border-radius:4px;user-select:all">npm install -g @TuLu-openclaw/tulu-openclaw-v2</code>
                <button class="btn btn-secondary btn-sm" data-action="refresh-services" style="margin-top:4px">${t('services.refreshStatus')}</button>
              </div>`
           : foreignGateway
@@ -797,7 +798,7 @@ async function handleServiceAction(action, label, page) {
         await loadServices(page)
         return
       }
-    } catch {}
+    } catch (e) { console.warn('[services] service status poll failed:', e) }
 
     await new Promise(r => setTimeout(r, POLL_INTERVAL))
   }
@@ -904,8 +905,9 @@ async function loadConfigEditor(page) {
         btnSaveOnly.disabled = true
       }
     }
-  } catch {
+  } catch (e) {
     // openclaw.json 不存在，隐藏编辑器
+    console.warn('[services] loadConfigEditor failed:', e)
     section.style.display = 'none'
   }
 }

@@ -1,13 +1,12 @@
 /**
  * 扩展工具页面
- * cftunnel 隧道管理 + ClawApp 状态
- */
+ * cftunnel 隧道管理 + ClawApp 状�? */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
-// HTML 转义，防止 XSS
+// HTML 转义，防�?XSS
 function escapeHtml(str) {
   if (!str) return ''
   return String(str)
@@ -68,7 +67,7 @@ function renderCftunnel(el, s) {
       <div style="color:var(--text-tertiary);margin-bottom:var(--space-md)">${t('ext.cftunnelNotInstalled')}</div>
       <div style="display:flex;gap:var(--space-sm);align-items:center">
         <button class="btn btn-primary btn-sm" data-action="install-cftunnel">${t('ext.installBtn')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/cftunnel" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/cftunnel" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
       </div>
       <div id="install-progress-area"></div>
     `
@@ -161,7 +160,7 @@ function renderClawapp(el, s) {
       <div style="color:var(--text-tertiary);margin-bottom:var(--space-md)">${t('ext.clawappNotInstalled')}</div>
       <div style="display:flex;gap:var(--space-sm);align-items:center">
         <button class="btn btn-primary btn-sm" data-action="install-clawapp">${t('ext.installBtn')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/qingchencloud/clawapp" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/clawpanel" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
       </div>
       <div id="install-clawapp-progress-area"></div>
     `
@@ -269,8 +268,7 @@ async function handleInstallCftunnel(page) {
   const area = page.querySelector('#install-progress-area')
   if (!area) return
 
-  // 显示进度条
-  area.innerHTML = `
+  // 显示进度�?  area.innerHTML = `
     <div style="margin-top:var(--space-lg)">
       <div class="upgrade-progress-wrap">
         <div class="upgrade-progress-bar">
@@ -311,8 +309,7 @@ async function handleInstallCftunnel(page) {
     progressText.innerHTML = `${statusIcon('ok', 14)} ${t('ext.installDone')}`
     toast(t('ext.installSuccess', { name: 'cftunnel' }), 'success')
 
-    // 3 秒后刷新状态
-    setTimeout(() => loadCftunnel(page), 3000)
+    // 3 秒后刷新状�?    setTimeout(() => loadCftunnel(page), 3000)
   } catch (e) {
     progressFill.classList.add('error')
     progressText.innerHTML = `${statusIcon('err', 14)} ${t('ext.installFailed')}`

@@ -3,17 +3,15 @@
  * 国内用户自动使用 Gitee 镜像，解决 GitHub 访问慢/不可达的问题
  */
 
-const GITHUB_ORG = 'https://github.com/qingchencloud'
-const GITEE_ORG = 'https://gitee.com/QtCodeCreators'
-const GITHUB_RAW = 'https://raw.githubusercontent.com/qingchencloud'
-const GITEE_RAW = 'https://gitee.com/QtCodeCreators'
+const GITHUB_ORG = 'https://github.com/TuLu-openclaw'
+const GITEE_ORG = 'https://gitee.com/tulu-openclaw'
+const GITHUB_RAW = 'https://raw.githubusercontent.com/TuLu-openclaw'
+const GITEE_RAW = 'https://gitee.com/tulu-openclaw'
 
 // 仓库名映射（GitHub → Gitee，名称不同时需映射）
 const REPO_MAP = {
-  星枢OpenClaw: '星枢OpenClaw',
-  clawapp: 'clawapp',
-  cftunnel: 'cftunnel',
-  'openclaw-zh': 'openclaw-zh',
+  'tulu-openclaw-v2': 'tulu-openclaw-v2',
+  clawpanel: 'clawpanel',
 }
 
 /**
@@ -87,8 +85,8 @@ export async function rawFileUrl(repo, branch, filePath) {
  */
 export function deployCommand() {
   return {
-    github: `curl -fsSL ${GITHUB_RAW}/星枢OpenClaw/main/deploy.sh | bash`,
-    gitee: `curl -fsSL ${GITEE_RAW}/星枢OpenClaw/raw/main/deploy.sh | bash`,
+    github: `curl -fsSL ${GITHUB_RAW}/tulu-openclaw-v2/main/deploy.sh | bash`,
+    gitee: `curl -fsSL ${GITEE_RAW}/tulu-openclaw-v2/raw/main/deploy.sh | bash`,
   }
 }
 

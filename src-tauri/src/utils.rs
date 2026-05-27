@@ -146,7 +146,7 @@ pub fn classify_cli_source(cli_path: &str) -> String {
         return "standalone".into();
     }
     // npm 汉化版
-    if lower.contains("openclaw-zh") || lower.contains("@qingchencloud") {
+    if lower.contains("openclaw-zh") || lower.contains("@qingchencloud") || lower.contains("tulu-openclaw") {
         return "npm-zh".into();
     }
     // npm 全局（大概率官方版）

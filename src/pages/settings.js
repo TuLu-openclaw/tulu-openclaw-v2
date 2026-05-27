@@ -26,7 +26,7 @@ function effectiveDockerEndpoint(cfg) {
 }
 
 function effectiveDockerImage(cfg) {
-  return (cfg?.dockerDefaultImage || '').trim() || 'ghcr.io/qingchencloud/openclaw'
+  return (cfg?.dockerDefaultImage || '').trim() || 'ghcr.io/TuLu-openclaw/tulu-openclaw'
 }
 
 function openclawInstallationIdentity(installation) {
@@ -191,7 +191,7 @@ async function loadModelProxyConfig(page) {
   }
 }
 
-// ===== npm 源设置 =====
+// ===== npm 源设�?=====
 
 async function loadRegistry(page) {
   const bar = page.querySelector('#registry-bar')
@@ -510,11 +510,11 @@ async function handleTestProxy(page) {
     const r = await api.testProxy()
     if (resultEl) {
       resultEl.innerHTML = r.ok
-        ? `<span style="color:var(--success)">✓ ${t('settings.proxyOk', { status: r.status, ms: r.elapsed_ms, target: escapeHtml(r.target) })}</span>`
-        : `<span style="color:var(--warning)">⚠ ${t('settings.proxyWarn', { status: r.status, ms: r.elapsed_ms })}</span>`
+        ? `<span style="color:var(--success)">�?${t('settings.proxyOk', { status: r.status, ms: r.elapsed_ms, target: escapeHtml(r.target) })}</span>`
+        : `<span style="color:var(--warning)">�?${t('settings.proxyWarn', { status: r.status, ms: r.elapsed_ms })}</span>`
     }
   } catch (e) {
-    if (resultEl) resultEl.innerHTML = `<span style="color:var(--error)">✗ ${escapeHtml(String(e))}</span>`
+    if (resultEl) resultEl.innerHTML = `<span style="color:var(--error)">�?${escapeHtml(String(e))}</span>`
   }
 }
 
@@ -577,10 +577,10 @@ async function loadGitPath(page) {
     const customValue = cfg?.gitPath || ''
     const invalidCustom = gitInfo.isCustom && !gitInfo.installed
     const statusText = gitInfo.installed
-      ? `<span style="color:var(--success)">✓ ${escapeHtml(gitInfo.version || 'Git')}</span>`
+      ? `<span style="color:var(--success)">�?${escapeHtml(gitInfo.version || 'Git')}</span>`
       : invalidCustom
-        ? `<span style="color:var(--error)">✗ ${t('settings.gitPathInvalid')}</span>`
-        : `<span style="color:var(--error)">✗ Git ${t('setup.notInstalled')}</span>`
+        ? `<span style="color:var(--error)">�?${t('settings.gitPathInvalid')}</span>`
+        : `<span style="color:var(--error)">�?Git ${t('setup.notInstalled')}</span>`
     const pathText = gitInfo.path ? `<span style="font-size:var(--font-size-xs);opacity:0.7">${escapeHtml(gitInfo.path)}</span>` : ''
     const customBadge = gitInfo.isCustom ? `<span class="badge" style="margin-left:6px;font-size:10px">${t('settings.customBadge')}</span>` : ''
     bar.innerHTML = `
@@ -687,7 +687,7 @@ async function loadCliBinding(page) {
       // Auto-detect option
       html += `<div style="display:flex;align-items:center;gap:var(--space-sm);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);${!boundPath ? 'background:var(--bg-active);border-color:var(--accent)' : ''}">
         <span style="flex:1;font-size:var(--font-size-sm)">${t('settings.cliAutoDetect')}</span>
-        ${boundPath ? '<button class="btn btn-secondary btn-xs" data-action="unbind-cli">' + t('common.reset') + '</button>' : '<span style="color:var(--success);font-size:var(--font-size-xs)">✓ ' + t('settings.cliActive') + '</span>'}
+        ${boundPath ? '<button class="btn btn-secondary btn-xs" data-action="unbind-cli">' + t('common.reset') + '</button>' : '<span style="color:var(--success);font-size:var(--font-size-xs)">�?' + t('settings.cliActive') + '</span>'}
       </div>`
       for (const inst of installations) {
         const isActive = inst.active
@@ -697,7 +697,7 @@ async function loadCliBinding(page) {
             <div style="font-size:var(--font-size-xs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(inst.path)}">${escapeHtml(inst.path)}</div>
             <div style="font-size:11px;color:var(--text-tertiary)">${sourceLabel(inst.source)}${inst.version ? ' · v' + inst.version : ''}</div>
           </div>
-          ${isBound ? '<span style="color:var(--success);font-size:var(--font-size-xs)">✓ ' + t('settings.cliBound') + '</span>' : `<button class="btn btn-secondary btn-xs" data-action="bind-cli" data-path="${escapeHtml(inst.path)}">${t('common.confirm')}</button>`}
+          ${isBound ? '<span style="color:var(--success);font-size:var(--font-size-xs)">�?' + t('settings.cliBound') + '</span>' : `<button class="btn btn-secondary btn-xs" data-action="bind-cli" data-path="${escapeHtml(inst.path)}">${t('common.confirm')}</button>`}
         </div>`
       }
       html += '</div>'
@@ -761,7 +761,7 @@ function loadLanguageSwitcher(page) {
   }
 }
 
-// ===== 开机自启 =====
+// ===== 开机自�?=====
 
 async function loadAutostart(page) {
   const bar = page.querySelector('#autostart-bar')
