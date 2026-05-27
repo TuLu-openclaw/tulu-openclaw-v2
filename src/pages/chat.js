@@ -22,8 +22,6 @@ const GROUP_SESSIONS_KEY = '星枢OpenClaw-group-sessions-v1'
 const ACTIVE_GROUP_KEY = '星枢OpenClaw-active-group-v1'
 const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
-const CHAT_TRANSLATE_SESSION_KEY = 'agent:main:chat-translate-zh'
-const CHAT_TRANSLATE_PROMPT = '请把下面内容翻译成简体中文。要求：只输出译文；保留 Markdown 结构、代码块、链接、列表、错误码、文件路径、命令、URL、requestId、runId 和专有名词；不要解释，不要添加原文没有的内容。\n\n'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -3564,43 +3562,6 @@ function isMostlyChinese(text = '') {
   return chinese >= 12 && chinese >= letters * 0.65
 }
 
-function waitForTranslatedAssistantMessage(sessionKey, since, timeoutMs = 60000) {
-  const started = Date.now()
-  return new Promise((resolve, reject) => {
-    let done = false
-    let timer = null
-    let unsub = null
-    const finish = (err, value) => {
-      if (done) return
-      done = true
-      if (timer) clearInterval(timer)
-      if (unsub) unsub()
-      err ? reject(err) : resolve(value)
-    }
-    const pick = (payload = {}) => {
-      if (payload.sessionKey !== sessionKey || payload.role !== 'assistant') return ''
-      const ts = new Date(payload.ts || payload.createdAt || payload.time || Date.now()).getTime()
-      if (Number.isFinite(ts) && ts + 1000 < since) return ''
-      return messageContentToText(payload.content || payload.text || payload.message?.content || payload.message || '')
-    }
-    unsub = wsClient.onEvent((event) => {
-      const text = pick(event?.payload || event || {})
-      if (text) finish(null, text)
-    })
-    timer = setInterval(async () => {
-      if (Date.now() - started > timeoutMs) return finish(new Error('翻译超时，请稍后重试'))
-      try {
-        const history = await wsClient.chatHistory(sessionKey, 20)
-        const messages = history?.messages || history || []
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const text = pick({ ...messages[i], sessionKey })
-          if (text) return finish(null, text)
-        }
-      } catch {}
-    }, 1800)
-  })
-}
-
 async function translateMessageToChinese(btn) {
   const msgWrap = btn.closest('.msg')
   const bubble = msgWrap?.querySelector('.msg-bubble')
@@ -3634,9 +3595,8 @@ async function translateMessageToChinese(btn) {
   const oldTitle = btn.title
   btn.title = '正在翻译...'
   try {
-    const since = Date.now()
-    await wsClient.chatSend(CHAT_TRANSLATE_SESSION_KEY, CHAT_TRANSLATE_PROMPT + rawText, [])
-    const translated = await waitForTranslatedAssistantMessage(CHAT_TRANSLATE_SESSION_KEY, since)
+    const currentModel = getSessionDisplayModel(_sessionKey)
+    const translated = await api.translateText(rawText, currentModel)
     const translatedText = messageContentToText(translated).trim()
     if (!translatedText) throw new Error('没有收到翻译内容')
     box.dataset.done = '1'

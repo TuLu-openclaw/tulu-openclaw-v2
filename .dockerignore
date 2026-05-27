@@ -76,6 +76,7 @@ docs/
 scripts/*.js
 scripts/*.sh
 !scripts/serve.js
+!scripts/dev-api.js
 
 # -----------------------------------------------------------------------------
 # CI/CD 配置

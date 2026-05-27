@@ -94,6 +94,7 @@ pub fn run() {
             config::reload_gateway,
             config::restart_gateway,
             config::test_model,
+            config::translate_text,
             config::list_remote_models,
             config::list_openclaw_versions,
             config::upgrade_openclaw,

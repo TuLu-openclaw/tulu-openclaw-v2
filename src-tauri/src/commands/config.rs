@@ -5004,6 +5004,187 @@ fn extract_error_message(text: &str, status: reqwest::StatusCode) -> String {
         .unwrap_or_else(|| format!("HTTP {status}"))
 }
 
+fn provider_model_from_full<'a>(
+    config: &'a Value,
+    full_model: &str,
+) -> Option<(String, &'a Value, String)> {
+    let full = full_model.trim();
+    let providers = config
+        .pointer("/models/providers")
+        .and_then(|v| v.as_object())?;
+    if let Some((provider_key, model_id)) = full.split_once('/') {
+        if let Some(provider) = providers.get(provider_key) {
+            return Some((provider_key.to_string(), provider, model_id.to_string()));
+        }
+    }
+    for (provider_key, provider) in providers {
+        for item in provider
+            .get("models")
+            .and_then(|v| v.as_array())
+            .into_iter()
+            .flatten()
+        {
+            let id = item
+                .as_str()
+                .or_else(|| item.get("id").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            if id == full || format!("{provider_key}/{id}") == full {
+                return Some((provider_key.to_string(), provider, id.to_string()));
+            }
+        }
+    }
+    None
+}
+
+fn extract_completion_text(value: &Value) -> Option<String> {
+    if let Some(arr) = value.get("content").and_then(|c| c.as_array()) {
+        let text = arr
+            .iter()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("");
+        if !text.trim().is_empty() {
+            return Some(text);
+        }
+    }
+    if let Some(t) = value
+        .get("candidates")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("content"))
+        .and_then(|c| c.get("parts"))
+        .and_then(|p| p.get(0))
+        .and_then(|p| p.get("text"))
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.trim().is_empty())
+    {
+        return Some(t.to_string());
+    }
+    if let Some(msg) = value
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+    {
+        if let Some(content) = msg
+            .get("content")
+            .and_then(|c| c.as_str())
+            .filter(|s| !s.trim().is_empty())
+        {
+            return Some(content.to_string());
+        }
+    }
+    value
+        .get("output")
+        .and_then(|o| o.get("text"))
+        .and_then(|t| t.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .map(ToString::to_string)
+}
+
+#[tauri::command]
+pub async fn translate_text(text: String, model: Option<String>) -> Result<String, String> {
+    let source = text.trim();
+    if source.is_empty() {
+        return Err("缺少需要翻译的内容".into());
+    }
+    let config = read_openclaw_config()?;
+    let requested_model = model
+        .as_deref()
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| {
+            config
+                .pointer("/agents/defaults/model/primary")
+                .and_then(|v| v.as_str())
+        })
+        .ok_or("当前会话模型未配置，无法翻译")?;
+    let (_provider_key, provider, model_id) = provider_model_from_full(&config, requested_model)
+        .ok_or_else(|| format!("找不到当前会话模型配置：{requested_model}"))?;
+    let base_url = provider
+        .get("baseUrl")
+        .or_else(|| provider.get("base_url"))
+        .and_then(|v| v.as_str())
+        .ok_or("当前会话模型缺少 baseUrl，无法翻译")?;
+    let api_key = provider
+        .get("apiKey")
+        .or_else(|| provider.get("api_key"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let api_type = normalize_model_api_type(
+        provider
+            .get("api")
+            .or_else(|| provider.get("apiType"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("openai-completions"),
+    );
+    let base = normalize_base_url_for_api(base_url, api_type);
+    let prompt = format!(
+        "请把下面内容翻译成简体中文。要求：只输出译文；保留 Markdown 结构、代码块、链接、列表、错误码、文件路径、命令、URL、requestId、runId 和专有名词；不要解释，不要添加原文没有的内容。\n\n{source}"
+    );
+    let client =
+        crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(90), None)
+            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+    let resp = match api_type {
+        "anthropic-messages" => {
+            let url = format!("{}/messages", base);
+            let body = json!({
+                "model": model_id,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 2048,
+            });
+            let mut req = client
+                .post(&url)
+                .header("anthropic-version", "2023-06-01")
+                .json(&body);
+            if !api_key.is_empty() {
+                req = req.header("x-api-key", api_key);
+            }
+            req.send()
+        }
+        "google-gemini" => {
+            let url = format!(
+                "{}/models/{}:generateContent?key={}",
+                base, model_id, api_key
+            );
+            let body = json!({
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}]
+            });
+            client.post(&url).json(&body).send()
+        }
+        _ => {
+            let url = format!("{}/chat/completions", base);
+            let body = json!({
+                "model": model_id,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 2048,
+                "stream": false,
+            });
+            let mut req = client.post(&url).json(&body);
+            if !api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {api_key}"));
+            }
+            req.send()
+        }
+    }
+    .await
+    .map_err(|e| {
+        if e.is_timeout() {
+            "翻译请求超时 (90s)".to_string()
+        } else if e.is_connect() {
+            format!("翻译连接失败: {e}")
+        } else {
+            format!("翻译请求失败: {e}")
+        }
+    })?;
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(extract_error_message(&body, status));
+    }
+    let value: Value = serde_json::from_str(&body).map_err(|e| format!("解析翻译响应失败: {e}"))?;
+    extract_completion_text(&value).ok_or("没有收到翻译内容".into())
+}
+
 /// 测试模型连通性：向 provider 发送一个简单的 chat completion 请求
 #[tauri::command]
 pub async fn test_model(
