@@ -56,8 +56,9 @@ ENV NODE_ENV=production
 ENV HOME=/root
 
 # 创建非 root 用户 (可选，主要用于日志查看)
-RUN addgroup -g 1000 appgroup && \
-    adduser -u 1000 -G appgroup -s /bin/sh -D appuser
+# node:22-alpine 已内置 node 用户/组，复用它避免 gid/uid 1000 冲突
+RUN addgroup -S appgroup 2>/dev/null || true && \
+    adduser -S -G appgroup -s /bin/sh appuser 2>/dev/null || true
 
 WORKDIR /app
 
