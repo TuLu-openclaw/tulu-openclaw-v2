@@ -3531,9 +3531,29 @@ function attachAgentMentionGesture(el, label) {
   })
 }
 
+function messageContentToText(content) {
+  if (content == null) return ''
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content.map(block => {
+      if (typeof block === 'string') return block
+      if (block?.type === 'text' && typeof block.text === 'string') return block.text
+      if (typeof block?.content === 'string') return block.content
+      return ''
+    }).filter(Boolean).join('\n')
+  }
+  if (typeof content === 'object') {
+    if (typeof content.text === 'string') return content.text
+    if (typeof content.content === 'string') return content.content
+    if (typeof content.message === 'string') return content.message
+    try { return JSON.stringify(content, null, 2) } catch { return String(content) }
+  }
+  return String(content)
+}
+
 function getMessageRawText(msgWrap) {
   if (!msgWrap) return ''
-  return msgWrap.dataset?.rawText || msgWrap.querySelector('.msg-text')?.innerText || msgWrap.querySelector('.msg-bubble')?.innerText || ''
+  return messageContentToText(msgWrap.dataset?.rawText || msgWrap.querySelector('.msg-text')?.innerText || msgWrap.querySelector('.msg-bubble')?.innerText || '')
 }
 
 function isMostlyChinese(text = '') {
@@ -3561,7 +3581,7 @@ function waitForTranslatedAssistantMessage(sessionKey, since, timeoutMs = 60000)
       if (payload.sessionKey !== sessionKey || payload.role !== 'assistant') return ''
       const ts = new Date(payload.ts || payload.createdAt || payload.time || Date.now()).getTime()
       if (Number.isFinite(ts) && ts + 1000 < since) return ''
-      return payload.content || payload.text || payload.message?.content || ''
+      return messageContentToText(payload.content || payload.text || payload.message?.content || payload.message || '')
     }
     unsub = wsClient.onEvent((event) => {
       const text = pick(event?.payload || event || {})
@@ -3585,7 +3605,8 @@ async function translateMessageToChinese(btn) {
   const msgWrap = btn.closest('.msg')
   const bubble = msgWrap?.querySelector('.msg-bubble')
   const rawText = getMessageRawText(msgWrap).trim()
-  if (!msgWrap || !bubble || !rawText) return
+  if (!msgWrap || !rawText) return
+  const target = bubble || msgWrap
   if (isMostlyChinese(rawText)) {
     toast('这条消息已经主要是中文', 'info')
     return
@@ -3603,7 +3624,7 @@ async function translateMessageToChinese(btn) {
   if (!box) {
     box = document.createElement('div')
     box.className = 'msg-translation'
-    bubble.appendChild(box)
+    target.appendChild(box)
   }
   box.hidden = false
   box.dataset.done = '0'
@@ -3616,12 +3637,15 @@ async function translateMessageToChinese(btn) {
     const since = Date.now()
     await wsClient.chatSend(CHAT_TRANSLATE_SESSION_KEY, CHAT_TRANSLATE_PROMPT + rawText, [])
     const translated = await waitForTranslatedAssistantMessage(CHAT_TRANSLATE_SESSION_KEY, since)
+    const translatedText = messageContentToText(translated).trim()
+    if (!translatedText) throw new Error('没有收到翻译内容')
     box.dataset.done = '1'
-    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-body">${renderMarkdown(translated || '')}</div>`
+    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-body">${renderMarkdown(translatedText)}</div>`
   } catch (e) {
+    const errText = messageContentToText(e?.message || e || '未知错误')
     box.dataset.done = '0'
-    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-error">翻译失败：${escapeHtml(e.message || String(e))}</div>`
-    toast(`翻译失败：${e.message || e}`, 'error')
+    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-error">翻译失败：${escapeHtml(errText)}</div>`
+    toast(`翻译失败：${errText}`, 'error')
   } finally {
     btn.disabled = false
     btn.title = oldTitle || '翻译成中文'
