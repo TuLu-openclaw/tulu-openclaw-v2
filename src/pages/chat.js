@@ -22,6 +22,8 @@ const GROUP_SESSIONS_KEY = '星枢OpenClaw-group-sessions-v1'
 const ACTIVE_GROUP_KEY = '星枢OpenClaw-active-group-v1'
 const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
+const CHAT_TRANSLATE_SESSION_KEY = 'agent:main:chat-translate-zh'
+const CHAT_TRANSLATE_PROMPT = '请把下面内容翻译成简体中文。要求：只输出译文；保留 Markdown 结构、代码块、链接、列表、错误码、文件路径、命令、URL、requestId、runId 和专有名词；不要解释，不要添加原文没有的内容。\n\n'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -667,6 +669,12 @@ function bindEvents(page) {
       }
       return
     }
+    const translateBtn = e.target.closest('.msg-translate-btn')
+    if (translateBtn) {
+      e.stopPropagation()
+      translateMessageToChinese(translateBtn)
+      return
+    }
     hideCmdPanel()
   })
 }
@@ -780,7 +788,7 @@ function getContextWindow(sessionKey = _sessionKey) {
   return _sessionContextTokens.get(sessionKey) || _defaultContextTokens || wsClient.snapshot?.sessionDefaults?.contextTokens || 0
 }
 
-function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cost = 0, model = '', contextWindow = 0, showCopy = true } = {}) {
+function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cost = 0, model = '', contextWindow = 0, showCopy = true, showTranslate = false } = {}) {
   const parts = [`<span class="msg-time">${formatTime(time)}</span>`]
   if (durationMs > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${(durationMs / 1000).toFixed(1)}s</span>`)
   const u = normalizeUsage(usage)
@@ -801,6 +809,7 @@ function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cos
   if (totalCost > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-cost" title="Cost">$${totalCost.toFixed(4)}</span>`)
   const modelLabel = normalizeModelValue(model) || getSessionRuntimeModel(_sessionKey) || _selectedModel || _primaryModel
   if (modelLabel) parts.push(`<span class="meta-sep">·</span><span class="msg-model" title="Model background">${escapeHtml(modelLabel)}</span>`)
+  if (showTranslate) parts.push(`<button class="msg-translate-btn" title="翻译成中文">译</button>`)
   if (showCopy) parts.push(`<button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`)
   return parts.join('')
 }
@@ -2708,6 +2717,7 @@ function handleChatEvent(payload) {
     }
     if (_currentAiBubble) {
       setReplyStatus('finalizing', CHAT_REPLY_STATUS_TEXT.finalizing, { runId: runId || _currentRunId, activity: `整理文本、附件和 ${finalTools.length || _currentAiTools.length || 0} 个工具结果` })
+      if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || finalText || ''
       if (_currentAiText) _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
       appendImagesToEl(_currentAiBubble, _currentAiImages)
       appendVideosToEl(_currentAiBubble, _currentAiVideos)
@@ -2739,7 +2749,7 @@ function handleChatEvent(payload) {
       const usage = extractMessageUsage(finalMetaSource)
       const cost = extractMessageCost(finalMetaSource)
       const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
-      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true })
+      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true, showTranslate: true })
       wrapper.appendChild(meta)
     }
     const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
@@ -3014,6 +3024,7 @@ function createStreamBubble() {
   showTyping(false)
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-ai msg-streaming'
+  wrap.dataset.rawText = ''
   const bubble = document.createElement('div')
   bubble.className = 'msg-bubble'
   bubble.innerHTML = '<span class="stream-cursor"></span>'
@@ -3207,6 +3218,7 @@ function throttledRender() {
 function doRender() {
   _lastRenderTime = performance.now()
   if (_currentAiBubble && _currentAiText) {
+    if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || ''
     _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
     scrollToBottom()
   }
@@ -3519,6 +3531,103 @@ function attachAgentMentionGesture(el, label) {
   })
 }
 
+function getMessageRawText(msgWrap) {
+  if (!msgWrap) return ''
+  return msgWrap.dataset?.rawText || msgWrap.querySelector('.msg-text')?.innerText || msgWrap.querySelector('.msg-bubble')?.innerText || ''
+}
+
+function isMostlyChinese(text = '') {
+  const compact = String(text || '').replace(/```[\s\S]*?```/g, '').replace(/https?:\/\/\S+/g, '').trim()
+  if (!compact) return true
+  const chinese = (compact.match(/[\u4e00-\u9fff]/g) || []).length
+  const letters = (compact.match(/[A-Za-zÀ-ÿА-Яа-яぁ-んァ-ン가-힣]/g) || []).length
+  return chinese >= 12 && chinese >= letters * 0.65
+}
+
+function waitForTranslatedAssistantMessage(sessionKey, since, timeoutMs = 60000) {
+  const started = Date.now()
+  return new Promise((resolve, reject) => {
+    let done = false
+    let timer = null
+    let unsub = null
+    const finish = (err, value) => {
+      if (done) return
+      done = true
+      if (timer) clearInterval(timer)
+      if (unsub) unsub()
+      err ? reject(err) : resolve(value)
+    }
+    const pick = (payload = {}) => {
+      if (payload.sessionKey !== sessionKey || payload.role !== 'assistant') return ''
+      const ts = new Date(payload.ts || payload.createdAt || payload.time || Date.now()).getTime()
+      if (Number.isFinite(ts) && ts + 1000 < since) return ''
+      return payload.content || payload.text || payload.message?.content || ''
+    }
+    unsub = wsClient.onEvent((event) => {
+      const text = pick(event?.payload || event || {})
+      if (text) finish(null, text)
+    })
+    timer = setInterval(async () => {
+      if (Date.now() - started > timeoutMs) return finish(new Error('翻译超时，请稍后重试'))
+      try {
+        const history = await wsClient.chatHistory(sessionKey, 20)
+        const messages = history?.messages || history || []
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const text = pick({ ...messages[i], sessionKey })
+          if (text) return finish(null, text)
+        }
+      } catch {}
+    }, 1800)
+  })
+}
+
+async function translateMessageToChinese(btn) {
+  const msgWrap = btn.closest('.msg')
+  const bubble = msgWrap?.querySelector('.msg-bubble')
+  const rawText = getMessageRawText(msgWrap).trim()
+  if (!msgWrap || !bubble || !rawText) return
+  if (isMostlyChinese(rawText)) {
+    toast('这条消息已经主要是中文', 'info')
+    return
+  }
+  let box = bubble.querySelector('.msg-translation')
+  if (box?.dataset.done === '1') {
+    box.hidden = !box.hidden
+    btn.classList.toggle('active', !box.hidden)
+    return
+  }
+  if (!wsClient.gatewayReady) {
+    toast('网关未连接，暂时无法翻译', 'error')
+    return
+  }
+  if (!box) {
+    box = document.createElement('div')
+    box.className = 'msg-translation'
+    bubble.appendChild(box)
+  }
+  box.hidden = false
+  box.dataset.done = '0'
+  box.innerHTML = '<div class="msg-translation-title">中文翻译</div><div class="msg-translation-loading">正在翻译...</div>'
+  btn.disabled = true
+  btn.classList.add('active')
+  const oldTitle = btn.title
+  btn.title = '正在翻译...'
+  try {
+    const since = Date.now()
+    await wsClient.chatSend(CHAT_TRANSLATE_SESSION_KEY, CHAT_TRANSLATE_PROMPT + rawText, [])
+    const translated = await waitForTranslatedAssistantMessage(CHAT_TRANSLATE_SESSION_KEY, since)
+    box.dataset.done = '1'
+    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-body">${renderMarkdown(translated || '')}</div>`
+  } catch (e) {
+    box.dataset.done = '0'
+    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-error">翻译失败：${escapeHtml(e.message || String(e))}</div>`
+    toast(`翻译失败：${e.message || e}`, 'error')
+  } finally {
+    btn.disabled = false
+    btn.title = oldTitle || '翻译成中文'
+  }
+}
+
 function appendUserMessage(text, attachments = [], msgTime, metaData = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-user'
@@ -3572,7 +3681,7 @@ function appendUserMessage(text, attachments = [], msgTime, metaData = {}) {
 
   const meta = document.createElement('div')
   meta.className = 'msg-meta'
-  meta.innerHTML = buildMessageMeta({ time: msgTime || new Date(), usage: metaData.usage, cost: metaData.cost, model: metaData.model, contextWindow: metaData.contextWindow || getContextWindow(metaData.sessionKey || _sessionKey), showCopy: true })
+  meta.innerHTML = buildMessageMeta({ time: msgTime || new Date(), usage: metaData.usage, cost: metaData.cost, model: metaData.model, contextWindow: metaData.contextWindow || getContextWindow(metaData.sessionKey || _sessionKey), showCopy: true, showTranslate: true })
 
   wrap.appendChild(bubble)
   wrap.appendChild(meta)
@@ -3583,6 +3692,7 @@ function appendUserMessage(text, attachments = [], msgTime, metaData = {}) {
 function appendAiMessage(text, msgTime, images, videos, audios, files, tools, metaData = {}) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-ai'
+  wrap.dataset.rawText = text || ''
   if (metaData.agentLabel) {
     const name = document.createElement('button')
     name.type = 'button'
@@ -3608,7 +3718,7 @@ function appendAiMessage(text, msgTime, images, videos, audios, files, tools, me
 
   const meta = document.createElement('div')
   meta.className = 'msg-meta'
-  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
+  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span><button class="msg-translate-btn" title="翻译成中文">译</button><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
 
   wrap.appendChild(bubble)
   wrap.appendChild(meta)
@@ -3815,7 +3925,15 @@ function showLightbox(src) {
 function appendSystemMessage(text) {
   const wrap = document.createElement('div')
   wrap.className = 'msg msg-system'
-  wrap.textContent = text
+  wrap.dataset.rawText = text || ''
+  const body = document.createElement('div')
+  body.className = 'msg-system-body'
+  body.textContent = text
+  const meta = document.createElement('div')
+  meta.className = 'msg-meta msg-system-meta'
+  meta.innerHTML = `<button class="msg-translate-btn" title="翻译成中文">译</button><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
+  wrap.appendChild(body)
+  wrap.appendChild(meta)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
 }

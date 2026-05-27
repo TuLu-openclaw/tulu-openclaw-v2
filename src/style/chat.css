@@ -759,6 +759,11 @@
   padding: var(--space-xs) var(--space-sm);
   max-width: 100%;
 }
+.msg-system-body { text-align: center; }
+.msg-system-meta {
+  justify-content: center;
+  margin-top: 4px;
+}
 
 @keyframes pulse-opacity {
   0%, 100% { opacity: 1; }
@@ -1496,7 +1501,8 @@
   opacity: 0.4;
 }
 
-.msg-copy-btn {
+.msg-copy-btn,
+.msg-translate-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1508,12 +1514,48 @@
   border-radius: 4px;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+.msg-copy-btn { margin-left: 2px; }
+.msg-translate-btn {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
   margin-left: auto;
 }
 .msg:hover .msg-copy-btn,
-.msg-copy-btn:focus { opacity: 1; }
-.msg-copy-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.msg:hover .msg-translate-btn,
+.msg-copy-btn:focus,
+.msg-translate-btn:focus,
+.msg-translate-btn.active { opacity: 1; }
+.msg-copy-btn:hover,
+.msg-translate-btn:hover,
+.msg-translate-btn.active { color: var(--text-primary); background: var(--bg-tertiary); }
 .msg-copy-btn.copied { opacity: 1; color: var(--success); }
+.msg-translate-btn:disabled { cursor: wait; opacity: 1; }
+
+.msg-translation {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-tertiary) 86%, transparent);
+}
+.msg-translation-title {
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.msg-translation-body,
+.msg-translation-loading,
+.msg-translation-error {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.65;
+}
+.msg-translation-error { color: var(--error); }
+.msg-translation-body p:last-child { margin-bottom: 0; }
 
 /* 会话状态提示：当前状态已移到标题栏下方的 .chat-reply-status-row */
 .msg-streaming {
