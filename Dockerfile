@@ -31,6 +31,7 @@ WORKDIR /build
 COPY package*.json ./
 COPY vite.config.js ./
 COPY index.html ./
+COPY lobster-office.html ./
 COPY scripts/ ./scripts/
 COPY src/ ./src/
 
