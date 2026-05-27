@@ -16,6 +16,7 @@ import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
 
 // ── 常量 ──
 const STORAGE_KEY = 'clawpanel-assistant'
+const LEGACY_STORAGE_KEYS = ['星枢OpenClaw-assistant']
 const SESSIONS_KEY = 'clawpanel-assistant-sessions'
 const MAX_SESSIONS = 50
 const MAX_CONTEXT_TOKENS = 30 // 最近 N 条消息作为上下文
@@ -1573,11 +1574,65 @@ async function fetchWithRetry(url, options, retries = 3) {
   }
 }
 
+function modelIdsFromProvider(provider = {}) {
+  if (!provider || typeof provider !== 'object') return []
+  const rawModels = []
+  if (Array.isArray(provider.models)) rawModels.push(...provider.models)
+  if (Array.isArray(provider.modelIds)) rawModels.push(...provider.modelIds)
+  if (provider.model && typeof provider.model === 'string') rawModels.push(provider.model)
+  const seen = new Set()
+  return rawModels.map(m => typeof m === 'string' ? m : (m?.id || m?.name || '')).filter(m => {
+    m = String(m || '').trim()
+    if (!m || seen.has(m)) return false
+    seen.add(m)
+    return true
+  })
+}
+
+function getConfigPrimaryModel(config = {}) {
+  const primary = config?.agents?.defaults?.model?.primary || config?.model?.primary || ''
+  return String(primary || '').trim()
+}
+
+function providerApiType(provider = {}) {
+  return normalizeApiType(provider.api || provider.apiType || provider.type || provider.kind)
+}
+
+function pushImportProvider(providers, seen, item) {
+  const baseUrl = String(item?.baseUrl || item?.base_url || '').trim()
+  const name = String(item?.name || '').trim()
+  if (!baseUrl || !name) return
+  const key = `${name}|${baseUrl}`
+  if (seen.has(key)) return
+  seen.add(key)
+  providers.push({
+    source: item.source || t('assistant.importGlobal'),
+    name,
+    baseUrl,
+    apiKey: item.apiKey || item.api_key || '',
+    apiType: providerApiType(item),
+    models: modelIdsFromProvider(item),
+    primaryModel: item.primaryModel || '',
+  })
+}
+
 // ── 配置读写 ──
 function loadConfig() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     _config = raw ? JSON.parse(raw) : null
+    if (!_config) {
+      for (const legacyKey of LEGACY_STORAGE_KEYS) {
+        const legacyRaw = localStorage.getItem(legacyKey)
+        if (!legacyRaw) continue
+        const legacyConfig = JSON.parse(legacyRaw)
+        if (legacyConfig && typeof legacyConfig === 'object') {
+          _config = legacyConfig
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(_config))
+          break
+        }
+      }
+    }
   } catch { _config = null }
   if (!_config) {
     _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false, webSearch: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY }
@@ -4018,6 +4073,22 @@ function showSettings() {
       if (!home) throw new Error('Cannot get home dir')
 
       const providers = []
+      const seenProviders = new Set()
+
+      const collectFromOpenClawConfig = (config, source) => {
+        const primary = getConfigPrimaryModel(config)
+        for (const [pid, p] of Object.entries(config?.models?.providers || {})) {
+          const models = modelIdsFromProvider(p)
+          const primaryModel = primary.startsWith(pid + '/') ? primary.slice(pid.length + 1) : ''
+          pushImportProvider(providers, seenProviders, { ...p, source, name: pid, models, primaryModel })
+        }
+      }
+
+      // 优先用后端命令读取真实 OpenClaw 配置，避免路径/编码差异导致漏扫
+      try {
+        const config = await api.readOpenclawConfig()
+        collectFromOpenClawConfig(config, t('assistant.importGlobal'))
+      } catch {}
 
       // 扫描 agents/*/agent/models.json
       try {
@@ -4028,16 +4099,7 @@ function showSettings() {
             const raw = await api.assistantReadFile(home + '/.openclaw/agents/' + agentId + '/agent/models.json')
             const data = JSON.parse(raw)
             for (const [pid, p] of Object.entries(data.providers || {})) {
-              if (p.baseUrl) {
-                providers.push({
-                  source: 'Agent: ' + agentId,
-                  name: pid,
-                  baseUrl: p.baseUrl,
-                  apiKey: p.apiKey || '',
-                  apiType: normalizeApiType(p.api),
-                  models: (p.models || []).map(m => m.id || m.name).filter(Boolean),
-                })
-              }
+              pushImportProvider(providers, seenProviders, { ...p, source: 'Agent: ' + agentId, name: pid })
             }
           } catch {}
         }
@@ -4047,18 +4109,7 @@ function showSettings() {
       try {
         const raw = await api.assistantReadFile(home + '/.openclaw/openclaw.json')
         const config = JSON.parse(raw)
-        for (const [pid, p] of Object.entries(config.models?.providers || {})) {
-          if (p.baseUrl && !providers.find(x => x.name === pid)) {
-            providers.push({
-              source: t('assistant.importGlobal'),
-              name: pid,
-              baseUrl: p.baseUrl,
-              apiKey: p.apiKey || '',
-              apiType: normalizeApiType(p.api),
-              models: (p.models || []).map(m => m.id || m.name).filter(Boolean),
-            })
-          }
-        }
+        collectFromOpenClawConfig(config, t('assistant.importGlobal'))
       } catch {}
 
       if (providers.length === 0) {
@@ -4093,8 +4144,9 @@ function showSettings() {
           overlay.querySelector('#ast-baseurl').value = p.baseUrl
           overlay.querySelector('#ast-apikey').value = p.apiKey
           overlay.querySelector('#ast-apitype').value = p.apiType
-          if (p.models.length > 0) {
-            overlay.querySelector('#ast-model').value = p.models[0]
+          const modelToUse = p.primaryModel || p.models[0] || ''
+          if (modelToUse) {
+            overlay.querySelector('#ast-model').value = modelToUse
             // 填充模型下拉列表
             dropdown.innerHTML = p.models.map(m =>
               '<div class="ast-model-option" data-model="' + escHtml(m) + '">' + escHtml(m) + '</div>'

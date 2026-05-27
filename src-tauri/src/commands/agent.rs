@@ -7,6 +7,43 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
+fn copy_workspace_dir(src: &Path, dest: &Path) -> Result<u64, String> {
+    if !src.exists() {
+        return Err(format!("源工作区不存在: {}", src.to_string_lossy()));
+    }
+    if !src.is_dir() {
+        return Err(format!("源工作区不是目录: {}", src.to_string_lossy()));
+    }
+    fs::create_dir_all(dest).map_err(|e| format!("创建目标工作区失败: {e}"))?;
+    let mut copied = 0u64;
+    for entry in fs::read_dir(src).map_err(|e| format!("读取源工作区失败: {e}"))? {
+        let entry = entry.map_err(|e| format!("读取源工作区条目失败: {e}"))?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_lossy = name.to_string_lossy();
+        if matches!(
+            name_lossy.as_ref(),
+            ".git" | "node_modules" | "target" | "dist" | ".openclaw"
+        ) {
+            continue;
+        }
+        let target = dest.join(&name);
+        let meta = entry
+            .metadata()
+            .map_err(|e| format!("读取源工作区元数据失败: {e}"))?;
+        if meta.is_dir() {
+            copied += copy_workspace_dir(&path, &target)?;
+        } else if meta.is_file() {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {e}"))?;
+            }
+            fs::copy(&path, &target).map_err(|e| format!("复制文件失败: {e}"))?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
 const AGENT_FILE_ALLOWLIST: &[&str] = &[
     "AGENTS.md",
     "SOUL.md",
@@ -940,6 +977,29 @@ fn collect_dir_to_zip(
         }
     }
     Ok(())
+}
+
+/// 更新 agent 模型配置
+#[tauri::command]
+pub async fn import_agent_workspace(
+    app: tauri::AppHandle,
+    target_id: String,
+    source_id: String,
+) -> Result<Value, String> {
+    if target_id.trim().is_empty() || source_id.trim().is_empty() {
+        return Err("Agent ID 不能为空".into());
+    }
+    if target_id == source_id {
+        return Err("不能导入自身工作区".into());
+    }
+    let config = super::config::load_openclaw_json()?;
+    let source_ws = resolve_agent_workspace_path(&source_id, &config);
+    let target_ws = resolve_agent_workspace_path(&target_id, &config);
+    let copied = copy_workspace_dir(&source_ws, &target_ws)?;
+    let _ = super::config::do_reload_gateway(&app).await;
+    Ok(
+        json!({ "ok": true, "copied": copied, "source": source_ws.to_string_lossy(), "target": target_ws.to_string_lossy() }),
+    )
 }
 
 /// 更新 agent 模型配置

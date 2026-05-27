@@ -163,6 +163,7 @@ pub fn run() {
             agent::update_agent_config,
             agent::update_agent_identity,
             agent::update_agent_model,
+            agent::import_agent_workspace,
             agent::backup_agent,
             // AI 助手工具
             assistant::assistant_exec,

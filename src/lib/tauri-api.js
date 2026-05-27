@@ -397,6 +397,7 @@ export const api = {
   deleteAgent: (id) => { invalidate('list_agents', 'get_agent_detail'); return invoke('delete_agent', { id }) },
   updateAgentIdentity: (id, name, emoji) => { invalidate('list_agents', 'get_agent_detail'); return invoke('update_agent_identity', { id, name, emoji }) },
   updateAgentModel: (id, model) => { invalidate('list_agents', 'get_agent_detail'); return invoke('update_agent_model', { id, model }) },
+  importAgentWorkspace: (targetId, sourceId) => { invalidate('list_agents', 'get_agent_detail', 'get_agent_workspace_info', 'list_agent_workspace_entries'); return invoke('import_agent_workspace', { targetId, sourceId }) },
   backupAgent: (id) => invoke('backup_agent', { id }),
 
   // 日志（短缓存）

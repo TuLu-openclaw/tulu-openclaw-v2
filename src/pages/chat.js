@@ -2058,6 +2058,26 @@ function updateTaskByRunOrSession(runId, sessionKey, patch = {}) {
   return updateTask(task.id, patch)
 }
 
+function getBusyGroupMemberLabels(group, excludeSessionKeys = []) {
+  if (!group) return []
+  const exclude = new Set(excludeSessionKeys.filter(Boolean))
+  const busyStatuses = ['sending', 'queued', 'thinking', 'streaming', 'tool', 'finalizing', 'running']
+  const labels = []
+  for (const member of group.members || []) {
+    const sessionKey = member.sessionKey
+    if (!sessionKey || exclude.has(sessionKey)) continue
+    const busy = _taskBoard.some(t => t.sessionKey === sessionKey && busyStatuses.includes(t.status))
+    if (busy) labels.push(getGroupMemberLabel(member, sessionKey))
+  }
+  return labels
+}
+
+function maybeNotifyBusyGroupMembers(group, excludeSessionKeys = []) {
+  const labels = getBusyGroupMemberLabels(group, excludeSessionKeys)
+  if (!labels.length) return
+  appendSystemMessage(`${labels.join('、')} 正在执行任务中，稍后会回到群聊继续回复。`)
+}
+
 function completeTaskRound(task) {
   if (!task || task._roundCounted) return
   const ctx = ensureTaskContext(task.sessionKey, task.model, task.prompt)
@@ -2465,6 +2485,7 @@ async function doGroupSend(group, text, attachments = []) {
   rememberGroupMessage(group, storedUser)
   saveMessage(storedUser)
   appendSystemMessage(`群聊任务已发送给：${targets.map(t => t.label || t.agentId || t.sessionKey).join('、')}`)
+  maybeNotifyBusyGroupMembers(group, targets.map(t => t.sessionKey))
   try {
     for (const target of targets) {
       const sessionKey = target.sessionKey
@@ -2597,8 +2618,14 @@ function handleChatEvent(payload) {
   const activeGroup = getActiveGroup()
   const taskGroup = trackedTask?.groupId ? _chatGroups.find(g => g.id === trackedTask.groupId) : null
   const eventGroup = (activeGroup && getGroupMemberBySession(activeGroup, eventSessionKey)) ? activeGroup : (taskGroup && getGroupMemberBySession(taskGroup, eventSessionKey) ? taskGroup : null)
-  if (eventGroup && state !== 'delta') {
+  if (eventGroup) {
     const renderIntoCurrentGroup = activeGroup?.id === eventGroup.id
+    if (state === 'queued' && renderIntoCurrentGroup && eventSessionKey !== _sessionKey) {
+      const member = getGroupMemberBySession(eventGroup, eventSessionKey)
+      if (member) appendSystemMessage(`${getGroupMemberLabel(member, eventSessionKey)} 正在执行任务中，稍后会回到群聊继续回复。`)
+      return
+    }
+    if (state === 'delta') return
     if (state === 'final') {
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
       completeTaskRound(doneTask)
@@ -4309,13 +4336,29 @@ async function runHostedAgentStep() {
   }
 }
 
+function loadHostedAssistantConfig() {
+  const keys = ['clawpanel-assistant', '星枢OpenClaw-assistant']
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) continue
+      const stored = JSON.parse(raw)
+      if (stored && typeof stored === 'object') {
+        return {
+          baseUrl: stored.baseUrl || '',
+          apiKey: stored.apiKey || '',
+          model: stored.model || '',
+          temperature: stored.temperature || 0.7,
+          apiType: stored.apiType || 'openai-completions',
+        }
+      }
+    } catch {}
+  }
+  return { baseUrl: '', apiKey: '', model: '', temperature: 0.7, apiType: 'openai-completions' }
+}
+
 async function callHostedAI(messages, onChunk) {
-  let config
-  try {
-    const raw = localStorage.getItem('星枢OpenClaw-assistant')
-    const stored = raw ? JSON.parse(raw) : {}
-    config = { baseUrl: stored.baseUrl || '', apiKey: stored.apiKey || '', model: stored.model || '', temperature: stored.temperature || 0.7, apiType: stored.apiType || 'openai-completions' }
-  } catch { config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, apiType: 'openai-completions' } }
+  const config = loadHostedAssistantConfig()
 
   if (!config.baseUrl || !config.model) throw new Error(t('chat.hostedModelNotConfigured'))
 

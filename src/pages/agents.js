@@ -110,6 +110,7 @@ function renderAgents(page, state) {
           <div class="agent-card-actions">
             <button class="btn btn-sm btn-primary" data-action="detail" data-id="${a.id}">${t('agents.detail')}</button>
             <button class="btn btn-sm btn-secondary" data-action="backup" data-id="${a.id}">${t('agents.backup')}</button>
+            <button class="btn btn-sm btn-secondary" data-action="import-workspace" data-id="${a.id}">${t('agents.importWorkspace')}</button>
             <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${a.id}">${t('agents.edit')}</button>
             ${!isDefault ? `<button class="btn btn-sm btn-danger" data-action="delete" data-id="${a.id}">${t('agents.delete')}</button>` : ''}
           </div>
@@ -146,6 +147,7 @@ function attachAgentEvents(page, state) {
       const id = btn.dataset.id
       if (action === 'detail') location.hash = `#/agent-detail?id=${encodeURIComponent(id)}`
       else if (action === 'edit') showEditAgentDialog(page, state, id)
+      else if (action === 'import-workspace') showImportWorkspaceDialog(page, state, id)
       else if (action === 'delete') await deleteAgent(page, state, id)
       else if (action === 'backup') await backupAgent(id)
       return
@@ -155,6 +157,36 @@ function attachAgentEvents(page, state) {
     if (card) {
       const id = card.dataset.id
       if (id) location.hash = `#/agent-detail?id=${encodeURIComponent(id)}`
+    }
+  })
+}
+
+async function showImportWorkspaceDialog(page, state, targetId) {
+  const sources = (state.agents || [])
+    .filter(a => a.id !== targetId && a.workspace)
+    .map(a => ({ value: a.id, label: `${a.id}${a.identityName ? ' — ' + a.identityName.split(',')[0] : ''}` }))
+  if (!sources.length) {
+    toast(t('agents.importWorkspaceNoSource'), 'warning')
+    return
+  }
+  showModal({
+    title: t('agents.importWorkspaceTitle', { id: targetId }),
+    fields: [
+      { name: 'sourceId', label: t('agents.importWorkspaceSource'), type: 'select', value: sources[0].value, options: sources },
+    ],
+    onConfirm: async (result) => {
+      const sourceId = (result.sourceId || '').trim()
+      if (!sourceId || sourceId === targetId) return
+      const yes = await showConfirm(t('agents.importWorkspaceConfirm', { source: sourceId, target: targetId }))
+      if (!yes) return
+      try {
+        const res = await api.importAgentWorkspace(targetId, sourceId)
+        toast(t('agents.importWorkspaceDone', { count: res?.copied || 0 }), 'success')
+        invalidate('list_agents')
+        await loadAgents(page, state)
+      } catch (e) {
+        toast(t('agents.importWorkspaceFailed') + ': ' + e, 'error')
+      }
     }
   })
 }
