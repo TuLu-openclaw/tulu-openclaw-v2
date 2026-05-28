@@ -565,7 +565,7 @@ export const api = {
   hermesEnvSet: (key, value) => invoke('hermes_env_set', { key, value }),
   hermesEnvDelete: (key) => invoke('hermes_env_delete', { key }),
   hermesEnvReveal: () => invoke('hermes_env_reveal'),
-  updateHermes: () => invoke('update_hermes'),
+  updateHermes: (target = 'latest') => invoke('update_hermes', { target }),
   uninstallHermes: (cleanConfig = false) => invoke('uninstall_hermes', { cleanConfig }),
 
   // Hermes Sessions / Logs / Skills / Memory

@@ -214,24 +214,28 @@ export function render() {
 
   let hubDebounceTimer = null
   async function loadHubResults() {
-    if (!hubQuery.trim()) { hubResults = []; draw(); return }
-    if (hubDebounceTimer) clearTimeout(hubDebounceTimer)
-    hubDebounceTimer = setTimeout(async () => {
-      hubLoading = true; draw()
-      try {
-        const fallback = await api.skillhubSearch(hubQuery.trim(), 25)
-        hubResults = normalizeHubItems(fallback)
-        if (hubResults.length === 0) {
-          toast(t('engine.skillsHubNoResults') || '未找到匹配的技能', 'info')
-        }
-      } catch (e) {
-        console.error('Hub search failed:', e)
-        hubResults = []
-        toast(t('engine.skillsHubSearchFailed') + ': ' + (e?.message || e), 'error')
-      } finally {
-        hubLoading = false; hubDebounceTimer = null; draw()
+    const q = hubQuery.trim()
+    if (!q) { hubResults = []; draw(); return }
+    if (hubDebounceTimer) { clearTimeout(hubDebounceTimer); hubDebounceTimer = null }
+    hubLoading = true; draw()
+    try {
+      const fallback = await api.skillhubSearch(q, 25)
+      hubResults = normalizeHubItems(fallback)
+      if (hubResults.length === 0) {
+        toast(t('engine.skillsHubNoResults') || '未找到匹配的技能', 'info')
       }
-    }, 250)
+    } catch (e) {
+      console.error('Hub search failed:', e)
+      hubResults = []
+      toast(t('engine.skillsHubSearchFailed') + ': ' + (e?.message || e), 'error')
+    } finally {
+      hubLoading = false; draw()
+    }
+  }
+
+  function scheduleHubSearch() {
+    if (hubDebounceTimer) clearTimeout(hubDebounceTimer)
+    hubDebounceTimer = setTimeout(loadHubResults, 300)
   }
 
   async function installHubSkill(slug) {
@@ -241,6 +245,7 @@ export function render() {
     try {
       await api.hermesSkillhubInstall(slug)
       toast(t('engine.skillsHubInstalled', { slug }), 'success')
+      hubMode = false
       // Reload local skills after install
       await loadSkills()
     } catch (e) {
@@ -745,9 +750,10 @@ export function render() {
 
     // Hub event listeners
     el.querySelector('#hm-skills-tab-local')?.addEventListener('click', () => { hubMode = false; draw() })
-    el.querySelector('#hm-skills-tab-hub')?.addEventListener('click', () => { hubMode = true; draw() })
-    el.querySelector('#hm-hub-query')?.addEventListener('input', (e) => { hubQuery = e.target.value })
-    el.querySelector('#hm-hub-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadHubResults() })
+    el.querySelector('#hm-skills-tab-hub')?.addEventListener('click', () => { hubMode = true; draw(); if (!hubResults.length && hubQuery.trim()) loadHubResults() })
+    el.querySelector('#hm-skills-open-hub')?.addEventListener('click', () => { hubMode = true; draw() })
+    el.querySelector('#hm-hub-query')?.addEventListener('input', (e) => { hubQuery = e.target.value; scheduleHubSearch() })
+    el.querySelector('#hm-hub-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); loadHubResults() } })
     el.querySelector('#hm-hub-search-btn')?.addEventListener('click', loadHubResults)
     el.querySelector('.hm-hub-results')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-install-slug]')

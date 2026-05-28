@@ -426,7 +426,8 @@ fn clean_cli_output(text: &str) -> String {
 
     // 2. Remove npm/node progress bar characters
     // Pattern: ████░░░░░░ 50% | some info
-    let progress_regex = regex::Regex::new(r"[█▓▒░│┼┤├┬┴]+[│].*?\r?\n").expect("invalid progress bar regex");
+    let progress_regex =
+        regex::Regex::new(r"[█▓▒░│┼┤├┬┴]+[│].*?\r?\n").expect("invalid progress bar regex");
     result = progress_regex.replace_all(&result, "").to_string();
 
     // 3. Remove lines that are purely ANSI cursor control sequences

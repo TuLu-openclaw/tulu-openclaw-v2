@@ -1274,10 +1274,7 @@ pub async fn run_channel_action(
     if platform == "weixin" && action == "install" {
         // 版本参数校验：None 或空字符串都降级为 latest
         let weixin_spec = match version.as_deref() {
-            Some(v) if !v.is_empty() => format!(
-                "@tencent-weixin/openclaw-weixin-cli@{}",
-                v
-            ),
+            Some(v) if !v.is_empty() => format!("@tencent-weixin/openclaw-weixin-cli@{}", v),
             _ => {
                 // 检测 OpenClaw 版本，决定装哪个
                 let oc_ver = crate::utils::resolve_openclaw_cli_path()

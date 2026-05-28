@@ -3,7 +3,7 @@
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
-import { showContentModal, showUpgradeModal } from '../../../components/modal.js'
+import { showConfirm, showContentModal, showUpgradeModal } from '../../../components/modal.js'
 import { toast } from '../../../components/toast.js'
 import {
   loadHermesProviders,
@@ -161,6 +161,7 @@ export function render() {
   let formApiKey = ''
   let formModel = ''
   let formInited = false    // 首次加载后用 hermesConfig 初始化
+  let importChoices = []    // OpenClaw 配置导入候选
 
   function getPresetApiType(provider) {
     return provider?.transport === 'anthropic_messages' ? 'anthropic-messages'
@@ -168,11 +169,55 @@ export function render() {
       : 'openai-completions'
   }
 
-  function findOpenClawPrimaryProvider(config) {
-    const primary = config?.agents?.defaults?.model?.primary || ''
-    const [providerId, modelId] = String(primary).split('/', 2)
-    const provider = providerId ? config?.models?.providers?.[providerId] : null
-    return { providerId, modelId, provider }
+  function normalizeApiType(raw) {
+    const type = String(raw || '').trim().toLowerCase()
+    if (type === 'anthropic' || type === 'anthropic-messages') return 'anthropic-messages'
+    if (type === 'google' || type === 'gemini' || type === 'google-gemini' || type === 'google-generative-ai') return 'google-generative-ai'
+    return 'openai-completions'
+  }
+
+  function modelIdsFromProvider(provider = {}) {
+    const raw = []
+    if (Array.isArray(provider?.models)) raw.push(...provider.models)
+    if (Array.isArray(provider?.modelIds)) raw.push(...provider.modelIds)
+    if (typeof provider?.model === 'string') raw.push(provider.model)
+    const seen = new Set()
+    return raw.map(m => typeof m === 'string' ? m : (m?.id || m?.name || '')).map(m => String(m || '').trim()).filter(m => {
+      if (!m || seen.has(m)) return false
+      seen.add(m)
+      return true
+    })
+  }
+
+  function getConfigPrimaryModel(config = {}) {
+    return String(config?.agents?.defaults?.model?.primary || config?.model?.primary || '').trim()
+  }
+
+  function pushImportProvider(list, seen, item) {
+    const baseUrl = String(item?.baseUrl || item?.base_url || '').trim()
+    const apiKey = String(item?.apiKey || item?.api_key || '').trim()
+    const name = String(item?.name || item?.id || '').trim()
+    if (!name || (!baseUrl && !apiKey && !modelIdsFromProvider(item).length)) return
+    const key = `${name}|${baseUrl}|${apiKey.slice(-8)}`
+    if (seen.has(key)) return
+    seen.add(key)
+    list.push({
+      source: item?.source || 'OpenClaw',
+      name,
+      baseUrl,
+      apiKey,
+      apiType: normalizeApiType(item?.api || item?.apiType || item?.type || item?.kind),
+      models: modelIdsFromProvider(item),
+      primaryModel: String(item?.primaryModel || '').trim(),
+    })
+  }
+
+  function collectProvidersFromConfig(config, source, list, seen) {
+    const primary = getConfigPrimaryModel(config)
+    for (const [pid, p] of Object.entries(config?.models?.providers || {})) {
+      const primaryModel = primary.startsWith(pid + '/') ? primary.slice(pid.length + 1) : ''
+      pushImportProvider(list, seen, { ...p, source, name: pid, primaryModel })
+    }
   }
 
   function syncFormFromDom() {
@@ -200,6 +245,48 @@ export function render() {
     { label: t('engine.cliUninstall'),  desc: t('engine.cliUninstallDesc'), cmd: 'uv tool uninstall hermes-agent' },
     { label: t('engine.cliConfig'),     desc: t('engine.cliConfigDesc'),    cmd: isWin ? `explorer ${configPath}` : `open ${configPath}` },
   ]
+
+  function renderUpdateCard(currentVersion) {
+    const installed = updateInfo?.installed || currentVersion || '-'
+    const recommended = updateInfo?.recommended || '2026.3.13'
+    const latest = updateInfo?.latest || '-'
+    const isHigh = !!updateInfo?.localAboveRecommended
+    const tone = updateInstalling ? 'is-installing' : isHigh ? 'is-warning' : updateInfo?.updateAvailable ? 'is-info' : 'is-ok'
+    const msg = updateInstalling
+      ? 'Hermes Agent 正在切换版本，请不要关闭窗口。'
+      : isHigh
+        ? `检测到你本地安装的是高于推荐稳定版的 ${installed}，可能存在接口、事件或配置兼容性问题。建议回退到 ${recommended}；如果你要继续使用高版本，请自行验证兼容性并关注 issue / release。`
+        : updateInfo?.updateAvailable
+          ? `检测到最新上游 ${latest}，当前本地版本 ${installed}。如需升级，请点击切换版本。`
+          : `当前 Hermes Agent 版本正常。推荐稳定版: ${recommended}。`
+    return `
+      <div class="hm-update-card ${tone}">
+        <div class="hm-update-head">
+          <div>
+            <div class="hm-update-title">Hermes Agent · 本地</div>
+            <div class="hm-update-version">${esc(installed)}</div>
+          </div>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm hm-update-dismiss" ${updateInstalling ? 'disabled' : ''}>${t('engine.dashDismiss')}</button>
+        </div>
+        <div class="hm-update-grid">
+          <div><span>推荐稳定版</span><strong>${esc(recommended)}</strong></div>
+          <div><span>最新上游</span><strong>${esc(latest)}</strong></div>
+          <div><span>发布页面</span><a href="${esc(updateInfo?.releaseUrl || '#')}" target="_blank">release</a></div>
+        </div>
+        ${updateInstalling ? `
+          <div class="hm-update-progress-row">
+            <span>${esc(updateLog || '正在准备...')}</span><strong>${updateProgress}%</strong>
+          </div>
+          <div class="hm-update-progress"><div style="width:${Math.max(0, Math.min(updateProgress, 100))}%"></div></div>
+        ` : ''}
+        <div class="hm-update-actions">
+          ${updateInfo?.canRollback ? `<button class="hm-btn hm-btn--warning hm-update-target" data-target="recommended">回退到推荐版</button>` : ''}
+          <button class="hm-btn hm-btn--primary hm-update-target" data-target="latest">切换版本</button>
+          <button class="hm-btn hm-btn--danger hm-update-uninstall">卸载</button>
+        </div>
+        <p class="hm-update-note">${esc(msg)}</p>
+      </div>`
+  }
 
   function renderCliCommands() {
     return CLI_COMMANDS.map((c, i) =>
@@ -273,6 +360,8 @@ export function render() {
         ).join('')}</div>`
       : ''
 
+    const updateCard = updateInfo ? renderUpdateCard(version) : ''
+
     el.innerHTML = `
       <!-- Hero strip: dynamic colored bar + title + CTA + icon actions -->
       <div class="hm-hero" data-state="${gwRunning ? 'running' : 'stopped'}">
@@ -292,32 +381,7 @@ export function render() {
         </div>
       </div>
 
-      ${updateInfo?.updateAvailable && !updateInstalling ? `
-      <div id="update-banner" style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
-        <span style="font-size:20px">🚀</span>
-        <span style="flex:1">${t('engine.dashUpdateBanner').replace('{current}', updateInfo.installed).replace('{latest}', updateInfo.latest)}</span>
-        <button id="hm-update-now-btn" style="padding:6px 18px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;color:#fff;cursor:pointer;font-size:13px;font-weight:600">⬇ ${t('engine.dashInstallUpdate')}</button>
-        <button id="hm-update-dismiss-btn" style="padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,0.25);border-radius:6px;color:rgba(255,255,255,0.7);cursor:pointer;font-size:13px">${t('engine.dashDismiss')}</button>
-      </div>
-      ${updateInstalling ? `
-      <div id="update-banner" style="padding:14px 18px;background:linear-gradient(135deg,#1d4ed8,#7c3aed);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <span style="font-size:18px">⏳</span>
-          <span style="flex:1">${t('engine.dashInstalling')}</span>
-          <span style="font-weight:700">${updateProgress}%</span>
-        </div>
-        <div style="background:rgba(255,255,255,0.2);border-radius:4px;height:6px;overflow:hidden">
-          <div style="background:#fff;height:100%;width:${updateProgress}%;transition:width .3s"></div>
-        </div>
-        ${updateLog ? `<div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:6px">${updateLog}</div>` : ''}
-      </div>` : ''}
-      ${updateProgress >= 100 && !updateInstalling ? `
-      <div id="update-banner" style="padding:14px 18px;background:linear-gradient(135deg,#059669,#10b981);border-radius:10px;margin:12px 0;font-size:14px;color:#fff">
-        <span style="font-size:18px">✅</span>
-        <span style="margin-left:8px">${t('engine.dashInstallSuccess')}</span>
-        <button id="hm-update-dismiss-btn" style="margin-left:auto;padding:6px 14px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);border-radius:6px;color:#fff;cursor:pointer;font-size:13px">${t('engine.dashDismiss')}</button>
-      </div>` : ''}
-      ` : ''}
+      ${updateCard}
 
       <!-- KPI grid: 5 cards with tone indicators -->
       <div class="hm-kpi-grid">
@@ -368,7 +432,7 @@ export function render() {
       </div>
 
       <!-- Model config panel (collapsible) -->
-      <div class="hm-panel">
+      <div class="hm-panel hm-panel--overflow-visible">
         <div class="hm-panel-header hm-panel-header--toggle hm-cfg-toggle ${modelConfigCollapsed ? '' : 'is-open'}">
           <div class="hm-panel-title">
             <svg class="hm-panel-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
@@ -885,13 +949,30 @@ export function render() {
     })
     // Save model config
     el.querySelector('.hm-import-openclaw-model')?.addEventListener('click', importOpenClawModel)
+    el.querySelectorAll('.hm-import-option').forEach(option => {
+      option.addEventListener('click', () => {
+        const p = importChoices[Number(option.dataset.idx)]
+        if (!p) return
+        formBaseUrl = p.baseUrl || ''
+        formApiKey = p.apiKey || ''
+        formModel = p.primaryModel || p.models[0] || ''
+        models = p.models || []
+        showDropdown = models.length > 0
+        importChoices = []
+        cfgMsg = `<span style="color:var(--success)">✓ 已导入 ${esc(p.name)}，请选择模型后保存到 Hermes</span>`
+        draw()
+      })
+    })
     el.querySelector('.hm-import-openclaw-persona')?.addEventListener('click', importOpenClawPersona)
     el.querySelector('.hm-save-model')?.addEventListener('click', doSaveModel)
     // --- 连接目标 ---
     el.querySelector('.hm-detect-env')?.addEventListener('click', doDetectEnv)
     el.querySelector('.hm-check-update')?.addEventListener('click', doCheckUpdate)
-    document.querySelector('#hm-update-now-btn')?.addEventListener('click', doInstallUpdate)
-    document.querySelector('#hm-update-dismiss-btn')?.addEventListener('click', () => {
+    el.querySelectorAll('.hm-update-target').forEach(btn => {
+      btn.addEventListener('click', () => doInstallUpdate(btn.dataset.target || 'latest'))
+    })
+    el.querySelector('.hm-update-uninstall')?.addEventListener('click', doUninstallHermes)
+    el.querySelector('.hm-update-dismiss')?.addEventListener('click', () => {
       updateInfo = null; updateProgress = 0; updateLog = ''; updateInstalling = false; draw()
     })
     el.querySelectorAll('.hm-connect-mode').forEach(btn => {
@@ -975,37 +1056,58 @@ export function render() {
   }
 
   async function importOpenClawModel() {
-    modelBusy = true; cfgMsg = ''; draw()
+    modelBusy = true
+    importChoices = []
+    cfgMsg = `<span style="color:var(--text-tertiary)">正在扫描本地 OpenClaw 配置...</span>`
+    draw()
     try {
-      const config = await api.readOpenclawConfig()
-      const { providerId, modelId, provider } = findOpenClawPrimaryProvider(config)
-      if (!provider) throw new Error(t('engine.dashImportOpenClawMissingModel'))
+      const providers = []
+      const seen = new Set()
 
-      // 从 provider 配置获取完整信息
-      formApiKey = provider.apiKey || ''
-      formBaseUrl = provider.baseUrl || ''
+      try {
+        const config = await api.readOpenclawConfig()
+        collectProvidersFromConfig(config, 'OpenClaw 全局配置', providers, seen)
+      } catch {}
 
-      // modelId 已经是去掉 nickname 后的真实模型名（如 MiniMax-M2.7-highspeed）
-      // 但要确保：如果 primary 是 "nickname/model" 格式，modelId才是实际模型名
-      formModel = modelId || ''
+      try {
+        const sysInfo = await api.assistantSystemInfo()
+        const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home:\s*(.+)/)?.[1]?.trim() || ''
+        if (home) {
+          try {
+            const agentsList = await api.assistantListDir(home + '/.openclaw/agents')
+            const agentIds = agentsList.split('\n').map(l => l.replace(/\/$/, '').trim()).filter(Boolean)
+            for (const agentId of agentIds) {
+              try {
+                const raw = await api.assistantReadFile(home + '/.openclaw/agents/' + agentId + '/agent/models.json')
+                const data = JSON.parse(raw)
+                for (const [pid, p] of Object.entries(data.providers || {})) {
+                  pushImportProvider(providers, seen, { ...p, source: 'Agent: ' + agentId, name: pid })
+                }
+              } catch {}
+            }
+          } catch {}
 
-      // providerId 从 baseUrl 推断，而不是直接用 OpenClaw 的 provider key
-      const matched = formBaseUrl ? inferProviderByBaseUrl(hermesProviders, formBaseUrl) : null
-      const effectiveProviderId = matched?.id || 'custom'
+          try {
+            const raw = await api.assistantReadFile(home + '/.openclaw/openclaw.json')
+            collectProvidersFromConfig(JSON.parse(raw), 'OpenClaw 全局配置', providers, seen)
+          } catch {}
+        }
+      } catch {}
 
-      // 校验 provider 有效性（防止用户输入无效 provider 名称）
-      const knownIds = hermesProviders.map(p => p.id)
-      if (effectiveProviderId !== 'custom' && !knownIds.includes(effectiveProviderId)) {
-        cfgMsg = `<span style="color:var(--error)">✗ 未知提供商 '${effectiveProviderId}'，请先在 Hermes 设置中添加该 Provider</span>`
-        modelBusy = false; draw(); return
-      }
-
-      const providerMeta = hermesProviders.find(p => p.id === effectiveProviderId)
-      const providerName = providerMeta?.name || effectiveProviderId || 'custom'
-
-      await api.configureHermes(effectiveProviderId, formApiKey, formModel, formBaseUrl || null)
-      cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.dashImportOpenClawModelOk', { provider: providerName, model: formModel || '—' })}</span>`
-      await refresh()
+      if (!providers.length) throw new Error(t('engine.dashImportOpenClawMissingModel'))
+      importChoices = providers
+      cfgMsg = `<div class="hm-import-list">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">找到 ${providers.length} 个可导入配置，点击一项填入 Hermes：</div>
+        ${providers.map((p, i) => {
+          const modelsStr = p.models.length ? p.models.join(', ') : '未声明模型'
+          const keyHint = p.apiKey ? '****' + p.apiKey.slice(-6) : '未设置 Key'
+          return `<button type="button" class="hm-import-option" data-idx="${i}">
+            <span class="hm-import-option-head"><strong>${esc(p.name)}</strong><em>${esc(p.source)}</em></span>
+            <span class="hm-import-option-url">${esc(p.baseUrl || '未设置 Base URL')} · ${esc(keyHint)}</span>
+            <span class="hm-import-option-models">模型：${esc(modelsStr)}</span>
+          </button>`
+        }).join('')}
+      </div>`
     } catch (e) {
       cfgMsg = `<span style="color:var(--error)">✗ ${String(e).replace(/^Error:\s*/, '')}</span>`
     } finally {
@@ -1055,22 +1157,22 @@ export function render() {
     updateChecking = false; draw()
   }
 
-  async function doInstallUpdate() {
+  async function doInstallUpdate(target = 'latest') {
     if (updateInstalling) return
     updateInstalling = true
-    updateProgress = 0
-    updateLog = ''
+    updateProgress = 1
+    updateLog = target === 'recommended' ? '准备回退到推荐稳定版...' : '准备切换到最新上游...'
     draw()
 
     // 监听安装事件
     let listeners = []
     try {
-      const unsubLog = await listen('hermes-install-log', (e) => {
+      const unsubLog = await tauriListen('hermes-install-log', (e) => {
         updateLog = String(e.payload)
         draw()
       })
       listeners.push(unsubLog)
-      const unsubProgress = await listen('hermes-install-progress', (e) => {
+      const unsubProgress = await tauriListen('hermes-install-progress', (e) => {
         updateProgress = Math.min(Number(e.payload) || 0, 99)
         draw()
       })
@@ -1078,10 +1180,12 @@ export function render() {
     } catch {}
 
     try {
-      await api.installHermes('uv-tool', [])
+      await api.updateHermes(target)
       updateProgress = 100
-      updateLog = t('engine.dashInstallSuccess')
+      updateLog = target === 'recommended' ? '已回退到推荐稳定版' : t('engine.dashInstallSuccess')
       updateInstalling = false
+      await refresh()
+      try { updateInfo = await api.checkHermesUpdate() } catch (_) {}
       draw()
     } catch (e) {
       updateProgress = 0
@@ -1089,15 +1193,34 @@ export function render() {
       updateInstalling = false
       draw()
       toast(t('engine.dashInstallFailed') + ': ' + (e?.message || e), 'error')
+    } finally {
+      listeners.forEach(fn => { try { fn() } catch {} })
     }
+  }
 
-    // 清理监听器
-    listeners.forEach(fn => { try { fn() } catch {} })
-    
-    // 安装成功后重置 updateInfo
-    if (updateProgress >= 100) {
+  async function doUninstallHermes() {
+    if (updateInstalling) return
+    const ok = await showConfirm('确认卸载 Hermes Agent？不会删除配置，除非你之后手动清理。')
+    if (!ok) return
+    updateInstalling = true
+    updateProgress = 5
+    updateLog = '正在卸载 Hermes Agent...'
+    draw()
+    try {
+      await api.uninstallHermes(false)
+      updateProgress = 100
+      updateLog = 'Hermes Agent 已卸载'
+      updateInstalling = false
+      await refresh()
       updateInfo = null
+      toast('Hermes Agent 已卸载', 'success')
       draw()
+    } catch (e) {
+      updateProgress = 0
+      updateLog = '❌ ' + (e?.message || String(e))
+      updateInstalling = false
+      draw()
+      toast('卸载失败: ' + (e?.message || e), 'error')
     }
   }
 

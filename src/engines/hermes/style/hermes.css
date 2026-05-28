@@ -6185,3 +6185,165 @@ body[data-active-engine="hermes"][data-theme="dark"] {
   text-align: center;
 }
 
+
+
+/* Hermes dashboard fixes: import list, model dropdown, update card */
+[data-engine="hermes"] .hm-panel--overflow-visible,
+[data-engine="hermes"] .hm-panel--overflow-visible .hm-panel-body {
+  overflow: visible;
+}
+
+[data-engine="hermes"] #hm-model-dropdown.hm-dropdown {
+  max-height: min(360px, 46vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 1000;
+}
+
+[data-engine="hermes"] .hm-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--hm-text-primary);
+}
+
+[data-engine="hermes"] .hm-import-option {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--hm-border);
+  background: var(--hm-surface-1);
+  color: var(--hm-text-primary);
+  border-radius: var(--hm-radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-engine="hermes"] .hm-import-option:hover {
+  border-color: var(--hm-accent);
+  background: var(--hm-accent-soft);
+}
+
+[data-engine="hermes"] .hm-import-option-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+[data-engine="hermes"] .hm-import-option-head em,
+[data-engine="hermes"] .hm-import-option-url,
+[data-engine="hermes"] .hm-import-option-models {
+  color: var(--hm-text-tertiary);
+  font-size: 11px;
+  font-style: normal;
+  word-break: break-all;
+}
+
+[data-engine="hermes"] .hm-update-card {
+  margin: 12px 0;
+  padding: 16px;
+  border-radius: var(--hm-radius-md);
+  border: 1px solid var(--hm-border);
+  background: var(--hm-surface-1);
+  box-shadow: var(--hm-shadow-sm);
+}
+
+[data-engine="hermes"] .hm-update-card.is-warning {
+  border-color: rgba(245, 158, 11, .45);
+  background: linear-gradient(135deg, rgba(245,158,11,.12), var(--hm-surface-1));
+}
+
+[data-engine="hermes"] .hm-update-card.is-info,
+[data-engine="hermes"] .hm-update-card.is-installing {
+  border-color: rgba(59, 130, 246, .35);
+  background: linear-gradient(135deg, rgba(59,130,246,.10), var(--hm-surface-1));
+}
+
+[data-engine="hermes"] .hm-update-card.is-ok {
+  border-color: rgba(34, 197, 94, .35);
+}
+
+[data-engine="hermes"] .hm-update-head,
+[data-engine="hermes"] .hm-update-actions,
+[data-engine="hermes"] .hm-update-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-engine="hermes"] .hm-update-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+[data-engine="hermes"] .hm-update-title {
+  font-size: 12px;
+  color: var(--hm-text-tertiary);
+}
+
+[data-engine="hermes"] .hm-update-version {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--hm-text-primary);
+}
+
+[data-engine="hermes"] .hm-update-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+[data-engine="hermes"] .hm-update-grid div {
+  border: 1px solid var(--hm-border);
+  border-radius: var(--hm-radius-sm);
+  padding: 8px 10px;
+  background: var(--hm-surface-0);
+}
+
+[data-engine="hermes"] .hm-update-grid span {
+  display: block;
+  font-size: 11px;
+  color: var(--hm-text-tertiary);
+  margin-bottom: 3px;
+}
+
+[data-engine="hermes"] .hm-update-grid strong,
+[data-engine="hermes"] .hm-update-grid a {
+  color: var(--hm-text-primary);
+  font-size: 13px;
+}
+
+[data-engine="hermes"] .hm-update-actions {
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+[data-engine="hermes"] .hm-update-note {
+  margin: 0;
+  color: var(--hm-text-secondary);
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+[data-engine="hermes"] .hm-update-progress-row {
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--hm-text-secondary);
+  margin: 8px 0;
+}
+
+[data-engine="hermes"] .hm-update-progress {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--hm-surface-3);
+}
+
+[data-engine="hermes"] .hm-update-progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--hm-accent), var(--hm-cta));
+  transition: width .25s ease;
+}

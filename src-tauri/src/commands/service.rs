@@ -859,7 +859,9 @@ mod platform {
                 // 排除纯 node.exe（可能是其他应用）
                 if cmdline_lower.contains("openclaw") && cmdline_lower.contains("gateway") {
                     // 只杀我们自己的 PID，不杀记录中的"已知好进程"
-                    let our_pid = *LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                    let our_pid = *LAST_KNOWN_GATEWAY_PID
+                        .lock()
+                        .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
                     if Some(pid) != our_pid {
                         kill_process_tree(pid);
                     }
@@ -944,7 +946,11 @@ mod platform {
             if parts.len() < 5 {
                 continue;
             }
-            let pid = match parts.last().expect("parts.len() >= 5 guarantees last()").parse::<u32>() {
+            let pid = match parts
+                .last()
+                .expect("parts.len() >= 5 guarantees last()")
+                .parse::<u32>()
+            {
                 Ok(p) => p,
                 Err(_) => continue,
             };
@@ -1122,14 +1128,18 @@ mod platform {
         };
         if std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_secs(1)).is_err() {
             // 端口不通，先清空已知的僵死 PID
-            let mut known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+            let mut known = LAST_KNOWN_GATEWAY_PID
+                .lock()
+                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
             *known = None;
             return (false, None);
         }
 
         // 端口通了，PID 识别仅作为增强信息
         if let Some(pid) = get_gateway_pid_by_port(port) {
-            let mut known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+            let mut known = LAST_KNOWN_GATEWAY_PID
+                .lock()
+                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
             *known = Some(pid);
             (true, Some(pid))
         } else {
@@ -1194,7 +1204,9 @@ mod platform {
         if running {
             // 已有 Gateway 在跑，更新已知 PID（避免后续重复拉起导致 lock 冲突），直接返回成功
             if let Some(p) = pid {
-                let mut known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                let mut known = LAST_KNOWN_GATEWAY_PID
+                    .lock()
+                    .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
                 *known = Some(p);
             }
             return Ok(());
@@ -1210,7 +1222,9 @@ mod platform {
             .stderr(stderr_log);
 
         // 记录 spawn 前的已知 PID
-        let before_pid = *LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+        let before_pid = *LAST_KNOWN_GATEWAY_PID
+            .lock()
+            .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
 
         let child = cmd.spawn().map_err(|e| format!("启动 Gateway 失败: {e}"))?;
         let spawned_pid = child.id();
@@ -1252,11 +1266,15 @@ mod platform {
             cleanup_legacy_gateway_window();
             // 清空已记录的 PID
             {
-                let mut known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                let mut known = LAST_KNOWN_GATEWAY_PID
+                    .lock()
+                    .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
                 *known = None;
             }
             {
-                let mut active = ACTIVE_GATEWAY_CHILD.lock().expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+                let mut active = ACTIVE_GATEWAY_CHILD
+                    .lock()
+                    .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
                 *active = None;
             }
             return Ok(());
@@ -1272,9 +1290,13 @@ mod platform {
             tokio::time::sleep(Duration::from_millis(300)).await;
             if !check_service_status(0, "").0 {
                 cleanup_legacy_gateway_window();
-                let mut known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                let mut known = LAST_KNOWN_GATEWAY_PID
+                    .lock()
+                    .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
                 *known = None;
-                let mut active = ACTIVE_GATEWAY_CHILD.lock().expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+                let mut active = ACTIVE_GATEWAY_CHILD
+                    .lock()
+                    .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
                 *active = None;
                 return Ok(());
             }
@@ -1283,8 +1305,12 @@ mod platform {
         // 精确 kill：只杀 Gateway 进程，不杀所有 node.exe
         // 1. 用记录的活跃子进程 PID
         let pids_to_kill: Vec<u32> = {
-            let active = ACTIVE_GATEWAY_CHILD.lock().expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
-            let known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+            let active = ACTIVE_GATEWAY_CHILD
+                .lock()
+                .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+            let known = LAST_KNOWN_GATEWAY_PID
+                .lock()
+                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
             [active.as_ref(), known.as_ref()]
                 .into_iter()
                 .flatten()
@@ -1310,9 +1336,13 @@ mod platform {
 
         if !check_service_status(0, "").0 {
             // 清空记录
-            let mut known = LAST_KNOWN_GATEWAY_PID.lock().expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+            let mut known = LAST_KNOWN_GATEWAY_PID
+                .lock()
+                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
             *known = None;
-            let mut active = ACTIVE_GATEWAY_CHILD.lock().expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+            let mut active = ACTIVE_GATEWAY_CHILD
+                .lock()
+                .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
             *active = None;
             Ok(())
         } else {

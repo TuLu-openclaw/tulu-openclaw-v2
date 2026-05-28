@@ -1000,6 +1000,31 @@ pub fn check_hermes() -> Result<Value, String> {
     Ok(Value::Object(result))
 }
 
+fn parse_semverish(version: &str) -> Vec<u64> {
+    version
+        .trim()
+        .trim_start_matches('v')
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse::<u64>().ok())
+        .collect()
+}
+
+fn cmp_versionish(a: &str, b: &str) -> std::cmp::Ordering {
+    let av = parse_semverish(a);
+    let bv = parse_semverish(b);
+    let len = av.len().max(bv.len()).max(1);
+    for i in 0..len {
+        let x = *av.get(i).unwrap_or(&0);
+        let y = *bv.get(i).unwrap_or(&0);
+        match x.cmp(&y) {
+            std::cmp::Ordering::Equal => continue,
+            ord => return ord,
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
 /// check_hermes_update — 检测 Hermes Agent 是否有新版本
 /// 从 GitHub API 获取最新 release，与本地安装版本对比
 #[tauri::command]
@@ -1047,10 +1072,29 @@ pub async fn check_hermes_update() -> Result<Value, String> {
     // 3. 比较版本
     let update_available =
         !local_version.is_empty() && !latest_version.is_empty() && local_version != latest_version;
+    let recommended_version = HERMES_RECOMMENDED_TAG.to_string();
+    let local_cmp_recommended = if local_version.is_empty() {
+        std::cmp::Ordering::Equal
+    } else {
+        cmp_versionish(&local_version, &recommended_version)
+    };
+    let local_above_recommended = local_cmp_recommended == std::cmp::Ordering::Greater;
+    let local_below_recommended = local_cmp_recommended == std::cmp::Ordering::Less;
+    let can_rollback = !local_version.is_empty() && local_above_recommended;
 
     let mut result = serde_json::Map::new();
     result.insert("installed".into(), Value::String(local_version));
     result.insert("latest".into(), Value::String(latest_version));
+    result.insert("recommended".into(), Value::String(recommended_version));
+    result.insert(
+        "localAboveRecommended".into(),
+        Value::Bool(local_above_recommended),
+    );
+    result.insert(
+        "localBelowRecommended".into(),
+        Value::Bool(local_below_recommended),
+    );
+    result.insert("canRollback".into(), Value::Bool(can_rollback));
     result.insert("latestTag".into(), Value::String(latest_tag));
     result.insert("latestName".into(), Value::String(latest_name));
     result.insert("publishedAt".into(), Value::String(published_at));
@@ -1561,6 +1605,7 @@ fn extract_uv_tar_gz(data: &[u8], dest: &std::path::Path) -> Result<(), String> 
 
 /// Hermes Agent 的 GitHub 仓库地址（不在 PyPI 上发布，只能从 GitHub 安装）
 const HERMES_GIT_URL: &str = "git+https://github.com/NousResearch/hermes-agent.git";
+const HERMES_RECOMMENDED_TAG: &str = "2026.3.13";
 const HERMES_REQUIRED_TOOL_DEPS: &[&str] = &["croniter", "aiohttp"];
 
 fn append_hermes_required_tool_deps(cmd: &mut tokio::process::Command) {
@@ -3078,8 +3123,23 @@ pub async fn hermes_set_gateway_url(url: Option<String>) -> Result<String, Strin
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
-    let _ = app.emit("hermes-install-log", "📦 升级 Hermes Agent...");
+pub async fn update_hermes(
+    app: tauri::AppHandle,
+    target: Option<String>,
+) -> Result<String, String> {
+    let requested = target.unwrap_or_else(|| "latest".into());
+    let target_ref = match requested.as_str() {
+        "stable" | "recommended" => HERMES_RECOMMENDED_TAG.to_string(),
+        "latest" | "" => "".to_string(),
+        other => other.trim_start_matches('v').to_string(),
+    };
+    let action_label = if target_ref.is_empty() {
+        "升级 Hermes Agent 到最新版本".to_string()
+    } else {
+        format!("切换 Hermes Agent 到 {target_ref}")
+    };
+    let _ = app.emit("hermes-install-log", format!("📦 {action_label}..."));
+    let _ = app.emit("hermes-install-progress", 0u32);
 
     let uv_path = uv_bin_path();
     let uv = if uv_path.exists() {
@@ -3089,9 +3149,15 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     };
 
     prepare_hermes_tool_install(&app, &uv).await;
+    let _ = app.emit("hermes-install-progress", 20u32);
 
-    // hermes-agent 从 GitHub 安装，upgrade 不可用，改用 reinstall
-    let pkg = format!("hermes-agent @ {}", HERMES_GIT_URL);
+    // hermes-agent 从 GitHub 安装，upgrade 不可用，改用 reinstall；指定 tag 时安装固定版本。
+    let git_ref = if target_ref.is_empty() {
+        HERMES_GIT_URL.to_string()
+    } else {
+        format!("{HERMES_GIT_URL}@{target_ref}")
+    };
+    let pkg = format!("hermes-agent @ {git_ref}");
     let mut cmd = tokio::process::Command::new(&uv);
     cmd.args(["tool", "install", "--reinstall", &pkg, "--python", "3.11"]);
     append_hermes_required_tool_deps(&mut cmd);
@@ -3104,7 +3170,13 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
+    let _ = app.emit(
+        "hermes-install-log",
+        format!("> uv tool install --reinstall \"{pkg}\" --python 3.11"),
+    );
+    let _ = app.emit("hermes-install-progress", 35u32);
     let output = cmd.output().await.map_err(|e| format!("升级失败: {e}"))?;
+    let _ = app.emit("hermes-install-progress", 85u32);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -3115,8 +3187,9 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     }
 
     if output.status.success() {
-        let _ = app.emit("hermes-install-log", "✅ 升级完成");
-        Ok("升级完成".into())
+        let _ = app.emit("hermes-install-log", "✅ 操作完成");
+        let _ = app.emit("hermes-install-progress", 100u32);
+        Ok("操作完成".into())
     } else {
         Err(format!("升级失败: {}", stderr.trim()))
     }
@@ -3236,9 +3309,12 @@ pub async fn hermes_api_proxy(
         _ => return Err(format!("不支持的方法: {method}")),
     };
 
-    // 注入 API_SERVER_KEY 认证
+    // 注入 API_SERVER_KEY 认证；同时带上 X-API-Key/X-API-Token，兼容不同 Hermes API Server 版本。
     if !api_key.is_empty() {
-        req = req.header("Authorization", format!("Bearer {api_key}"));
+        req = req
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("X-API-Key", api_key.clone())
+            .header("X-API-Token", api_key.clone());
     }
 
     // 注入自定义 headers（如 X-Hermes-Session-Id）
@@ -3329,7 +3405,10 @@ pub async fn hermes_agent_run(
         .header("Content-Type", "application/json")
         .body(payload.to_string());
     if !api_key.is_empty() {
-        req = req.header("Authorization", format!("Bearer {api_key}"));
+        req = req
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("X-API-Key", api_key.clone())
+            .header("X-API-Token", api_key.clone());
     }
 
     let resp = req
@@ -3363,7 +3442,10 @@ pub async fn hermes_agent_run(
 
     let mut sse_req = sse_client.get(&events_url);
     if !api_key.is_empty() {
-        sse_req = sse_req.header("Authorization", format!("Bearer {api_key}"));
+        sse_req = sse_req
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("X-API-Key", api_key.clone())
+            .header("X-API-Token", api_key.clone());
     }
 
     let sse_resp = sse_req
