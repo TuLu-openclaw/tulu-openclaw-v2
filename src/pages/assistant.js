@@ -116,7 +116,7 @@ ${personality}
 - **GitHub**: https://github.com/TuLu-openclaw
 - **开源项目**:
   - **星枢：双引擎管理面板** — OpenClaw 可视化管理面板（Tauri v2）
-  - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @TuLu-openclaw/openclaw-zh
+  - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @qingchencloud/openclaw-zh
 
 ## 星枢：双引擎管理面板 是什么
 - OpenClaw 的可视化管理面板，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
@@ -127,7 +127,7 @@ ${personality}
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
 - 核心组件: Gateway（API 网关）、Agent（AI 代理）、Tools（工具系统）
 - 配置文件: ~/.openclaw/openclaw.json（全局配置）
-- 安装方式: npm install -g @TuLu-openclaw/openclaw-zh（汉化版，推荐）或 npm install -g openclaw（官方英文版）
+- 安装方式: npm install -g @qingchencloud/openclaw-zh（汉化版，推荐）或 npm install -g openclaw（官方英文版）
 
 ## OpenClaw CLI 命令速查
 ### 基础命令
@@ -185,7 +185,7 @@ ${personality}
 
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
-- **OpenClaw 汉化版**: npm install -g @TuLu-openclaw/openclaw-zh（推荐国内用户）
+- **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh（推荐国内用户）
 - **OpenClaw 官方版**: npm install -g openclaw
 - **星枢：双引擎管理面板**: 从 https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases 下载
 - **更多项目**: 访问 https://github.com/TuLu-openclaw

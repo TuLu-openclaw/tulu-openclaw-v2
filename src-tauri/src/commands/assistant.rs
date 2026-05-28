@@ -7,7 +7,6 @@ use base64::{engine::general_purpose, Engine as _};
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use tauri::Manager;
-// use tauri::Manager; // 移到函数内部按需引用
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
 fn audit_log(action: &str, detail: &str) {
@@ -1286,7 +1285,7 @@ pub async fn open_global_builtin_window(
 
 /// 龙虾办公室状态同步 - 后台线程写入状态文件
 ///
-/// 状态文件路径: %APPDATA%/TuLuOpenClaw_v2/openclaw-office-state.json
+/// 状态文件路径: %APPDATA%/XingShuOpenClaw_v2/openclaw-office-state.json
 /// Star-Office-UI 后端读取此文件，自动映射到办公室状态
 use std::sync::OnceLock;
 static OFFICE_SYNC_HANDLE: OnceLock<std::thread::JoinHandle<()>> = OnceLock::new();
@@ -1404,8 +1403,6 @@ pub async fn update_office_state(
     state: String,
     detail: String,
 ) -> Result<(), String> {
-    use tauri::Manager;
-
     // 验证状态值
     let valid_states = [
         "idle",
@@ -1557,7 +1554,7 @@ pub async fn save_recording(
 ) -> Result<String, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let Downloads = dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    let _downloads = dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
 
     let file_path = app
         .dialog()
@@ -1900,7 +1897,7 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
     #[async_recursion::async_recursion]
     async fn scan_html_recursive(
         html: &str,
-        base: &str,
+        _base: &str,
         src: &str,
         results: &mut Vec<serde_json::Value>,
         seen: &mut std::collections::HashSet<String>,
@@ -2059,7 +2056,7 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
     #[async_recursion::async_recursion]
     async fn scan_iframes(
         html: &str,
-        base: &str,
+        _base: &str,
         src: &str,
         results: &mut Vec<serde_json::Value>,
         seen: &mut std::collections::HashSet<String>,

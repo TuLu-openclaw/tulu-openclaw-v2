@@ -12,17 +12,22 @@ use commands::{
 
 pub fn run() {
     let hot_update_dir = commands::openclaw_dir()
-        .join("TuLuOpenClaw")
+        .join("星枢OpenClaw")
         .join("web-update");
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
-        #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-        .plugin(tauri_plugin_autostart::init(
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ))
+        ));
+    }
+
+    builder
         .register_uri_scheme_protocol("tauri", move |ctx, request| {
             let uri_path = request.uri().path();
             let path = if uri_path == "/" || uri_path.is_empty() {
@@ -248,6 +253,12 @@ pub fn run() {
             hermes::hermes_dashboard_probe,
             hermes::hermes_dashboard_start,
             hermes::hermes_dashboard_stop,
+            hermes::hermes_dashboard_themes,
+            hermes::hermes_dashboard_theme_set,
+            hermes::hermes_dashboard_plugins,
+            hermes::hermes_dashboard_plugins_rescan,
+            hermes::hermes_toolsets_list,
+            hermes::hermes_cron_jobs_list,
             // 消息渠道管理
             messaging::read_platform_config,
             messaging::save_messaging_platform,

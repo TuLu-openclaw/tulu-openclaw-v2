@@ -12,7 +12,7 @@ export function isTauriRuntime() {
 // npm 包名映射
 const NPM_PACKAGES = {
   official: 'openclaw',
-  chinese: '@TuLu-openclaw/tulu-openclaw-v2',
+  chinese: '@qingchencloud/openclaw-zh',
 }
 
 // 解析版本号用于排序

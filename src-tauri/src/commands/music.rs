@@ -25,13 +25,6 @@ pub struct PlatformSearchResult {
     pub error: String,
 }
 
-/// 搜索结果聚合
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SearchResults {
-    #[serde(default)]
-    pub results: Vec<PlatformSearchResult>,
-}
-
 /// 下载目录状态
 static DOWNLOAD_DIR: std::sync::RwLock<Option<PathBuf>> = std::sync::RwLock::new(None);
 

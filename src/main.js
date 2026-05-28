@@ -14,7 +14,7 @@ import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStat
 import { version as APP_VERSION } from '../package.json'
 import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
-// import { tryShowEngagement } from './components/engagement.js'
+
 import { initI18n, t } from './lib/i18n.js'
 import { initEngineManager, registerEngine } from './lib/engine-manager.js'
 import { engineMeta as hermesMeta, getRoutes as getHermesRoutes, getDefaultRoute as getHermesDefaultRoute, boot as hermesBoot, cleanup as hermesCleanup } from './engines/hermes/index.js'

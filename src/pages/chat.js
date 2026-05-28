@@ -20,6 +20,7 @@ const STORAGE_SESSION_NAMES_KEY = '星枢OpenClaw-chat-session-names'
 const STORAGE_WORKSPACE_PANEL_KEY = '星枢OpenClaw-chat-workspace-open'
 const GROUP_SESSIONS_KEY = '星枢OpenClaw-group-sessions-v1'
 const ACTIVE_GROUP_KEY = '星枢OpenClaw-active-group-v1'
+const GROUP_SESSION_CHANNEL_PREFIX = 'group-'
 const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
 
@@ -1598,7 +1599,8 @@ function refreshSessionListSoon() {
 function renderSessionList(sessions) {
   if (!_sessionListEl) return
   sessions = normalizeSessionList(sessions)
-  const normalHtml = sessions.length ? sessions.map(s => renderSessionCard(s)).join('') : `<div class="chat-session-empty">${t('chat.noSessions')}</div>`
+  const visibleSessions = sessions.filter(s => !isGroupDedicatedSessionKey(s.sessionKey || s.key || ''))
+  const normalHtml = visibleSessions.length ? visibleSessions.map(s => renderSessionCard(s)).join('') : `<div class="chat-session-empty">${t('chat.noSessions')}</div>`
   if (_sessionListNormalEl) _sessionListNormalEl.innerHTML = normalHtml
   else _sessionListEl.innerHTML = normalHtml
   renderGroupSessionList()
@@ -1805,7 +1807,7 @@ async function deleteSession(key) {
 
 async function resetCurrentSession() {
   if (!_sessionKey) return
-  const group = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+  const group = _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
   const label = group ? `群聊：${group.name}` : getDisplayLabel(_sessionKey)
   const yes = await showConfirm(group ? `确认重置${label}？
 这会重置群聊内所有成员会话，并清零每个成员的当前任务轮次。` : t('chat.confirmResetSession', { label }))
@@ -1838,7 +1840,7 @@ async function resetCurrentSession() {
 function updateSessionTitle() {
   const el = _page?.querySelector('#chat-title')
   if (el) {
-    const group = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+    const group = _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
     el.textContent = group ? `群聊：${group.name}` : getDisplayLabel(_sessionKey)
   }
   syncWorkspaceContext(false)
@@ -1942,7 +1944,7 @@ function emitLobsterPhase(phase, message) {
 }
 
 function loadGroupSessions() {
-  try { _chatGroups = JSON.parse(localStorage.getItem(GROUP_SESSIONS_KEY) || '[]') || [] } catch { _chatGroups = [] }
+  try { _chatGroups = (JSON.parse(localStorage.getItem(GROUP_SESSIONS_KEY) || '[]') || []).map(normalizeGroup) } catch { _chatGroups = [] }
 }
 
 function saveGroupSessions() {
@@ -2111,11 +2113,57 @@ function parseGroupMentions(text, group) {
 }
 
 function getActiveGroup() {
-  return _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+  return _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
 }
 
 function getGroupStorageKey(group) {
   return group?.id ? `group:${group.id}` : ''
+}
+
+function slugifySessionPart(value = '') {
+  const raw = String(value || '').trim().toLowerCase()
+  const ascii = raw.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48)
+  if (ascii) return ascii
+  let hash = 0
+  for (let i = 0; i < raw.length; i++) hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0
+  return `m${Math.abs(hash).toString(36)}`
+}
+
+function getGroupMemberSessionKey(group, member) {
+  if (!group || !member) return ''
+  if (member.groupSessionKey) return member.groupSessionKey
+  const sourceKey = member.sourceSessionKey || member.sessionKey || ''
+  const agentId = member.agentId || parseSessionAgent(sourceKey) || 'main'
+  const channelSeed = member.label || parseSessionLabel(sourceKey) || sourceKey || agentId
+  return `agent:${agentId}:${GROUP_SESSION_CHANNEL_PREFIX}${slugifySessionPart(group.id)}-${slugifySessionPart(channelSeed)}`
+}
+
+function isGroupDedicatedSessionKey(sessionKey = '') {
+  const parts = String(sessionKey || '').split(':')
+  return parts.length >= 3 && parts.slice(2).join(':').startsWith(GROUP_SESSION_CHANNEL_PREFIX)
+}
+
+function normalizeGroupMember(group, member) {
+  const sourceSessionKey = member.sourceSessionKey || (isGroupDedicatedSessionKey(member.sessionKey) ? '' : member.sessionKey) || ''
+  const agentId = member.agentId || parseSessionAgent(sourceSessionKey || member.sessionKey) || 'main'
+  const label = member.label || getDisplayLabel(sourceSessionKey) || parseSessionLabel(sourceSessionKey || member.sessionKey) || agentId
+  const groupSessionKey = member.groupSessionKey || (isGroupDedicatedSessionKey(member.sessionKey) ? member.sessionKey : getGroupMemberSessionKey(group, { ...member, sourceSessionKey, agentId, label }))
+  return { ...member, type: 'session', sourceSessionKey, agentId, label, sessionKey: groupSessionKey, groupSessionKey }
+}
+
+function normalizeGroup(group) {
+  if (!group) return group
+  const next = { ...group }
+  next.members = (group.members || []).map(m => normalizeGroupMember(next, m))
+  return next
+}
+
+function ensureGroupIsolation(group) {
+  if (!group) return group
+  const before = JSON.stringify(group.members || [])
+  Object.assign(group, normalizeGroup(group))
+  if (JSON.stringify(group.members || []) !== before) saveGroupSessions()
+  return group
 }
 
 function getGroupFallbackSessionKey(group) {
@@ -2198,7 +2246,7 @@ function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
 
 function showGroupEditor(groupId = '') {
   const group = _chatGroups.find(g => g.id === groupId) || null
-  const existingMembers = new Set((group?.members || []).map(m => m.sessionKey))
+  const existingMembers = new Set((group?.members || []).map(m => m.sourceSessionKey || m.sessionKey))
   wsClient.sessionsList(200, { includeGlobal: true, includeUnknown: true }).then(result => {
     const sessions = normalizeSessionList(result?.sessions || result || [])
     const options = sessions.map(s => {
@@ -2222,11 +2270,12 @@ function showGroupEditor(groupId = '') {
       if (!name) { toast('请输入群聊名称', 'warning'); return }
       const selected = Array.from(overlay.querySelectorAll('.chat-group-member-list input:checked')).map(input => {
         const key = input.value
-        return { type: 'session', sessionKey: key, agentId: parseSessionAgent(key) || 'main', label: getDisplayLabel(key) }
+        return { type: 'session', sourceSessionKey: key, agentId: parseSessionAgent(key) || 'main', label: getDisplayLabel(key) }
       })
       if (!selected.length) { toast('至少选择一个 Agent 会话', 'warning'); return }
-      if (group) Object.assign(group, { name, members: selected, updatedAt: Date.now() })
-      else _chatGroups.unshift({ id: uuid(), name, members: selected, createdAt: Date.now(), updatedAt: Date.now() })
+      const groupToSave = group || { id: uuid(), name: '', members: [], createdAt: Date.now(), updatedAt: Date.now() }
+      Object.assign(groupToSave, { name, members: selected.map(m => normalizeGroupMember(groupToSave, m)), updatedAt: Date.now() })
+      if (!group) _chatGroups.unshift(groupToSave)
       saveGroupSessions()
       renderGroupSessionList()
       overlay.close()
@@ -2236,7 +2285,7 @@ function showGroupEditor(groupId = '') {
 }
 
 async function deleteGroupSession(groupId) {
-  const group = _chatGroups.find(g => g.id === groupId)
+  const group = ensureGroupIsolation(_chatGroups.find(g => g.id === groupId))
   if (!group) return
   const yes = await showConfirm(`确认删除群聊“${group.name}”？不会删除真实 Agent 会话。`)
   if (!yes) return
@@ -2247,7 +2296,7 @@ async function deleteGroupSession(groupId) {
 }
 
 async function switchGroupSession(groupId, options = {}) {
-  const group = _chatGroups.find(g => g.id === groupId)
+  const group = ensureGroupIsolation(_chatGroups.find(g => g.id === groupId))
   if (!group) return
   if (_sessionKey && !_currentGroupId) _lastDirectSessionKey = _sessionKey
   _currentGroupId = groupId
@@ -2407,7 +2456,7 @@ function sendMessage() {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
-  const activeGroup = _currentGroupId ? _chatGroups.find(g => g.id === _currentGroupId) : null
+  const activeGroup = _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
   if (activeGroup && _isSending) {
     toast('群聊任务正在分发中，请稍后再发送', 'warning')
     return

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('TuLuOpenClaw 应用', () => {
+test.describe('星枢OpenClaw 应用', () => {
   test('首页应正常加载', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/OpenClaw|TuLu|OpenClaw/);
+    await expect(page).toHaveTitle(/星枢OpenClaw|OpenClaw/);
   });
 
   test('侧边栏应可见', async ({ page }) => {

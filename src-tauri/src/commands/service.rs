@@ -203,18 +203,6 @@ async fn current_gateway_runtime(label: &str) -> (bool, Option<u32>) {
     }
 }
 
-async fn is_gateway_health_ready() -> bool {
-    let port = crate::commands::gateway_listen_port();
-    let url = format!("http://127.0.0.1:{port}/health");
-    match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()
-    {
-        Ok(client) => client.get(&url).send().await.is_ok(),
-        Err(_) => false,
-    }
-}
-
 async fn wait_for_gateway_running(label: &str, timeout: Duration) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
@@ -956,7 +944,7 @@ mod platform {
             if parts.len() < 5 {
                 continue;
             }
-            let pid = match *parts.last().expect("parts.len() >= 5 guarantees last()").parse::<u32>() {
+            let pid = match parts.last().expect("parts.len() >= 5 guarantees last()").parse::<u32>() {
                 Ok(p) => p,
                 Err(_) => continue,
             };

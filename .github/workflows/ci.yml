@@ -1,4 +1,4 @@
-# TuLuOpenClaw Continuous Integration Workflow
+# XingShuOpenClaw Continuous Integration Workflow
 # Full feature version: lint + test + build
 
 on:
@@ -283,8 +283,8 @@ jobs:
         with:
           name: build-${{ matrix.platform.name }}
           path: |
-            src-tauri/target/${{ matrix.platform.target }}/release/TuLuOpenClaw.exe
-            src-tauri/target/${{ matrix.platform.target }}/release/TuLuOpenClaw
+            src-tauri/target/${{ matrix.platform.target }}/release/*.exe
+            src-tauri/target/${{ matrix.platform.target }}/release/星枢OpenClaw
             src-tauri/target/${{ matrix.platform.target }}/release/bundle/
           retention-days: 5
 

@@ -269,7 +269,7 @@ async function showEditAgentDialog(page, state, id) {
         if (mid) models.push({ value: `${pk}/${mid}`, label: `${pk}/${mid}` })
       }
     }
-    console.log('[Agent编辑] 获取到模型列表:', models.length, '个')
+    // 模型列表加载成功
   } catch (e) {
     console.error('[Agent编辑] 获取模型列表失败:', e)
   }
@@ -286,8 +286,7 @@ async function showEditAgentDialog(page, state, id) {
       options: models,
     }
     fields.push(modelField)
-    console.log('[Agent编辑] 当前模型:', agent.model)
-    console.log('[Agent编辑] 模型选项:', models)
+
   } else {
     console.warn('[Agent编辑] 模型列表为空，不显示模型选择器')
   }
@@ -303,18 +302,16 @@ async function showEditAgentDialog(page, state, id) {
     title: t('agents.editTitle', { id }),
     fields,
     onConfirm: async (result) => {
-      console.log('[Agent编辑] 保存数据:', result)
+      // 保存 Agent 编辑结果
       const newName = (result.name || '').trim()
       const emoji = (result.emoji || '').trim()
       const model = (result.model || '').trim()
 
       try {
         if (newName || emoji) {
-          console.log('[Agent编辑] 更新身份信息...')
           await api.updateAgentIdentity(id, newName || null, emoji || null)
         }
         if (model && model !== agent.model) {
-          console.log('[Agent编辑] 更新模型:', agent.model, '->', model)
           await api.updateAgentModel(id, model)
         }
 

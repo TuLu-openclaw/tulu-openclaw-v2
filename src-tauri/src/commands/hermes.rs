@@ -888,7 +888,7 @@ pub fn check_hermes() -> Result<Value, String> {
 /// 从 GitHub API 获取最新 release，与本地安装版本对比
 #[tauri::command]
 pub async fn check_hermes_update() -> Result<Value, String> {
-    let home = hermes_home();
+    let _home = hermes_home();
     let enhanced = hermes_enhanced_path();
 
     // 1. 获取本地版本

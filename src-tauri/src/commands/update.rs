@@ -4,10 +4,10 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
-/// 前端热更新目录 (~/.openclaw/TuLuOpenClaw/web-update/)
+/// 前端热更新目录 (~/.openclaw/星枢OpenClaw/web-update/)
 pub fn update_dir() -> PathBuf {
     super::openclaw_dir()
-        .join("TuLuOpenClaw")
+        .join("星枢OpenClaw")
         .join("web-update")
 }
 
@@ -195,7 +195,7 @@ pub async fn check_frontend_update() -> Result<Value, String> {
         .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
     let resp = client
         .get(GITHUB_RELEASE_API)
-        .header("User-Agent", "TuLuOpenClaw")
+        .header("User-Agent", "XingShuOpenClaw")
         .send()
         .await
         .map_err(|e| format!("GitHub 请求失败: {e}"))?;
@@ -246,7 +246,7 @@ pub async fn download_frontend_update(url: String, expected_hash: String) -> Res
             .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
     let resp = client
         .get(&url)
-        .header("User-Agent", "TuLuOpenClaw")
+        .header("User-Agent", "XingShuOpenClaw")
         .send()
         .await
         .map_err(|e| format!("下载失败: {e}"))?;
