@@ -117,9 +117,26 @@ export function render() {
   // Hub (在线技能市场) state
   let hubMode = false           // true = show hub, false = show local
   let hubQuery = ''
-  let hubResults = []           // [{ slug, displayName, summary, version, downloads, stars }]
+  let hubResults = []           // [{ slug, displayName/name, summary/description, version, downloads, stars }]
   let hubLoading = false
   let hubInstalling = new Set() // slugs currently being installed
+
+  function normalizeHubItems(data) {
+    const raw = Array.isArray(data)
+      ? data
+      : (Array.isArray(data?.items) ? data.items
+        : (Array.isArray(data?.results) ? data.results
+          : (Array.isArray(data?.skills) ? data.skills : [])))
+    return raw.map(item => {
+      const slug = item?.slug || item?.id || item?.name || ''
+      return {
+        ...item,
+        slug,
+        displayName: item?.displayName || item?.display_name || item?.title || item?.name || slug,
+        summary: item?.summary || item?.description || item?.desc || '',
+      }
+    }).filter(item => item.slug)
+  }
 
   // ============================================================ loaders
 
@@ -202,37 +219,8 @@ export function render() {
     hubDebounceTimer = setTimeout(async () => {
       hubLoading = true; draw()
       try {
-        // 直接 fetch clawhub.ai API，避免 Rust 层转发
-        const q = encodeURIComponent(hubQuery.trim())
-        const url = `https://clawhub.ai/api/v1/skills?q=${q}&limit=25&_=${Date.now()}`
-        let data = null
-        try {
-          const r = await fetch(url, {
-            headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
-            cache: 'no-store',
-          })
-          if (r.ok) data = await r.json()
-        } catch (e) { console.warn('clawhub fetch failed', e) }
-
-        // 提取 items 数组（API 返回 {items: [...]} 格式）
-        let parsed = null
-        if (Array.isArray(data)) {
-          parsed = data
-        } else if (data && Array.isArray(data.items)) {
-          parsed = data.items
-        } else if (data && Array.isArray(data.results)) {
-          parsed = data.results
-        }
-
-        // Fallback: 通过 Rust 后端代理（如果前端 fetch 失败或格式不对）
-        if (!parsed || !parsed.length) {
-          try {
-            const fallback = await api.skillhubSearch(hubQuery.trim(), 25)
-            parsed = Array.isArray(fallback) ? fallback : []
-          } catch (_) {}
-        }
-
-        hubResults = parsed || []
+        const fallback = await api.skillhubSearch(hubQuery.trim(), 25)
+        hubResults = normalizeHubItems(fallback)
         if (hubResults.length === 0) {
           toast(t('engine.skillsHubNoResults') || '未找到匹配的技能', 'info')
         }
@@ -243,7 +231,7 @@ export function render() {
       } finally {
         hubLoading = false; hubDebounceTimer = null; draw()
       }
-    }, 400)
+    }, 250)
   }
 
   async function installHubSkill(slug) {
@@ -687,6 +675,9 @@ export function render() {
           <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-skills-refresh" ${loading ? 'disabled' : ''}>
             ${ICONS.refresh} ${t('engine.skillsRefresh')}
           </button>
+          <button class="hm-btn hm-btn--cta hm-btn--sm" id="hm-skills-open-hub">
+            ${ICONS.search} ${t('engine.skillsHubInstallAction') || t('engine.skillsHubTab')}
+          </button>
         </div>
       </div>
 
@@ -709,6 +700,7 @@ export function render() {
     })
 
     el.querySelector('#hm-skills-refresh')?.addEventListener('click', () => loadSkills())
+    el.querySelector('#hm-skills-open-hub')?.addEventListener('click', () => { hubMode = true; draw() })
     el.querySelector('#hm-toolsets-refresh')?.addEventListener('click', () => loadToolsets())
 
     el.querySelectorAll('.hm-skill-cat-header').forEach(btn => {

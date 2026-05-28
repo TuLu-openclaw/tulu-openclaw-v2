@@ -41,13 +41,13 @@ pub struct SkillHubItem {
 
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
-    #[serde(default)]
+    #[serde(default, alias = "items", alias = "skills")]
     results: Vec<SkillHubItem>,
 }
 
 #[derive(Debug, Deserialize)]
 struct IndexResponse {
-    #[serde(default)]
+    #[serde(default, alias = "items", alias = "results")]
     skills: Vec<SkillHubItem>,
 }
 
@@ -83,11 +83,17 @@ pub async fn search(query: &str, limit: u32) -> Result<Vec<SkillHubItem>, String
     if !resp.status().is_success() {
         return Err(format!("SkillHub 搜索失败: HTTP {}", resp.status()));
     }
-    let data: SearchResponse = resp
-        .json()
+    let text = resp
+        .text()
         .await
-        .map_err(|e| format!("SkillHub 搜索结果解析失败: {e}"))?;
-    Ok(data.results)
+        .map_err(|e| format!("SkillHub 搜索结果读取失败: {e}"))?;
+    if let Ok(data) = serde_json::from_str::<SearchResponse>(&text) {
+        return Ok(data.results);
+    }
+    if let Ok(items) = serde_json::from_str::<Vec<SkillHubItem>>(&text) {
+        return Ok(items);
+    }
+    Err("SkillHub 搜索结果解析失败: 未识别的响应格式".into())
 }
 
 /// 拉取全量索引（带 10 分钟内存缓存）

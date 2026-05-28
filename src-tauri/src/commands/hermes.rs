@@ -459,11 +459,22 @@ fn uv_tools_hermes_dir() -> Option<PathBuf> {
         if appdata.trim().is_empty() {
             return None;
         }
-        Some(PathBuf::from(appdata).join("uv").join("tools").join("hermes-agent"))
+        Some(
+            PathBuf::from(appdata)
+                .join("uv")
+                .join("tools")
+                .join("hermes-agent"),
+        )
     }
     #[cfg(not(target_os = "windows"))]
     {
-        dirs::home_dir().map(|home| home.join(".local").join("share").join("uv").join("tools").join("hermes-agent"))
+        dirs::home_dir().map(|home| {
+            home.join(".local")
+                .join("share")
+                .join("uv")
+                .join("tools")
+                .join("hermes-agent")
+        })
     }
 }
 
@@ -515,7 +526,10 @@ async fn prepare_hermes_tool_install(app: &tauri::AppHandle, uv_path: &str) {
             let stderr = String::from_utf8_lossy(&out.stderr);
             let stdout = String::from_utf8_lossy(&out.stdout);
             let combined = format!("{}\n{}", stdout.trim(), stderr.trim()).to_lowercase();
-            if combined.contains("not installed") || combined.contains("is not installed") || combined.contains("no tool") {
+            if combined.contains("not installed")
+                || combined.contains("is not installed")
+                || combined.contains("no tool")
+            {
                 let _ = app.emit("hermes-install-log", "✓ 未发现旧 Hermes Agent 工具");
             } else {
                 let _ = app.emit(
@@ -1547,6 +1561,86 @@ fn extract_uv_tar_gz(data: &[u8], dest: &std::path::Path) -> Result<(), String> 
 
 /// Hermes Agent 的 GitHub 仓库地址（不在 PyPI 上发布，只能从 GitHub 安装）
 const HERMES_GIT_URL: &str = "git+https://github.com/NousResearch/hermes-agent.git";
+const HERMES_REQUIRED_TOOL_DEPS: &[&str] = &["croniter", "aiohttp"];
+
+fn append_hermes_required_tool_deps(cmd: &mut tokio::process::Command) {
+    for dep in HERMES_REQUIRED_TOOL_DEPS {
+        cmd.args(["--with", dep]);
+    }
+}
+
+fn hermes_tool_python_path() -> Option<PathBuf> {
+    let tool_dir = uv_tools_hermes_dir()?;
+    #[cfg(target_os = "windows")]
+    let python = tool_dir.join("Scripts").join("python.exe");
+    #[cfg(not(target_os = "windows"))]
+    let python = tool_dir.join("bin").join("python");
+    python.exists().then_some(python)
+}
+
+async fn python_can_import(python: &PathBuf, module: &str) -> bool {
+    let mut cmd = tokio::process::Command::new(python);
+    cmd.args(["-c", &format!("import {module}")]);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.output()
+        .await
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
+
+async fn ensure_hermes_gateway_dependencies(app: &tauri::AppHandle) -> Result<(), String> {
+    if let Some(python) = hermes_tool_python_path() {
+        if python_can_import(&python, "aiohttp").await {
+            return Ok(());
+        }
+    }
+
+    let _ = app.emit(
+        "hermes-install-log",
+        "🔧 检测到 Hermes Gateway api_server 依赖缺失，正在补装 aiohttp...",
+    );
+
+    let uv_path = uv_bin_path();
+    let uv = if uv_path.exists() {
+        uv_path.to_string_lossy().to_string()
+    } else {
+        "uv".into()
+    };
+    let pkg = format!("hermes-agent @ {}", HERMES_GIT_URL);
+    let mut cmd = tokio::process::Command::new(&uv);
+    cmd.args(["tool", "install", "--reinstall", &pkg, "--python", "3.11"]);
+    append_hermes_required_tool_deps(&mut cmd);
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    if let Some(mirror) = pypi_mirror_url() {
+        cmd.args(["--index-url", &mirror]);
+    }
+    super::apply_proxy_env_tokio(&mut cmd);
+    cmd.env("PATH", hermes_enhanced_path());
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| format!("补装 Hermes Gateway 依赖失败: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for line in stdout.lines().chain(stderr.lines()) {
+        if !line.trim().is_empty() {
+            let _ = app.emit("hermes-install-log", line.trim());
+        }
+    }
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "补装 Hermes Gateway 依赖失败 (exit {}): {}",
+            output.status.code().unwrap_or(-1),
+            stderr.trim()
+        ))
+    }
+}
 
 /// 通过 uv tool install 安装 Hermes Agent（从 GitHub）
 async fn install_via_uv_tool(
@@ -1572,9 +1666,8 @@ async fn install_via_uv_tool(
     let _ = app.emit("hermes-install-progress", 30u32);
 
     let mut cmd = tokio::process::Command::new(uv_path);
-    cmd.args([
-        "tool", "install", "--force", &pkg, "--python", "3.11", "--with", "croniter",
-    ]);
+    cmd.args(["tool", "install", "--force", &pkg, "--python", "3.11"]);
+    append_hermes_required_tool_deps(&mut cmd);
 
     // 配置 PyPI 镜像（extras 的依赖仍从 PyPI 下载）
     if let Some(mirror) = pypi_mirror_url() {
@@ -1596,7 +1689,11 @@ async fn install_via_uv_tool(
 
     let _ = app.emit(
         "hermes-install-log",
-        format!("> uv tool install \"{}\" --python 3.11", pkg),
+        format!(
+            "> uv tool install \"{}\" --python 3.11 --with {}",
+            pkg,
+            HERMES_REQUIRED_TOOL_DEPS.join(" --with ")
+        ),
     );
 
     let child = cmd.spawn().map_err(|e| format!("启动安装进程失败: {e}"))?;
@@ -2471,7 +2568,10 @@ pub async fn hermes_gateway_action(
                     return Ok("Gateway 已在运行".into());
                 }
 
-                // 2. 先精准杀掉之前我们 spawn 的进程
+                // 2. 先确保 api_server 平台运行依赖存在（旧安装可能缺 aiohttp）
+                ensure_hermes_gateway_dependencies(&app).await?;
+
+                // 3. 先精准杀掉之前我们 spawn 的进程
                 kill_gateway_pid();
                 // 如果仍有残留（非我们启动的），再 taskkill
                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -2489,13 +2589,13 @@ pub async fn hermes_gateway_action(
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 }
 
-                // 3. 清理过期 PID 文件（绕过 Hermes Windows bug）
+                // 4. 清理过期 PID 文件（绕过 Hermes Windows bug）
                 let pid_file = home.join("gateway.pid");
                 if pid_file.exists() {
                     let _ = std::fs::remove_file(&pid_file);
                 }
 
-                // 4. 启动 Gateway 进程
+                // 5. 启动 Gateway 进程
                 let log_path = home.join("gateway-run.log");
                 let log_file = std::fs::File::create(&log_path)
                     .map_err(|e| format!("创建日志文件失败: {e}"))?;
@@ -2530,7 +2630,7 @@ pub async fn hermes_gateway_action(
                         // 记录 PID 供后续精准 kill
                         GW_PID.store(child.id(), Ordering::SeqCst);
 
-                        // 5. 等待 Gateway 端口可达（最多 20s）
+                        // 6. 等待 Gateway 端口可达（最多 20s）
                         let mut ok = false;
                         for i in 0..40 {
                             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -2586,6 +2686,9 @@ pub async fn hermes_gateway_action(
             #[cfg(not(target_os = "windows"))]
             {
                 let home = hermes_home();
+                // 先确保 api_server 平台运行依赖存在（旧安装可能缺 aiohttp）
+                ensure_hermes_gateway_dependencies(&app).await?;
+
                 // 先精准杀掉之前我们 spawn 的进程
                 kill_gateway_pid();
 
@@ -2991,6 +3094,7 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     let pkg = format!("hermes-agent @ {}", HERMES_GIT_URL);
     let mut cmd = tokio::process::Command::new(&uv);
     cmd.args(["tool", "install", "--reinstall", &pkg, "--python", "3.11"]);
+    append_hermes_required_tool_deps(&mut cmd);
     cmd.env("GIT_TERMINAL_PROMPT", "0");
     if let Some(mirror) = pypi_mirror_url() {
         cmd.args(["--index-url", &mirror]);

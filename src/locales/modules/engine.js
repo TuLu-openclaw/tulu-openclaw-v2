@@ -145,6 +145,7 @@ export default {
   skillsHubNoResults:            {"zh-CN": "未找到匹配的技能", "en": "No matching skills found"},
   skillsHubHint:                 {"zh-CN": "输入关键词搜索在线技能", "en": "Enter keywords to search online skills"},
   skillsHubInstall:              {"zh-CN": "安装", "en": "Install"},
+  skillsHubInstallAction:        {"zh-CN": "搜索安装技能", "en": "Search & Install"},
   skillsHubInstalled:            {"zh-CN": "技能 {slug} 安装成功", "en": "Skill {slug} installed"},
   skillsHubInstallFailed:        {"zh-CN": "安装失败", "en": "Install failed"},
   skillsHubSearchFailed:         {"zh-CN": "搜索失败", "en": "Search failed"},
