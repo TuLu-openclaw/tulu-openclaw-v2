@@ -452,6 +452,108 @@ fn uv_download_urls(version: &str) -> Vec<String> {
     vec![primary, mirror1, mirror2]
 }
 
+fn uv_tools_hermes_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var("APPDATA").ok()?;
+        if appdata.trim().is_empty() {
+            return None;
+        }
+        Some(PathBuf::from(appdata).join("uv").join("tools").join("hermes-agent"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        dirs::home_dir().map(|home| home.join(".local").join("share").join("uv").join("tools").join("hermes-agent"))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn force_kill_hermes_processes() -> bool {
+    let mut killed_any = false;
+    if let Ok(out) = std::process::Command::new("taskkill")
+        .args(["/F", "/IM", "hermes.exe", "/T"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        killed_any = out.status.success();
+    }
+    killed_any
+}
+
+#[cfg(not(target_os = "windows"))]
+fn force_kill_hermes_processes() -> bool {
+    std::process::Command::new("pkill")
+        .args(["-f", "hermes"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+async fn prepare_hermes_tool_install(app: &tauri::AppHandle, uv_path: &str) {
+    let _ = app.emit(
+        "hermes-install-log",
+        "🧹 准备本地重装：停止 Hermes Gateway/相关进程并清理旧安装...",
+    );
+
+    stop_guardian();
+    let _ = kill_gateway_pid();
+    let _ = kill_dashboard_pid();
+    let _ = force_kill_hermes_processes();
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+    let mut uninstall_cmd = tokio::process::Command::new(uv_path);
+    uninstall_cmd.args(["tool", "uninstall", "hermes-agent"]);
+    uninstall_cmd.env("PATH", hermes_enhanced_path());
+    #[cfg(target_os = "windows")]
+    uninstall_cmd.creation_flags(CREATE_NO_WINDOW);
+
+    match uninstall_cmd.output().await {
+        Ok(out) if out.status.success() => {
+            let _ = app.emit("hermes-install-log", "✓ 已卸载旧 Hermes Agent 工具");
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let combined = format!("{}\n{}", stdout.trim(), stderr.trim()).to_lowercase();
+            if combined.contains("not installed") || combined.contains("is not installed") || combined.contains("no tool") {
+                let _ = app.emit("hermes-install-log", "✓ 未发现旧 Hermes Agent 工具");
+            } else {
+                let _ = app.emit(
+                    "hermes-install-log",
+                    format!("⚠️ 旧工具卸载未完全成功，将继续清理目录: {}", stderr.trim()),
+                );
+            }
+        }
+        Err(e) => {
+            let _ = app.emit(
+                "hermes-install-log",
+                format!("⚠️ 旧工具卸载命令启动失败，将继续清理目录: {e}"),
+            );
+        }
+    }
+
+    if let Some(tool_dir) = uv_tools_hermes_dir() {
+        if tool_dir.exists() {
+            match std::fs::remove_dir_all(&tool_dir) {
+                Ok(_) => {
+                    let _ = app.emit(
+                        "hermes-install-log",
+                        format!("✓ 已清理旧工具目录: {}", tool_dir.display()),
+                    );
+                }
+                Err(e) => {
+                    let _ = app.emit(
+                        "hermes-install-log",
+                        format!("⚠️ 旧工具目录暂时无法删除，将依赖 uv 覆盖安装: {e}"),
+                    );
+                }
+            }
+        }
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+}
+
 /// 构建增强 PATH，确保能找到 uv、hermes、python 等
 fn hermes_enhanced_path() -> String {
     let current = std::env::var("PATH").unwrap_or_default();
@@ -1465,6 +1567,9 @@ async fn install_via_uv_tool(
     } else {
         format!("hermes-agent[{}] @ {}", extras.join(","), HERMES_GIT_URL)
     };
+
+    prepare_hermes_tool_install(app, uv_path).await;
+    let _ = app.emit("hermes-install-progress", 30u32);
 
     let mut cmd = tokio::process::Command::new(uv_path);
     cmd.args([
@@ -2879,6 +2984,8 @@ pub async fn update_hermes(app: tauri::AppHandle) -> Result<String, String> {
     } else {
         "uv".into()
     };
+
+    prepare_hermes_tool_install(&app, &uv).await;
 
     // hermes-agent 从 GitHub 安装，upgrade 不可用，改用 reinstall
     let pkg = format!("hermes-agent @ {}", HERMES_GIT_URL);
