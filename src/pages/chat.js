@@ -2120,22 +2120,26 @@ function getGroupStorageKey(group) {
   return group?.id ? `group:${group.id}` : ''
 }
 
+function hashSessionPart(value = '') {
+  const raw = String(value || '')
+  let hash = 5381
+  for (let i = 0; i < raw.length; i++) hash = ((hash << 5) + hash + raw.charCodeAt(i)) | 0
+  return Math.abs(hash).toString(36)
+}
+
 function slugifySessionPart(value = '') {
   const raw = String(value || '').trim().toLowerCase()
-  const ascii = raw.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48)
-  if (ascii) return ascii
-  let hash = 0
-  for (let i = 0; i < raw.length; i++) hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0
-  return `m${Math.abs(hash).toString(36)}`
+  const ascii = raw.replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32)
+  return ascii || `m${hashSessionPart(raw)}`
 }
 
 function getGroupMemberSessionKey(group, member) {
   if (!group || !member) return ''
-  if (member.groupSessionKey) return member.groupSessionKey
-  const sourceKey = member.sourceSessionKey || member.sessionKey || ''
-  const agentId = member.agentId || parseSessionAgent(sourceKey) || 'main'
-  const channelSeed = member.label || parseSessionLabel(sourceKey) || sourceKey || agentId
-  return `agent:${agentId}:${GROUP_SESSION_CHANNEL_PREFIX}${slugifySessionPart(group.id)}-${slugifySessionPart(channelSeed)}`
+  const sourceKey = member.sourceSessionKey || (isGroupDedicatedSessionKey(member.sessionKey) ? '' : member.sessionKey) || ''
+  const agentId = member.agentId || parseSessionAgent(sourceKey || member.sessionKey) || 'main'
+  const channelSeed = member.label || getDisplayLabel(sourceKey) || parseSessionLabel(sourceKey) || sourceKey || agentId
+  const uniqueSeed = sourceKey || member.groupSessionKey || member.sessionKey || channelSeed
+  return `agent:${agentId}:${GROUP_SESSION_CHANNEL_PREFIX}${slugifySessionPart(group.id)}-${slugifySessionPart(channelSeed)}-${hashSessionPart(uniqueSeed)}`
 }
 
 function isGroupDedicatedSessionKey(sessionKey = '') {
@@ -2144,11 +2148,14 @@ function isGroupDedicatedSessionKey(sessionKey = '') {
 }
 
 function normalizeGroupMember(group, member) {
-  const sourceSessionKey = member.sourceSessionKey || (isGroupDedicatedSessionKey(member.sessionKey) ? '' : member.sessionKey) || ''
+  const hasDedicatedKey = isGroupDedicatedSessionKey(member.sessionKey)
+  const sourceSessionKey = member.sourceSessionKey || (hasDedicatedKey ? '' : member.sessionKey) || ''
   const agentId = member.agentId || parseSessionAgent(sourceSessionKey || member.sessionKey) || 'main'
   const label = member.label || getDisplayLabel(sourceSessionKey) || parseSessionLabel(sourceSessionKey || member.sessionKey) || agentId
-  const groupSessionKey = member.groupSessionKey || (isGroupDedicatedSessionKey(member.sessionKey) ? member.sessionKey : getGroupMemberSessionKey(group, { ...member, sourceSessionKey, agentId, label }))
-  return { ...member, type: 'session', sourceSessionKey, agentId, label, sessionKey: groupSessionKey, groupSessionKey }
+  const computedGroupSessionKey = sourceSessionKey
+    ? getGroupMemberSessionKey(group, { ...member, sourceSessionKey, agentId, label })
+    : (member.groupSessionKey || (hasDedicatedKey ? member.sessionKey : getGroupMemberSessionKey(group, { ...member, sourceSessionKey, agentId, label })))
+  return { ...member, type: 'session', sourceSessionKey, agentId, label, sessionKey: computedGroupSessionKey, groupSessionKey: computedGroupSessionKey }
 }
 
 function normalizeGroup(group) {
@@ -2316,9 +2323,9 @@ async function switchGroupSession(groupId, options = {}) {
       else appendSystemMessage(msg.content || '')
     })
   }
-  if (!options.restore) appendSystemMessage(`已进入 Agent 群聊：${group.name}
-成员：${(group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、')}
-提示：群聊对话会在本界面聚合显示；成员之间可见群聊上下文，但各自真实会话记忆仍保持隔离。`)
+  if (!options.restore) {
+    toast(`已进入 Agent 群聊：${group.name}`, 'success')
+  }
   renderSessionList(_lastSessionList)
   updateSessionListActiveState()
   applyRuntimeModelToSelect(getGroupFallbackSessionKey(group))
