@@ -148,6 +148,7 @@ export function render() {
   let updateBannerVisible = false  // 是否显示版本更新横幅
   let updateInfo = null     // { installed, latest, updateAvailable, releaseUrl, changelog }
   let updateInstalling = false
+  let updateProgressVisible = false
   let updateProgress = 0
   let updateLog = ''
   let connectMode = 'local' // local | wsl2 | docker | custom
@@ -160,6 +161,7 @@ export function render() {
   let formBaseUrl = ''
   let formApiKey = ''
   let formModel = ''
+  let selectedHermesProvider = ''
   let formInited = false    // 首次加载后用 hermesConfig 初始化
   let importChoices = []    // OpenClaw 配置导入候选
 
@@ -193,6 +195,15 @@ export function render() {
     return String(config?.agents?.defaults?.model?.primary || config?.model?.primary || '').trim()
   }
 
+  function canonicalHermesProviderForImport(item = {}) {
+    const explicit = String(item?.provider || item?.providerId || '').trim()
+    if (explicit && hermesProviders.some(p => p.id === explicit)) return explicit
+    const apiType = normalizeApiType(item?.api || item?.apiType || item?.type || item?.kind)
+    if (apiType === 'anthropic-messages') return 'anthropic'
+    if (apiType === 'google-generative-ai') return 'gemini'
+    return 'custom'
+  }
+
   function pushImportProvider(list, seen, item) {
     const baseUrl = String(item?.baseUrl || item?.base_url || '').trim()
     const apiKey = String(item?.apiKey || item?.api_key || '').trim()
@@ -207,6 +218,7 @@ export function render() {
       baseUrl,
       apiKey,
       apiType: normalizeApiType(item?.api || item?.apiType || item?.type || item?.kind),
+      hermesProvider: canonicalHermesProviderForImport(item),
       models: modelIdsFromProvider(item),
       primaryModel: String(item?.primaryModel || '').trim(),
     })
@@ -273,7 +285,7 @@ export function render() {
           <div><span>最新上游</span><strong>${esc(latest)}</strong></div>
           <div><span>发布页面</span><a href="${esc(updateInfo?.releaseUrl || '#')}" target="_blank">release</a></div>
         </div>
-        ${updateInstalling ? `
+        ${updateProgressVisible ? `
           <div class="hm-update-progress-row">
             <span>${esc(updateLog || '正在准备...')}</span><strong>${updateProgress}%</strong>
           </div>
@@ -921,6 +933,7 @@ export function render() {
     el.querySelectorAll('.hm-preset-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         formBaseUrl = btn.dataset.url
+        selectedHermesProvider = btn.dataset.key || ''
         const provider = hermesProviders.find(p => p.id === btn.dataset.key)
         if (provider?.models?.length && !formModel) formModel = provider.models[0]
         cfgMsg = `<span style="color:var(--success)">${t('engine.dashPresetApplied', { provider: btn.textContent.trim() })}</span>`
@@ -956,10 +969,11 @@ export function render() {
         formBaseUrl = p.baseUrl || ''
         formApiKey = p.apiKey || ''
         formModel = p.primaryModel || p.models[0] || ''
+        selectedHermesProvider = p.hermesProvider || 'custom'
         models = p.models || []
         showDropdown = models.length > 0
         importChoices = []
-        cfgMsg = `<span style="color:var(--success)">✓ 已导入 ${esc(p.name)}，请选择模型后保存到 Hermes</span>`
+        cfgMsg = `<span style="color:var(--success)">✓ 已导入 ${esc(p.name)}，将按 ${esc(selectedHermesProvider)} 写入 Hermes；请选择模型后保存</span>`
         draw()
       })
     })
@@ -973,7 +987,7 @@ export function render() {
     })
     el.querySelector('.hm-update-uninstall')?.addEventListener('click', doUninstallHermes)
     el.querySelector('.hm-update-dismiss')?.addEventListener('click', () => {
-      updateInfo = null; updateProgress = 0; updateLog = ''; updateInstalling = false; draw()
+      updateInfo = null; updateProgress = 0; updateLog = ''; updateInstalling = false; updateProgressVisible = false; draw()
     })
     el.querySelectorAll('.hm-connect-mode').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1034,8 +1048,8 @@ export function render() {
     if (!formModel) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configModelRequired')}</span>`; draw(); return }
 
     const matched = inferProviderByBaseUrl(hermesProviders, formBaseUrl)
-    // 验证 provider 是否为 Hermes 已知提供商，防止用户输入无效 provider 名称（如"小风车"）
-    const provider = matched?.id || 'custom'
+    // 优先使用导入/预设按钮记录的 provider，避免 OpenClaw 自定义聚合接口被误判。
+    const provider = selectedHermesProvider || matched?.id || 'custom'
     const knownProviderIds = hermesProviders.map(p => p.id)
     if (provider !== 'custom' && !knownProviderIds.includes(provider)) {
       cfgMsg = `<span style="color:var(--error)">✗ 未知提供商 '${provider}'，请从下拉列表选择支持的提供商</span>`
@@ -1160,6 +1174,7 @@ export function render() {
   async function doInstallUpdate(target = 'latest') {
     if (updateInstalling) return
     updateInstalling = true
+    updateProgressVisible = true
     updateProgress = 1
     updateLog = target === 'recommended' ? '准备回退到推荐稳定版...' : '准备切换到最新上游...'
     draw()
@@ -1184,6 +1199,7 @@ export function render() {
       updateProgress = 100
       updateLog = target === 'recommended' ? '已回退到推荐稳定版' : t('engine.dashInstallSuccess')
       updateInstalling = false
+      updateProgressVisible = true
       await refresh()
       try { updateInfo = await api.checkHermesUpdate() } catch (_) {}
       draw()
@@ -1191,6 +1207,7 @@ export function render() {
       updateProgress = 0
       updateLog = '❌ ' + (e?.message || String(e))
       updateInstalling = false
+      updateProgressVisible = true
       draw()
       toast(t('engine.dashInstallFailed') + ': ' + (e?.message || e), 'error')
     } finally {
@@ -1203,6 +1220,7 @@ export function render() {
     const ok = await showConfirm('确认卸载 Hermes Agent？不会删除配置，除非你之后手动清理。')
     if (!ok) return
     updateInstalling = true
+    updateProgressVisible = true
     updateProgress = 5
     updateLog = '正在卸载 Hermes Agent...'
     draw()
@@ -1211,6 +1229,7 @@ export function render() {
       updateProgress = 100
       updateLog = 'Hermes Agent 已卸载'
       updateInstalling = false
+      updateProgressVisible = true
       await refresh()
       updateInfo = null
       toast('Hermes Agent 已卸载', 'success')
@@ -1219,6 +1238,7 @@ export function render() {
       updateProgress = 0
       updateLog = '❌ ' + (e?.message || String(e))
       updateInstalling = false
+      updateProgressVisible = true
       draw()
       toast('卸载失败: ' + (e?.message || e), 'error')
     }
@@ -1335,6 +1355,7 @@ export function render() {
         formBaseUrl = hermesConfig.base_url || ''
         formApiKey = hermesConfig.api_key || ''
         formModel = hermesConfig.model || ''
+        selectedHermesProvider = hermesConfig.provider || ''
         formInited = true
       }
       draw()

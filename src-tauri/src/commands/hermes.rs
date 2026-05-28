@@ -1069,9 +1069,10 @@ pub async fn check_hermes_update() -> Result<Value, String> {
 
     let latest_version = latest_tag.trim_start_matches('v').to_string();
 
-    // 3. 比较版本
-    let update_available =
-        !local_version.is_empty() && !latest_version.is_empty() && local_version != latest_version;
+    // 3. 比较版本：用数字段语义比较，避免 2026.3.13 与 v2026.3.13 字符串差异误报。
+    let update_available = !local_version.is_empty()
+        && !latest_version.is_empty()
+        && cmp_versionish(&local_version, &latest_version) == std::cmp::Ordering::Less;
     let recommended_version = HERMES_RECOMMENDED_TAG.to_string();
     let local_cmp_recommended = if local_version.is_empty() {
         std::cmp::Ordering::Equal
@@ -2038,6 +2039,9 @@ system:
     if let Some(env) = key_env {
         if !api_key.trim().is_empty() {
             new_pairs.push((env.to_string(), api_key.trim().to_string()));
+            if provider == "custom" && env != "OPENAI_API_KEY" {
+                new_pairs.push(("OPENAI_API_KEY".into(), api_key.trim().to_string()));
+            }
         }
     } else if !api_key.trim().is_empty() {
         // OAuth provider 传了 api_key —— 记日志，不落盘
@@ -2048,6 +2052,9 @@ system:
         let u: &str = url.trim();
         if !u.is_empty() {
             new_pairs.push((env.to_string(), u.to_string()));
+            if provider == "custom" && env != "OPENAI_BASE_URL" {
+                new_pairs.push(("OPENAI_BASE_URL".into(), u.to_string()));
+            }
         }
     }
 

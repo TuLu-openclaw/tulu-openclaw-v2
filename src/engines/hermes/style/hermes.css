@@ -6347,3 +6347,92 @@ body[data-active-engine="hermes"][data-theme="dark"] {
   background: linear-gradient(90deg, var(--hm-accent), var(--hm-cta));
   transition: width .25s ease;
 }
+
+/* Hermes Skill Hub search panel fixes */
+[data-engine="hermes"] .hm-hub-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+  padding: 4px 2px 14px;
+}
+
+[data-engine="hermes"] .hm-hub-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 6px 0 10px;
+  background: var(--hm-bg, var(--bg-primary));
+}
+
+[data-engine="hermes"] .hm-hub-input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--hm-border, var(--border-primary));
+  border-radius: 10px;
+  background: var(--hm-surface, var(--bg-secondary));
+  color: var(--hm-text, var(--text-primary));
+  font-size: 13px;
+  outline: none;
+}
+
+[data-engine="hermes"] .hm-hub-input:focus {
+  border-color: var(--hm-accent, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--hm-accent, #6366f1) 18%, transparent);
+}
+
+[data-engine="hermes"] .hm-hub-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 120px;
+}
+
+[data-engine="hermes"] .hm-hub-result-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--hm-border, var(--border-primary));
+  border-radius: 12px;
+  background: var(--hm-surface, var(--bg-secondary));
+}
+
+[data-engine="hermes"] .hm-hub-result-info {
+  min-width: 0;
+}
+
+[data-engine="hermes"] .hm-hub-result-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--hm-text, var(--text-primary));
+}
+
+[data-engine="hermes"] .hm-hub-result-desc,
+[data-engine="hermes"] .hm-hub-empty {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--hm-text-secondary, var(--text-secondary));
+}
+
+[data-engine="hermes"] .hm-hub-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+[data-engine="hermes"] .hm-hub-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--hm-border, var(--border-primary));
+  font-size: 11px;
+  color: var(--hm-text-secondary, var(--text-secondary));
+}
