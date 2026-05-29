@@ -63,7 +63,7 @@ function normalizeApiType(raw) {
 
 function requiresApiKey(apiType) {
   const type = normalizeApiType(apiType)
-  return type === 'anthropic-messages' || type === 'google-generative-ai'
+  return type !== 'ollama'
 }
 
 function apiHintText(apiType) {
@@ -1598,9 +1598,23 @@ function providerApiType(provider = {}) {
   return normalizeApiType(provider.api || provider.apiType || provider.type || provider.kind)
 }
 
+function isPlaceholderApiKey(key) {
+  const v = String(key || '').trim().toLowerCase()
+  if (!v) return true
+  return v === 'wrongkey'
+    || v === 'testkey'
+    || v === 'your-key-here'
+    || v === 'sk-xxx'
+    || v === 'changeme'
+    || v.includes('placeholder')
+    || v.includes('example')
+}
+
 function pushImportProvider(providers, seen, item) {
   const baseUrl = String(item?.baseUrl || item?.base_url || '').trim()
   const name = String(item?.name || '').trim()
+  const rawApiKey = String(item?.apiKey || item?.api_key || '').trim()
+  const apiKey = isPlaceholderApiKey(rawApiKey) ? '' : rawApiKey
   if (!baseUrl || !name) return
   const key = `${name}|${baseUrl}`
   if (seen.has(key)) return
@@ -1609,7 +1623,7 @@ function pushImportProvider(providers, seen, item) {
     source: item.source || t('assistant.importGlobal'),
     name,
     baseUrl,
-    apiKey: item.apiKey || item.api_key || '',
+    apiKey,
     apiType: providerApiType(item),
     models: modelIdsFromProvider(item),
     primaryModel: item.primaryModel || '',
@@ -4193,6 +4207,10 @@ function showSettings() {
     _config.model = overlay.querySelector('#ast-model').value.trim()
     _config.temperature = parseFloat(overlay.querySelector('#ast-temp').value) || 0.7
     _config.apiType = normalizeApiType(overlay.querySelector('#ast-apitype').value || 'openai-completions')
+    if (requiresApiKey(_config.apiType) && isPlaceholderApiKey(_config.apiKey)) {
+      toast('请输入有效 API Key，占位/测试 Key 不能保存', 'warning')
+      return
+    }
     // 工具开关
     _config.tools.terminal = overlay.querySelector('#ast-tool-terminal').checked
     _config.tools.fileOps = overlay.querySelector('#ast-tool-fileops').checked

@@ -206,9 +206,29 @@ export function render() {
     return 'custom'
   }
 
+  function isPlaceholderApiKey(key) {
+    const v = String(key || '').trim().toLowerCase()
+    if (!v) return true
+    return v === 'wrongkey'
+      || v === 'testkey'
+      || v === 'your-key-here'
+      || v === 'sk-xxx'
+      || v === 'changeme'
+      || v.includes('placeholder')
+      || v.includes('example')
+  }
+
+  function maskKey(key) {
+    const v = String(key || '')
+    if (!v) return '未设置 Key'
+    if (isPlaceholderApiKey(v)) return '疑似占位/无效 Key'
+    return '****' + v.slice(-6)
+  }
+
   function pushImportProvider(list, seen, item) {
     const baseUrl = String(item?.baseUrl || item?.base_url || '').trim()
-    const apiKey = String(item?.apiKey || item?.api_key || '').trim()
+    const rawApiKey = String(item?.apiKey || item?.api_key || '').trim()
+    const apiKey = isPlaceholderApiKey(rawApiKey) ? '' : rawApiKey
     const name = String(item?.name || item?.id || '').trim()
     if (!name || (!baseUrl && !apiKey && !modelIdsFromProvider(item).length)) return
     const key = `${name}|${baseUrl}|${apiKey.slice(-8)}`
@@ -975,7 +995,8 @@ export function render() {
         models = p.models || []
         showDropdown = models.length > 0
         importChoices = []
-        cfgMsg = `<span style="color:var(--success)">✓ 已导入 ${esc(p.name)}，将按 ${esc(selectedHermesProvider)} 写入 Hermes；请选择模型后保存</span>`
+        const keyWarning = p.apiKey ? '' : '；原配置中的 API Key 为空或疑似占位值，请重新粘贴有效 Key'
+        cfgMsg = `<span style="color:var(--success)">✓ 已导入 ${esc(p.name)}，将按 ${esc(selectedHermesProvider)} 写入 Hermes；请选择模型并确认 API Key 后保存${keyWarning}</span>`
         draw()
       })
     })
@@ -1048,7 +1069,7 @@ export function render() {
 
   async function doSaveModel() {
     syncFormFromDom()
-    if (!formApiKey) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configFetchNeedKey')}</span>`; draw(); return }
+    if (!formApiKey || isPlaceholderApiKey(formApiKey)) { cfgMsg = `<span style="color:var(--warning)">请输入有效 API Key，占位/测试 Key 不能保存</span>`; draw(); return }
     if (!formModel) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configModelRequired')}</span>`; draw(); return }
 
     const matched = inferProviderByBaseUrl(hermesProviders, formBaseUrl)
@@ -1064,7 +1085,14 @@ export function render() {
     modelBusy = true; cfgMsg = ''; draw()
     try {
       await api.configureHermes(provider, formApiKey, formModel, formBaseUrl || null)
-      cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSaved')}</span>`
+      cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSaved')}，正在重启 Hermes Gateway 使新 Key 生效...</span>`
+      draw()
+      try {
+        await api.hermesGatewayAction('restart')
+        cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSaved')}，Hermes Gateway 已重启，新配置已生效</span>`
+      } catch (restartErr) {
+        cfgMsg = `<span style="color:var(--warning)">✓ ${t('engine.configSaved')}，但 Gateway 重启失败，请手动重启: ${String(restartErr).replace(/^Error:\s*/, '')}</span>`
+      }
       // 刷新后端状态（不覆盖 form）
       try { hermesConfig = await api.hermesReadConfig() } catch (_) {}
     } catch (e) {
@@ -1119,7 +1147,7 @@ export function render() {
         <div style="font-size:12px;font-weight:600;margin-bottom:8px">找到 ${providers.length} 个可导入配置，点击一项填入 Hermes：</div>
         ${providers.map((p, i) => {
           const modelsStr = p.models.length ? p.models.join(', ') : '未声明模型'
-          const keyHint = p.apiKey ? '****' + p.apiKey.slice(-6) : '未设置 Key'
+          const keyHint = maskKey(p.apiKey)
           return `<button type="button" class="hm-import-option" data-idx="${i}">
             <span class="hm-import-option-head"><strong>${esc(p.name)}</strong><em>${esc(p.source)}</em></span>
             <span class="hm-import-option-url">${esc(p.baseUrl || '未设置 Base URL')} · ${esc(keyHint)}</span>

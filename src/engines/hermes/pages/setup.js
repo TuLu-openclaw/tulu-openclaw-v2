@@ -620,12 +620,13 @@ export function render() {
       return
     }
 
-    if (!apiKey) {
-      alert('请输入 API Key')
+    if (!apiKey || ['wrongkey', 'testkey', 'your-key-here', 'sk-xxx', 'changeme'].includes(apiKey.toLowerCase())) {
+      alert('请输入有效 API Key，占位/测试 Key 不能保存')
       return
     }
     try {
       await api.configureHermes(provider, apiKey, model, baseUrl)
+      try { await api.hermesGatewayAction('restart') } catch (_) {}
       phase = 'gateway'
       await refreshHermes()
     } catch (e) {
