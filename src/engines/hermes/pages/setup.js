@@ -615,6 +615,10 @@ export function render() {
     // 从 baseUrl 推断 provider id；推不出来时用 'custom'，让后端按通用 OpenAI 兼容处理
     const matched = inferProviderByBaseUrl(hermesProviders, baseUrl)
     const provider = matched?.id || 'custom'
+    if (provider === 'custom' && !baseUrl) {
+      alert('自定义 OpenAI 兼容服务必须填写 Base URL')
+      return
+    }
 
     if (!apiKey) {
       alert('请输入 API Key')

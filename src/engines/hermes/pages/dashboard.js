@@ -196,8 +196,10 @@ export function render() {
   }
 
   function canonicalHermesProviderForImport(item = {}) {
-    const explicit = String(item?.provider || item?.providerId || '').trim()
+    const explicit = String(item?.provider || item?.providerId || item?.id || item?.name || '').trim()
     if (explicit && hermesProviders.some(p => p.id === explicit)) return explicit
+    const byUrl = inferProviderByBaseUrl(hermesProviders, item?.baseUrl || item?.base_url)
+    if (byUrl?.id) return byUrl.id
     const apiType = normalizeApiType(item?.api || item?.apiType || item?.type || item?.kind)
     if (apiType === 'anthropic-messages') return 'anthropic'
     if (apiType === 'google-generative-ai') return 'gemini'
@@ -1028,9 +1030,11 @@ export function render() {
         : 'openai-completions')
       : 'openai-completions'
 
+    if (provider && hermesProviders.some(p => p.id === provider)) selectedHermesProvider = provider
+
     fetchBusy = true; cfgMsg = ''; draw()
     try {
-      const fetchedModels = await api.hermesFetchModels(formBaseUrl, formApiKey, apiType)
+      const fetchedModels = await api.hermesFetchModels(formBaseUrl, formApiKey, apiType, provider || null)
       models = fetchedModels || []
       cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configFetchSuccess', { count: models.length })}</span>`
       showDropdown = models.length > 0
@@ -1050,6 +1054,7 @@ export function render() {
     const matched = inferProviderByBaseUrl(hermesProviders, formBaseUrl)
     // 优先使用导入/预设按钮记录的 provider，避免 OpenClaw 自定义聚合接口被误判。
     const provider = selectedHermesProvider || matched?.id || 'custom'
+    if (provider && hermesProviders.some(p => p.id === provider)) selectedHermesProvider = provider
     const knownProviderIds = hermesProviders.map(p => p.id)
     if (provider !== 'custom' && !knownProviderIds.includes(provider)) {
       cfgMsg = `<span style="color:var(--error)">✗ 未知提供商 '${provider}'，请从下拉列表选择支持的提供商</span>`
