@@ -5195,8 +5195,9 @@ pub async fn assistant_chat_once(
 ) -> Result<String, String> {
     let api_type = normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
     let base = normalize_base_url_for_api(&base_url, api_type);
-    let client = crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(120), None)
-        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+    let client =
+        crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(120), None)
+            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
     let msgs = messages.as_array().cloned().unwrap_or_default();
     let temp = temperature.unwrap_or(0.7);
@@ -5204,11 +5205,13 @@ pub async fn assistant_chat_once(
     let resp = match api_type {
         "anthropic-messages" => {
             let url = format!("{}/messages", base);
-            let system = msgs.iter()
+            let system = msgs
+                .iter()
                 .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))
                 .and_then(|m| m.get("content").and_then(|c| c.as_str()))
                 .unwrap_or("");
-            let chat_messages: Vec<Value> = msgs.iter()
+            let chat_messages: Vec<Value> = msgs
+                .iter()
                 .filter(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"))
                 .cloned()
                 .collect();
@@ -5222,23 +5225,37 @@ pub async fn assistant_chat_once(
             if !system.is_empty() {
                 body["system"] = Value::String(system.to_string());
             }
-            let mut req = client.post(&url)
+            let mut req = client
+                .post(&url)
                 .header("anthropic-version", "2023-06-01")
                 .json(&body);
-            if !api_key.is_empty() { req = req.header("x-api-key", api_key.clone()); }
+            if !api_key.is_empty() {
+                req = req.header("x-api-key", api_key.clone());
+            }
             req.send()
         }
         "google-gemini" => {
-            let url = format!("{}/models/{}:generateContent?key={}", base, model_id, api_key);
-            let contents: Vec<Value> = msgs.iter()
+            let url = format!(
+                "{}/models/{}:generateContent?key={}",
+                base, model_id, api_key
+            );
+            let contents: Vec<Value> = msgs
+                .iter()
                 .filter(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"))
                 .map(|m| {
-                    let role = if m.get("role").and_then(|r| r.as_str()) == Some("assistant") { "model" } else { "user" };
+                    let role = if m.get("role").and_then(|r| r.as_str()) == Some("assistant") {
+                        "model"
+                    } else {
+                        "user"
+                    };
                     let text = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
                     json!({"role": role, "parts": [{"text": text}]})
                 })
                 .collect();
-            client.post(&url).json(&json!({"contents": contents})).send()
+            client
+                .post(&url)
+                .json(&json!({"contents": contents}))
+                .send()
         }
         _ => {
             let url = format!("{}/chat/completions", base);
@@ -5249,15 +5266,21 @@ pub async fn assistant_chat_once(
                 "temperature": temp,
             });
             let mut req = client.post(&url).json(&body);
-            if !api_key.is_empty() { req = req.header("Authorization", format!("Bearer {api_key}")); }
+            if !api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {api_key}"));
+            }
             req.send()
         }
     }
     .await
     .map_err(|e| {
-        if e.is_timeout() { "请求超时 (120s)".to_string() }
-        else if e.is_connect() { format!("连接失败: {e}") }
-        else { format!("请求失败: {e}") }
+        if e.is_timeout() {
+            "请求超时 (120s)".to_string()
+        } else if e.is_connect() {
+            format!("连接失败: {e}")
+        } else {
+            format!("请求失败: {e}")
+        }
     })?;
 
     let status = resp.status();
