@@ -546,7 +546,15 @@ export const api = {
   checkPython: () => cachedInvoke('check_python', {}, 60000),
   installHermes: (method = 'uv-tool', extras = []) => { invalidate('check_hermes'); return invoke('install_hermes', { method, extras }, 300000) },
   configureHermes: (provider, apiKey, model, baseUrl) => { invalidate('check_hermes'); return invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null }) },
-  hermesGatewayAction: (action) => { invalidate('check_hermes'); return invoke('hermes_gateway_action', { action }, action === 'start' || action === 'restart' ? 60000 : 15000) },
+  hermesGatewayAction: async (action) => {
+    invalidate('check_hermes')
+    if (action === 'restart') {
+      try { await invoke('hermes_gateway_action', { action: 'stop' }, 15000) } catch (_) {}
+      await new Promise(r => setTimeout(r, 800))
+      return invoke('hermes_gateway_action', { action: 'start' }, 60000)
+    }
+    return invoke('hermes_gateway_action', { action }, action === 'start' ? 60000 : 15000)
+  },
   hermesHealthCheck: () => invoke('hermes_health_check'),
   hermesApiProxy: (method, path, body, headers) => invoke('hermes_api_proxy', { method, path, body: body || null, headers: headers || null }),
   musicSearch: (q) => invoke('music_search', { query: q }),
