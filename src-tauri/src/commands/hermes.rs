@@ -568,7 +568,46 @@ async fn prepare_hermes_tool_install(app: &tauri::AppHandle, uv_path: &str) {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 }
 
-/// 构建增强 PATH，确保能找到 uv、hermes、python 等
+#[cfg(target_os = "windows")]
+fn find_git_bash_path() -> Option<PathBuf> {
+    if let Ok(custom) = std::env::var("HERMES_GIT_BASH_PATH") {
+        let path = PathBuf::from(custom);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(&local_appdata).join(r"hermes\git\bin\bash.exe"));
+        candidates.push(PathBuf::from(&local_appdata).join(r"hermes\git\usr\bin\bash.exe"));
+        candidates.push(PathBuf::from(local_appdata).join(r"Programs\Git\bin\bash.exe"));
+    }
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        candidates.push(PathBuf::from(program_files).join(r"Git\bin\bash.exe"));
+    }
+    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+        candidates.push(PathBuf::from(program_files_x86).join(r"Git\bin\bash.exe"));
+    }
+
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn apply_hermes_git_bash_env(cmd: &mut std::process::Command) {
+    if let Some(bash) = find_git_bash_path() {
+        cmd.env("HERMES_GIT_BASH_PATH", bash);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_hermes_git_bash_env_tokio(cmd: &mut tokio::process::Command) {
+    if let Some(bash) = find_git_bash_path() {
+        cmd.env("HERMES_GIT_BASH_PATH", bash);
+    }
+}
+
+/// 构建增强 PATH，确保能找到 uv、hermes、python、Git Bash 等
 fn hermes_enhanced_path() -> String {
     let current = std::env::var("PATH").unwrap_or_default();
     let home = dirs::home_dir().unwrap_or_default();
@@ -586,6 +625,13 @@ fn hermes_enhanced_path() -> String {
             extra.push(format!(r"{}\uv\tools\bin", appdata));
             // hermes-agent 的 Scripts 目录（hermes.exe 实际位置）
             extra.push(format!(r"{}\uv\tools\hermes-agent\Scripts", appdata));
+        }
+        if let Some(bash) = find_git_bash_path() {
+            if let Some(dir) = bash.parent() {
+                // 放在系统 PATH 前，避免 Hermes terminal local 后端误选
+                // C:\Windows\System32\bash.exe（WSL launcher）。
+                extra.push(dir.to_string_lossy().to_string());
+            }
         }
         extra.push(format!(r"{}\.local\bin", home.display()));
         // uv 自身的默认安装路径
@@ -1938,14 +1984,23 @@ pub async fn configure_hermes(
 
     // ---- 写入 config.yaml（合并模式：保留用户自定义的 hooks/skills/cron 等） ----
     let config_path = home.join("config.yaml");
-    let base_url_line = match base_url.as_ref() {
-        Some(url) if !url.trim().is_empty() => format!("  base_url: {}\n", url.trim()),
-        _ => String::new(),
+    let is_custom_provider = provider == "custom";
+    let custom_provider_name = "clawpanel-custom";
+    let base_url_line = if is_custom_provider {
+        String::new()
+    } else {
+        match base_url.as_ref() {
+            Some(url) if !url.trim().is_empty() => format!("  base_url: {}\n", url.trim()),
+            _ => String::new(),
+        }
     };
-    // Provider 字段：Hermes 需要该字段来路由到正确的 provider。
-    // custom provider 也需要写入，否则 Hermes 无法确定使用哪个 provider。
+    // Provider 字段：内置 provider 直接写 provider id；custom 使用 Hermes 官方
+    // custom_providers 命名入口，避免裸 provider: custom 在 Gateway run 链路中
+    // 走 direct-alias/no-key-required 分支导致工具 Agent 401。
     let provider_line = if provider.is_empty() {
         String::new()
+    } else if is_custom_provider {
+        format!("  provider: custom:{}\n", custom_provider_name)
     } else {
         format!("  provider: {provider}\n")
     };
@@ -1993,6 +2048,22 @@ system:
 "#
         )
     };
+    if is_custom_provider {
+        let custom_base_url = base_url
+            .as_ref()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .unwrap_or_default();
+        if custom_base_url.is_empty() {
+            return Err("Custom provider requires a base URL".into());
+        }
+        config_content = ensure_clawpanel_custom_provider(
+            &config_content,
+            custom_provider_name,
+            &custom_base_url,
+            &model_str,
+        );
+    }
+
     // 如果合并后没有 system 区块，追加以免模型不知道平台信息
     if !config_content.contains("system:") {
         let os_label = if cfg!(target_os = "windows") {
@@ -2085,6 +2156,67 @@ system:
 // ---------------------------------------------------------------------------
 // 配置合并帮助函数
 // ---------------------------------------------------------------------------
+
+fn ensure_clawpanel_custom_provider(
+    existing: &str,
+    name: &str,
+    base_url: &str,
+    model_str: &str,
+) -> String {
+    let mut result = Vec::new();
+    let lines: Vec<&str> = existing.lines().collect();
+    let mut i = 0;
+    let mut wrote = false;
+
+    while i < lines.len() {
+        let line = lines[i];
+        let trimmed = line.trim();
+        if trimmed == "custom_providers:" || trimmed.starts_with("custom_providers:") {
+            result.push("custom_providers:".to_string());
+            result.push(format!("  - name: {name}"));
+            result.push(format!("    base_url: {base_url}"));
+            result.push("    key_env: CUSTOM_API_KEY".to_string());
+            result.push("    api_mode: chat_completions".to_string());
+            result.push(format!("    model: {model_str}"));
+            wrote = true;
+            i += 1;
+            while i < lines.len() {
+                let next = lines[i];
+                let next_trimmed = next.trim();
+                if next_trimmed.is_empty() {
+                    i += 1;
+                    continue;
+                }
+                if next.starts_with("  ") || next.starts_with('\t') {
+                    i += 1;
+                    continue;
+                }
+                break;
+            }
+            continue;
+        }
+        result.push(line.to_string());
+        i += 1;
+    }
+
+    if !wrote {
+        if !result.is_empty() && !result.last().map(|s| s.is_empty()).unwrap_or(false) {
+            result.push(String::new());
+        }
+        result.push("custom_providers:".to_string());
+        result.push(format!("  - name: {name}"));
+        result.push(format!("    base_url: {base_url}"));
+        result.push("    key_env: CUSTOM_API_KEY".to_string());
+        result.push("    api_mode: chat_completions".to_string());
+        result.push(format!("    model: {model_str}"));
+    }
+
+    let mut content = result.join("\n");
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content
+}
 
 /// 合并 Hermes config.yaml：只更新 model 区块（default/base_url），
 /// 保留用户自定义的 hooks、skills、cron、session 等其他顶级 section。
@@ -2656,6 +2788,8 @@ pub async fn hermes_gateway_action(
                     .map_err(|e| format!("克隆日志句柄失败: {e}"))?;
 
                 let mut cmd = std::process::Command::new("hermes");
+                #[cfg(target_os = "windows")]
+                apply_hermes_git_bash_env(&mut cmd);
                 cmd.args(["gateway", "run"])
                     .current_dir(&home)
                     .env("PATH", &enhanced)
@@ -2798,6 +2932,8 @@ pub async fn hermes_gateway_action(
                     Err(e) => {
                         // fallback: hermes gateway start
                         let mut fallback = tokio::process::Command::new("hermes");
+                        #[cfg(target_os = "windows")]
+                        apply_hermes_git_bash_env_tokio(&mut fallback);
                         fallback.args(["gateway", "start"]).env("PATH", &enhanced);
                         let out = fallback
                             .output()
@@ -2831,6 +2967,8 @@ pub async fn hermes_gateway_action(
 
             // 2. 尝试 hermes gateway stop（作为补充）
             let mut cmd = tokio::process::Command::new("hermes");
+            #[cfg(target_os = "windows")]
+            apply_hermes_git_bash_env_tokio(&mut cmd);
             cmd.args(["gateway", "stop"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
@@ -2874,6 +3012,8 @@ pub async fn hermes_gateway_action(
         }
         "status" => {
             let mut cmd = tokio::process::Command::new("hermes");
+            #[cfg(target_os = "windows")]
+            apply_hermes_git_bash_env_tokio(&mut cmd);
             cmd.args(["gateway", "status"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
@@ -2883,6 +3023,8 @@ pub async fn hermes_gateway_action(
         }
         "install" => {
             let mut cmd = tokio::process::Command::new("hermes");
+            #[cfg(target_os = "windows")]
+            apply_hermes_git_bash_env_tokio(&mut cmd);
             cmd.args(["gateway", "install"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);
@@ -2895,6 +3037,8 @@ pub async fn hermes_gateway_action(
         }
         "uninstall" => {
             let mut cmd = tokio::process::Command::new("hermes");
+            #[cfg(target_os = "windows")]
+            apply_hermes_git_bash_env_tokio(&mut cmd);
             cmd.args(["gateway", "uninstall"]).env("PATH", &enhanced);
             #[cfg(target_os = "windows")]
             cmd.creation_flags(CREATE_NO_WINDOW);

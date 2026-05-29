@@ -2931,6 +2931,66 @@ function _normalizeBaseUrl(raw) {
   return base
 }
 
+function _normalizeAssistantApiType(apiType = 'openai-completions') {
+  return ['anthropic', 'anthropic-messages'].includes(apiType) ? 'anthropic-messages'
+    : apiType === 'google-gemini' ? 'google-gemini'
+    : apiType === 'openai-responses' ? 'openai-responses'
+    : 'openai-completions'
+}
+
+function _extractProviderError(text, status) {
+  let msg = `HTTP ${status}`
+  try {
+    const parsed = JSON.parse(text || '{}')
+    if (typeof parsed.error === 'string') msg = parsed.error
+    else if (parsed.error?.message) msg = parsed.error.message
+    else if (parsed.message) msg = parsed.message
+    else if (parsed.detail) msg = typeof parsed.detail === 'string' ? parsed.detail : JSON.stringify(parsed.detail)
+  } catch {
+    if (text) msg = `${msg}: ${text.slice(0, 500)}`
+  }
+  return msg
+}
+
+function _extractAssistantReply(data) {
+  const anthropicText = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
+  if (anthropicText) return anthropicText
+  const geminiText = data.candidates?.[0]?.content?.parts?.map?.(p => p.text).filter(Boolean).join('') || ''
+  if (geminiText) return geminiText
+  const content = data.choices?.[0]?.message?.content
+  if (content) return content
+  const reasoning = data.choices?.[0]?.message?.reasoning_content
+  if (reasoning) return `[reasoning] ${reasoning}`
+  if (Array.isArray(data.output)) {
+    const chunks = []
+    for (const item of data.output) {
+      if (Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if (typeof c.text === 'string') chunks.push(c.text)
+          else if (typeof c.output_text === 'string') chunks.push(c.output_text)
+        }
+      }
+    }
+    if (chunks.join('').trim()) return chunks.join('')
+  }
+  if (typeof data.output_text === 'string' && data.output_text) return data.output_text
+  return ''
+}
+
+async function _fetchJsonWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch(url, { ...options, signal: controller.signal })
+    clearTimeout(timeout)
+    return resp
+  } catch (e) {
+    clearTimeout(timeout)
+    if (e.name === 'AbortError') throw new Error(`请求超时 (${Math.round(timeoutMs / 1000)}s)`)
+    throw e
+  }
+}
+
 // === 后端内存缓存（ARM 设备性能优化）===
 // 防止短时间内重复 spawn CLI 进程，显著降低 CPU 占用
 const _serverCache = new Map()
@@ -4572,20 +4632,16 @@ const handlers = {
 
   // 模型测试
   async test_model({ baseUrl, apiKey, modelId, apiType = 'openai-completions' }) {
-    const type = ['anthropic', 'anthropic-messages'].includes(apiType) ? 'anthropic-messages'
-      : apiType === 'google-gemini' ? 'google-gemini'
-      : 'openai-completions'
+    const type = _normalizeAssistantApiType(apiType)
     let base = _normalizeBaseUrl(baseUrl)
     // 仅 Anthropic 强制补 /v1，OpenAI 兼容类不强制（火山引擎等用 /v3）
     if (type === 'anthropic-messages' && !/\/v1$/i.test(base)) base += '/v1'
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30000)
     try {
       let resp
       if (type === 'anthropic-messages') {
         const headers = { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' }
         if (apiKey) headers['x-api-key'] = apiKey
-        resp = await fetch(`${base}/messages`, {
+        resp = await _fetchJsonWithTimeout(`${base}/messages`, {
           method: 'POST',
           headers,
           body: JSON.stringify({
@@ -4593,19 +4649,25 @@ const handlers = {
             messages: [{ role: 'user', content: 'Hi' }],
             max_tokens: 16,
           }),
-          signal: controller.signal
-        })
+        }, 30000)
       } else if (type === 'google-gemini') {
-        resp = await fetch(`${base}/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(apiKey || '')}`, {
+        resp = await _fetchJsonWithTimeout(`${base}/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(apiKey || '')}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Hi' }] }] }),
-          signal: controller.signal
-        })
+        }, 30000)
+      } else if (type === 'openai-responses') {
+        const headers = { 'Content-Type': 'application/json' }
+        if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+        resp = await _fetchJsonWithTimeout(`${base}/responses`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ model: modelId, input: 'Hi', max_output_tokens: 16 }),
+        }, 30000)
       } else {
         const headers = { 'Content-Type': 'application/json' }
-        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-        resp = await fetch(`${base}/chat/completions`, {
+        if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+        resp = await _fetchJsonWithTimeout(`${base}/chat/completions`, {
           method: 'POST',
           headers,
           body: JSON.stringify({
@@ -4614,37 +4676,82 @@ const handlers = {
             max_tokens: 16,
             stream: false
           }),
-          signal: controller.signal
-        })
+        }, 30000)
       }
-      clearTimeout(timeout)
       if (!resp.ok) {
         const text = await resp.text()
-        let msg = `HTTP ${resp.status}`
-        try {
-          const parsed = JSON.parse(text)
-          msg = parsed.error?.message || parsed.message || msg
-        } catch {}
+        const msg = _extractProviderError(text, resp.status)
         if (resp.status === 401 || resp.status === 403) throw new Error(msg)
         return `⚠ 连接正常（API 返回 ${resp.status}，部分模型对简单测试不兼容，不影响实际使用）`
       }
       const data = await resp.json()
-      const anthropicText = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
-      const geminiText = data.candidates?.[0]?.content?.parts?.map?.(p => p.text).filter(Boolean).join('') || ''
-      const content = data.choices?.[0]?.message?.content
-      const reasoning = data.choices?.[0]?.message?.reasoning_content
-      return anthropicText || geminiText || content || (reasoning ? `[reasoning] ${reasoning}` : '（无回复内容）')
+      return _extractAssistantReply(data) || '（无回复内容）'
     } catch (e) {
-      clearTimeout(timeout)
-      if (e.name === 'AbortError') throw new Error('请求超时 (30s)')
       throw e
     }
   },
 
+  async assistant_chat_once({ baseUrl, apiKey, modelId, apiType = 'openai-completions', messages = [], temperature = 0.7 }) {
+    const type = _normalizeAssistantApiType(apiType)
+    let base = _normalizeBaseUrl(baseUrl)
+    if (type === 'anthropic-messages' && !/\/v1$/i.test(base)) base += '/v1'
+    const msgs = Array.isArray(messages) ? messages : []
+    let resp
+    if (type === 'anthropic-messages') {
+      const headers = { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' }
+      if (apiKey) headers['x-api-key'] = apiKey
+      const system = msgs.find(m => m?.role === 'system')?.content || ''
+      const chatMessages = msgs.filter(m => m?.role !== 'system')
+      const body = {
+        model: modelId,
+        messages: chatMessages,
+        max_tokens: 8192,
+        stream: false,
+        temperature,
+      }
+      if (system) body.system = system
+      resp = await _fetchJsonWithTimeout(`${base}/messages`, { method: 'POST', headers, body: JSON.stringify(body) }, 120000)
+    } else if (type === 'google-gemini') {
+      const contents = msgs
+        .filter(m => m?.role !== 'system')
+        .map(m => ({
+          role: m?.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: typeof m?.content === 'string' ? m.content : JSON.stringify(m?.content ?? '') }]
+        }))
+      resp = await _fetchJsonWithTimeout(`${base}/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(apiKey || '')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents }),
+      }, 120000)
+    } else if (type === 'openai-responses') {
+      const headers = { 'Content-Type': 'application/json' }
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+      const input = msgs.map(m => `${m.role || 'user'}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')}`).join('\n\n')
+      resp = await _fetchJsonWithTimeout(`${base}/responses`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: modelId, input, temperature, max_output_tokens: 8192 }),
+      }, 120000)
+    } else {
+      const headers = { 'Content-Type': 'application/json' }
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+      resp = await _fetchJsonWithTimeout(`${base}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: modelId, messages: msgs, stream: false, temperature }),
+      }, 120000)
+    }
+    const text = await resp.text()
+    if (!resp.ok) throw new Error(_extractProviderError(text, resp.status))
+    let data
+    try { data = JSON.parse(text) } catch (e) { throw new Error(`解析响应失败: ${e.message}`) }
+    const reply = _extractAssistantReply(data)
+    if (!reply) throw new Error('模型响应为空或格式不支持')
+    return reply
+  },
+
   async list_remote_models({ baseUrl, apiKey, apiType = 'openai-completions' }) {
-    const type = ['anthropic', 'anthropic-messages'].includes(apiType) ? 'anthropic-messages'
-      : apiType === 'google-gemini' ? 'google-gemini'
-      : 'openai-completions'
+    const type = _normalizeAssistantApiType(apiType)
     let base = _normalizeBaseUrl(baseUrl)
     // 仅 Anthropic 强制补 /v1，OpenAI 兼容类不强制（火山引擎等用 /v3）
     if (type === 'anthropic-messages' && !/\/v1$/i.test(base)) base += '/v1'
