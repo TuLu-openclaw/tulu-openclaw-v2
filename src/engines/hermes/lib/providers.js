@@ -152,6 +152,30 @@ export function inferProviderByBaseUrl(list, rawBaseUrl) {
 }
 
 /**
+ * Infer provider from an OpenClaw provider object.
+ * OpenClaw often stores provider id/name but uses OpenAI-compatible transport
+ * for many services. Falling back to "custom" too early makes Hermes write
+ * CUSTOM_API_KEY/OPENAI_API_KEY and then every request fails with 401.
+ */
+export function inferProviderForOpenClawImport(list, item = {}) {
+  const explicit = String(item.provider || item.providerId || item.id || item.name || '').trim()
+  if (explicit) {
+    const byId = list?.find(p => p.id === explicit)
+    if (byId) return byId
+    const normalized = explicit.toLowerCase().replace(/[\s_]+/g, '-')
+    const byName = list?.find(p =>
+      p.id.toLowerCase() === normalized ||
+      p.name.toLowerCase() === explicit.toLowerCase() ||
+      p.name.toLowerCase().includes(explicit.toLowerCase())
+    )
+    if (byName) return byName
+  }
+  const byUrl = inferProviderByBaseUrl(list, item.baseUrl || item.base_url)
+  if (byUrl) return byUrl
+  return null
+}
+
+/**
  * Return a sensible default model for a provider.
  * Aggregators may have empty `models` — callers must handle null.
  */

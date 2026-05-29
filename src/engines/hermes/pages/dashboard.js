@@ -8,6 +8,7 @@ import { toast } from '../../../components/toast.js'
 import {
   loadHermesProviders,
   inferProviderByBaseUrl,
+  inferProviderForOpenClawImport,
 } from '../lib/providers.js'
 import { getGatewayState, onStateChange, setUserStopped as setHermesUserStopped, resetAutoRestart as resetHermesAutoRestart } from '../index.js'
 
@@ -196,10 +197,8 @@ export function render() {
   }
 
   function canonicalHermesProviderForImport(item = {}) {
-    const explicit = String(item?.provider || item?.providerId || item?.id || item?.name || '').trim()
-    if (explicit && hermesProviders.some(p => p.id === explicit)) return explicit
-    const byUrl = inferProviderByBaseUrl(hermesProviders, item?.baseUrl || item?.base_url)
-    if (byUrl?.id) return byUrl.id
+    const inferred = inferProviderForOpenClawImport(hermesProviders, item)
+    if (inferred?.id) return inferred.id
     const apiType = normalizeApiType(item?.api || item?.apiType || item?.type || item?.kind)
     if (apiType === 'anthropic-messages') return 'anthropic'
     if (apiType === 'google-generative-ai') return 'gemini'
