@@ -1904,35 +1904,13 @@ async function _callAIOnce(messages, onChunk) {
   }, TIMEOUT_TOTAL)
 
   try {
-    if (apiType === 'anthropic-messages') {
-      await callAnthropicMessages(base, allMessages, onChunk)
-      return
-    }
-
-    if (apiType === 'google-gemini') {
-      await callGeminiGenerate(base, allMessages, onChunk)
-      return
-    }
-
-    // OpenAI: 先尝试 Chat Completions API
-    try {
-      await callChatCompletions(base, allMessages, onChunk)
-      return
-    } catch (err) {
-      // 超时触发的 abort → 转换为超时错误
-      if (err.name === 'AbortError' && _timedOut) {
-        throw new Error(t('assistant.errTimeout', { seconds: TIMEOUT_TOTAL / 1000 }))
-      }
-      // 如果是 "legacy protocol" 或 "use /v1/responses" 类错误，自动切换到 Responses API
-      const msg = err.message || ''
-      if (msg.includes('legacy protocol') || msg.includes('/v1/responses') || msg.includes('not supported')) {
-        console.log('[assistant] Chat Completions 不支持此模型，自动切换到 Responses API')
-        _abortController = new AbortController()
-        await callResponsesAPI(base, allMessages, onChunk)
-        return
-      }
-      throw err
-    }
+    // OpenAI-compatible/Anthropic/Gemini all go through the Tauri backend.
+    // Browser-side fetch hits CORS on many providers, which surfaced as
+    // a useless "Failed to fetch" in the assistant page while OpenClaw chat
+    // worked through its gateway.
+    const reply = await api.assistantChatOnce(base, _config.apiKey || '', _config.model, apiType, allMessages, _config.temperature || 0.7)
+    if (reply) onChunk(reply)
+    return
   } finally {
     clearTimeout(totalTimer)
   }

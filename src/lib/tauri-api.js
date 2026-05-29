@@ -376,6 +376,7 @@ export const api = {
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
   setNpmRegistry: (registry) => { invalidate('get_npm_registry'); return invoke('set_npm_registry', { registry }) },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
+  assistantChatOnce: (baseUrl, apiKey, modelId, apiType, messages, temperature = 0.7) => invoke('assistant_chat_once', { baseUrl, apiKey, modelId, apiType: apiType || null, messages, temperature }, 130000),
   translateText: (text, model = null) => invoke('translate_text', { text, model }, 90000),
   listRemoteModels: (baseUrl, apiKey, apiType = null) => invoke('list_remote_models', { baseUrl, apiKey, apiType }),
 

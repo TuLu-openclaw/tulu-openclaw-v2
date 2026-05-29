@@ -5185,6 +5185,91 @@ pub async fn translate_text(text: String, model: Option<String>) -> Result<Strin
 
 /// 测试模型连通性：向 provider 发送一个简单的 chat completion 请求
 #[tauri::command]
+pub async fn assistant_chat_once(
+    base_url: String,
+    api_key: String,
+    model_id: String,
+    api_type: Option<String>,
+    messages: Value,
+    temperature: Option<f64>,
+) -> Result<String, String> {
+    let api_type = normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
+    let base = normalize_base_url_for_api(&base_url, api_type);
+    let client = crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(120), None)
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let msgs = messages.as_array().cloned().unwrap_or_default();
+    let temp = temperature.unwrap_or(0.7);
+
+    let resp = match api_type {
+        "anthropic-messages" => {
+            let url = format!("{}/messages", base);
+            let system = msgs.iter()
+                .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))
+                .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+                .unwrap_or("");
+            let chat_messages: Vec<Value> = msgs.iter()
+                .filter(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"))
+                .cloned()
+                .collect();
+            let mut body = json!({
+                "model": model_id,
+                "messages": chat_messages,
+                "max_tokens": 8192,
+                "stream": false,
+                "temperature": temp,
+            });
+            if !system.is_empty() {
+                body["system"] = Value::String(system.to_string());
+            }
+            let mut req = client.post(&url)
+                .header("anthropic-version", "2023-06-01")
+                .json(&body);
+            if !api_key.is_empty() { req = req.header("x-api-key", api_key.clone()); }
+            req.send()
+        }
+        "google-gemini" => {
+            let url = format!("{}/models/{}:generateContent?key={}", base, model_id, api_key);
+            let contents: Vec<Value> = msgs.iter()
+                .filter(|m| m.get("role").and_then(|r| r.as_str()) != Some("system"))
+                .map(|m| {
+                    let role = if m.get("role").and_then(|r| r.as_str()) == Some("assistant") { "model" } else { "user" };
+                    let text = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                    json!({"role": role, "parts": [{"text": text}]})
+                })
+                .collect();
+            client.post(&url).json(&json!({"contents": contents})).send()
+        }
+        _ => {
+            let url = format!("{}/chat/completions", base);
+            let body = json!({
+                "model": model_id,
+                "messages": msgs,
+                "stream": false,
+                "temperature": temp,
+            });
+            let mut req = client.post(&url).json(&body);
+            if !api_key.is_empty() { req = req.header("Authorization", format!("Bearer {api_key}")); }
+            req.send()
+        }
+    }
+    .await
+    .map_err(|e| {
+        if e.is_timeout() { "请求超时 (120s)".to_string() }
+        else if e.is_connect() { format!("连接失败: {e}") }
+        else { format!("请求失败: {e}") }
+    })?;
+
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(extract_error_message(&text, status));
+    }
+    let value: Value = serde_json::from_str(&text).map_err(|e| format!("解析响应失败: {e}"))?;
+    extract_completion_text(&value).ok_or("模型响应为空或格式不支持".into())
+}
+
+#[tauri::command]
 pub async fn test_model(
     base_url: String,
     api_key: String,
