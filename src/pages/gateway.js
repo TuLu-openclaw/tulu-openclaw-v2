@@ -2,6 +2,8 @@
  * Gateway 配置页面 — 小白友好版
  */
 import { api } from '../lib/tauri-api.js'
+import { wsClient } from '../lib/ws-client.js'
+import { refreshGatewayStatus } from '../lib/app-state.js'
 import { toast } from '../components/toast.js'
 import { t } from '../lib/i18n.js'
 
@@ -292,6 +294,14 @@ function bindConfigEvents(el) {
   }
 }
 
+async function reconnectGatewayWithSavedConfig(port, auth) {
+  const token = typeof auth?.token === 'string' ? auth.token : ''
+  if (!token) return
+  const host = `127.0.0.1:${port || 18789}`
+  wsClient.disconnect()
+  setTimeout(() => wsClient.connect(host, token), 300)
+}
+
 async function saveConfig(page, state) {
   const port = parseInt(page.querySelector('#gw-port')?.value) || 18789
   const bindRadio = page.querySelector('input[name="gw-bind"]:checked')
@@ -333,8 +343,12 @@ async function saveConfig(page, state) {
     toast(t('gateway.configSaved'), 'info')
     try {
       await api.reloadGateway()
+      await refreshGatewayStatus().catch(() => {})
+      await reconnectGatewayWithSavedConfig(port, auth)
+      state._origToken = resolvedToken
       toast(t('gateway.reloaded'), 'success')
     } catch (e) {
+      await refreshGatewayStatus().catch(() => {})
       toast(t('gateway.savedButReloadFailed') + ': ' + e, 'warning')
     }
   } catch (e) {
