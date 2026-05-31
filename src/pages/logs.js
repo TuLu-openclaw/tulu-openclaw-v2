@@ -14,6 +14,8 @@ const LOG_TABS = [
 ]
 
 let _searchTimer = null
+let _activePage = null
+let _logSeq = 0
 
 export async function render() {
   const page = document.createElement('div')
@@ -38,6 +40,7 @@ export async function render() {
   `
 
   let currentTab = 'gateway'
+  _activePage = page
 
   // Tab 切换
   page.querySelectorAll('.tab').forEach(tab => {
@@ -72,16 +75,21 @@ export async function render() {
 export function cleanup() {
   clearTimeout(_searchTimer)
   _searchTimer = null
+  _activePage = null
+  _logSeq++
 }
 
 async function loadLog(page, logName) {
   const el = page.querySelector('#log-content')
   const refreshBtn = page.querySelector('#btn-refresh')
+  if (!el) return
+  const seq = ++_logSeq
   // 显示加载状态
   el.innerHTML = '<div class="log-loading"><div class="service-spinner"></div><span style="color:var(--text-tertiary);margin-left:8px">' + t('logs.loading') + '</span></div>'
   if (refreshBtn) { refreshBtn.classList.add('btn-loading'); refreshBtn.disabled = true }
   try {
     const content = await api.readLogTail(logName, 200)
+    if (seq !== _logSeq || page !== _activePage || !page.isConnected || !el.isConnected) return
     if (!content || !content.trim()) {
       el.innerHTML = '<div style="color:var(--text-tertiary)">' + t('logs.empty') + '</div>'
       return
@@ -92,23 +100,28 @@ async function loadLog(page, logName) {
       el.scrollTop = el.scrollHeight
     }
   } catch (e) {
+    if (seq !== _logSeq || page !== _activePage || !page.isConnected || !el.isConnected) return
     el.innerHTML = '<div style="color:var(--error);padding:12px">' + t('logs.loadFailed') + ': ' + e + '</div>'
     toast(t('logs.loadFailed') + ': ' + e, 'error')
   } finally {
-    if (refreshBtn) { refreshBtn.classList.remove('btn-loading'); refreshBtn.disabled = false }
+    if (seq === _logSeq && page === _activePage && refreshBtn?.isConnected) { refreshBtn.classList.remove('btn-loading'); refreshBtn.disabled = false }
   }
 }
 
 async function searchLog(page, logName, query) {
   const el = page.querySelector('#log-content')
+  if (!el) return
+  const seq = ++_logSeq
   try {
     const results = await api.searchLog(logName, query)
+    if (seq !== _logSeq || page !== _activePage || !page.isConnected || !el.isConnected) return
     if (!results || !results.length) {
       el.innerHTML = '<div style="color:var(--text-tertiary)">' + t('logs.noResults') + '</div>'
       return
     }
     el.innerHTML = results.map(l => `<div class="log-line">${highlightMatch(escapeHtml(l), query)}</div>`).join('')
   } catch (e) {
+    if (seq !== _logSeq || page !== _activePage || !page.isConnected || !el.isConnected) return
     el.innerHTML = '<div style="color:var(--error);padding:12px">' + t('logs.searchFailed') + ': ' + e + '</div>'
     toast(t('logs.searchFailed') + ': ' + e, 'error')
   }
