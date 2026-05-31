@@ -76,31 +76,33 @@ let _replyStatusElapsedEl = null
 let _replyStatusTimer = null
 const CHAT_REPLY_STATUS_ID = 'chat-reply-status'
 const CHAT_REPLY_STATUS_STORE_PREFIX = '星枢Open_chat_reply_status_'
-const CHAT_REPLY_STATUS_TEXT = {
-  queued: '任务已进入队列，等待系统调度执行',
-  sending: '正在向 OpenClaw 网关发送用户指令和附件',
-  thinking: 'Agent 正在分析任务目标、上下文和下一步操作',
-  tool: 'Agent 正在调用工具处理任务，请等待工具返回结果',
-  streaming: 'Agent 正在生成回复，内容正在持续返回',
-  finalizing: '正在整理最终回复、附件、工具结果和状态记录',
-  done: '回复已完成，任务状态和轮次已保存',
-  waiting: '当前会话空闲，等待新的任务指令',
-  error: '处理失败，错误状态已保存，可查看详情后重试',
-  aborted: '生成已停止，当前状态已保存',
+const CHAT_REPLY_STATUS_TEXT_KEYS = {
+  queued: 'chat.replyStatusQueued',
+  sending: 'chat.replyStatusSending',
+  thinking: 'chat.replyStatusThinking',
+  tool: 'chat.replyStatusTool',
+  streaming: 'chat.replyStatusStreaming',
+  finalizing: 'chat.replyStatusFinalizing',
+  done: 'chat.replyStatusDone',
+  waiting: 'chat.replyStatusWaiting',
+  error: 'chat.replyStatusError',
+  aborted: 'chat.replyStatusAborted',
 }
-const CHAT_REPLY_STATUS_PHASE = {
-  queued: '排队调度',
-  sending: '发送指令',
-  thinking: '分析任务',
-  tool: '工具执行',
-  streaming: '生成回复',
-  finalizing: '结果整理',
-  done: '已完成',
-  waiting: '待机',
-  error: '异常',
-  aborted: '已中止',
+const CHAT_REPLY_STATUS_PHASE_KEYS = {
+  queued: 'chat.replyPhaseQueued',
+  sending: 'chat.replyPhaseSending',
+  thinking: 'chat.replyPhaseThinking',
+  tool: 'chat.replyPhaseTool',
+  streaming: 'chat.replyPhaseStreaming',
+  finalizing: 'chat.replyPhaseFinalizing',
+  done: 'chat.replyPhaseDone',
+  waiting: 'chat.replyPhaseWaiting',
+  error: 'chat.replyPhaseError',
+  aborted: 'chat.replyPhaseAborted',
 }
-const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: CHAT_REPLY_STATUS_TEXT.waiting, ts: 0, sessionKey: '', runId: '', toolName: '', toolInput: '', toolCount: 0, lastToolAt: 0, activity: '' }
+function replyStatusText(state) { return t(CHAT_REPLY_STATUS_TEXT_KEYS[state] || CHAT_REPLY_STATUS_TEXT_KEYS.waiting) }
+function replyStatusPhase(state) { return t(CHAT_REPLY_STATUS_PHASE_KEYS[state] || CHAT_REPLY_STATUS_PHASE_KEYS.waiting) }
+const CHAT_REPLY_STATUS_DEFAULT = { state: 'waiting', detail: '', ts: 0, sessionKey: '', runId: '', toolName: '', toolInput: '', toolCount: 0, lastToolAt: 0, activity: '' }
 let _replyStatusState = { ...CHAT_REPLY_STATUS_DEFAULT }
 let _sessionListEl = null, _sessionListNormalEl = null, _sessionListGroupsEl = null, _cmdPanelEl = null, _attachPreviewEl = null, _fileInputEl = null
 let _mentionPanelEl = null
@@ -256,7 +258,7 @@ export async function render() {
       <div class="chat-reply-status-row" id="chat-reply-status-row" aria-live="polite" hidden>
         <div class="chat-reply-status-head">
           <span class="chat-reply-status-dot"></span>
-          <span class="chat-reply-status-phase" id="chat-reply-status-phase">待机</span>
+          <span class="chat-reply-status-phase" id="chat-reply-status-phase">${replyStatusPhase('waiting')}</span>
           <span class="chat-reply-status-elapsed" id="chat-reply-status-elapsed">--</span>
         </div>
         <div class="chat-reply-status-body">
@@ -2613,7 +2615,7 @@ async function doSend(text, attachments = []) {
   showTyping(true)
   _isSending = true
   updateSendState()
-  setReplyStatus('sending', CHAT_REPLY_STATUS_TEXT.sending, { runId: _currentRunId || '', activity: '正在提交消息和附件' })
+  setReplyStatus('sending', replyStatusText('sending'), { runId: _currentRunId || '', activity: t('chat.replyActivitySubmitting') })
   _startResponseWatchdog()
   let sendFailed = false
   try {
@@ -2631,7 +2633,7 @@ async function doSend(text, attachments = []) {
     if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
     updateSendState()
     if (!sendFailed && !_isStreaming) {
-      setReplyStatus('thinking', CHAT_REPLY_STATUS_TEXT.thinking, { runId: _currentRunId || '', activity: '等待 Gateway 返回队列/工具/生成事件' })
+      setReplyStatus('thinking', replyStatusText('thinking'), { runId: _currentRunId || '', activity: t('chat.replyActivityWaitingGateway') })
       updateTask(currentTask.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
     }
   }
@@ -2774,10 +2776,10 @@ function handleChatEvent(payload) {
         _isStreaming = true
         _streamStartTime = Date.now()
         updateSendState()
-        setReplyStatus('queued', CHAT_REPLY_STATUS_TEXT.queued, { runId: payload.runId, activity: '已创建流式回复通道' })
+        setReplyStatus('queued', replyStatusText('queued'), { runId: payload.runId, activity: t('chat.replyActivityStreamReady') })
       }
       _currentAiText = c.text
-      setReplyStatus('streaming', `正在生成回复：已收到 ${_currentAiText.length} 个字符`, { runId: payload.runId, activity: '持续接收模型输出' })
+      setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: payload.runId, activity: t('chat.replyActivityReceivingOutput') })
       // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
       clearTimeout(_streamSafetyTimer)
       _streamSafetyTimer = setTimeout(() => {
@@ -2832,7 +2834,7 @@ function handleChatEvent(payload) {
       _currentAiText = finalText
     }
     if (_currentAiBubble) {
-      setReplyStatus('finalizing', CHAT_REPLY_STATUS_TEXT.finalizing, { runId: runId || _currentRunId, activity: `整理文本、附件和 ${finalTools.length || _currentAiTools.length || 0} 个工具结果` })
+      setReplyStatus('finalizing', replyStatusText('finalizing'), { runId: runId || _currentRunId, activity: t('chat.replyActivityFinalizing', { count: finalTools.length || _currentAiTools.length || 0 }) })
       if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || finalText || ''
       if (_currentAiText) flushStreamRender()
       appendImagesToEl(_currentAiBubble, _currentAiImages)
@@ -2870,7 +2872,7 @@ function handleChatEvent(payload) {
     }
     const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
     completeTaskRound(doneTask)
-    setReplyStatus('done', CHAT_REPLY_STATUS_TEXT.done, { runId: runId || _currentRunId, activity: '本轮响应完成，等待下一条任务' })
+    setReplyStatus('done', replyStatusText('done'), { runId: runId || _currentRunId, activity: t('chat.replyActivityDone') })
     refreshSessionList()
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
@@ -2906,7 +2908,7 @@ function handleChatEvent(payload) {
     }
     appendSystemMessage(t('chat.generationStopped'))
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'aborted', progress: 100 })
-    setReplyStatus('aborted', CHAT_REPLY_STATUS_TEXT.aborted, { runId: _currentRunId, activity: '用户或系统停止了本轮生成' })
+    setReplyStatus('aborted', replyStatusText('aborted'), { runId: _currentRunId, activity: t('chat.replyActivityAborted') })
     resetStreamState()
     processMessageQueue()
     return
@@ -3155,10 +3157,10 @@ function getReplyStatusKey(sessionKey = _sessionKey) {
 }
 
 function normalizeReplyStatus(raw = {}, sessionKey = _sessionKey) {
-  const state = CHAT_REPLY_STATUS_TEXT[raw.state] ? raw.state : 'waiting'
+  const state = CHAT_REPLY_STATUS_TEXT_KEYS[raw.state] ? raw.state : 'waiting'
   return {
     state,
-    detail: raw.detail || CHAT_REPLY_STATUS_TEXT[state] || CHAT_REPLY_STATUS_TEXT.waiting,
+    detail: raw.detail || replyStatusText(state),
     ts: raw.ts || Date.now(),
     sessionKey: raw.sessionKey || sessionKey || 'default',
     runId: raw.runId || '',
@@ -3259,10 +3261,10 @@ function renderReplyStatus(status = _replyStatusState) {
   _replyStatusRowEl.hidden = false
   _replyStatusRowEl.dataset.state = status.state
   _replyStatusRowEl.dataset.sessionKey = status.sessionKey || _sessionKey || ''
-  _replyStatusRowEl.title = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || ''
-  const phase = CHAT_REPLY_STATUS_PHASE[status.state] || status.state
+  _replyStatusRowEl.title = status.detail || replyStatusText(status.state) || ''
+  const phase = replyStatusPhase(status.state)
   if (_replyStatusPhaseEl) _replyStatusPhaseEl.textContent = phase
-  _replyStatusTextEl.textContent = status.detail || CHAT_REPLY_STATUS_TEXT[status.state] || CHAT_REPLY_STATUS_TEXT.waiting
+  _replyStatusTextEl.textContent = status.detail || replyStatusText(status.state)
   if (_replyStatusDetailEl) _replyStatusDetailEl.textContent = buildReplyStatusDetail(status)
   if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(status)
   if (_replyStatusMetaEl) {
