@@ -3435,10 +3435,12 @@ function resetStreamState() {
 
 async function loadHistory() {
   if (!_sessionKey || !_messagesEl) return
+  const sessionKey = _sessionKey
   _isLoadingHistory = true
   const hasExisting = _messagesEl.querySelector('.msg')
   if (!hasExisting && isStorageAvailable()) {
-    const local = await getLocalMessages(_sessionKey, 200)
+    const local = await getLocalMessages(sessionKey, 200)
+    if (!_pageActive || !_messagesEl || _sessionKey !== sessionKey) { _isLoadingHistory = false; return }
     if (local.length) {
       clearMessages()
       local.forEach(msg => {
@@ -3455,7 +3457,8 @@ async function loadHistory() {
   }
   if (!wsClient.gatewayReady) { _isLoadingHistory = false; return }
   try {
-    const result = await wsClient.chatHistory(_sessionKey, 200)
+    const result = await wsClient.chatHistory(sessionKey, 200)
+    if (!_pageActive || !_messagesEl || _sessionKey !== sessionKey) { _isLoadingHistory = false; return }
     if (!result?.messages?.length) {
       if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(t('chat.noMessages'))
       return
@@ -3470,7 +3473,7 @@ async function loadHistory() {
       saveMessages(result.messages.map(m => {
         const c = extractContent(m)
         const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-        return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(_sessionKey) }
+        return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey) }
       }))
       _isLoadingHistory = false
       return
@@ -3490,7 +3493,7 @@ async function loadHistory() {
         if (msg.images?.length && !userAtts.length) hasOmittedImages = true
         appendUserMessage(msg.text, userAtts, msgTime)
       } else if (msg.role === 'assistant') {
-        appendAiMessage(msg.text, msgTime, msg.images, msg.videos, msg.audios, msg.files, msg.tools, { usage: msg.usage, cost: msg.cost, model: msg.model, contextWindow: getContextWindow(_sessionKey), sessionKey: _sessionKey })
+        appendAiMessage(msg.text, msgTime, msg.images, msg.videos, msg.audios, msg.files, msg.tools, { usage: msg.usage, cost: msg.cost, model: msg.model, contextWindow: getContextWindow(sessionKey), sessionKey })
       }
     })
     if (hasOmittedImages) {
@@ -3499,7 +3502,7 @@ async function loadHistory() {
     saveMessages(result.messages.map(m => {
       const c = extractContent(m)
       const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-      return { id: m.id || uuid(), sessionKey: _sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(_sessionKey) }
+      return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey) }
     }))
     scrollToBottom()
     restoreReplyStatus()
