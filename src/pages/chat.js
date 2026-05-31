@@ -168,6 +168,7 @@ let _hostedBusy = false
 let _hostedAbort = null
 let _hostedLastTargetTs = 0
 let _hostedAutoStopTimer = null
+let _hostedRetryTimer = null
 let _hostedStartTime = 0
 let _workspaceBtn = null, _workspacePanelEl = null, _workspaceAgentBadgeEl = null, _workspaceAgentTitleEl = null
 let _workspacePathEl = null, _workspaceCoreListEl = null, _workspaceTreeEl = null, _workspaceCurrentFileEl = null
@@ -4282,6 +4283,7 @@ async function startHostedAgent() {
   clearTimeout(_hostedAutoStopTimer)
   if (autoStopMinutes > 0) {
     _hostedAutoStopTimer = setTimeout(() => {
+      if (!_pageActive || !_hostedSessionConfig?.enabled) return
       appendHostedOutput(t('chat.hostedTimerExpired', { min: autoStopMinutes }))
       stopHostedAgent()
     }, autoStopMinutes * 60000)
@@ -4295,6 +4297,7 @@ function stopHostedAgent() {
   if (!_hostedSessionConfig) return
   if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
   clearTimeout(_hostedAutoStopTimer); _hostedAutoStopTimer = null
+  clearTimeout(_hostedRetryTimer); _hostedRetryTimer = null
   clearInterval(_countdownInterval); _countdownInterval = null
   _hostedBusy = false
   _hostedSessionConfig.enabled = false
@@ -4373,6 +4376,7 @@ function detectStopFromText(text) {
 }
 
 async function runHostedAgentStep() {
+  if (!_pageActive || !_page?.isConnected) return
   if (_hostedBusy || !_hostedSessionConfig?.enabled) return
   const prompt = (_hostedSessionConfig.prompt || '').trim()
   if (!prompt) return
@@ -4402,7 +4406,19 @@ async function runHostedAgentStep() {
   persistHostedRuntime(); updateHostedBadge()
 
   const delay = _hostedSessionConfig.stepDelayMs || HOSTED_DEFAULTS.stepDelayMs
-  if (delay > 0) await new Promise(r => setTimeout(r, delay))
+  if (delay > 0) {
+    await new Promise(resolve => {
+      _hostedRetryTimer = setTimeout(() => {
+        _hostedRetryTimer = null
+        resolve()
+      }, delay)
+    })
+    if (!_pageActive || !_page?.isConnected || !_hostedSessionConfig?.enabled) {
+      _hostedBusy = false
+      _hostedRuntime.pending = false
+      return
+    }
+  }
 
   try {
     const messages = buildHostedMessages()
@@ -4441,7 +4457,13 @@ async function runHostedAgentStep() {
       return
     }
     persistHostedRuntime(); updateHostedBadge()
-    setTimeout(() => { _hostedBusy = false; runHostedAgentStep() }, delay)
+    clearTimeout(_hostedRetryTimer)
+    _hostedRetryTimer = setTimeout(() => {
+      _hostedRetryTimer = null
+      if (!_pageActive || !_page?.isConnected || !_hostedSessionConfig?.enabled) return
+      _hostedBusy = false
+      runHostedAgentStep()
+    }, delay)
     return
   } finally {
     _hostedBusy = false
@@ -4586,6 +4608,12 @@ export function cleanup() {
   _cancelResponseWatchdog()
   clearTimeout(_postFinalCheck)
   _postFinalCheck = null
+  clearTimeout(_hostedAutoStopTimer)
+  _hostedAutoStopTimer = null
+  clearTimeout(_hostedRetryTimer)
+  _hostedRetryTimer = null
+  clearInterval(_countdownInterval)
+  _countdownInterval = null
   if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
   _sessionKey = null
   _page = null
