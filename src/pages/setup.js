@@ -957,7 +957,7 @@ function bindEvents(page, nodeOk, detectState) {
                 patched = true
                 modal.appendHtmlLog(`${statusIcon('ok', 14)} ${t('setup.toolsFullEnabled')}`)
               }
-              if (patched) await api.writeOpenclawConfig(config)
+              if (patched) await api.writeOpenclawConfig(config, { reload: false })
             }
           } catch (ce) {
             modal.appendHtmlLog(`${statusIcon('warn', 14)} ${t('setup.autoConfigFailed', { err: ce })}`)
