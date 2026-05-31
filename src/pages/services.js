@@ -787,7 +787,7 @@ async function handleServiceAction(action, label, page) {
   const loadingText = actionsEl?.querySelector('.service-loading-text')
   const cancelBtn = actionsEl?.querySelector('.service-cancel-btn')
 
-  while (!cancelled) {
+  while (!cancelled && page.isConnected) {
     const elapsed = Date.now() - startTime
 
     // 5 秒后显示取消按钮
@@ -816,14 +816,17 @@ async function handleServiceAction(action, label, page) {
       if (svc && isGatewayActionSettled(action, svc)) {
         const gatewayUi = getGatewayUiSnapshot(svc)
         toast(t('services.actionDone', { label, action: actionLabel }) + ` · ${gatewayUi.statusText}` + (svc.pid ? ' (PID: ' + svc.pid + ')' : ''), 'success')
+        if (!page.isConnected) return
         await loadServices(page)
         return
       }
     } catch (e) { console.warn('[services] service status poll failed:', e) }
 
+    if (!page.isConnected) return
     await new Promise(r => setTimeout(r, POLL_INTERVAL))
   }
 
+  if (!page.isConnected) return
   if (cancelled) {
     toast(t('services.cancelled'), 'info')
   }
