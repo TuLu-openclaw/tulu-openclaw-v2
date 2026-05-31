@@ -1105,7 +1105,15 @@ sudo systemctl reload nginx</pre>
           const openBtn = document.createElement('button')
           openBtn.className = 'btn btn-sm'
           openBtn.textContent = '📂 ' + t('about.openZip')
-          openBtn.onclick = () => window.open('file:///' + desktopZip.replace(/\\/g, '/'))
+          openBtn.onclick = async () => {
+            try {
+              await api.openDesktopZip(desktopZip)
+            } catch (e) {
+              console.error('Open desktop update ZIP failed:', e)
+              const { toast } = await import('./components/toast.js')
+              toast(t('about.openZipFailed') + (e?.message || e), 'error')
+            }
+          }
           btnGroup.insertBefore(openBtn, btn)
         }
         btn.textContent = '🔄 ' + t('about.reloadApp')
