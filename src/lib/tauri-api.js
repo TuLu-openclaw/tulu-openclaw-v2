@@ -527,6 +527,7 @@ export const api = {
 
   // 设备密钥 + Gateway 握手
   createConnectFrame: (nonce, gatewayToken) => invoke('create_connect_frame', { nonce, gatewayToken }),
+  deviceInfo: () => invoke('device_info'),
 
   // 设备配对
   autoPairDevice: () => invoke('auto_pair_device'),

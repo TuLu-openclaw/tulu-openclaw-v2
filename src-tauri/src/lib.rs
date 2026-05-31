@@ -178,6 +178,7 @@ pub fn run() {
             assistant::assistant_write_file,
             assistant::assistant_list_dir,
             assistant::assistant_system_info,
+            assistant::device_info,
             assistant::assistant_list_processes,
             assistant::assistant_check_port,
             assistant::assistant_web_search,

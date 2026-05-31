@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
+use serde::Serialize;
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
 /// 仅在用户主动开启工具后由 AI 调用
@@ -25,6 +26,73 @@ fn audit_log(action: &str, detail: &str) {
 /// 星枢OpenClaw 数据目录（~/.openclaw/星枢OpenClaw/）
 fn data_dir() -> PathBuf {
     super::openclaw_dir().join("星枢OpenClaw")
+}
+
+/// 设备信息：用于卡密绑定等需要稳定设备标识的前端流程。
+/// 只返回本机主机名和首个可用 MAC，不做网络访问。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceInfo {
+    hostname: String,
+    mac_address: Option<String>,
+}
+
+#[tauri::command]
+pub async fn device_info() -> Result<DeviceInfo, String> {
+    let hostname = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown".into());
+    let mac_address = read_primary_mac_address().await;
+    Ok(DeviceInfo { hostname, mac_address })
+}
+
+async fn read_primary_mac_address() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = "Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.MACAddress -and $_.IPEnabled } | Select-Object -First 1 -ExpandProperty MACAddress";
+        return tokio::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", script])
+            .output()
+            .await
+            .ok()
+            .and_then(|out| parse_mac_output(&out.stdout));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return tokio::process::Command::new("sh")
+            .args(["-c", "ifconfig en0 | awk '/ether/{print $2; exit}'"])
+            .output()
+            .await
+            .ok()
+            .and_then(|out| parse_mac_output(&out.stdout));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(mut entries) = tokio::fs::read_dir("/sys/class/net").await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name == "lo" { continue; }
+                let path = entry.path().join("address");
+                if let Ok(bytes) = tokio::fs::read(path).await {
+                    if let Some(mac) = parse_mac_output(&bytes) { return Some(mac); }
+                }
+            }
+        }
+        return None;
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+fn parse_mac_output(bytes: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(bytes);
+    text.lines()
+        .map(str::trim)
+        .find(|line| line.len() >= 12 && line.chars().any(|c| c == ':' || c == '-'))
+        .map(|line| line.to_string())
 }
 
 /// 确保数据目录及子目录存在，返回目录路径
