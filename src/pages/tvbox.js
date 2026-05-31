@@ -306,7 +306,7 @@ function renderSourceManager() {
         '<button class="tvbox-source-del-btn" onclick="window.__tvbox.delSrc(\''+esc(src.key)+'\');">删除</button>'+
       '</div></div>';
   }).join('');
-  return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ 添加新源</button></div>'+renderSourceEditModal(null);
+  return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ 添加新源</button></div>'+renderSourceEditModal(S('editingSrc', null));
 }
 
 function renderSourceEditModal(srcToEdit) {
