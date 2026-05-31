@@ -9,6 +9,18 @@ import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
 
 let _unsubGw = null
+let _dashboardReloadTimer = null
+
+function scheduleDashboardReload(page, fullRefresh = false) {
+  if (!page?.isConnected) return
+  clearTimeout(_dashboardReloadTimer)
+  _dashboardReloadTimer = setTimeout(() => {
+    _dashboardReloadTimer = null
+    loadDashboardData(page, fullRefresh).catch(e => {
+      console.warn('[dashboard] scheduled reload failed:', e)
+    })
+  }, 300)
+}
 
 export async function render() {
   const page = document.createElement('div')
@@ -55,7 +67,7 @@ export async function render() {
   // 监听 Gateway 状态变化，自动刷新仪表盘
   if (_unsubGw) _unsubGw()
   _unsubGw = onGatewayChange(() => {
-    loadDashboardData(page)
+    scheduleDashboardReload(page)
   })
 
   return page
@@ -63,6 +75,7 @@ export async function render() {
 
 export function cleanup() {
   if (_unsubGw) { _unsubGw(); _unsubGw = null }
+  if (_dashboardReloadTimer) { clearTimeout(_dashboardReloadTimer); _dashboardReloadTimer = null }
 }
 
 function openclawInstallationIdentity(installation) {
