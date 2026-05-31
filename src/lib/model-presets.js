@@ -83,6 +83,9 @@ export const MODEL_PRESETS = {
   ],
 }
 
+const _qtcoolModelCache = new Map()
+const QTCOOL_MODEL_CACHE_TTL = 10 * 60 * 1000
+
 /**
  * 动态获取 QTCOOL 模型列表
  * @param {string} [apiKey] - 自定义密钥；未传时尝试从已有配置读取
@@ -98,21 +101,34 @@ export async function fetchQtcoolModels(apiKey) {
       key = cfg?.models?.providers?.qtcool?.apiKey || ''
     } catch { /* ignore */ }
   }
-  try {
-    const headers = key ? { 'Authorization': 'Bearer ' + key } : {}
-    const resp = await fetch(QTCOOL.baseUrl + '/models', {
-      headers,
-      signal: AbortSignal.timeout(8000)
-    })
-    if (resp.ok) {
-      const data = await resp.json()
-      if (data.data && data.data.length) {
-        return data.data.map(m => ({
-          id: m.id, name: m.id, contextWindow: 128000,
-          reasoning: m.id.includes('codex')
-        })).sort((a, b) => b.id.localeCompare(a.id))
+  const cacheKey = key || '__anonymous__'
+  const now = Date.now()
+  const cached = _qtcoolModelCache.get(cacheKey)
+  if (cached && cached.expires > now) return cached.promise
+
+  const promise = (async () => {
+    try {
+      const headers = key ? { 'Authorization': 'Bearer ' + key } : {}
+      const resp = await fetch(QTCOOL.baseUrl + '/models', {
+        headers,
+        signal: AbortSignal.timeout(8000)
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.data && data.data.length) {
+          return data.data.map(m => ({
+            id: m.id, name: m.id, contextWindow: 128000,
+            reasoning: m.id.includes('codex')
+          })).sort((a, b) => b.id.localeCompare(a.id))
+        }
       }
-    }
-  } catch { /* use fallback */ }
-  return QTCOOL.models
+    } catch { /* use fallback */ }
+    return QTCOOL.models
+  })().catch(err => {
+    _qtcoolModelCache.delete(cacheKey)
+    throw err
+  })
+
+  _qtcoolModelCache.set(cacheKey, { expires: now + QTCOOL_MODEL_CACHE_TTL, promise })
+  return promise
 }

@@ -349,6 +349,24 @@ function _debouncedReloadGateway() {
   }, 3000)
 }
 
+const _remoteModelCache = new Map()
+const REMOTE_MODEL_CACHE_TTL = 10 * 60 * 1000
+
+async function cachedRemoteModels(baseUrl, apiKey, apiType = null) {
+  const key = JSON.stringify({ baseUrl: String(baseUrl || '').replace(/\/$/, ''), apiKey: apiKey || '', apiType: apiType || null })
+  const now = Date.now()
+  const hit = _remoteModelCache.get(key)
+  if (hit && hit.expires > now) return hit.promise
+
+  const promise = invoke('list_remote_models', { baseUrl, apiKey, apiType })
+    .catch(err => {
+      _remoteModelCache.delete(key)
+      throw err
+    })
+  _remoteModelCache.set(key, { expires: now + REMOTE_MODEL_CACHE_TTL, promise })
+  return promise
+}
+
 // 导出 API
 export const api = {
   // 服务管理（状态用短缓存，操作不缓存）
@@ -402,7 +420,7 @@ export const api = {
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
   assistantChatOnce: (baseUrl, apiKey, modelId, apiType, messages, temperature = 0.7) => invoke('assistant_chat_once', { baseUrl, apiKey, modelId, apiType: apiType || null, messages, temperature }, 130000),
   translateText: (text, model = null) => invoke('translate_text', { text, model }, 90000),
-  listRemoteModels: (baseUrl, apiKey, apiType = null) => invoke('list_remote_models', { baseUrl, apiKey, apiType }),
+  listRemoteModels: (baseUrl, apiKey, apiType = null) => cachedRemoteModels(baseUrl, apiKey, apiType),
 
   // Agent 管理
   listAgents: () => cachedInvoke('list_agents'),
