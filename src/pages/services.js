@@ -964,7 +964,7 @@ async function handleSaveConfig(page, restart) {
   status.innerHTML = `<span style="color:var(--text-tertiary)">${t('services.saving')}</span>`
 
   try {
-    await api.writeOpenclawConfig(config, { reload: !restart })
+    await api.writeOpenclawConfig(config, { reload: false })
     _configOriginal = area.value
     toast(restart ? t('services.configSavedRestarting') : t('services.configSaved'), 'success')
     status.innerHTML = `<span style="color:var(--success)">${t('services.configSaved')}</span>`
