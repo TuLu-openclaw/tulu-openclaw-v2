@@ -364,7 +364,14 @@ export const api = {
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
   calibrateOpenclawConfig: (mode = 'inherit') => { invalidate('check_installation', 'list_backups'); invalidateGatewayCaches(); return invoke('calibrate_openclaw_config', { mode }).then(r => { invalidateGatewayCaches(); _debouncedReloadGateway(); return r }) },
-  writeOpenclawConfig: (config) => { invalidateGatewayCaches(); return invoke('write_openclaw_config', { config }).then(r => { invalidateGatewayCaches(); _debouncedReloadGateway(); return r }) },
+  writeOpenclawConfig: (config, options = {}) => {
+    invalidateGatewayCaches()
+    return invoke('write_openclaw_config', { config }).then(r => {
+      invalidateGatewayCaches()
+      if (options?.reload !== false) _debouncedReloadGateway()
+      return r
+    })
+  },
   readMcpConfig: () => cachedInvoke('read_mcp_config'),
   writeMcpConfig: (config) => { invalidate('read_mcp_config'); return invoke('write_mcp_config', { config }) },
   reloadGateway: () => { invalidateGatewayCaches(); return invoke('reload_gateway').then(r => { invalidateGatewayCaches(); return r }) },

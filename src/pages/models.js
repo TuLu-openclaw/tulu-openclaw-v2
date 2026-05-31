@@ -450,7 +450,7 @@ async function doAutoSave(state) {
     if (primary) applyDefaultModel(state)
     normalizeProviderUrls(state.config)
     disableAgentModelAllowlist(state.config)
-    await api.writeOpenclawConfig(state.config)
+    await api.writeOpenclawConfig(state.config, { reload: false })
 
     // 重启 Gateway 使配置生效（Gateway 不支持 SIGHUP 热重载）
     toast(t('models.configSavedRestarting'), 'info')
