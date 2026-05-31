@@ -544,8 +544,14 @@ export const api = {
   checkHermes: () => cachedInvoke('check_hermes', {}, 30000),
   checkHermesUpdate: () => invoke('check_hermes_update'),
   checkPython: () => cachedInvoke('check_python', {}, 60000),
-  installHermes: (method = 'uv-tool', extras = []) => { invalidate('check_hermes'); return invoke('install_hermes', { method, extras }, 300000) },
-  configureHermes: (provider, apiKey, model, baseUrl) => { invalidate('check_hermes'); return invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null }) },
+  installHermes: (method = 'uv-tool', extras = []) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('install_hermes', { method, extras }, 300000)
+  },
+  configureHermes: (provider, apiKey, model, baseUrl) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null })
+  },
   hermesGatewayAction: async (action) => {
     invalidate('check_hermes')
     if (action === 'restart') {
@@ -561,21 +567,45 @@ export const api = {
   musicSearchNetease: (q, limit) => invoke('music_search_netease', { query: q, limit: limit || 20 }),
   hermesAgentRun: (input, sessionId, conversationHistory, instructions) => invoke('hermes_agent_run', { input, sessionId: sessionId || null, conversationHistory: conversationHistory || null, instructions: instructions || null }, 330000),
   hermesProfilesList: () => invoke('hermes_profiles_list', {}).catch(() => ({ profiles: [], active: 'default' })),
-  hermesProfileUse: (name) => invoke('hermes_profile_use', { name }).catch(() => true),
+  hermesProfileUse: (name) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('hermes_profile_use', { name }).catch(() => true)
+  },
   hermesReadConfig: () => invoke('hermes_read_config'),
   hermesConfigRawRead: () => invoke('hermes_config_raw_read'),
-  hermesConfigRawWrite: (yaml) => invoke('hermes_config_raw_write', { yaml }),
+  hermesConfigRawWrite: (yaml) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('hermes_config_raw_write', { yaml })
+  },
   hermesFetchModels: (baseUrl, apiKey, apiType, provider) => invoke('hermes_fetch_models', { baseUrl, apiKey, apiType: apiType || null, provider: provider || null }),
   hermesListProviders: () => cachedInvoke('hermes_list_providers', {}, 30000),
-  hermesUpdateModel: (model) => invoke('hermes_update_model', { model }),
+  hermesUpdateModel: (model) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('hermes_update_model', { model })
+  },
   hermesDetectEnvironments: () => invoke('hermes_detect_environments'),
-  hermesSetGatewayUrl: (url) => invoke('hermes_set_gateway_url', { url: url || null }),
+  hermesSetGatewayUrl: (url) => {
+    invalidate('check_hermes')
+    return invoke('hermes_set_gateway_url', { url: url || null })
+  },
   hermesEnvReadUnmanaged: () => invoke('hermes_env_read_unmanaged'),
-  hermesEnvSet: (key, value) => invoke('hermes_env_set', { key, value }),
-  hermesEnvDelete: (key) => invoke('hermes_env_delete', { key }),
+  hermesEnvSet: (key, value) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('hermes_env_set', { key, value })
+  },
+  hermesEnvDelete: (key) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('hermes_env_delete', { key })
+  },
   hermesEnvReveal: () => invoke('hermes_env_reveal'),
-  updateHermes: (target = 'latest') => invoke('update_hermes', { target }),
-  uninstallHermes: (cleanConfig = false) => invoke('uninstall_hermes', { cleanConfig }),
+  updateHermes: (target = 'latest') => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('update_hermes', { target })
+  },
+  uninstallHermes: (cleanConfig = false) => {
+    invalidate('check_hermes', 'hermes_list_providers')
+    return invoke('uninstall_hermes', { cleanConfig })
+  },
 
   // Hermes Sessions / Logs / Skills / Memory
   hermesSessionsList: (source, limit, profile) => invoke('hermes_sessions_list', { source: source || null, limit: limit || null, profile: profile || null }),
