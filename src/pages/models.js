@@ -111,7 +111,7 @@ function collectAllModels(config) {
   const providers = config?.models?.providers || {}
   for (const [pk, pv] of Object.entries(providers)) {
     for (const m of (pv.models || [])) {
-      const id = typeof m === 'string' ? m : m.id
+      const id = getModelId(m)
       if (id) result.push({ provider: pk, modelId: id, full: `${pk}/${id}` })
     }
   }
@@ -120,6 +120,14 @@ function collectAllModels(config) {
 
 function getApiTypeLabel(apiType) {
   return API_TYPES.find(at => at.value === apiType)?.label || apiType || t('common.unknown')
+}
+
+function asModelObject(model) {
+  return (model && typeof model === 'object') ? model : { id: String(model || '') }
+}
+
+function getModelId(model) {
+  return asModelObject(model).id
 }
 
 function disableAgentModelAllowlist(config) {
@@ -182,43 +190,47 @@ function sortModels(models, sortBy) {
   switch (sortBy) {
     case 'name-asc':
       sorted.sort((a, b) => {
-        const nameA = (a.name || a.id || '').toLowerCase()
-        const nameB = (b.name || b.id || '').toLowerCase()
+        const modelA = asModelObject(a)
+        const modelB = asModelObject(b)
+        const nameA = (modelA.name || modelA.id || '').toLowerCase()
+        const nameB = (modelB.name || modelB.id || '').toLowerCase()
         return nameA.localeCompare(nameB)
       })
       break
     case 'name-desc':
       sorted.sort((a, b) => {
-        const nameA = (a.name || a.id || '').toLowerCase()
-        const nameB = (b.name || b.id || '').toLowerCase()
+        const modelA = asModelObject(a)
+        const modelB = asModelObject(b)
+        const nameA = (modelA.name || modelA.id || '').toLowerCase()
+        const nameB = (modelB.name || modelB.id || '').toLowerCase()
         return nameB.localeCompare(nameA)
       })
       break
     case 'latency-asc':
       sorted.sort((a, b) => {
-        const latA = a.latency ?? Infinity
-        const latB = b.latency ?? Infinity
+        const latA = asModelObject(a).latency ?? Infinity
+        const latB = asModelObject(b).latency ?? Infinity
         return latA - latB
       })
       break
     case 'latency-desc':
       sorted.sort((a, b) => {
-        const latA = a.latency ?? -1
-        const latB = b.latency ?? -1
+        const latA = asModelObject(a).latency ?? -1
+        const latB = asModelObject(b).latency ?? -1
         return latB - latA
       })
       break
     case 'context-asc':
       sorted.sort((a, b) => {
-        const ctxA = a.contextWindow ?? 0
-        const ctxB = b.contextWindow ?? 0
+        const ctxA = asModelObject(a).contextWindow ?? 0
+        const ctxB = asModelObject(b).contextWindow ?? 0
         return ctxA - ctxB
       })
       break
     case 'context-desc':
       sorted.sort((a, b) => {
-        const ctxA = a.contextWindow ?? 0
-        const ctxB = b.contextWindow ?? 0
+        const ctxA = asModelObject(a).contextWindow ?? 0
+        const ctxB = asModelObject(b).contextWindow ?? 0
         return ctxB - ctxA
       })
       break
@@ -250,8 +262,9 @@ function renderProviders(page, state) {
     const models = p.models || []
     const filtered = search
       ? models.filter((m) => {
-          const id = (typeof m === 'string' ? m : m.id).toLowerCase()
-          const name = (m.name || '').toLowerCase()
+          const model = asModelObject(m)
+          const id = (model.id || '').toLowerCase()
+          const name = (model.name || '').toLowerCase()
           return id.includes(search) || name.includes(search)
         })
       : models
@@ -311,30 +324,31 @@ function renderModelCards(providerKey, models, primary, search) {
     return `<div style="color:var(--text-tertiary);font-size:var(--font-size-sm);padding:8px 0">${t('models.noModel')}</div>`
   }
   return models.map((m) => {
-    const id = typeof m === 'string' ? m : m.id
-    const name = m.name || id
+    const model = (m && typeof m === 'object') ? m : null
+    const id = model?.id || String(m || '')
+    const name = model?.name || id
     const full = `${providerKey}/${id}`
     const isPrimary = full === primary
     const borderColor = isPrimary ? 'var(--success)' : 'var(--border-primary)'
     const bgColor = isPrimary ? 'var(--success-muted)' : 'var(--bg-tertiary)'
     const meta = []
     if (name !== id) meta.push(name)
-    if (m.contextWindow) meta.push((m.contextWindow / 1000) + 'K ' + t('models.context'))
+    if (model?.contextWindow) meta.push((model.contextWindow / 1000) + 'K ' + t('models.context'))
     const safeId = escapeAttr(id)
     const safeFull = escapeAttr(full)
     const safeIdText = escapeHtml(id)
-    const safeError = escapeAttr(m.testError || '')
+    const safeError = escapeAttr(model?.testError || '')
     // 测试状态标签：成功显示耗时，失败显示不可用
     let latencyTag = ''
-    if (m.testStatus === 'fail') {
+    if (model?.testStatus === 'fail') {
       latencyTag = `<span style="font-size:var(--font-size-xs);padding:1px 6px;border-radius:var(--radius-sm);background:var(--error-muted, #fee2e2);color:var(--error)" title="${safeError}">${t('models.unavailable')}</span>`
-    } else if (m.latency != null) {
-      const color = m.latency < 3000 ? 'success' : m.latency < 8000 ? 'warning' : 'error'
+    } else if (model?.latency != null) {
+      const color = model.latency < 3000 ? 'success' : model.latency < 8000 ? 'warning' : 'error'
       const bg = color === 'success' ? 'var(--success-muted)' : color === 'warning' ? 'var(--warning-muted, #fef3c7)' : 'var(--error-muted, #fee2e2)'
       const fg = color === 'success' ? 'var(--success)' : color === 'warning' ? 'var(--warning, #d97706)' : 'var(--error)'
-      latencyTag = `<span style="font-size:var(--font-size-xs);padding:1px 6px;border-radius:var(--radius-sm);background:${bg};color:${fg}">${(m.latency / 1000).toFixed(1)}s</span>`
+      latencyTag = `<span style="font-size:var(--font-size-xs);padding:1px 6px;border-radius:var(--radius-sm);background:${bg};color:${fg}">${(model.latency / 1000).toFixed(1)}s</span>`
     }
-    const testTime = m.lastTestAt ? formatTestTime(m.lastTestAt) : ''
+    const testTime = model?.lastTestAt ? formatTestTime(model.lastTestAt) : ''
     if (testTime) meta.push(testTime)
     return `
       <div class="model-card" data-model-id="${safeId}" data-full="${safeFull}"
@@ -345,7 +359,7 @@ function renderModelCards(providerKey, models, primary, search) {
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-family:var(--font-mono);font-size:var(--font-size-sm)">${safeIdText}</span>
             ${isPrimary ? `<span style="font-size:var(--font-size-xs);background:var(--success);color:var(--text-inverse);padding:1px 6px;border-radius:var(--radius-sm)">${t('models.primaryModel')}</span>` : ''}
-            ${m.reasoning ? `<span style="font-size:var(--font-size-xs);background:var(--accent-muted);color:var(--accent);padding:1px 6px;border-radius:var(--radius-sm)">${t('models.reasoning')}</span>` : ''}
+            ${model?.reasoning ? `<span style="font-size:var(--font-size-xs);background:var(--accent-muted);color:var(--accent);padding:1px 6px;border-radius:var(--radius-sm)">${t('models.reasoning')}</span>` : ''}
             ${latencyTag}
           </div>
           <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:2px">${meta.join(' · ') || ''}</div>
@@ -372,7 +386,7 @@ function formatTestTime(ts) {
 
 // 根据 model-id 找到原始 index
 function findModelIdx(provider, modelId) {
-  return (provider.models || []).findIndex(m => (typeof m === 'string' ? m : m.id) === modelId)
+  return (provider.models || []).findIndex(m => getModelId(m) === modelId)
 }
 
 // ===== 自动保存 + 撤销机制 =====
@@ -625,7 +639,7 @@ function bindProviderButtons(listEl, page, state) {
           const newOrderIds = [...container.querySelectorAll('.model-card')].map(c => c.dataset.modelId)
           pushUndo(state)
           const oldModels = [...provider.models]
-          provider.models = newOrderIds.map(id => oldModels.find(m => (typeof m === 'string' ? m : m.id) === id))
+          provider.models = newOrderIds.map(id => oldModels.find(m => getModelId(m) === id))
           autoSave(state)
         }
       }
@@ -826,7 +840,7 @@ function bindTopActions(page, state) {
 
     // 已有的模型 ID
     const existingProvider = (state.config.models?.providers || {})[QTCOOL.providerKey]
-    const existingIds = new Set((existingProvider?.models || []).map(m => typeof m === 'string' ? m : m.id))
+    const existingIds = new Set((existingProvider?.models || []).map(getModelId))
 
     // 弹窗让用户勾选要添加的模型
     const overlay = document.createElement('div')
@@ -1052,7 +1066,7 @@ function editProvider(page, state, providerKey) {
 function addModel(page, state, providerKey) {
   const presets = MODEL_PRESETS[providerKey] || []
   const existingIds = (state.config.models.providers[providerKey].models || [])
-    .map(m => typeof m === 'string' ? m : m.id)
+    .map(getModelId)
 
   // 过滤掉已添加的模型
   const available = presets.filter(p => !existingIds.includes(p.id))
@@ -1188,7 +1202,9 @@ function doAddModel(state, providerKey, vals) {
 
 // 编辑模型
 function editModel(page, state, providerKey, idx) {
-  const m = state.config.models.providers[providerKey].models[idx]
+  const list = state.config.models.providers[providerKey].models
+  const current = list[idx]
+  const m = (current && typeof current === 'object') ? current : { id: String(current || '') }
   showModal({
     title: t('models.editModelTitle', { name: m.id }),
     fields: [
@@ -1204,6 +1220,8 @@ function editModel(page, state, providerKey, idx) {
       m.name = vals.name?.trim() || vals.id.trim()
       m.reasoning = !!vals.reasoning
       if (vals.contextWindow) m.contextWindow = parseInt(vals.contextWindow) || 0
+      else delete m.contextWindow
+      list[idx] = m
       renderProviders(page, state)
       renderDefaultBar(page, state)
       updateUndoBtn(page, state)
@@ -1233,7 +1251,7 @@ async function handleBatchDelete(section, page, state, providerKey) {
   pushUndo(state)
   const provider = state.config.models.providers[providerKey]
   provider.models = (provider.models || []).filter(m => {
-    const mid = typeof m === 'string' ? m : m.id
+    const mid = getModelId(m)
     return !ids.includes(mid)
   })
   renderProviders(page, state)
@@ -1256,7 +1274,7 @@ async function handleBatchTest(section, state, providerKey) {
   const checked = [...section.querySelectorAll('.model-checkbox:checked')]
   const ids = checked.length
     ? checked.map(cb => cb.dataset.modelId)
-    : (provider.models || []).map(m => typeof m === 'string' ? m : m.id)
+    : (provider.models || []).map(getModelId)
 
   if (!ids.length) { toast(t('models.noTestModels'), 'warning'); return }
 
@@ -1274,7 +1292,8 @@ async function handleBatchTest(section, state, providerKey) {
   for (const modelId of ids) {
     if (ctrl.abort || !page?.isConnected) break
 
-    const model = (provider.models || []).find(m => (typeof m === 'string' ? m : m.id) === modelId)
+    const model = (provider.models || []).find(m => getModelId(m) === modelId)
+    const resultTarget = model && typeof model === 'object' ? model : null
     // 标记当前正在测试的卡片
     const card = section.querySelector(`.model-card[data-model-id="${modelId}"]`)
     if (card) card.style.outline = '2px solid var(--accent)'
@@ -1283,20 +1302,20 @@ async function handleBatchTest(section, state, providerKey) {
     try {
       await api.testModel(provider.baseUrl, provider.apiKey || '', modelId, provider.api || 'openai-completions')
       const elapsed = Date.now() - start
-      if (model && typeof model === 'object') {
-        model.latency = elapsed
-        model.lastTestAt = Date.now()
-        model.testStatus = 'ok'
-        delete model.testError
+      if (resultTarget) {
+        resultTarget.latency = elapsed
+        resultTarget.lastTestAt = Date.now()
+        resultTarget.testStatus = 'ok'
+        delete resultTarget.testError
       }
       ok++
     } catch (e) {
       const elapsed = Date.now() - start
-      if (model && typeof model === 'object') {
-        model.latency = null
-        model.lastTestAt = Date.now()
-        model.testStatus = 'fail'
-        model.testError = String(e).slice(0, 100)
+      if (resultTarget) {
+        resultTarget.latency = null
+        resultTarget.lastTestAt = Date.now()
+        resultTarget.testStatus = 'fail'
+        resultTarget.testError = String(e).slice(0, 100)
       }
       fail++
     }
@@ -1308,9 +1327,9 @@ async function handleBatchTest(section, state, providerKey) {
     }
     if (ctrl.abort || !page?.isConnected) break
     // 进度 toast
-    const status = model?.testStatus === 'ok' ? '\u2713' : '\u2717'
-    const latStr = model?.latency != null ? ` ${(model.latency / 1000).toFixed(1)}s` : ''
-    toast(`${status} ${modelId}${latStr} (${ok + fail}/${ids.length})`, model?.testStatus === 'ok' ? 'success' : 'error')
+    const status = resultTarget?.testStatus === 'ok' ? '\u2713' : '\u2717'
+    const latStr = resultTarget?.latency != null ? ` ${(resultTarget.latency / 1000).toFixed(1)}s` : ''
+    toast(`${status} ${modelId}${latStr} (${ok + fail}/${ids.length})`, resultTarget?.testStatus === 'ok' ? 'success' : 'error')
   }
 
   // 恢复按钮
@@ -1347,7 +1366,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
     btn.textContent = t('models.fetchList')
 
     // 标记已添加的模型
-    const existingIds = (provider.models || []).map(m => typeof m === 'string' ? m : m.id)
+    const existingIds = (provider.models || []).map(getModelId)
 
     // 弹窗展示可选模型列表
     const overlay = document.createElement('div')
