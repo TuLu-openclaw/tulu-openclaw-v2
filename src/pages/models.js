@@ -1484,8 +1484,9 @@ async function testModel(btn, state, providerKey, idx) {
       const summary = lines[0]
       const detail = lines.slice(1).join('\n').trim()
       if (detail) {
-        const detailHtml = detail.replace(/</g, '&lt;').replace(/(https?:\/\/[^\s,，。；）)'"&]+)/g, '<a href="$1" target="_blank" style="color:var(--primary);text-decoration:underline">$1</a>')
-        toast(`<strong>${modelId}</strong> ${summary.replace(/</g, '&lt;')}<br><span style="font-size:11px;line-height:1.5;word-break:break-all">${detailHtml}</span>`, 'warning', { duration: 10000, html: true })
+        const escapedSummary = escapeHtml(summary)
+        const linkedDetailHtml = escapeHtml(detail).replace(/(https?:\/\/[^\s,，。；）)'"&]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:underline">$1</a>')
+        toast(`<strong>${escapeHtml(modelId)}</strong> ${escapedSummary}<br><span style="font-size:11px;line-height:1.5;word-break:break-all">${linkedDetailHtml}</span>`, 'warning', { duration: 10000, html: true })
       } else {
         toast(`${modelId} ${summary}`, 'warning', { duration: 6000 })
       }
