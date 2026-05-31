@@ -847,8 +847,8 @@ function bindTopActions(page, state) {
           ${models.map(m => {
             const already = existingIds.has(m.id)
             return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius-md);cursor:pointer;background:var(--bg-tertiary);opacity:${already ? '0.5' : '1'}">
-              <input type="checkbox" value="${m.id}" ${already ? `disabled title="${t('models.alreadyAdded')}"` : 'checked'} style="accent-color:var(--primary)">
-              <span style="font-size:var(--font-size-sm);flex:1">${m.id}</span>
+              <input type="checkbox" value="${escapeAttr(m.id)}" ${already ? `disabled title="${escapeAttr(t('models.alreadyAdded'))}"` : 'checked'} style="accent-color:var(--primary)">
+              <span style="font-size:var(--font-size-sm);flex:1">${escapeHtml(m.id)}</span>
               ${already ? `<span style="font-size:10px;color:var(--text-tertiary)">${t('models.already')}</span>` : ''}
             </label>`
           }).join('')}
@@ -1379,10 +1379,11 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
         : remoteIds
       listEl.innerHTML = filtered.map(id => {
         const exists = existingIds.includes(id)
+        const safeId = escapeAttr(id)
         return `
           <label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;${exists ? 'opacity:0.5' : ''}">
-            <input type="checkbox" class="remote-cb" data-id="${id}" ${exists ? 'disabled' : ''}>
-            <span style="font-family:var(--font-mono);font-size:var(--font-size-sm)">${id}</span>
+            <input type="checkbox" class="remote-cb" data-id="${safeId}" ${exists ? 'disabled' : ''}>
+            <span style="font-family:var(--font-mono);font-size:var(--font-size-sm)">${escapeHtml(id)}</span>
             ${exists ? `<span style="font-size:var(--font-size-xs);color:var(--text-tertiary)">(${t('models.alreadyAdded')})</span>` : ''}
           </label>`
       }).join('')
