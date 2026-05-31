@@ -861,7 +861,7 @@ export function render() {
         ${filtered.map(c => `
           <button class="hm-chat-slash-item" data-cmd="${escAttr(c.cmd)}">
             <span class="hm-chat-slash-cmd">${escHtml(c.cmd)}</span>
-            <span class="hm-chat-slash-desc">${escHtml(t('engine.' + c.desc))}</span>
+            <span class="hm-chat-slash-desc">${escHtml(t(c.desc))}</span>
           </button>
         `).join('')}
       </div>

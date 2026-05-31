@@ -21,6 +21,7 @@ export default {
   errors: _('错误', 'Errors', '錯誤'),
   errorRate: _('错误率', 'Error rate', '錯誤率'),
   totalTokens: _('Token 总量', 'Total Tokens', 'Token 總量', '合計トークン', '총 토큰', 'Tổng token', 'Tokens totales', 'Total de tokens', 'Всего токенов', 'Tokens totaux', 'Gesamte Tokens'),
+  tokens: _('Token', 'Tokens', 'Token'),
   input: _('输入', 'input', '輸入'),
   output: _('输出', 'output', '輸出'),
   cost: _('费用', 'Cost', '費用', 'コスト', '비용'),

@@ -64,6 +64,7 @@ export default {
   writingConfig: _('正在写入配置...', 'Writing config...', '正在写入設定...'),
   fixFailed: _('修复失败: ', 'Fix failed: ', '修复失敗: '),
   imageOnly: _('仅支持上传图片', 'Only images are supported', '僅支援上傳圖片'),
+  imageSizeLimit: _('图片大小不能超过 5MB', 'Image size must not exceed 5MB', '圖片大小不能超過 5MB'),
   readFileFailed: _('读取文件失败', 'Failed to read file', '讀取檔案失敗'),
   noSessions: _('暂无会话', 'No sessions', '暫無對話', 'セッションなし', '세션 없음', 'Không có phiên', 'Sin sesiones', 'Sem sessões', 'Нет сессий', 'Aucune session', 'Keine Sitzungen'),
   disconnected: _('连接已断开，正在重连...', 'Disconnected, reconnecting...', '連線已斷開，正在重連...', '切断', '연결 끊김', 'Đã ngắt kết nối', 'Desconectado', 'Desconectado', 'Отключено', 'Déconnecté', 'Getrennt'),

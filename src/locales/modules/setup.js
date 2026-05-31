@@ -9,6 +9,7 @@ export default {
   recheck: _('重新检测', 'Re-detect', '重新檢測', '再検出', '재감지', 'Kiểm tra lại', 'Verificar de nuevo', 'Verificar novamente', 'Проверить снова', 'Revérifier', 'Erneut prüfen'),
   stepNode: _('Node.js 环境', 'Node.js Environment', 'Node.js 環境', 'Node.js 環境', 'Node.js 환경', 'Môi trường Node.js', 'Entorno Node.js', 'Ambiente Node.js', 'Среда Node.js', 'Environnement Node.js', 'Node.js-Umgebung'),
   installed: _('已安装', 'Installed', '已安裝', 'インストール済み', '설치됨', 'Đã cài đặt', 'Instalado', 'Instalado', 'Установлено', 'Installé', 'Installiert'),
+  notInstalled: _('未安装', 'Not installed', '未安裝'),
   stepNodeHint: _('OpenClaw 基于 Node.js 运行，请先安装。', 'OpenClaw requires Node.js, please install it first.', 'OpenClaw 基於 Node.js 執行，請先安裝。', 'OpenClaw は Node.js で動作します。先にインストールしてください。'),
   downloadNode: _('下载 Node.js', 'Download Node.js', '下載 Node.js', 'Node.js をダウンロード', 'Node.js 다운로드', 'Tải Node.js', 'Descargar Node.js', 'Baixar Node.js', 'Скачать Node.js', 'Télécharger Node.js', 'Node.js herunterladen'),
   recheckAfterInstall: _('安装后点击「重新检测」', 'Click "Re-detect" after installation', '安裝后点擊「重新檢測」', 'インストール後「再検出」をクリック'),

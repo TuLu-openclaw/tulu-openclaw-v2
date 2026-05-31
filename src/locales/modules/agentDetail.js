@@ -21,6 +21,7 @@ export default {
   noFallback: _('未配置备选模型（主模型不可用时无法切换）', 'No fallback models configured.'),
   removeFallback: _('移除', 'Remove'),
   thinkingLevel: _('推理级别', 'Thinking Level'),
+  thinking: _('推理', 'Thinking'),
   thinkingOff: _('关闭', 'Off'),
   thinkingMinimal: _('最小', 'Minimal'),
   thinkingLow: _('低', 'Low'),

@@ -237,6 +237,7 @@ export default {
   chatProfileMenuFoot:           {"zh-CN": "切换后会同步刷新会话列表", "en": "Switching will refresh sessions"},
   chatProfileSwitchBlocked:      {"zh-CN": "正在生成回复时不能切换配置", "en": "Cannot switch profile while streaming"},
   chatProfileSwitched:           {"zh-CN": "已切换到 {name}", "en": "Switched to {name}"},
+  switchedTo:                    {"zh-CN": "已切换到 {name}", "zh-TW": "已切換到 {name}", "en": "Switched to {name}"},
   chatUnpin:                     {"zh-CN": "取消置顶", "en": "Unpin"},
   chatPin:                       {"zh-CN": "置顶", "en": "Pin"},
   chatUsageTooltip:              {"zh-CN": "当前会话累计 Token 与成本统计", "en": "Session token and cost usage"},
