@@ -825,6 +825,22 @@ function extractMessageModel(msg = {}) {
   return normalizeModelValue(msg.model || msg.runtimeModel || msg.currentModel || msg.modelId || msg.message?.model || '', msg.modelProvider || msg.provider || msg.message?.modelProvider || '')
 }
 
+function applySessionDefaultsModel(defaults = null) {
+  if (!defaults || typeof defaults !== 'object') return ''
+  const defaultsModel = normalizeModelValue(defaults.model || defaults.runtimeModel || defaults.currentModel || '', defaults.modelProvider || defaults.provider || '')
+  if (defaultsModel) {
+    _primaryModel = defaultsModel
+    _defaultModelLabel = `Default (${defaultsModel})`
+    ensureModelOption(defaultsModel)
+    return defaultsModel
+  }
+  if (Object.prototype.hasOwnProperty.call(defaults, 'model')) {
+    _primaryModel = ''
+    _defaultModelLabel = 'Default model'
+  }
+  return ''
+}
+
 function applyRuntimeModelToSelect(sessionKey = _sessionKey) {
   const runtimeModel = getSessionRuntimeModel(sessionKey)
   if (runtimeModel) ensureModelOption(runtimeModel)
@@ -846,16 +862,11 @@ async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
   })
   const sessions = result?.sessions || result || []
   updateSessionRuntimeCache(sessions, result?.defaults)
-  const defaultsModel = normalizeModelValue(result?.defaults?.model, result?.defaults?.modelProvider)
-  if (defaultsModel) {
-    _primaryModel = defaultsModel
-    _defaultModelLabel = `Default (${defaultsModel})`
-    ensureModelOption(defaultsModel)
-  }
   return applyRuntimeModelToSelect(sessionKey)
 }
 
 function updateSessionRuntimeCache(sessions, defaults = null) {
+  applySessionDefaultsModel(defaults)
   const defaultCtx = Number(defaults?.contextTokens ?? defaults?.context_tokens ?? defaults?.contextWindow ?? 0) || 0
   if (defaultCtx > 0) _defaultContextTokens = defaultCtx
   for (const item of (sessions || [])) {
