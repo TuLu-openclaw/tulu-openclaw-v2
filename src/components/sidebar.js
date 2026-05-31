@@ -17,10 +17,10 @@ function _escSidebar(s) { return String(s || '').replace(/</g, '&lt;').replace(/
 async function _openGlobalBuiltinInIndependentWindow() {
   try {
     await api.openGlobalBuiltinWindow()
-    toast('已打开全球内置独立窗口', 'success')
+    toast(t('sidebar.globalBuiltinOpenOk'), 'success')
     return true
   } catch (err) {
-    toast(err?.message || '全球内置窗口打开失败', 'error')
+    toast(err?.message || t('sidebar.globalBuiltinOpenFailed'), 'error')
     return false
   }
 }
@@ -28,10 +28,10 @@ async function _openGlobalBuiltinInIndependentWindow() {
 async function _openXingshuChatInIndependentWindow() {
   try {
     await api.openXingshuChatWindow()
-    toast('已打开星枢聊天室独立窗口', 'success')
+    toast(t('sidebar.xingshuChatOpenOk'), 'success')
     return true
   } catch (err) {
-    toast(err?.message || '星枢聊天室窗口打开失败', 'error')
+    toast(err?.message || t('sidebar.xingshuChatOpenFailed'), 'error')
     navigate('/xingshu-chat')
     return false
   }
@@ -105,14 +105,14 @@ const NAV_ITEMS_OPENCLAW = [
     section: t('sidebar.sectionExtension'),
     items: [
       { route: '/skills', label: t('sidebar.skills'), icon: 'skills' },
-      { route: '/miaogu-verify', label: '喵咕验证', icon: 'shield' },
-      { route: '/weiyan-verify', label: '微验验证', icon: 'verify' },
-      { route: '/movie-tool', label: '星枢影视', icon: 'movie' },
+      { route: '/miaogu-verify', label: t('sidebar.miaoguVerify'), icon: 'shield' },
+      { route: '/weiyan-verify', label: t('sidebar.weiyanVerify'), icon: 'verify' },
+      { route: '/movie-tool', label: t('sidebar.movieTool'), icon: 'movie' },
       { route: '/music-player', label: t('sidebar.musicPlayer'), icon: 'music' },
-      { dataAction: 'open-xingshu-chat', label: '星枢聊天室', icon: 'chatroom' },
-      { route: '/lobster-office', label: '龙虾办公室', icon: 'lobster' },
-      { route: '/coming-soon', label: '全球内置', icon: 'lock' },
-      { dataAction: 'deploy-hermes', label: '部署 Hermes', icon: 'rocket' },
+      { dataAction: 'open-xingshu-chat', label: t('sidebar.xingshuChatroom'), icon: 'chatroom' },
+      { route: '/lobster-office', label: t('sidebar.lobsterOffice'), icon: 'lobster' },
+      { route: '/coming-soon', label: t('sidebar.globalBuiltin'), icon: 'lock' },
+      { dataAction: 'deploy-hermes', label: t('sidebar.deployHermes'), icon: 'rocket' },
     ]
   },
   {
@@ -129,20 +129,20 @@ const NAV_ITEMS_HERMES = [
   {
     section: '',
     items: [
-      { route: '/h/chat', label: 'AI 对话', icon: 'chat' },
-      { route: '/h/dashboard', label: '控制台', icon: 'dashboard' },
-      { route: '/h/setup', label: '引擎设置', icon: 'setup' },
-      { route: '/h/sessions', label: '会话记录', icon: 'chat' },
-      { route: '/h/usage', label: '用量分析', icon: 'bar-chart' },
-      { route: '/h/skills', label: '技能中心', icon: 'skills' },
-      { route: '/h/channels', label: '对话渠道', icon: 'channels' },
-      { route: '/h/logs', label: '运行日志', icon: 'logs' },
-      { route: '/h/memory', label: '记忆管理', icon: 'memory' },
-      { route: '/h/cron', label: '定时任务', icon: 'clock' },
-      { route: '/h/extensions', label: '扩展中心', icon: 'extensions' },
-      { route: '/h/services', label: '服务管理', icon: 'services' },
-      { route: '/h/config', label: '引擎配置', icon: 'settings' },
-      { route: '/h/env', label: '环境变量', icon: 'settings' },
+      { route: '/h/chat', label: t('sidebar.hermesChat'), icon: 'chat' },
+      { route: '/h/dashboard', label: t('sidebar.hermesDashboard'), icon: 'dashboard' },
+      { route: '/h/setup', label: t('sidebar.hermesSetup'), icon: 'setup' },
+      { route: '/h/sessions', label: t('sidebar.hermesSessions'), icon: 'chat' },
+      { route: '/h/usage', label: t('sidebar.hermesUsage'), icon: 'bar-chart' },
+      { route: '/h/skills', label: t('sidebar.hermesSkills'), icon: 'skills' },
+      { route: '/h/channels', label: t('sidebar.hermesChannels'), icon: 'channels' },
+      { route: '/h/logs', label: t('sidebar.hermesLogs'), icon: 'logs' },
+      { route: '/h/memory', label: t('sidebar.hermesMemory'), icon: 'memory' },
+      { route: '/h/cron', label: t('sidebar.hermesCron'), icon: 'clock' },
+      { route: '/h/extensions', label: t('sidebar.hermesExtensions'), icon: 'extensions' },
+      { route: '/h/services', label: t('sidebar.hermesServices'), icon: 'services' },
+      { route: '/h/config', label: t('sidebar.hermesConfig'), icon: 'settings' },
+      { route: '/h/env', label: t('sidebar.hermesEnv'), icon: 'settings' },
     ]
   },
 ]
@@ -351,7 +351,7 @@ export function renderSidebar(el) {
           _closeEngineDropdown()
           if (getActiveEngineId() !== 'hermes') {
             switchEngine('hermes').then(() => {
-              toast('正在切换到 Hermes Engine…', 'info')
+              toast(t('sidebar.switchHermesInfo'), 'info')
               navigate('/h/setup')
               renderSidebar(el)
             })
@@ -465,7 +465,7 @@ export function renderSidebar(el) {
         _closeEngineDropdown()
         if (getActiveEngineId() !== 'hermes') {
           switchEngine('hermes').then(() => {
-            toast('正在切换到 Hermes Engine…', 'info')
+            toast(t('sidebar.switchHermesInfo'), 'info')
             navigate('/h/setup')
             renderSidebar(el)
           })
