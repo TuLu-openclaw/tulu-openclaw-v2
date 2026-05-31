@@ -186,7 +186,7 @@ function renderMessages(el) {
             <input class="form-input" id="msg-sr-thinking" value="${esc(sr.thinking || '')}" placeholder="💭 / 🤔" style="max-width:200px">
           </div>
           <div>
-            <label class="form-label">规划 planning</label>
+            <label class="form-label">${t('communication.statusPhasePlanning')}</label>
             <input class="form-input" id="msg-sr-planning" value="${esc(sr.planning || '')}" placeholder="🧭 / 📋" style="max-width:200px">
           </div>
           <div>
@@ -198,11 +198,11 @@ function renderMessages(el) {
             <input class="form-input" id="msg-sr-working" value="${esc(sr.working || '')}" placeholder="🔴 / ⚙️" style="max-width:200px">
           </div>
           <div>
-            <label class="form-label">校验 verifying</label>
+            <label class="form-label">${t('communication.statusPhaseVerifying')}</label>
             <input class="form-input" id="msg-sr-verifying" value="${esc(sr.verifying || '')}" placeholder="🔍 / ✅" style="max-width:200px">
           </div>
           <div>
-            <label class="form-label">输出 streaming</label>
+            <label class="form-label">${t('communication.statusPhaseStreaming')}</label>
             <input class="form-input" id="msg-sr-streaming" value="${esc(sr.streaming || '')}" placeholder="✍️ / 📤" style="max-width:200px">
           </div>
           <div>
@@ -210,7 +210,7 @@ function renderMessages(el) {
             <input class="form-input" id="msg-sr-done" value="${esc(sr.done || '')}" placeholder="🟢 / ✅" style="max-width:200px">
           </div>
           <div>
-            <label class="form-label">待命 idle</label>
+            <label class="form-label">${t('communication.statusPhaseIdle')}</label>
             <input class="form-input" id="msg-sr-idle" value="${esc(sr.idle || '')}" placeholder="🟢 / 💤" style="max-width:200px">
           </div>
         </div>
