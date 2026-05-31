@@ -3864,7 +3864,7 @@ function showSettings() {
         if (!config.agents.defaults.model) config.agents.defaults.model = {}
         config.agents.defaults.model.primary = 'qtcool/' + selectedModel
 
-        await api.writeOpenclawConfig(config)
+        await api.writeOpenclawConfig(config, { reload: false })
         qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} ${t('assistant.qtcoolSetMainDone', { model: selectedModel })}</span>`
         try {
           await api.restartGateway()
@@ -3909,7 +3909,7 @@ function showSettings() {
       if (!config.agents.defaults) config.agents.defaults = {}
       if (!config.agents.defaults.model) config.agents.defaults.model = {}
       config.agents.defaults.model.primary = 'qtcool/' + model
-      await api.writeOpenclawConfig(config)
+      await api.writeOpenclawConfig(config, { reload: false })
       toast(t('assistant.qtcoolSyncToDone', { model }), 'success')
       try { await api.restartGateway() } catch {}
     } catch (e) {
