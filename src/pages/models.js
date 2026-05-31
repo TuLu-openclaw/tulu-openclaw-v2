@@ -639,7 +639,14 @@ function bindProviderButtons(listEl, page, state) {
           const newOrderIds = [...container.querySelectorAll('.model-card')].map(c => c.dataset.modelId)
           pushUndo(state)
           const oldModels = [...provider.models]
-          provider.models = newOrderIds.map(id => oldModels.find(m => getModelId(m) === id))
+          const reorderedVisible = newOrderIds
+            .map(id => oldModels.find(m => getModelId(m) === id))
+            .filter(Boolean)
+          const visibleIds = new Set(newOrderIds)
+          provider.models = oldModels.map((model) => {
+            const id = getModelId(model)
+            return visibleIds.has(id) ? reorderedVisible.shift() : model
+          })
           autoSave(state)
         }
       }
