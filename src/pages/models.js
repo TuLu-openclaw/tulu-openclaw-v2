@@ -1320,6 +1320,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
 
   try {
     const remoteIds = await api.listRemoteModels(provider.baseUrl, provider.apiKey || '', provider.api || 'openai-completions', { fresh: true })
+    if (!page?.isConnected || !btn?.isConnected) return
     btn.disabled = false
     btn.textContent = t('models.fetchList')
 
@@ -1392,6 +1393,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
         provider.models.push({ id, input: ['text', 'image'] })
       }
       overlay.remove()
+      if (!page?.isConnected) return
       renderProviders(page, state)
       renderDefaultBar(page, state)
       updateUndoBtn(page, state)
@@ -1401,6 +1403,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
 
     filterInput.focus()
   } catch (e) {
+    if (!page?.isConnected || !btn?.isConnected) return
     btn.disabled = false
     btn.textContent = t('models.fetchList')
     toast(t('models.fetchFailed', { error: e }), 'error')
@@ -1452,11 +1455,13 @@ async function testModel(btn, state, providerKey, idx) {
     }
     toast(t('models.testFail', { model: modelId, time: (elapsed / 1000).toFixed(1), error: e }), 'error', { duration: 8000 })
   } finally {
-    btn.disabled = false
-    btn.textContent = origText
+    if (btn?.isConnected) {
+      btn.disabled = false
+      btn.textContent = origText
+    }
     // 刷新卡片显示最新状态
     const page = btn.closest('.page')
-    if (page) {
+    if (page?.isConnected) {
       renderProviders(page, state)
       renderDefaultBar(page, state)
     }
