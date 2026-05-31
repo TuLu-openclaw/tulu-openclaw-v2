@@ -22,6 +22,10 @@ function _isSecretRef(token) {
   return token && typeof token === 'object' && ('$env' in token || '$ref' in token)
 }
 
+function _escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]))
+}
+
 export async function render() {
   const page = document.createElement('div')
   page.className = 'page'
@@ -71,7 +75,7 @@ async function loadConfig(page, state) {
     state._origToken = state.config?.gateway?.auth?.token ?? null
     renderConfig(page, state)
   } catch (e) {
-    el.innerHTML = '<div style="color:var(--error);padding:20px">' + t('gateway.loadFailed') + ': ' + e + '</div>'
+    el.innerHTML = '<div style="color:var(--error);padding:20px">' + t('gateway.loadFailed') + ': ' + _escapeHtml(e) + '</div>'
     toast(t('gateway.loadFailed') + ': ' + e, 'error')
   }
 }
