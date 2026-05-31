@@ -83,6 +83,22 @@ async function openGatewayConflict(error = null) {
   await showGatewayConflictGuidance({ error, service: gw })
 }
 
+let _mainReconnectTimer = null
+let _debugReloadTimer = null
+
+function maskWsUrl(url) {
+  return String(url || '').replace(/([?&]token=)[^&]*/i, '$1***')
+}
+
+function scheduleDebugReload(page, delayMs = 1500) {
+  if (_debugReloadTimer) clearTimeout(_debugReloadTimer)
+  _debugReloadTimer = setTimeout(() => {
+    _debugReloadTimer = null
+    if (!page?.isConnected) return
+    loadDebugInfo(page).catch(e => console.warn('[chat-debug] reload failed:', e))
+  }, delayMs)
+}
+
 async function reconnectMainWsFromLatestConfig(delayMs = 300) {
   const latestConfig = await api.readOpenclawConfig()
   const latestGw = latestConfig?.gateway || {}
@@ -91,7 +107,11 @@ async function reconnectMainWsFromLatestConfig(delayMs = 300) {
   if (!latestToken) return false
   const latestHost = isTauriRuntime() ? `127.0.0.1:${latestGw.port || 18789}` : location.host
   wsClient.disconnect()
-  setTimeout(() => wsClient.connect(latestHost, latestToken), delayMs)
+  if (_mainReconnectTimer) clearTimeout(_mainReconnectTimer)
+  _mainReconnectTimer = setTimeout(() => {
+    _mainReconnectTimer = null
+    wsClient.connect(latestHost, latestToken)
+  }, delayMs)
   return true
 }
 
@@ -374,7 +394,7 @@ async function handleDoctor(page, fix) {
     if (fix) {
       await refreshGatewayStatus().catch(() => {})
       await reconnectMainWsFromLatestConfig().catch(() => false)
-      setTimeout(() => loadDebugInfo(page), 1500)
+      scheduleDebugReload(page, 1500)
     }
     if (btnCheck) { btnCheck.disabled = false; btnCheck.textContent = t('chatDebug.btnDiagConfig') }
     if (btnFix) { btnFix.disabled = false; btnFix.textContent = t('chatDebug.btnAutoFix') }
@@ -401,6 +421,15 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+export function cleanup() {
+  if (testWs) {
+    try { testWs.close(1000) } catch (_) {}
+    testWs = null
+  }
+  if (_mainReconnectTimer) { clearTimeout(_mainReconnectTimer); _mainReconnectTimer = null }
+  if (_debugReloadTimer) { clearTimeout(_debugReloadTimer); _debugReloadTimer = null }
 }
 
 // WebSocket 连接测试
@@ -436,8 +465,8 @@ function testWebSocket(page) {
     const wsHost = isTauriRuntime() ? `127.0.0.1:${port}` : location.host
     const url = `ws://${wsHost}/ws?token=${encodeURIComponent(token)}`
 
-    addLog(`${icon('radio', 14)} ${t('chatDebug.wsAddress', { url })}`)
-    addLog(`${icon('key', 14)} ${t('chatDebug.wsToken', { token: token ? token.substring(0, 20) + '...' : t('chatDebug.empty') })}`)
+    addLog(`${icon('radio', 14)} ${t('chatDebug.wsAddress', { url: maskWsUrl(url) })}`)
+    addLog(`${icon('key', 14)} ${t('chatDebug.wsToken', { token: token ? '***' : t('chatDebug.empty') })}`)
     addLog(`${icon('clock', 14)} ${t('chatDebug.wsConnecting')}`)
 
     try {
@@ -461,7 +490,7 @@ function testWebSocket(page) {
 
             api.createConnectFrame(nonce, token).then(frame => {
               addLog(`${statusIcon('ok', 14)} ${t('chatDebug.wsFrameGenerated')}`)
-              addLog(`${icon('send', 14)} ${t('chatDebug.wsSendingFrame')}: ${escapeHtml(JSON.stringify(frame, null, 2))}`)
+              addLog(`${icon('send', 14)} ${t('chatDebug.wsSendingFrame')}`)
               testWs.send(JSON.stringify(frame))
             }).catch(e => {
               addLog(`${statusIcon('err', 14)} ${t('chatDebug.wsFrameFailed')}: ${e}`)
@@ -492,7 +521,7 @@ function testWebSocket(page) {
       }
 
       testWs.onclose = (e) => {
-        addLog(`${icon('plug', 14)} ${t('chatDebug.wsClosed')} - Code: ${e.code}, Reason: ${e.reason || t('chatDebug.empty')}`)
+        addLog(`${icon('plug', 14)} ${t('chatDebug.wsClosed')} - Code: ${e.code}, Reason: ${escapeHtml(String(e.reason || t('chatDebug.empty')).replace(/token=[^\s&]+/gi, 'token=***'))}`)
         if (e.code === 1008) {
           addLog(`${statusIcon('err', 14)} ${t('chatDebug.wsOriginRejected')}`)
           addLog(`${icon('lightbulb', 14)} ${t('chatDebug.wsOriginFix')}`)
@@ -707,7 +736,7 @@ async function fixPairing(page) {
             // 触发主应用的 wsClient 使用最新配置重连，避免继续复用旧 URL/旧 token
             const reconnected = await reconnectMainWsFromLatestConfig()
             if (!reconnected) addLog(`${statusIcon('warn', 14)} Gateway token 不是明文字符串，已刷新状态但不主动重连`)
-            setTimeout(() => loadDebugInfo(page), 2000)
+            scheduleDebugReload(page, 2000)
           } else {
             const errMsg = msg.error?.message || msg.error?.code || t('common.unknown')
             addLog(`${statusIcon('err', 14)} ${t('chatDebug.wsHandshakeFailed')}: ${errMsg}`)
