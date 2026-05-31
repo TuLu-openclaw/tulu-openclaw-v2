@@ -13,7 +13,7 @@ const isTauri = !!window.__TAURI_INTERNALS__
 const GATEWAY_POLL_INTERVAL = 15000
 const GATEWAY_FAST_POLL_INTERVAL = 1000
 const GATEWAY_FAST_POLL_WINDOW = 90000
-const GATEWAY_OFFLINE_THRESHOLD = 1
+const GATEWAY_OFFLINE_THRESHOLD = 2
 
 let _openclawReady = false
 let _gatewayRunning = false
