@@ -10,6 +10,21 @@ import { t } from '../lib/i18n.js'
 
 let _unsubGw = null
 let _dashboardReloadTimer = null
+const _dashboardActionTimers = new Set()
+
+function scheduleDashboardFollowup(page, delayMs, fn) {
+  if (!page?.isConnected) return
+  const timer = setTimeout(() => {
+    _dashboardActionTimers.delete(timer)
+    if (!page?.isConnected) return
+    try {
+      fn()
+    } catch (e) {
+      console.warn('[dashboard] follow-up failed:', e)
+    }
+  }, delayMs)
+  _dashboardActionTimers.add(timer)
+}
 
 function scheduleDashboardReload(page, fullRefresh = false) {
   if (!page?.isConnected) return
@@ -76,6 +91,8 @@ export async function render() {
 export function cleanup() {
   if (_unsubGw) { _unsubGw(); _unsubGw = null }
   if (_dashboardReloadTimer) { clearTimeout(_dashboardReloadTimer); _dashboardReloadTimer = null }
+  for (const timer of _dashboardActionTimers) clearTimeout(timer)
+  _dashboardActionTimers.clear()
 }
 
 function openclawInstallationIdentity(installation) {
@@ -573,10 +590,10 @@ function bindActions(page) {
       try {
         await api.startService('ai.openclaw.gateway')
         toast(t('dashboard.gwStartSent'), 'success')
-        setTimeout(() => {
-          loadDashboardData(page)
+        scheduleDashboardFollowup(page, 3000, () => {
+          loadDashboardData(page).catch(e => console.warn('[dashboard] start follow-up reload failed:', e))
           navigate('/chat')
-        }, 3000)
+        })
       } catch (err) {
         if (isForeignGatewayError(err)) await openGatewayConflict(page, err)
         else toast(t('dashboard.startFail') + ': ' + err, 'error')
@@ -588,7 +605,7 @@ function bindActions(page) {
       try {
         await api.stopService('ai.openclaw.gateway')
         toast(t('dashboard.gwStopped'), 'success')
-        setTimeout(() => loadDashboardData(page), 1500)
+        scheduleDashboardFollowup(page, 1500, () => loadDashboardData(page).catch(e => console.warn('[dashboard] stop follow-up reload failed:', e)))
       } catch (err) {
         if (isForeignGatewayError(err)) await openGatewayConflict(page, err)
         else toast(t('dashboard.stopFail') + ': ' + err, 'error')
@@ -600,7 +617,7 @@ function bindActions(page) {
       try {
         await api.restartService('ai.openclaw.gateway')
         toast(t('dashboard.gwRestartSent'), 'success')
-        setTimeout(() => loadDashboardData(page), 3000)
+        scheduleDashboardFollowup(page, 3000, () => loadDashboardData(page).catch(e => console.warn('[dashboard] restart follow-up reload failed:', e)))
       } catch (err) {
         if (isForeignGatewayError(err)) await openGatewayConflict(page, err)
         else toast(t('dashboard.restartFail') + ': ' + err, 'error')
@@ -625,7 +642,7 @@ function bindActions(page) {
     }
     // 轮询等待实际重启完成
     const t0 = Date.now()
-    while (Date.now() - t0 < 30000) {
+    while (page.isConnected && Date.now() - t0 < 30000) {
       try {
         const s = await api.getServicesStatus()
         const gw = s?.find?.(x => x.label === 'ai.openclaw.gateway') || s?.[0]
@@ -642,6 +659,7 @@ function bindActions(page) {
       btnRestart.textContent = t('dashboard.restarting') + ` ${sec}s`
       await new Promise(r => setTimeout(r, 1500))
     }
+    if (!page.isConnected) return
     toast(t('dashboard.restartTimeout'), 'warning')
     btnRestart.disabled = false
     btnRestart.classList.remove('btn-loading')
@@ -678,7 +696,7 @@ function bindActions(page) {
     try {
       const res = await api.createBackup()
       toast(t('dashboard.backupDone', { name: res.name }), 'success')
-      setTimeout(() => loadDashboardData(page), 500)
+      scheduleDashboardFollowup(page, 500, () => loadDashboardData(page).catch(e => console.warn('[dashboard] backup follow-up reload failed:', e)))
     } catch (e) {
       toast(t('dashboard.backupFail') + ': ' + e, 'error')
     } finally {
