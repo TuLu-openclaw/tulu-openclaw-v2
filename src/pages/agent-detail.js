@@ -9,6 +9,9 @@ import { CHANNEL_LABELS } from '../lib/channel-labels.js'
 import { t } from '../lib/i18n.js'
 import { navigate } from '../router.js'
 
+let _activePage = null
+let _loadSeq = 0
+
 function esc(str) {
   if (!str) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -28,6 +31,7 @@ export async function render() {
 
   const page = document.createElement('div')
   page.className = 'page agent-detail-page'
+  _activePage = page
 
   page.innerHTML = `
     <div class="page-header">
@@ -65,8 +69,15 @@ export async function render() {
   return page
 }
 
+export function cleanup() {
+  _activePage = null
+  _loadSeq++
+}
+
 async function loadDetail(page, state) {
   const content = page.querySelector('#agent-tab-content')
+  if (!content) return
+  const seq = ++_loadSeq
   content.innerHTML = '<div class="skeleton" style="width:100%;height:200px;border-radius:8px"></div>'
   try {
     const [detail, config, skillsResp] = await Promise.all([
@@ -74,6 +85,7 @@ async function loadDetail(page, state) {
       api.readOpenclawConfig().catch(() => null),
       api.skillsList().catch(() => ({ skills: [] })),
     ])
+    if (seq !== _loadSeq || page !== _activePage || !page.isConnected || !content.isConnected) return
     state.detail = detail
     // 解析可用模型
     state.models = parseModelList(config)
@@ -88,6 +100,7 @@ async function loadDetail(page, state) {
     }
     switchTab(page, state, 'overview')
   } catch (e) {
+    if (seq !== _loadSeq || page !== _activePage || !page.isConnected || !content.isConnected) return
     content.innerHTML = `<div style="color:var(--error);padding:20px">${t('agentDetail.loadFailed')}: ${esc(String(e))}</div>`
   }
 }
