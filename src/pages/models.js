@@ -1250,7 +1250,7 @@ async function handleBatchTest(section, state, providerKey) {
   const page = section.closest('.page')
   let ok = 0, fail = 0
   for (const modelId of ids) {
-    if (ctrl.abort) break
+    if (ctrl.abort || !page?.isConnected) break
 
     const model = (provider.models || []).find(m => (typeof m === 'string' ? m : m.id) === modelId)
     // 标记当前正在测试的卡片
@@ -1280,10 +1280,11 @@ async function handleBatchTest(section, state, providerKey) {
     }
 
     // 每测完一个实时刷新卡片
-    if (page) {
+    if (page?.isConnected) {
       renderProviders(page, state)
       renderDefaultBar(page, state)
     }
+    if (ctrl.abort || !page?.isConnected) break
     // 进度 toast
     const status = model?.testStatus === 'ok' ? '\u2713' : '\u2717'
     const latStr = model?.latency != null ? ` ${(model.latency / 1000).toFixed(1)}s` : ''
@@ -1301,8 +1302,9 @@ async function handleBatchTest(section, state, providerKey) {
     newBtn.classList.add('btn-secondary')
   }
 
-  const aborted = ctrl.abort
+  const aborted = ctrl.abort || !page?.isConnected
   saveConfigOnly(state)
+  if (!page?.isConnected) return
   if (aborted) {
     toast(t('models.batchTestAborted', { ok, fail, skip: ids.length - ok - fail }), 'warning')
   } else {
