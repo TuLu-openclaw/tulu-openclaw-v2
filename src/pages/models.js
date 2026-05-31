@@ -440,7 +440,7 @@ async function saveConfigOnly(state) {
     normalizeProviderUrls(state.config)
     disableAgentModelAllowlist(state.config)
     api.clearRemoteModelCache?.()
-    await api.writeOpenclawConfig(state.config)
+    await api.writeOpenclawConfig(state.config, { reload: false })
   } catch (e) {
     toast(t('models.saveFailed') + ': ' + e, 'error')
   }
@@ -1302,7 +1302,7 @@ async function handleBatchTest(section, state, providerKey) {
   }
 
   const aborted = ctrl.abort
-  autoSave(state)
+  saveConfigOnly(state)
   if (aborted) {
     toast(t('models.batchTestAborted', { ok, fail, skip: ids.length - ok - fail }), 'warning')
   } else {

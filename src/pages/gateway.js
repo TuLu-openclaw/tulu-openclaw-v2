@@ -7,6 +7,9 @@ import { refreshGatewayStatus } from '../lib/app-state.js'
 import { toast } from '../components/toast.js'
 import { t } from '../lib/i18n.js'
 
+let _reconnectTimer = null
+let _saveSeq = 0
+
 // 兼容新版 SecretRef：token 可能是 string 或 { $env: "VAR" } / { $ref: "x/y" }
 function _tokenDisplayStr(token) {
   if (!token) return ''
@@ -66,6 +69,14 @@ export async function render() {
     }
   }
   return page
+}
+
+export function cleanup() {
+  _saveSeq++
+  if (_reconnectTimer) {
+    clearTimeout(_reconnectTimer)
+    _reconnectTimer = null
+  }
 }
 
 async function loadConfig(page, state) {
@@ -298,12 +309,17 @@ function bindConfigEvents(el) {
   }
 }
 
-async function reconnectGatewayWithSavedConfig(port, auth) {
+async function reconnectGatewayWithSavedConfig(port, auth, seq) {
   const token = typeof auth?.token === 'string' ? auth.token : ''
   if (!token) return
   const host = `127.0.0.1:${port || 18789}`
+  if (_reconnectTimer) clearTimeout(_reconnectTimer)
   wsClient.disconnect()
-  setTimeout(() => wsClient.connect(host, token), 300)
+  _reconnectTimer = setTimeout(() => {
+    _reconnectTimer = null
+    if (seq !== _saveSeq) return
+    wsClient.connect(host, token)
+  }, 300)
 }
 
 async function saveConfig(page, state) {
@@ -342,13 +358,15 @@ async function saveConfig(page, state) {
     tailscale: tailscaleAddr.trim() ? { address: tailscaleAddr.trim() } : undefined,
   }
 
+  const seq = ++_saveSeq
+
   try {
     await api.writeOpenclawConfig(state.config, { reload: false })
     toast(t('gateway.configSaved'), 'info')
     try {
       await api.reloadGateway()
       await refreshGatewayStatus().catch(() => {})
-      await reconnectGatewayWithSavedConfig(port, auth)
+      await reconnectGatewayWithSavedConfig(port, auth, seq)
       state._origToken = resolvedToken
       toast(t('gateway.reloaded'), 'success')
     } catch (e) {
