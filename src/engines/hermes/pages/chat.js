@@ -1053,7 +1053,7 @@ export function render() {
             <span>${escHtml(sidebarOpen ? t('engine.chatHideSessions') : t('engine.chatShowSessions'))}</span>
           </button>
           <div class="hm-chat-header-title-wrap">
-            <span class="hm-chat-header-title" id="hm-chat-header-title" title="双击重命名当前会话">${escHtml(title)}</span>
+            <span class="hm-chat-header-title" id="hm-chat-header-title" title="${escAttr(t('engine.chatRenameTitleHint'))}">${escHtml(title)}</span>
             ${source ? `<span class="hm-chat-source-badge">${escHtml(source)}</span>` : ''}
           </div>
         </div>
@@ -1061,7 +1061,7 @@ export function render() {
           <div class="hm-chat-gw-status ${gwOnline ? 'is-online' : 'is-offline'}"
                title="${escHtml(gwOnline ? t('engine.chatGatewayOnline') : t('engine.chatGatewayOffline'))}">
             <span class="hm-chat-gw-dot"></span>
-            <span class="hm-chat-gw-label">网关</span>
+            <span class="hm-chat-gw-label">${escHtml(t('engine.chatGatewayLabel'))}</span>
             <span class="hm-chat-gw-text">${escHtml(gwOnline ? t('engine.chatGatewayOnlineShort') : t('engine.chatGatewayOfflineShort'))}</span>
             ${currentModel ? `<span class="hm-chat-gw-model">${escHtml(currentModel)}</span>` : ''}
           </div>
@@ -1105,8 +1105,8 @@ export function render() {
           ${renderHeader()}
           ${!providerConfigured ? `<div class="hm-chat-provider-warning" style="background:linear-gradient(135deg,#ff6b35,#ff4444);color:#fff;padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer;" id="hm-provider-fix">
             <span style="font-size:16px;">⚠️</span>
-            <span style="flex:1">未配置推理 Provider — 点击此处自动跳转到「设置」页面配置 API Key</span>
-            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:6px;font-size:12px;">立即配置 →</span>
+            <span style="flex:1">${escHtml(t('engine.chatProviderWarning'))}</span>
+            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:6px;font-size:12px;">${escHtml(t('engine.chatConfigureNow'))}</span>
           </div>` : ''}
           <div class="hm-chat-messages" id="hm-chat-messages">
             ${renderMessages()}
