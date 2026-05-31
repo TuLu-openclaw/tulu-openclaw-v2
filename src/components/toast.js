@@ -15,10 +15,11 @@ function ensureContainer() {
 export function toast(message, type = 'info', options = {}) {
   const duration = options.duration || 3000
   const action = options.action // 可选的操作按钮（DOM 元素）
+  const normalizedType = type === 'warn' ? 'warning' : type
 
   const container = ensureContainer()
   const el = document.createElement('div')
-  el.className = `toast ${type}`
+  el.className = `toast ${normalizedType}`
 
   const textSpan = document.createElement('span')
   if (options.html) {
