@@ -193,6 +193,7 @@ function createFab() {
   }
 
   window.addEventListener('hashchange', updateVisibility)
+  window.addEventListener('resize', () => keepFabInViewport(fab))
   updateVisibility()
 
   return { el: fab }
@@ -204,8 +205,15 @@ function getCurrentRoute() {
 
 function savePosition(side, top) {
   try {
-    localStorage.setItem(POS_KEY, JSON.stringify({ side, top }))
+    localStorage.setItem(POS_KEY, JSON.stringify({ side, top: clampFabTop(top) }))
   } catch {}
+}
+
+function clampFabTop(top) {
+  const size = 48
+  const margin = 8
+  const maxTop = Math.max(margin, window.innerHeight - size - margin)
+  return Math.max(margin, Math.min(maxTop, Number(top) || margin))
 }
 
 function restorePosition(fab) {
@@ -218,10 +226,27 @@ function restorePosition(fab) {
       fab.style.right = 'auto'
     }
     if (typeof top === 'number') {
-      fab.style.top = top + 'px'
+      fab.style.top = clampFabTop(top) + 'px'
       fab.style.bottom = 'auto'
     }
   } catch {}
+}
+
+function keepFabInViewport(fab) {
+  if (!fab || fab.style.display === 'none') return
+  const rect = fab.getBoundingClientRect()
+  const side = rect.left > window.innerWidth / 2 ? 'right' : 'left'
+  const top = clampFabTop(rect.top)
+  if (side === 'right') {
+    fab.style.left = 'auto'
+    fab.style.right = '24px'
+  } else {
+    fab.style.left = '24px'
+    fab.style.right = 'auto'
+  }
+  fab.style.top = top + 'px'
+  fab.style.bottom = 'auto'
+  savePosition(side, top)
 }
 
 const HINT_KEY = '星枢OpenClaw-fab-hint-shown'
