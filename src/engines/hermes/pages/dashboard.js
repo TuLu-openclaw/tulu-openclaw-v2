@@ -1249,22 +1249,22 @@ export function render() {
 
   async function doUninstallHermes() {
     if (updateInstalling) return
-    const ok = await showConfirm('确认卸载 Hermes Agent？不会删除配置，除非你之后手动清理。')
+    const ok = await showConfirm(t('engine.dashUninstallConfirm'))
     if (!ok) return
     updateInstalling = true
     updateProgressVisible = true
     updateProgress = 5
-    updateLog = '正在卸载 Hermes Agent...'
+    updateLog = t('engine.dashUninstalling')
     draw()
     try {
       await api.uninstallHermes(false)
       updateProgress = 100
-      updateLog = 'Hermes Agent 已卸载'
+      updateLog = t('engine.dashUninstallSuccess')
       updateInstalling = false
       updateProgressVisible = true
       await refresh()
       updateInfo = null
-      toast('Hermes Agent 已卸载', 'success')
+      toast(t('engine.dashUninstallSuccess'), 'success')
       draw()
     } catch (e) {
       updateProgress = 0
@@ -1272,7 +1272,7 @@ export function render() {
       updateInstalling = false
       updateProgressVisible = true
       draw()
-      toast('卸载失败: ' + (e?.message || e), 'error')
+      toast(t('engine.dashUninstallFailed') + ': ' + (e?.message || e), 'error')
     }
   }
 

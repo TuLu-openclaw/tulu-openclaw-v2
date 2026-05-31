@@ -879,12 +879,12 @@ export function render() {
     return `
       <div class="hm-chat-quick-command-menu" id="hm-chat-quick-command-menu">
         <div class="hm-chat-quick-command-head">
-          <div class="hm-chat-quick-command-title">Hermes 快捷指令</div>
-          <button type="button" class="hm-chat-quick-command-close" id="hm-chat-quick-command-close" title="关闭">${ICONS.close}</button>
+          <div class="hm-chat-quick-command-title">${escHtml(t('engine.chatQuickCommandTitle'))}</div>
+          <button type="button" class="hm-chat-quick-command-close" id="hm-chat-quick-command-close" title="${escAttr(t('common.close'))}">${ICONS.close}</button>
         </div>
         <div class="hm-chat-quick-command-search-wrap">
           <input type="text" id="hm-chat-quick-command-search" class="hm-chat-quick-command-search"
-                 placeholder="搜索命令或说明..." value="${escAttr(quickCommandQuery)}" />
+                 placeholder="${escAttr(t('engine.chatQuickCommandSearch'))}" value="${escAttr(quickCommandQuery)}" />
         </div>
         <div class="hm-chat-quick-command-list">
           ${filtered.length ? filtered.map(([cmd, desc]) => `
@@ -893,9 +893,9 @@ export function render() {
                 <span class="hm-chat-quick-command-item-cmd">${escHtml(cmd)}</span>
                 <span class="hm-chat-quick-command-item-desc">${escHtml(desc)}</span>
               </span>
-              <span class="hm-chat-quick-command-item-send">发送</span>
+              <span class="hm-chat-quick-command-item-send">${escHtml(t('engine.chatQuickCommandSend'))}</span>
             </button>
-          `).join('') : `<div class="hm-chat-quick-command-empty">没有匹配的快捷指令</div>`}
+          `).join('') : `<div class="hm-chat-quick-command-empty">${escHtml(t('engine.chatQuickCommandEmpty'))}</div>`}
         </div>
       </div>
     `
@@ -909,58 +909,58 @@ export function render() {
     const presetCards = COLLAB_TASK_PRESETS.map(preset => `
       <button type="button" class="hm-collab-picker-preset" data-collab-preset="${escAttr(preset.key)}">
         <span class="hm-collab-picker-preset-title">${escHtml(preset.name)}</span>
-        <span class="hm-collab-picker-preset-meta">${escHtml(preset.leadEngine)} → ${escHtml(preset.supportEngine)} · ${preset.autoIterate ? '自动迭代' : '单轮'}</span>
+        <span class="hm-collab-picker-preset-meta">${escHtml(preset.leadEngine)} → ${escHtml(preset.supportEngine)} · ${preset.autoIterate ? escHtml(t('engine.collabAutoIterate')) : escHtml(t('engine.collabSingleRound'))}</span>
       </button>
     `).join('')
     return `
       <div class="hm-collab-picker" id="hm-collab-picker">
         <div class="hm-collab-picker-head">
-          <div class="hm-collab-picker-title">真协同配置面板</div>
-          <button type="button" class="hm-collab-picker-close" id="hm-collab-picker-close" title="关闭">${ICONS.close}</button>
+          <div class="hm-collab-picker-title">${escHtml(t('engine.collabPickerTitle'))}</div>
+          <button type="button" class="hm-collab-picker-close" id="hm-collab-picker-close" title="${escAttr(t('common.close'))}">${ICONS.close}</button>
         </div>
         <div class="hm-collab-picker-group">
-          <div class="hm-collab-picker-label">快捷预设</div>
+          <div class="hm-collab-picker-label">${escHtml(t('engine.collabPresets'))}</div>
           <div class="hm-collab-picker-preset-list">${presetCards}</div>
         </div>
         <div class="hm-collab-picker-group">
-          <div class="hm-collab-picker-label">主导引擎</div>
+          <div class="hm-collab-picker-label">${escHtml(t('engine.collabLeadEngine'))}</div>
           <div class="hm-collab-picker-row">
             ${mkBtn('lead', 'Hermes', collabLeadEngine)}
             ${mkBtn('lead', 'OpenClaw', collabLeadEngine)}
           </div>
         </div>
         <div class="hm-collab-picker-group">
-          <div class="hm-collab-picker-label">协作引擎</div>
+          <div class="hm-collab-picker-label">${escHtml(t('engine.collabSupportEngine'))}</div>
           <div class="hm-collab-picker-row">
             ${mkBtn('support', 'Hermes', collabSupportEngine)}
             ${mkBtn('support', 'OpenClaw', collabSupportEngine)}
           </div>
         </div>
         <div class="hm-collab-picker-group">
-          <div class="hm-collab-picker-label">主导任务</div>
-          <textarea id="hm-collab-lead-task" class="hm-chat-input" rows="3" placeholder="例如：由 Hermes 编写代码、修改文件、输出补丁">${escHtml(collabLeadTask)}</textarea>
+          <div class="hm-collab-picker-label">${escHtml(t('engine.collabLeadTask'))}</div>
+          <textarea id="hm-collab-lead-task" class="hm-chat-input" rows="3" placeholder="${escAttr(t('engine.collabLeadTaskPlaceholder'))}">${escHtml(collabLeadTask)}</textarea>
         </div>
         <div class="hm-collab-picker-group">
-          <div class="hm-collab-picker-label">协作任务</div>
-          <textarea id="hm-collab-support-task" class="hm-chat-input" rows="3" placeholder="例如：由 OpenClaw 执行测试、构建验证、返回失败日志">${escHtml(collabSupportTask)}</textarea>
+          <div class="hm-collab-picker-label">${escHtml(t('engine.collabSupportTask'))}</div>
+          <textarea id="hm-collab-support-task" class="hm-chat-input" rows="3" placeholder="${escAttr(t('engine.collabSupportTaskPlaceholder'))}">${escHtml(collabSupportTask)}</textarea>
         </div>
         <div class="hm-collab-picker-group">
-          <div class="hm-collab-picker-label">执行策略</div>
+          <div class="hm-collab-picker-label">${escHtml(t('engine.collabExecutionStrategy'))}</div>
           <div class="hm-collab-picker-row" style="justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
             <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">
               <input type="checkbox" id="hm-collab-auto-iterate" ${collabAutoIterate ? 'checked' : ''}>
-              自动迭代
+              ${escHtml(t('engine.collabAutoIterate'))}
             </label>
             <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">
-              最大轮数
+              ${escHtml(t('engine.collabMaxRounds'))}
               <input type="number" id="hm-collab-max-rounds" min="1" max="10" value="${Number(collabMaxRounds) || 3}" style="width:72px" class="form-input">
             </label>
           </div>
         </div>
         <div class="hm-collab-picker-actions">
-          <button type="button" class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-collab-picker-cancel">取消</button>
-          <button type="button" class="hm-btn hm-btn--primary hm-btn--sm" id="hm-collab-picker-apply">应用到协同模板</button>
-          <button type="button" class="hm-btn hm-btn--primary hm-btn--sm" id="hm-collab-picker-run">直接启动真协同</button>
+          <button type="button" class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-collab-picker-cancel">${escHtml(t('common.cancel'))}</button>
+          <button type="button" class="hm-btn hm-btn--primary hm-btn--sm" id="hm-collab-picker-apply">${escHtml(t('engine.collabApplyTemplate'))}</button>
+          <button type="button" class="hm-btn hm-btn--primary hm-btn--sm" id="hm-collab-picker-run">${escHtml(t('engine.collabRunNow'))}</button>
         </div>
       </div>
     `
@@ -995,9 +995,9 @@ export function render() {
         ${renderQuickCommandMenu()}
         ${collabPicker}
         <div class="hm-chat-quickbar">
-          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-collab-run" title="打开双引擎真协同配置并执行">🦞⇄🤖 真协同</button>
-          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-command" title="选择并一键发送 Hermes 快捷指令">⚡ 快捷指令</button>
-          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-skills" title="一键发送必备技能清单给 Hermes">🧠 必备技能</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-collab-run" title="${escAttr(t('engine.collabQuickRunTitle'))}">🦞⇄🤖 ${escHtml(t('engine.collabQuickRun'))}</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-command" title="${escAttr(t('engine.chatQuickCommandButtonTitle'))}">⚡ ${escHtml(t('engine.chatQuickCommandButton'))}</button>
+          <button class="hm-btn hm-btn--ghost hm-btn--sm" id="hm-chat-quick-skills" title="${escAttr(t('engine.chatQuickSkillsButtonTitle'))}">🧠 ${escHtml(t('engine.chatQuickSkillsButton'))}</button>
         </div>
         ${showUsage ? `
           <div class="hm-chat-usage-bar" title="${escAttr(t('engine.chatUsageTooltip'))}">
@@ -1707,7 +1707,7 @@ export function render() {
 
   function applyCollabPicker() {
     if (collabLeadEngine === collabSupportEngine) {
-      toast('主导引擎和协作引擎不能相同', 'warning')
+      toast(t('engine.collabSameEngineWarning'), 'warning')
       return
     }
     syncCollabPickerFields()
@@ -1718,11 +1718,11 @@ export function render() {
   async function runTrueCollab() {
     const goal = (inputValue || '').trim()
     if (!goal) {
-      toast('请先输入任务目标，再发起真协同', 'warning')
+      toast(t('engine.collabGoalRequired'), 'warning')
       return
     }
     try {
-      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'planning', message: '双引擎协同任务编排中' } }))
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'planning', message: t('engine.collabPlanningStatus') } }))
     } catch {}
     const text = `# 真正双引擎协同执行中\n\n任务：\n${goal}\n\n状态：\n- 将优先解析用户填写的主导引擎 / 协作引擎 / 主导任务 / 协作任务\n- 已开始请求 OpenClaw 与 Hermes 进入协同链路\n- 完成后将自动生成互审与收敛结果` 
     await store.sendMessage(text)
@@ -1736,12 +1736,12 @@ export function render() {
         : `${result.mergedPrompt}\n\n[系统抓取的协同原始结果]\n## OpenClaw 首轮\n${result.openclaw?.text || '-'}\n\n## Hermes 首轮\n${result.hermes?.text || '-'}\n\n## OpenClaw 复核 Hermes\n${result.openclawReview?.text || '-'}\n\n## Hermes 复核 OpenClaw\n${result.hermesReview?.text || '-'}${result.extraRounds?.length ? `\n\n## 额外自动迭代轮次\n${result.extraRounds.map(r => `### 第 ${r.round} 轮\n- OpenClaw:\n${r.openclaw?.text || '-'}\n- Hermes:\n${r.hermes?.text || '-'}`).join('\n\n')}` : ''}`
       await store.sendMessage(summary)
       try {
-        window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'verifying', message: '双引擎互审完成，等待最终收敛输出' } }))
+        window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'verifying', message: t('engine.collabReviewDoneStatus') } }))
       } catch {}
     } catch (e) {
-      toast('双引擎真协同失败：' + (e?.message || e), 'error')
+      toast(t('engine.collabRunFailed') + ': ' + (e?.message || e), 'error')
       try {
-        window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'done', message: '双引擎协同执行失败' } }))
+        window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'done', message: t('engine.collabFailedStatus') } }))
       } catch {}
     }
   }
