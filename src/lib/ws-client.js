@@ -370,12 +370,16 @@ export class WsClient {
   async _refreshTokenAndReconnect(reason = '') {
     const config = await invoke('read_openclaw_config')
     const gw = config?.gateway || {}
-    const freshToken = gw.auth?.token || gw.authToken || ''
+    const rawFreshToken = gw.auth?.token ?? gw.authToken ?? ''
+    const freshToken = typeof rawFreshToken === 'string' ? rawFreshToken : ''
     if (!freshToken || freshToken === this._token) {
       throw new Error(reason || 'Gateway Token 未变化')
     }
+    const configuredHost = typeof location !== 'undefined' && location.host
+      ? location.host
+      : `127.0.0.1:${gw.port || 18789}`
     const hostMatch = (this._url || '').match(/^wss?:\/\/([^/]+)\//)
-    const host = hostMatch?.[1]
+    const host = gw.port ? `127.0.0.1:${gw.port}` : (hostMatch?.[1] || configuredHost)
     if (!host) throw new Error('无法从当前 WebSocket URL 解析 Gateway 地址')
     const secure = (this._url || '').startsWith('wss://')
     this._token = freshToken
