@@ -465,15 +465,15 @@ function renderSearchResults() {
   if (state.searchResults.length === 0) {
     return `<div class="xingmu-empty">${t('music.noResults')}</div>`
   }
-  return `<div class="xingmu-results">${state.searchResults.map((s, i) => renderSongCard(s, i)).join('')}</div>`
+  return `<div class="xingmu-results">${state.searchResults.map((s, i) => renderSongCard(s, i, 'search')).join('')}</div>`
 }
 
-function renderSongCard(song, idx) {
+function renderSongCard(song, idx, source = 'search') {
   const isPlaying = state.currentSong?.id === song.id && state.currentSong?.platform === song.platform
   const isFav = isFavorite(song)
   const p = PLATFORMS[song.platform] || { name: song.platform, color: '#666' }
   return `
-    <div class="xingmu-song-card ${isPlaying ? 'playing' : ''}" data-index="${idx}">
+    <div class="xingmu-song-card ${isPlaying ? 'playing' : ''}" data-index="${idx}" data-source="${source}">
       <div class="xingmu-song-cover">
         ${song.cover
           ? `<img src="${esc(song.cover)}" alt="" loading="lazy">`
@@ -488,8 +488,8 @@ function renderSongCard(song, idx) {
         </div>
       </div>
       <div class="xingmu-song-actions">
-        <button class="xingmu-action-btn xingmu-play-btn" data-index="${idx}" title="${t('music.togglePlay')}">${isPlaying && state.playing ? '⏸' : '▶'}</button>
-        <button class="xingmu-action-btn xingmu-fav-btn ${isFav ? 'active' : ''}" data-index="${idx}" title="${t('music.like')}">${isFav ? '❤️' : '🤍'}</button>
+        <button class="xingmu-action-btn xingmu-play-btn" data-index="${idx}" data-source="${source}" title="${t('music.togglePlay')}">${isPlaying && state.playing ? '⏸' : '▶'}</button>
+        <button class="xingmu-action-btn xingmu-fav-btn ${isFav ? 'active' : ''}" data-index="${idx}" data-source="${source}" title="${t('music.like')}">${isFav ? '❤️' : '🤍'}</button>
       </div>
     </div>
   `
@@ -503,13 +503,13 @@ function renderMyPage() {
         <div class="xingmu-section-title">❤️ ${t('music.favTitle')}</div>
         ${state.favorites.length === 0
           ? `<div class="xingmu-empty">${t('music.emptyFav')}</div>`
-          : `<div class="xingmu-results">${state.favorites.slice(0, 20).map((s, i) => renderSongCard(s, i)).join('')}</div>`}
+          : `<div class="xingmu-results">${state.favorites.slice(0, 20).map((s, i) => renderSongCard(s, i, 'favorites')).join('')}</div>`}
       </div>
       <div class="xingmu-section">
         <div class="xingmu-section-title">🕐 ${t('music.historyTitle')}</div>
         ${state.history.length === 0
           ? `<div class="xingmu-empty">${t('music.emptyHistory')}</div>`
-          : `<div class="xingmu-results">${state.history.slice(0, 20).map((s, i) => renderSongCard(s, i)).join('')}</div>`}
+          : `<div class="xingmu-results">${state.history.slice(0, 20).map((s, i) => renderSongCard(s, i, 'history')).join('')}</div>`}
       </div>
     </div>
   `
@@ -683,6 +683,12 @@ function updateProgressUI() {
   }
 }
 
+function getSongListBySource(source) {
+  if (source === 'favorites') return state.favorites
+  if (source === 'history') return state.history
+  return state.searchResults.length > 0 ? state.searchResults : state.favorites.length > 0 ? state.favorites : state.history
+}
+
 function bindEvents(page) {
   // Tab 切换
   page.querySelectorAll('.xingmu-tab').forEach(btn => {
@@ -740,7 +746,7 @@ function bindEvents(page) {
     btn.addEventListener('click', e => {
       e.stopPropagation()
       const idx = parseInt(btn.dataset.index)
-      const results = state.searchResults.length > 0 ? state.searchResults : state.favorites.length > 0 ? state.favorites : state.history
+      const results = getSongListBySource(btn.dataset.source)
       if (results[idx]) {
         state.queue = results.slice(idx).concat(results.slice(0, idx))
         state.queueIndex = 0
@@ -754,7 +760,7 @@ function bindEvents(page) {
     btn.addEventListener('click', e => {
       e.stopPropagation()
       const idx = parseInt(btn.dataset.index)
-      const results = state.searchResults.length > 0 ? state.searchResults : state.favorites.length > 0 ? state.favorites : state.history
+      const results = getSongListBySource(btn.dataset.source)
       if (results[idx]) toggleFavorite(results[idx])
     })
   })
