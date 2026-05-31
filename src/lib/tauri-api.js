@@ -331,38 +331,49 @@ export async function checkBackendHealth() {
   }
 }
 
+const GATEWAY_CACHE_KEYS = ['read_openclaw_config', 'get_services_status', 'get_status_summary']
+
+function invalidateGatewayCaches() {
+  invalidate(...GATEWAY_CACHE_KEYS)
+}
+
 // 配置保存后防抖重载 Gateway（3 秒内多次写入只触发一次重载）
 let _reloadTimer = null
 function _debouncedReloadGateway() {
   clearTimeout(_reloadTimer)
-  _reloadTimer = setTimeout(() => { invoke('reload_gateway').catch(() => {}) }, 3000)
+  _reloadTimer = setTimeout(() => {
+    invalidateGatewayCaches()
+    invoke('reload_gateway')
+      .then(() => invalidateGatewayCaches())
+      .catch(() => {})
+  }, 3000)
 }
 
 // 导出 API
 export const api = {
   // 服务管理（状态用短缓存，操作不缓存）
   getServicesStatus: () => cachedInvoke('get_services_status', {}, 10000),
-  startService: (label) => { invalidate('get_services_status'); return invoke('start_service', { label }, 300000) },
-  stopService: (label) => { invalidate('get_services_status'); return invoke('stop_service', { label }, 60000) },
-  restartService: (label) => { invalidate('get_services_status'); return invoke('restart_service', { label }, 300000) },
-  claimGateway: () => { invalidate('get_services_status'); return invoke('claim_gateway') },
+  startService: (label) => { invalidateGatewayCaches(); return invoke('start_service', { label }, 300000).then(r => { invalidateGatewayCaches(); return r }) },
+  stopService: (label) => { invalidateGatewayCaches(); return invoke('stop_service', { label }, 60000).then(r => { invalidateGatewayCaches(); return r }) },
+  restartService: (label) => { invalidateGatewayCaches(); return invoke('restart_service', { label }, 300000).then(r => { invalidateGatewayCaches(); return r }) },
+  claimGateway: () => { invalidateGatewayCaches(); return invoke('claim_gateway').then(r => { invalidateGatewayCaches(); return r }) },
   guardianStatus: () => invoke('guardian_status'),
 
   // 版本信息：本地部分走 Rust，远程（latest）走 JS fetch（绕过 Rust 网络限制）
   getVersionInfo: () => getVersionInfoViaJs(),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
-  calibrateOpenclawConfig: (mode = 'inherit') => { invalidate('read_openclaw_config', 'check_installation', 'list_backups', 'get_services_status', 'get_status_summary'); return invoke('calibrate_openclaw_config', { mode }).then(r => { _debouncedReloadGateway(); return r }) },
-  writeOpenclawConfig: (config) => { invalidate('read_openclaw_config'); return invoke('write_openclaw_config', { config }).then(r => { _debouncedReloadGateway(); return r }) },
+  calibrateOpenclawConfig: (mode = 'inherit') => { invalidate('check_installation', 'list_backups'); invalidateGatewayCaches(); return invoke('calibrate_openclaw_config', { mode }).then(r => { invalidateGatewayCaches(); _debouncedReloadGateway(); return r }) },
+  writeOpenclawConfig: (config) => { invalidateGatewayCaches(); return invoke('write_openclaw_config', { config }).then(r => { invalidateGatewayCaches(); _debouncedReloadGateway(); return r }) },
   readMcpConfig: () => cachedInvoke('read_mcp_config'),
   writeMcpConfig: (config) => { invalidate('read_mcp_config'); return invoke('write_mcp_config', { config }) },
-  reloadGateway: () => invoke('reload_gateway'),
-  restartGateway: () => invoke('restart_gateway', {}, 60000),
+  reloadGateway: () => { invalidateGatewayCaches(); return invoke('reload_gateway').then(r => { invalidateGatewayCaches(); return r }) },
+  restartGateway: () => { invalidateGatewayCaches(); return invoke('restart_gateway', {}, 60000).then(r => { invalidateGatewayCaches(); return r }) },
   doctorCheck: () => invoke('doctor_check'),
   doctorFix: () => {
-    invalidate('read_openclaw_config', 'get_services_status', 'get_status_summary')
+    invalidateGatewayCaches()
     return invoke('doctor_fix').then(r => {
-      invalidate('read_openclaw_config', 'get_services_status', 'get_status_summary')
+      invalidateGatewayCaches()
       return r
     })
   },
