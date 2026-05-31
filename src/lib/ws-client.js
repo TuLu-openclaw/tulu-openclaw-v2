@@ -124,16 +124,23 @@ export class WsClient {
     this._intentionalClose = false
     this._autoPairAttempts = 0
     this._authRefreshAttempts = 0
-    this._token = token || ''
+    const nextToken = token || ''
     const shouldUseSecure = opts.secure ?? (
       typeof location !== 'undefined' && location.protocol === 'https:'
     )
     const proto = shouldUseSecure ? 'wss' : 'ws'
-    const nextUrl = `${proto}://${host}/ws?token=${encodeURIComponent(this._token)}`
-    if (this._connecting || this._handshaking || this._gatewayReady) {
+    const nextUrl = `${proto}://${host}/ws?token=${encodeURIComponent(nextToken)}`
+    if ((this._connecting || this._handshaking || this._gatewayReady) && this._url === nextUrl) return
+    if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) {
       if (this._url === nextUrl) return
+      this._stopPing()
+      this._stopHeartbeat()
+      this._clearReconnectTimer()
+      this._clearChallengeTimer()
+      this._flushPending()
+      this._closeWs()
     }
-    if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) return
+    this._token = nextToken
     this._url = nextUrl
     this._lastConnectedAt = Date.now()
     this._doConnect()
