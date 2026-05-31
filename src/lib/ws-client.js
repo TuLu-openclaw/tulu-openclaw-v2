@@ -219,11 +219,14 @@ export class WsClient {
       this._connecting = false
       this._clearChallengeTimer()
       if (e.code === 4001 || e.code === 4003 || e.code === 4004) {
+        const authReason = e.reason || '网关令牌校验失败'
+        if (this._authRefreshAttempts < 1) {
+          if (this._tryRefreshTokenAndReconnect(authReason)) return
+        }
         this._status = '认证失败'
-        this._statusDetail = e.reason || '网关令牌校验失败'
-        this._setConnected(false, 'auth_failed', e.reason || '网关令牌校验失败')
+        this._statusDetail = 'Gateway Token 不匹配，自动刷新失败；请点击“修复并重连”重新同步本地配置'
+        this._setConnected(false, 'auth_failed', this._statusDetail)
         this._flushPending()
-        if (this._tryRefreshTokenAndReconnect(e.reason || '网关令牌校验失败')) return
         this._intentionalClose = true
         return
       }
@@ -360,7 +363,7 @@ export class WsClient {
     this._refreshTokenAndReconnect(reason).catch((e) => {
       console.warn('[ws] 自动刷新 Gateway Token 失败:', e)
       this._status = '认证失败'
-      this._statusDetail = reason || String(e) || '网关令牌校验失败'
+      this._statusDetail = 'Gateway Token 不匹配，自动刷新失败；请点击“修复并重连”重新同步本地配置'
       this._setConnected(false, 'auth_failed', this._statusDetail)
       this._intentionalClose = true
     })
