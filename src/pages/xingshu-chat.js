@@ -35,11 +35,15 @@ function nowTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
 }
 
+function getValidRoomId(roomId) {
+  return ROOMS.some(room => room.id === roomId) ? roomId : 'lobby'
+}
+
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
     return {
-      activeRoom: saved.activeRoom || 'lobby',
+      activeRoom: getValidRoomId(saved.activeRoom),
       nickname: saved.nickname || '星枢用户',
       serverUrl: saved.serverUrl || DEFAULT_SERVER,
       admin: !!saved.admin,
@@ -185,7 +189,7 @@ function render(el) {
 }
 
 function wireEvents(el) {
-  el.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => { state.activeRoom = btn.dataset.room; saveState(); render(el) })
+  el.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => { state.activeRoom = getValidRoomId(btn.dataset.room); saveState(); render(el) })
   const nick = el.querySelector('#xs-nick')
   if (nick) nick.onchange = () => { state.nickname = nick.value.trim() || '星枢用户'; saveState() }
   const server = el.querySelector('#xs-server')
