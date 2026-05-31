@@ -1,12 +1,13 @@
-/**
+/*
  * 扩展工具页面
- * cftunnel 隧道管理 + ClawApp 状�? */
+ * cftunnel 隧道管理 + ClawApp 状态
+ */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
-// HTML 转义，防�?XSS
+// HTML 转义，防止 XSS
 function escapeHtml(str) {
   if (!str) return ''
   return String(str)
