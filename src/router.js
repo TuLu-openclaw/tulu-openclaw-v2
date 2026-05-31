@@ -102,7 +102,10 @@ async function loadRoute() {
     if (thisLoad === _loadId) showLoadError(_contentEl, routePath, e)
     return
   }
-  if (thisLoad !== _loadId) return
+  if (thisLoad !== _loadId) {
+    try { mod.cleanup?.() } catch (_) {}
+    return
+  }
 
   // 插入页面内容
   // 场景1：renderFn 返回字符串 → 替换内容
