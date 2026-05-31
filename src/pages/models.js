@@ -135,6 +135,20 @@ function disableAgentModelAllowlist(config) {
   return false
 }
 
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>'"]/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  }[c]))
+}
+
+function escapeAttr(value = '') {
+  return escapeHtml(value)
+}
+
 // 渲染当前主模型状态栏
 function renderDefaultBar(page, state) {
   const bar = page.querySelector('#default-model-bar')
@@ -245,10 +259,12 @@ function renderProviders(page, state) {
     const hiddenCount = models.length - sorted.length
     const collapsed = !!state._collapsed[key]
     const chevron = collapsed ? '▸' : '▾'
+    const safeKey = escapeAttr(key)
+    const safeKeyText = escapeHtml(key)
     return `
-      <div class="config-section" data-provider="${key}">
+      <div class="config-section" data-provider="${safeKey}">
         <div class="config-section-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span style="cursor:pointer;user-select:none" data-action="toggle-provider"><span style="display:inline-block;width:16px;font-size:12px;color:var(--text-tertiary)">${chevron}</span>${key} <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);font-weight:400">${getApiTypeLabel(p.api)} · ${t('models.nModels', { count: models.length })}</span></span>
+          <span style="cursor:pointer;user-select:none" data-action="toggle-provider" title="${safeKey}"><span style="display:inline-block;width:16px;font-size:12px;color:var(--text-tertiary)">${chevron}</span>${safeKeyText} <span style="font-size:var(--font-size-xs);color:var(--text-tertiary);font-weight:400">${getApiTypeLabel(p.api)} · ${t('models.nModels', { count: models.length })}</span></span>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm btn-secondary" data-action="edit-provider">${t('models.editProvider')}</button>
             <button class="btn btn-sm btn-secondary" data-action="add-model">${t('models.addModel')}</button>
@@ -304,10 +320,14 @@ function renderModelCards(providerKey, models, primary, search) {
     const meta = []
     if (name !== id) meta.push(name)
     if (m.contextWindow) meta.push((m.contextWindow / 1000) + 'K ' + t('models.context'))
+    const safeId = escapeAttr(id)
+    const safeFull = escapeAttr(full)
+    const safeIdText = escapeHtml(id)
+    const safeError = escapeAttr(m.testError || '')
     // 测试状态标签：成功显示耗时，失败显示不可用
     let latencyTag = ''
     if (m.testStatus === 'fail') {
-      latencyTag = `<span style="font-size:var(--font-size-xs);padding:1px 6px;border-radius:var(--radius-sm);background:var(--error-muted, #fee2e2);color:var(--error)" title="${(m.testError || '').replace(/"/g, '&quot;')}">${t('models.unavailable')}</span>`
+      latencyTag = `<span style="font-size:var(--font-size-xs);padding:1px 6px;border-radius:var(--radius-sm);background:var(--error-muted, #fee2e2);color:var(--error)" title="${safeError}">${t('models.unavailable')}</span>`
     } else if (m.latency != null) {
       const color = m.latency < 3000 ? 'success' : m.latency < 8000 ? 'warning' : 'error'
       const bg = color === 'success' ? 'var(--success-muted)' : color === 'warning' ? 'var(--warning-muted, #fef3c7)' : 'var(--error-muted, #fee2e2)'
@@ -317,13 +337,13 @@ function renderModelCards(providerKey, models, primary, search) {
     const testTime = m.lastTestAt ? formatTestTime(m.lastTestAt) : ''
     if (testTime) meta.push(testTime)
     return `
-      <div class="model-card" data-model-id="${id}" data-full="${full}"
+      <div class="model-card" data-model-id="${safeId}" data-full="${safeFull}"
            style="background:${bgColor};border:1px solid ${borderColor};padding:10px 14px;border-radius:var(--radius-md);margin-bottom:8px;display:flex;align-items:center;gap:10px">
         <span class="drag-handle" style="color:var(--text-tertiary);cursor:grab;user-select:none;font-size:16px;padding:4px;touch-action:none">⋮⋮</span>
-        <input type="checkbox" class="model-checkbox" data-model-id="${id}" style="flex-shrink:0;cursor:pointer">
+        <input type="checkbox" class="model-checkbox" data-model-id="${safeId}" style="flex-shrink:0;cursor:pointer">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-family:var(--font-mono);font-size:var(--font-size-sm)">${id}</span>
+            <span style="font-family:var(--font-mono);font-size:var(--font-size-sm)">${safeIdText}</span>
             ${isPrimary ? `<span style="font-size:var(--font-size-xs);background:var(--success);color:var(--text-inverse);padding:1px 6px;border-radius:var(--radius-sm)">${t('models.primaryModel')}</span>` : ''}
             ${m.reasoning ? `<span style="font-size:var(--font-size-xs);background:var(--accent-muted);color:var(--accent);padding:1px 6px;border-radius:var(--radius-sm)">${t('models.reasoning')}</span>` : ''}
             ${latencyTag}
