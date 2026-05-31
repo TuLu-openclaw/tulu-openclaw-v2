@@ -148,12 +148,16 @@ function renderUsage(el, data) {
   // ── Top 排行 ──
   const renderTop = (title, items, keyFn, valueFn) => {
     if (!items || !items.length) return ''
-    const rows = items.slice(0, 5).map(item => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-primary)">
-        <span style="font-size:var(--font-size-sm);color:var(--text-primary);font-weight:500">${esc(keyFn(item))}</span>
-        <span style="font-size:var(--font-size-sm);color:var(--text-secondary);font-family:var(--font-mono)">${valueFn(item)}</span>
-      </div>
-    `).join('')
+    const rows = items.slice(0, 5).map(item => {
+      const name = esc(keyFn(item))
+      const value = esc(valueFn(item))
+      return `
+        <div class="usage-top-row">
+          <span class="usage-top-row-name" title="${escAttr(keyFn(item))}">${name}</span>
+          <span class="usage-top-row-value" title="${escAttr(valueFn(item))}">${value}</span>
+        </div>
+      `
+    }).join('')
     return `
       <div class="usage-top-card">
         <div class="usage-top-title">${title}</div>
@@ -225,7 +229,7 @@ function renderUsage(el, data) {
           ${model ? `<span class="session-model">${esc(model)}</span>` : ''}
           ${provider ? `<span class="session-flag">${esc(provider)}</span>` : ''}
         </div>
-        <div class="session-row-meta">${fmtTokens(u.totalTokens)} tokens · ${fmtCost(u.totalCost)} · ${(u.messageCounts?.total || 0)} msgs${u.messageCounts?.errors ? ' · ' + u.messageCounts.errors + ' err' : ''}</div>
+        <div class="session-row-meta">${esc(`${fmtTokens(u.totalTokens)} tokens · ${fmtCost(u.totalCost)} · ${(u.messageCounts?.total || 0)} msgs${u.messageCounts?.errors ? ' · ' + u.messageCounts.errors + ' err' : ''}`)}</div>
       </div>`
     }).join('')
     sessionsHtml = `
@@ -240,5 +244,9 @@ function renderUsage(el, data) {
 }
 
 function esc(str) {
-  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function escAttr(str) {
+  return esc(str).replace(/"/g, '&quot;')
 }

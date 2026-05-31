@@ -101,7 +101,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
+  max-width: min(100%, 420px);
+  min-width: 0;
 }
 .session-model {
   font-size: var(--font-size-xs);
@@ -109,6 +110,10 @@
   background: var(--bg-hover);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
+  max-width: min(100%, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .session-flag {
   font-size: 10px;
@@ -117,6 +122,10 @@
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
+  max-width: min(100%, 220px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .session-bar-wrap {
   height: 4px;
@@ -153,6 +162,35 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   padding: var(--space-md);
+  min-width: 0;
+}
+.usage-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+.usage-top-row-name,
+.usage-top-row-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-top-row-name {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.usage-top-row-value {
+  flex-shrink: 0;
+  max-width: 45%;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  text-align: right;
 }
 .usage-top-title {
   font-size: var(--font-size-sm);
