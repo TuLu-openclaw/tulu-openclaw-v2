@@ -52,6 +52,7 @@ export class WsClient {
     this._challengeTimer = null
     this._wsId = 0
     this._autoPairAttempts = 0
+    this._authRefreshAttempts = 0
     this._serverVersion = null
     this._status = 'idle'
     this._statusDetail = ''
@@ -122,6 +123,7 @@ export class WsClient {
   connect(host, token, opts = {}) {
     this._intentionalClose = false
     this._autoPairAttempts = 0
+    this._authRefreshAttempts = 0
     this._token = token || ''
     const shouldUseSecure = opts.secure ?? (
       typeof location !== 'undefined' && location.protocol === 'https:'
@@ -220,8 +222,9 @@ export class WsClient {
         this._status = '认证失败'
         this._statusDetail = e.reason || '网关令牌校验失败'
         this._setConnected(false, 'auth_failed', e.reason || '网关令牌校验失败')
-        this._intentionalClose = true
         this._flushPending()
+        if (this._tryRefreshTokenAndReconnect(e.reason || '网关令牌校验失败')) return
+        this._intentionalClose = true
         return
       }
       if (e.code === 1008 && !this._intentionalClose) {
@@ -289,6 +292,8 @@ export class WsClient {
           console.warn('[ws] 自动修复已尝试过，不再重试')
         }
 
+        if (this._isAuthTokenError(errMsg, errCode) && this._tryRefreshTokenAndReconnect(errMsg)) return
+
         this._status = '握手失败'
         this._statusDetail = errMsg
         this._setConnected(false, 'error', errMsg)
@@ -339,6 +344,55 @@ export class WsClient {
         try { fn(msg) } catch (e) { console.error('[ws] handler error:', e) }
       })
     }
+  }
+
+  _isAuthTokenError(message = '', code = '') {
+    const text = `${code || ''} ${message || ''}`
+    return /unauthorized|auth|token|令牌|认证|鑰冭瘉|mismatch/i.test(text)
+  }
+
+  _tryRefreshTokenAndReconnect(reason = '') {
+    if (this._authRefreshAttempts >= 1) return false
+    this._authRefreshAttempts++
+    this._status = '正在刷新 Gateway Token'
+    this._statusDetail = '检测到认证失败，正在重新读取本地 Gateway 配置并重连'
+    this._setConnected(false, 'reconnecting', 'Gateway Token 不匹配，正在自动刷新并重连...')
+    this._refreshTokenAndReconnect(reason).catch((e) => {
+      console.warn('[ws] 自动刷新 Gateway Token 失败:', e)
+      this._status = '认证失败'
+      this._statusDetail = reason || String(e) || '网关令牌校验失败'
+      this._setConnected(false, 'auth_failed', this._statusDetail)
+      this._intentionalClose = true
+    })
+    return true
+  }
+
+  async _refreshTokenAndReconnect(reason = '') {
+    const config = await invoke('read_openclaw_config')
+    const gw = config?.gateway || {}
+    const freshToken = gw.auth?.token || gw.authToken || ''
+    if (!freshToken || freshToken === this._token) {
+      throw new Error(reason || 'Gateway Token 未变化')
+    }
+    const hostMatch = (this._url || '').match(/^wss?:\/\/([^/]+)\//)
+    const host = hostMatch?.[1]
+    if (!host) throw new Error('无法从当前 WebSocket URL 解析 Gateway 地址')
+    const secure = (this._url || '').startsWith('wss://')
+    this._token = freshToken
+    this._url = `${secure ? 'wss' : 'ws'}://${host}/ws?token=${encodeURIComponent(this._token)}`
+    this._status = 'Gateway Token 已刷新'
+    this._statusDetail = '已读取最新本地 token，正在重连'
+    this._intentionalClose = false
+    this._reconnectAttempts = 0
+    this._missedHeartbeats = 0
+    this._stopPing()
+    this._stopHeartbeat()
+    this._clearReconnectTimer()
+    this._clearChallengeTimer()
+    this._closeWs()
+    setTimeout(() => {
+      if (!this._intentionalClose) this._doConnect()
+    }, 300)
   }
 
   async _autoPairAndReconnect() {
@@ -400,6 +454,7 @@ export class WsClient {
 
   _handleConnectSuccess(payload) {
     this._autoPairAttempts = 0
+    this._authRefreshAttempts = 0
     this._hello = payload || null
     this._snapshot = payload?.snapshot || null
     this._serverVersion = payload?.serverVersion || null
