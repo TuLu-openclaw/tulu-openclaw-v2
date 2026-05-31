@@ -1,0 +1,26 @@
+import { _ } from '../helper.js'
+
+export default {
+  authFailedTitle: _('验证失败', 'Verification failed', '驗證失敗', '認証に失敗しました', '인증 실패', 'Xác minh thất bại'),
+  authExpired: _('卡密验证已失效，请重新验证', 'License key verification has expired. Please verify again.', '卡密驗證已失效，請重新驗證', 'ライセンスキー認証の有効期限が切れました。再度認証してください。', '라이선스 키 인증이 만료되었습니다. 다시 인증하세요.', 'Xác minh mã bản quyền đã hết hiệu lực. Vui lòng xác minh lại.'),
+  retryVerify: _('重新验证', 'Verify again', '重新驗證', '再認証', '다시 인증', 'Xác minh lại'),
+  showPassword: _('显示密码', 'Show password', '顯示密碼', 'パスワードを表示', '비밀번호 표시', 'Hiện mật khẩu'),
+  hidePassword: _('隐藏密码', 'Hide password', '隱藏密碼', 'パスワードを隠す', '비밀번호 숨기기', 'Ẩn mật khẩu'),
+  defaultNotice: _('验证通过后即可使用全部功能，卡密问题请点击购买卡密或联系星枢官方', 'After verification, all features will be available. For license key issues, buy a key or contact 星枢 official support.', '驗證通過後即可使用全部功能，卡密問題請點擊購買卡密或聯繫星樞官方', '認証後、すべての機能を利用できます。ライセンスキーの問題は購入リンクまたは星枢公式サポートまでお問い合わせください。', '인증 후 모든 기능을 사용할 수 있습니다. 라이선스 키 문제는 구매 링크 또는 星枢 공식 지원에 문의하세요.', 'Sau khi xác minh, bạn có thể dùng toàn bộ tính năng. Nếu gặp vấn đề về mã bản quyền, hãy mua mã hoặc liên hệ hỗ trợ chính thức của 星枢.'),
+  title: _('星枢授权验证', '星枢 authorization verification', '星樞授權驗證', '星枢 認証確認', '星枢 권한 인증', 'Xác minh ủy quyền 星枢'),
+  subtitle: _('请输入卡密以继续使用', 'Enter your license key to continue.', '請輸入卡密以繼續使用', '続行するにはライセンスキーを入力してください。', '계속하려면 라이선스 키를 입력하세요.', 'Nhập mã bản quyền để tiếp tục.'),
+  licenseKey: _('卡密', 'License key', '卡密', 'ライセンスキー', '라이선스 키', 'Mã bản quyền'),
+  licensePlaceholder: _('请输入卡密', 'Enter license key', '請輸入卡密', 'ライセンスキーを入力', '라이선스 키 입력', 'Nhập mã bản quyền'),
+  rememberKey: _('记住卡密', 'Remember key', '記住卡密', 'キーを保存', '키 저장', 'Ghi nhớ mã'),
+  buyKey: _('购买卡密', 'Buy key', '購買卡密', 'キーを購入', '키 구매', 'Mua mã'),
+  verifyButton: _('验证卡密', 'Verify key', '驗證卡密', 'キーを認証', '키 인증', 'Xác minh mã'),
+  officialSystem: _('星枢官方 · 卡密系统', '星枢 Official · License system', '星樞官方 · 卡密系統', '星枢公式 · ライセンスシステム', '星枢 공식 · 라이선스 시스템', '星枢 chính thức · Hệ thống mã bản quyền'),
+  emptyKey: _('请输入卡密', 'Enter your license key', '請輸入卡密', 'ライセンスキーを入力してください', '라이선스 키를 입력하세요', 'Nhập mã bản quyền'),
+  verifying: _('验证中...', 'Verifying...', '驗證中...', '認証中...', '인증 중...', 'Đang xác minh...'),
+  successTitle: _('验证成功', 'Verification successful', '驗證成功', '認証成功', '인증 성공', 'Xác minh thành công'),
+  enteringApp: _('正在进入应用...', 'Entering app...', '正在進入應用...', 'アプリに移動中...', '앱으로 이동 중...', 'Đang vào ứng dụng...'),
+  invalidOrExpired: _('验证失败，卡密无效或已过期', 'Verification failed. The key is invalid or expired.', '驗證失敗，卡密無效或已過期', '認証に失敗しました。キーが無効または期限切れです。', '인증 실패: 키가 잘못되었거나 만료되었습니다.', 'Xác minh thất bại, mã không hợp lệ hoặc đã hết hạn.'),
+  genericFailure: _('验证失败', 'Verification failed', '驗證失敗', '認証に失敗しました', '인증 실패', 'Xác minh thất bại'),
+  moduleLoadFailed: _('验证模块加载失败，请重启应用', 'Verification module failed to load. Please restart the app.', '驗證模組載入失敗，請重啟應用', '認証モジュールの読み込みに失敗しました。アプリを再起動してください。', '인증 모듈 로드에 실패했습니다. 앱을 다시 시작하세요.', 'Không tải được mô-đun xác minh, vui lòng khởi động lại ứng dụng.'),
+  unauthorizedMessage: _('星枢OpenClaw尚未对该用户进行授权', '星枢OpenClaw has not authorized this user yet.', '星樞OpenClaw尚未對該使用者授權', '星枢OpenClaw はこのユーザーをまだ認証していません。', '星枢OpenClaw에서 아직 이 사용자를 인증하지 않았습니다.', '星枢OpenClaw chưa cấp quyền cho người dùng này.'),
+}

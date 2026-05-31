@@ -198,24 +198,24 @@ function showKamiFallbackModal() {
     <div style="background:#1a1a2e;border-radius:16px;padding:36px;width:380px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08)">
       <div style="text-align:center;margin-bottom:28px">
         <div style="font-size:48px;margin-bottom:12px">🔐</div>
-        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">星枢授权验证</div>
-        <div style="font-size:12px;color:#666">请输入卡密以继续使用</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:6px">${t('kami.title')}</div>
+        <div style="font-size:12px;color:#666">${t('kami.subtitle')}</div>
         <div id="kami-fb-notice" style="margin-top:12px;padding:10px 12px;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px;color:#a5b4fc;line-height:1.6;display:none"></div>
       </div>
       <div style="margin-bottom:16px">
-        <div style="color:#888;font-size:12px;margin-bottom:8px">卡密</div>
-        <input id="kami-fb-input" type="password" placeholder="请输入卡密" autocomplete="off" autofocus
+        <div style="color:#888;font-size:12px;margin-bottom:8px">${t('kami.licenseKey')}</div>
+        <input id="kami-fb-input" type="password" placeholder="${t('kami.licensePlaceholder')}" autocomplete="off" autofocus
           style="width:100%;padding:12px 14px;box-sizing:border-box;background:#16213e;border:1px solid rgba(99,102,241,0.3);border-radius:10px;color:#fff;font-size:14px;outline:none"
         />
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
         <label style="display:flex;align-items:center;cursor:pointer;user-select:none">
           <input id="kami-fb-remember" type="checkbox" style="width:15px;height:15px;margin-right:8px;accent-color:#6366f1;cursor:pointer" />
-          <span style="font-size:12px;color:#888">记住卡密</span>
+          <span style="font-size:12px;color:#888">${t('kami.rememberKey')}</span>
         </label>
-        <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">购买卡密 →</a>
+        <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" style="font-size:11px;color:#6366f1;text-decoration:none">${t('kami.buyKey')} →</a>
       </div>
-      <button id="kami-fb-btn" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,0.35)">验证卡密</button>
+      <button id="kami-fb-btn" style="width:100%;padding:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;cursor:pointer;box-shadow:0 4px 14px rgba(99,102,241,0.35)">${t('kami.verifyButton')}</button>
       <div id="kami-fb-error" style="margin-top:12px;text-align:center;font-size:12px;color:#ef4444;min-height:16px"></div>
     </div>
   `
@@ -239,29 +239,30 @@ function showKamiFallbackModal() {
 
     async function doVerify() {
       const kami = inputEl.value.trim()
-      if (!kami) { errorEl.textContent = '请输入卡密'; return }
+      if (!kami) { errorEl.textContent = t('kami.emptyKey'); return }
       btnEl.disabled = true
-      btnEl.textContent = '验证中...'
+      btnEl.textContent = t('kami.verifying')
       errorEl.textContent = ''
 
       const result = await login(kami)
       if (result.success) {
         if (rememberEl.checked) saveKami(kami)
         markVerified(kami, result.time)
-        overlay.innerHTML = `<div style="text-align:center;padding:40px;color:#22c55e;font-size:18px;font-weight:700">✅ 验证成功，正在进入应用...</div>`
+        overlay.innerHTML = `<div style="text-align:center;padding:40px;color:#22c55e;font-size:18px;font-weight:700">✅ ${t('kami.successTitle')}，${t('kami.enteringApp')}</div>`
         setTimeout(() => overlay.remove(), 800)
         setTimeout(() => location.reload(), 1000)
       } else {
-        errorEl.textContent = result.error || '验证失败'
+        errorEl.textContent = result.error || t('kami.genericFailure')
         btnEl.disabled = false
-        btnEl.textContent = '验证卡密'
+        btnEl.textContent = t('kami.verifyButton')
       }
     }
 
     btnEl.addEventListener('click', doVerify)
     inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doVerify() })
   }).catch(err => {
-    errorEl.textContent = '验证模块加载失败，请重启应用'
+    const fallbackErrorEl = document.getElementById('kami-fb-error')
+    if (fallbackErrorEl) fallbackErrorEl.textContent = t('kami.moduleLoadFailed')
     console.error('[kami-fallback] kami.js 加载失败:', err)
   })
 }

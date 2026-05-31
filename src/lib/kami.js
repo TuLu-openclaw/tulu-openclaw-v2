@@ -280,5 +280,5 @@ export const KAMI_CONFIG = {
   appid: APPID,
   successCode: SUCCESS_CODE,
   checkIntervalMs: 5 * 60 * 1000,
-  errorMessage: '星枢OpenClaw尚未对该用户进行授权',
+  errorMessageKey: 'kami.unauthorizedMessage',
 }
