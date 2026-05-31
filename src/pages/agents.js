@@ -8,6 +8,16 @@ import { showModal, showConfirm } from '../components/modal.js'
 import { CHANNEL_LABELS } from '../lib/channel-labels.js'
 import { t } from '../lib/i18n.js'
 
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>'"]/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  }[c]))
+}
+
 export async function render() {
   const page = document.createElement('div')
   page.className = 'page'
@@ -100,33 +110,38 @@ function renderAgents(page, state) {
   container.innerHTML = state.agents.map(a => {
     const isDefault = a.isDefault || a.id === 'main'
     const name = a.identityName ? a.identityName.split(',')[0].trim() : t('agents.noDesc')
+    const safeId = escapeHtml(a.id)
+    const safeName = escapeHtml(name)
+    const rawModel = typeof a.model === 'object' ? (a.model?.primary || a.model?.id || JSON.stringify(a.model)) : (a.model || t('agents.notSet'))
+    const safeModel = escapeHtml(rawModel)
+    const safeWorkspace = escapeHtml(a.workspace || t('agents.notSet'))
     return `
-      <div class="agent-card" data-id="${a.id}">
+      <div class="agent-card" data-id="${safeId}">
         <div class="agent-card-header">
           <div class="agent-card-title">
-            <span class="agent-id">${a.id}</span>
+            <span class="agent-id">${safeId}</span>
             ${isDefault ? `<span class="badge badge-success">${t('agents.default')}</span>` : ''}
           </div>
           <div class="agent-card-actions">
-            <button class="btn btn-sm btn-primary" data-action="detail" data-id="${a.id}">${t('agents.detail')}</button>
-            <button class="btn btn-sm btn-secondary" data-action="backup" data-id="${a.id}">${t('agents.backup')}</button>
-            <button class="btn btn-sm btn-secondary" data-action="import-workspace" data-id="${a.id}">${t('agents.importWorkspace')}</button>
-            <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${a.id}">${t('agents.edit')}</button>
-            ${!isDefault ? `<button class="btn btn-sm btn-danger" data-action="delete" data-id="${a.id}">${t('agents.delete')}</button>` : ''}
+            <button class="btn btn-sm btn-primary" data-action="detail" data-id="${safeId}">${t('agents.detail')}</button>
+            <button class="btn btn-sm btn-secondary" data-action="backup" data-id="${safeId}">${t('agents.backup')}</button>
+            <button class="btn btn-sm btn-secondary" data-action="import-workspace" data-id="${safeId}">${t('agents.importWorkspace')}</button>
+            <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${safeId}">${t('agents.edit')}</button>
+            ${!isDefault ? `<button class="btn btn-sm btn-danger" data-action="delete" data-id="${safeId}">${t('agents.delete')}</button>` : ''}
           </div>
         </div>
         <div class="agent-card-body">
           <div class="agent-info-row">
             <span class="agent-info-label">${t('agents.labelName')}</span>
-            <span class="agent-info-value">${name}</span>
+            <span class="agent-info-value">${safeName}</span>
           </div>
           <div class="agent-info-row">
             <span class="agent-info-label">${t('agents.labelModel')}</span>
-            <span class="agent-info-value">${typeof a.model === 'object' ? (a.model?.primary || a.model?.id || JSON.stringify(a.model)) : (a.model || t('agents.notSet'))}</span>
+            <span class="agent-info-value">${safeModel}</span>
           </div>
           <div class="agent-info-row">
             <span class="agent-info-label">${t('agents.labelWorkspace')}</span>
-            <span class="agent-info-value" style="font-family:var(--font-mono);font-size:var(--font-size-xs)">${a.workspace || t('agents.notSet')}</span>
+            <span class="agent-info-value" style="font-family:var(--font-mono);font-size:var(--font-size-xs)">${safeWorkspace}</span>
           </div>
           <div class="agent-info-row">
             <span class="agent-info-label">${t('agents.labelBindings')}</span>
