@@ -74,7 +74,7 @@ async function saveConfig() {
   try {
     // 从当前表单收集值到 _config
     collectCurrentTab()
-    await api.writeOpenclawConfig(_config)
+    await api.writeOpenclawConfig(_config, { reload: false })
     try {
       const sr = _config?.messages?.statusReactions || {}
       window.__lobsterPhaseOverrides = {
