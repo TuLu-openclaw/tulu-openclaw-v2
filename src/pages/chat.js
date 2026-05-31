@@ -107,7 +107,7 @@ let _mentionPanelEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
-let _lastRenderTime = 0, _renderPending = false, _lastHistoryHash = ''
+let _lastRenderTime = 0, _renderPending = false, _renderTimer = null, _lastHistoryHash = ''
 let _autoScrollEnabled = true, _lastScrollTop = 0, _touchStartY = 0
 let _isLoadingHistory = false
 let _streamSafetyTimer = null, _unsubEvent = null, _unsubReady = null, _unsubStatus = null
@@ -2799,7 +2799,7 @@ function handleChatEvent(payload) {
     if (_currentAiBubble) {
       setReplyStatus('finalizing', CHAT_REPLY_STATUS_TEXT.finalizing, { runId: runId || _currentRunId, activity: `整理文本、附件和 ${finalTools.length || _currentAiTools.length || 0} 个工具结果` })
       if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || finalText || ''
-      if (_currentAiText) _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
+      if (_currentAiText) flushStreamRender()
       appendImagesToEl(_currentAiBubble, _currentAiImages)
       appendVideosToEl(_currentAiBubble, _currentAiVideos)
       appendAudiosToEl(_currentAiBubble, _currentAiAudios)
@@ -3286,14 +3286,32 @@ function updateStreamingStatus(state, detail = '', options = {}) {
 // ── 流式渲染（节流） ──
 
 function throttledRender() {
-  if (_renderPending) return
+  if (!_currentAiBubble || !_currentAiText) return
   const now = performance.now()
-  if (now - _lastRenderTime >= RENDER_THROTTLE) {
+  const elapsed = now - _lastRenderTime
+  if (!_renderPending && elapsed >= RENDER_THROTTLE) {
     doRender()
-  } else {
-    _renderPending = true
-    requestAnimationFrame(() => { _renderPending = false; doRender() })
+    return
   }
+  if (_renderPending) return
+  _renderPending = true
+  const delay = Math.max(0, RENDER_THROTTLE - elapsed)
+  _renderTimer = setTimeout(() => {
+    _renderTimer = null
+    requestAnimationFrame(() => {
+      _renderPending = false
+      doRender()
+    })
+  }, delay)
+}
+
+function flushStreamRender() {
+  if (_renderTimer) {
+    clearTimeout(_renderTimer)
+    _renderTimer = null
+  }
+  _renderPending = false
+  doRender()
 }
 
 function doRender() {
@@ -3349,12 +3367,16 @@ function _schedulePostFinalCheck() {
 function resetStreamState() {
   clearTimeout(_streamSafetyTimer)
   if (_currentAiBubble && (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length)) {
-    _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
+    flushStreamRender()
     appendImagesToEl(_currentAiBubble, _currentAiImages)
     appendVideosToEl(_currentAiBubble, _currentAiVideos)
     appendAudiosToEl(_currentAiBubble, _currentAiAudios)
     appendFilesToEl(_currentAiBubble, _currentAiFiles)
     appendToolsToEl(_currentAiBubble, _currentAiTools)
+  }
+  if (_renderTimer) {
+    clearTimeout(_renderTimer)
+    _renderTimer = null
   }
   _renderPending = false
   _lastRenderTime = 0
