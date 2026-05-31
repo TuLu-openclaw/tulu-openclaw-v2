@@ -47,11 +47,11 @@ function getGatewayUiSnapshot(service) {
   }
 
   const details = [
-    `状态：${statusText}`,
-    `WS：${wsConnected ? '已连接' : '未连接'}`,
-    `握手：${gatewayReady ? '已完成' : '未完成'}`,
-    `重连：${reconnectState}`,
-    `最近检查：${lastCheckLabel}`,
+    t('services.gatewayDetailStatus', { status: statusText }),
+    t('services.gatewayDetailWs', { status: wsConnected ? t('services.connected') : t('services.notConnected') }),
+    t('services.gatewayDetailHandshake', { status: gatewayReady ? t('services.completed') : t('services.notCompleted') }),
+    t('services.gatewayDetailReconnect', { state: reconnectState }),
+    t('services.gatewayDetailLastCheck', { time: lastCheckLabel }),
   ]
 
   return { tone, statusText, details: details.join(' · '), state, wsInfo }
