@@ -339,7 +339,7 @@ async function saveConfig(page, state) {
   }
 
   try {
-    await api.writeOpenclawConfig(state.config)
+    await api.writeOpenclawConfig(state.config, { reload: false })
     toast(t('gateway.configSaved'), 'info')
     try {
       await api.reloadGateway()
