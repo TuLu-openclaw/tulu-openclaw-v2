@@ -595,12 +595,16 @@ export const api = {
   },
   hermesGatewayAction: async (action) => {
     invalidate('check_hermes')
-    if (action === 'restart') {
-      try { await invoke('hermes_gateway_action', { action: 'stop' }, 15000) } catch (_) {}
-      await new Promise(r => setTimeout(r, 800))
-      return invoke('hermes_gateway_action', { action: 'start' }, 60000)
+    try {
+      if (action === 'restart') {
+        try { await invoke('hermes_gateway_action', { action: 'stop' }, 15000) } catch (_) {}
+        await new Promise(r => setTimeout(r, 800))
+        return await invoke('hermes_gateway_action', { action: 'start' }, 60000)
+      }
+      return await invoke('hermes_gateway_action', { action }, action === 'start' ? 60000 : 15000)
+    } finally {
+      invalidate('check_hermes')
     }
-    return invoke('hermes_gateway_action', { action }, action === 'start' ? 60000 : 15000)
   },
   hermesHealthCheck: () => invoke('hermes_health_check'),
   hermesApiProxy: (method, path, body, headers) => invoke('hermes_api_proxy', { method, path, body: body || null, headers: headers || null }),
@@ -610,7 +614,7 @@ export const api = {
   hermesProfilesList: () => invoke('hermes_profiles_list', {}).catch(() => ({ profiles: [], active: 'default' })),
   hermesProfileUse: (name) => {
     invalidate('check_hermes', 'hermes_list_providers')
-    return invoke('hermes_profile_use', { name }).catch(() => true)
+    return invoke('hermes_profile_use', { name }).catch(() => true).finally(() => invalidate('check_hermes', 'hermes_list_providers'))
   },
   hermesReadConfig: () => invoke('hermes_read_config'),
   hermesConfigRawRead: () => invoke('hermes_config_raw_read'),
@@ -622,12 +626,12 @@ export const api = {
   hermesListProviders: () => cachedInvoke('hermes_list_providers', {}, 30000),
   hermesUpdateModel: (model) => {
     invalidate('check_hermes', 'hermes_list_providers')
-    return invoke('hermes_update_model', { model })
+    return invoke('hermes_update_model', { model }).finally(() => invalidate('check_hermes', 'hermes_list_providers'))
   },
   hermesDetectEnvironments: () => invoke('hermes_detect_environments'),
   hermesSetGatewayUrl: (url) => {
     invalidate('check_hermes')
-    return invoke('hermes_set_gateway_url', { url: url || null })
+    return invoke('hermes_set_gateway_url', { url: url || null }).finally(() => invalidate('check_hermes'))
   },
   hermesEnvReadUnmanaged: () => invoke('hermes_env_read_unmanaged'),
   hermesEnvSet: (key, value) => {
