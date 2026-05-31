@@ -1027,8 +1027,8 @@ async function doUpgradeWithModal(source, page, version = null, method = 'auto')
         const diagnosis = diagnoseInstallError(fullLog)
         modal.setError(diagnosis.title)
         if (diagnosis.hint) modal.appendLog('')
-        if (diagnosis.hint) modal.appendHtmlLog(`${statusIcon('info', 14)} ${diagnosis.hint}`)
-        if (diagnosis.command) modal.appendHtmlLog(`${icon('clipboard', 14)} ${diagnosis.command}`)
+        if (diagnosis.hint) modal.appendHtmlLog(`${statusIcon('info', 14)} ${escapeHtml(diagnosis.hint)}`)
+        if (diagnosis.command) modal.appendHtmlLog(`${icon('clipboard', 14)} ${escapeHtml(diagnosis.command)}`)
         if (window.__openAIDrawerWithError) {
           window.__openAIDrawerWithError({ title: diagnosis.title, error: fullLog, scene: t('services.upgradeScene'), hint: diagnosis.hint })
         }

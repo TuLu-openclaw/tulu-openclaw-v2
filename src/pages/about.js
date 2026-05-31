@@ -4,7 +4,7 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { showUpgradeModal, showConfirm } from '../components/modal.js'
+import { showUpgradeModal, showConfirm, escapeHtml } from '../components/modal.js'
 import { setUpgrading } from '../lib/app-state.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t, getLang } from '../lib/i18n.js'
@@ -582,8 +582,8 @@ async function doInstall(page, title, source, version) {
         const diagnosis = diagnoseInstallError(fullLog)
         modal.setError(diagnosis.title)
         if (diagnosis.hint) modal.appendLog('')
-        if (diagnosis.hint) modal.appendHtmlLog(`${statusIcon('info', 14)} ${diagnosis.hint}`)
-        if (diagnosis.command) modal.appendHtmlLog(`${icon('clipboard', 14)} ${diagnosis.command}`)
+        if (diagnosis.hint) modal.appendHtmlLog(`${statusIcon('info', 14)} ${escapeHtml(diagnosis.hint)}`)
+        if (diagnosis.command) modal.appendHtmlLog(`${icon('clipboard', 14)} ${escapeHtml(diagnosis.command)}`)
         if (window.__openAIDrawerWithError) {
           window.__openAIDrawerWithError({ title: diagnosis.title, error: fullLog, scene: title, hint: diagnosis.hint })
         }

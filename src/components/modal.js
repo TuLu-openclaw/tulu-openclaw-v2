@@ -14,6 +14,15 @@ function escapeAttr(str) {
     .replace(/>/g, '&gt;')
 }
 
+// 转义 HTML 文本节点，允许调用方拼接可信图标/标签时保护动态文本
+export function escapeHtml(str) {
+  if (str == null) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 /**
  * 自定义确认弹窗，替代原生 confirm()
  * Tauri WebView 不支持原生 confirm/alert，必须用自定义弹窗
