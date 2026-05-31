@@ -203,14 +203,14 @@ export async function render() {
       <div class="chat-session-list chat-session-sections" id="chat-session-list">
         <div class="chat-session-section">
           <div class="chat-session-section-title">
-            <span>普通会话</span>
+            <span>${t('chat.normalSessions')}</span>
           </div>
           <div class="chat-session-list-pane" id="chat-session-list-normal"></div>
         </div>
         <div class="chat-session-section chat-session-section-groups">
           <div class="chat-session-section-title">
-            <span>群聊会话</span>
-            <button class="chat-session-section-btn" id="btn-new-group" title="新建群聊">新建群聊</button>
+            <span>${t('chat.groupSessions')}</span>
+            <button class="chat-session-section-btn" id="btn-new-group" title="${t('chat.newGroupChat')}">${t('chat.newGroupChat')}</button>
           </div>
           <div class="chat-session-list-pane" id="chat-session-list-groups"></div>
         </div>
@@ -711,7 +711,7 @@ async function loadModelOptions(showToast = false) {
     const config = await Promise.race([configPromise, timeoutPromise])
     const providers = config?.models?.providers || {}
     _primaryModel = config?.agents?.defaults?.model?.primary || ''
-    _defaultModelLabel = _primaryModel ? `Default (${_primaryModel})` : 'Default model'
+    _defaultModelLabel = _primaryModel ? t('chat.defaultModelWithName', { model: _primaryModel }) : t('chat.defaultModel')
     const models = []
     const seen = new Set()
     const addModel = (value) => {
@@ -735,7 +735,7 @@ async function loadModelOptions(showToast = false) {
   } catch (e) {
     _availableModels = []
     _primaryModel = ''
-    _defaultModelLabel = 'Default model'
+    _defaultModelLabel = t('chat.defaultModel')
     _selectedModel = ''
     renderModelSelect(`${t('common.loadFailed')}: ${e.message || e}`)
     if (showToast) toast(`${t('common.loadFailed')}: ${e.message || e}`, 'error')
@@ -751,7 +751,7 @@ function renderModelSelect(errorText = '') {
     return
   }
   _modelSelectEl.disabled = _isApplyingModel || !_availableModels.length
-  const defaultLabel = _defaultModelLabel || (_primaryModel ? `Default (${_primaryModel})` : 'Default model')
+  const defaultLabel = _defaultModelLabel || (_primaryModel ? t('chat.defaultModelWithName', { model: _primaryModel }) : t('chat.defaultModel'))
   const defaultOption = `<option value="" ${_selectedModel === '' ? 'selected' : ''}>${escapeAttr(defaultLabel)}</option>`
   const modelOptions = _availableModels.map(full => {
     const suffix = full === _primaryModel ? ` ${t('chat.defaultSuffix')}` : ''
@@ -827,10 +827,10 @@ function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cos
     }
   }
   const totalCost = normalizeCost(cost)
-  if (totalCost > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-cost" title="Cost">$${totalCost.toFixed(4)}</span>`)
+  if (totalCost > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-cost" title="${escapeAttr(t('chat.messageCost'))}">$${totalCost.toFixed(4)}</span>`)
   const modelLabel = normalizeModelValue(model) || getSessionRuntimeModel(_sessionKey) || _selectedModel || _primaryModel
-  if (modelLabel) parts.push(`<span class="meta-sep">·</span><span class="msg-model" title="Model background">${escapeHtml(modelLabel)}</span>`)
-  if (showTranslate) parts.push(`<button class="msg-translate-btn" title="翻译成中文">译</button>`)
+  if (modelLabel) parts.push(`<span class="meta-sep">·</span><span class="msg-model" title="${escapeAttr(t('chat.messageModel'))}">${escapeHtml(modelLabel)}</span>`)
+  if (showTranslate) parts.push(translateButtonHtml())
   if (showCopy) parts.push(`<button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`)
   return parts.join('')
 }
@@ -852,13 +852,13 @@ function applySessionDefaultsModel(defaults = null) {
   const defaultsModel = normalizeModelValue(defaults.model || defaults.runtimeModel || defaults.currentModel || '', defaults.modelProvider || defaults.provider || '')
   if (defaultsModel) {
     _primaryModel = defaultsModel
-    _defaultModelLabel = `Default (${defaultsModel})`
+    _defaultModelLabel = t('chat.defaultModelWithName', { model: defaultsModel })
     ensureModelOption(defaultsModel)
     return defaultsModel
   }
   if (Object.prototype.hasOwnProperty.call(defaults, 'model')) {
     _primaryModel = ''
-    _defaultModelLabel = 'Default model'
+    _defaultModelLabel = t('chat.defaultModel')
   }
   return ''
 }
@@ -3707,6 +3707,14 @@ function isMostlyChinese(text = '') {
   return chinese >= 12 && chinese >= letters * 0.65
 }
 
+function translateButtonHtml() {
+  return `<button class="msg-translate-btn" title="${escapeAttr(t('chat.translateToChinese'))}">${t('chat.translateShort')}</button>`
+}
+
+function translateTitleHtml() {
+  return `<div class="msg-translation-title">${t('chat.translationTitle')}</div>`
+}
+
 async function translateMessageToChinese(btn) {
   const msgWrap = btn.closest('.msg')
   const bubble = msgWrap?.querySelector('.msg-bubble')
@@ -3734,26 +3742,26 @@ async function translateMessageToChinese(btn) {
   }
   box.hidden = false
   box.dataset.done = '0'
-  box.innerHTML = '<div class="msg-translation-title">中文翻译</div><div class="msg-translation-loading">正在翻译...</div>'
+  box.innerHTML = `${translateTitleHtml()}<div class="msg-translation-loading">${t('chat.translating')}</div>`
   btn.disabled = true
   btn.classList.add('active')
   const oldTitle = btn.title
-  btn.title = '正在翻译...'
+  btn.title = t('chat.translating')
   try {
     const currentModel = getSessionDisplayModel(_sessionKey)
     const translated = await api.translateText(rawText, currentModel)
     const translatedText = messageContentToText(translated).trim()
-    if (!translatedText) throw new Error('没有收到翻译内容')
+    if (!translatedText) throw new Error(t('chat.translationEmpty'))
     box.dataset.done = '1'
-    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-body">${renderMarkdown(translatedText)}</div>`
+    box.innerHTML = `${translateTitleHtml()}<div class="msg-translation-body">${renderMarkdown(translatedText)}</div>`
   } catch (e) {
-    const errText = messageContentToText(e?.message || e || '未知错误')
+    const errText = messageContentToText(e?.message || e || t('common.unknown'))
     box.dataset.done = '0'
-    box.innerHTML = `<div class="msg-translation-title">中文翻译</div><div class="msg-translation-error">翻译失败：${escapeHtml(errText)}</div>`
-    toast(`翻译失败：${errText}`, 'error')
+    box.innerHTML = `${translateTitleHtml()}<div class="msg-translation-error">${t('chat.translationFailed')}: ${escapeHtml(errText)}</div>`
+    toast(`${t('chat.translationFailed')}: ${errText}`, 'error')
   } finally {
     btn.disabled = false
-    btn.title = oldTitle || '翻译成中文'
+    btn.title = oldTitle || t('chat.translateToChinese')
   }
 }
 
@@ -3847,7 +3855,7 @@ function appendAiMessage(text, msgTime, images, videos, audios, files, tools, me
 
   const meta = document.createElement('div')
   meta.className = 'msg-meta'
-  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span><button class="msg-translate-btn" title="翻译成中文">译</button><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
+  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span>${translateButtonHtml()}<button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
 
   wrap.appendChild(bubble)
   wrap.appendChild(meta)
@@ -4060,7 +4068,7 @@ function appendSystemMessage(text) {
   body.textContent = text
   const meta = document.createElement('div')
   meta.className = 'msg-meta msg-system-meta'
-  meta.innerHTML = `<button class="msg-translate-btn" title="翻译成中文">译</button><button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
+  meta.innerHTML = `${translateButtonHtml()}<button class="msg-copy-btn" title="${t('common.copy')}">${svgIcon('copy', 12)}</button>`
   wrap.appendChild(body)
   wrap.appendChild(meta)
   _messagesEl.insertBefore(wrap, _typingEl)
