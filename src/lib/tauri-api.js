@@ -409,7 +409,7 @@ export const api = {
   listMemoryFiles: (category, agentId) => cachedInvoke('list_memory_files', { category, agentId: agentId || null }),
   readMemoryFile: (path, agentId) => cachedInvoke('read_memory_file', { path, agentId: agentId || null }, 5000),
   writeMemoryFile: (path, content, category, agentId) => { invalidate('list_memory_files', 'read_memory_file'); return invoke('write_memory_file', { path, content, category: category || 'memory', agentId: agentId || null }) },
-  deleteMemoryFile: (path, agentId) => { invalidate('list_memory_files'); return invoke('delete_memory_file', { path, agentId: agentId || null }) },
+  deleteMemoryFile: (path, agentId) => { invalidate('list_memory_files', 'read_memory_file'); return invoke('delete_memory_file', { path, agentId: agentId || null }) },
   exportMemoryZip: (category, agentId) => invoke('export_memory_zip', { category, agentId: agentId || null }),
 
   // 消息渠道管理
@@ -466,7 +466,7 @@ export const api = {
   // 备份管理
   listBackups: () => cachedInvoke('list_backups'),
   createBackup: () => { invalidate('list_backups'); return invoke('create_backup') },
-  restoreBackup: (name) => invoke('restore_backup', { name }),
+  restoreBackup: (name) => { invalidate(); return invoke('restore_backup', { name }) },
   deleteBackup: (name) => { invalidate('list_backups'); return invoke('delete_backup', { name }) },
 
   // 设备密钥 + Gateway 握手
