@@ -359,7 +359,13 @@ export const api = {
   reloadGateway: () => invoke('reload_gateway'),
   restartGateway: () => invoke('restart_gateway', {}, 60000),
   doctorCheck: () => invoke('doctor_check'),
-  doctorFix: () => invoke('doctor_fix'),
+  doctorFix: () => {
+    invalidate('read_openclaw_config', 'get_services_status', 'get_status_summary')
+    return invoke('doctor_fix').then(r => {
+      invalidate('read_openclaw_config', 'get_services_status', 'get_status_summary')
+      return r
+    })
+  },
   listOpenclawVersions: async (source = 'chinese') => fetchNpmAllVersions(source),
   upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => invoke('upgrade_openclaw', { source, version, method }),
   uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
