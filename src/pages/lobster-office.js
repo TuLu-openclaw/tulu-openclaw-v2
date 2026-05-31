@@ -190,17 +190,15 @@ export default function render(el) {
     btn.textContent = '正在打开...'
     try {
       await api.openLobsterOffice()
-      // 等待窗口打开后建立通信
-      setTimeout(() => {
-        _lobsterWin = window.open('/lobster-office.html', 'lobster', 'width=1024,height=640,menubar=no,toolbar=no')
-        if (!_lobsterWin) {
-          toast('弹窗被拦截，请允许弹窗后重试', 'error')
-        } else {
-          toast('龙虾办公室已打开！', 'success')
-        }
-      }, 300)
+      toast('龙虾办公室已打开！', 'success')
     } catch (e) {
-      toast('打开失败：' + e, 'error')
+      // Tauri 命令本身会创建独立窗口；只有命令不可用时才退回到浏览器窗口。
+      _lobsterWin = window.open('/lobster-office.html', 'lobster', 'width=1024,height=640,menubar=no,toolbar=no')
+      if (!_lobsterWin) {
+        toast('打开失败：' + e, 'error')
+      } else {
+        toast('已使用浏览器窗口打开龙虾办公室', 'info')
+      }
     } finally {
       btn.disabled = false
       btn.textContent = '🦞 打开龙虾办公室'
