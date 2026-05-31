@@ -319,6 +319,26 @@ async function loadDockerManager(page) {
 
 // ===== 服务列表 =====
 
+function renderServiceLoadFallback(container, error) {
+  const gatewayUi = getGatewayUiSnapshot({ running: true })
+  const errText = escapeHtml(error?.message || String(error || ''))
+  container.innerHTML = `
+    <div class="service-card" data-label="ai.openclaw.gateway">
+      <div class="service-info">
+        <span class="status-dot ${gatewayUi.tone === 'stopped' ? 'warning' : gatewayUi.tone}"></span>
+        <div>
+          <div class="service-name">ai.openclaw.gateway</div>
+          <div class="service-desc">${gatewayUi.details}</div>
+          <div class="service-desc" style="color:var(--warning);margin-top:4px">${t('services.serviceLoadFailed')}: ${errText}</div>
+        </div>
+      </div>
+      <div class="service-actions">
+        <button class="btn btn-secondary btn-sm" data-action="refresh-services">${t('services.refreshStatus')}</button>
+        <button class="btn btn-secondary btn-sm" data-action="restart" data-label="ai.openclaw.gateway">${t('services.restart')}</button>
+      </div>
+    </div>`
+}
+
 async function loadServices(page) {
   const container = page.querySelector('#services-list')
   try {
@@ -332,7 +352,8 @@ async function loadServices(page) {
       }).catch(() => {})
     }
   } catch (e) {
-    container.innerHTML = `<div style="color:var(--error)">${t('services.serviceLoadFailed')}: ${escapeHtml(String(e))}</div>`
+    await refreshGatewayStatus().catch(() => {})
+    renderServiceLoadFallback(container, e)
   }
 }
 
