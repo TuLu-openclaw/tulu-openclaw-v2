@@ -7,6 +7,7 @@ import { toast } from '../components/toast.js'
 import { t } from '../lib/i18n.js'
 
 let _loadSeq = 0
+let _activePage = null
 
 function esc(str) {
   if (!str) return ''
@@ -40,8 +41,16 @@ export async function render() {
     </div>
   `
   bindEvents(page)
+  _activePage = page
   loadSkills(page)
   return page
+}
+
+export function cleanup() {
+  _loadSeq++
+  _searchSeq++
+  if (_searchTimer !== null) { clearTimeout(_searchTimer); _searchTimer = null }
+  _activePage = null
 }
 
 async function loadSkills(page) {
@@ -56,10 +65,10 @@ async function loadSkills(page) {
 
   try {
     const data = await api.skillsList()
-    if (seq !== _loadSeq) return
+    if (seq !== _loadSeq || page !== _activePage || !page.isConnected) return
     renderSkills(el, data)
   } catch (e) {
-    if (seq !== _loadSeq) return
+    if (seq !== _loadSeq || page !== _activePage || !page.isConnected) return
     el.innerHTML = `<div class="skills-load-error">
       <div style="color:var(--error);margin-bottom:8px">${t('skills.loadFailed')}: ${esc(e?.message || e)}</div>
       <div class="form-hint" style="margin-bottom:10px">${t('skills.loadFailedHint')}</div>
@@ -207,6 +216,7 @@ async function handleInfo(page, name) {
   detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   try {
     const skill = await api.skillsInfo(name)
+    if (page !== _activePage || !page.isConnected || !detail.isConnected) return
     const s = skill || {}
     const reqs = s.requirements || {}
     const miss = s.missing || {}
@@ -238,6 +248,7 @@ async function handleInfo(page, name) {
       </div>
     `
   } catch (e) {
+    if (page !== _activePage || !page.isConnected || !detail.isConnected) return
     detail.innerHTML = `<div style="color:var(--error);margin-top:var(--space-md)">${t('skills.detailLoadFailed')}: ${esc(e?.message || e)}</div>`
   }
 }
@@ -251,9 +262,11 @@ async function handleInstallDep(page, btn) {
   btn.textContent = t('skills.installing')
   try {
     await api.skillsInstallDep(kind, spec)
+    if (page !== _activePage || !page.isConnected) return
     toast(t('skills.depInstalled', { name: skillName }), 'success')
     await loadSkills(page)
   } catch (e) {
+    if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(`${t('skills.installFailed')}: ${e?.message || e}`, 'error')
     btn.disabled = false
     btn.textContent = spec.label || t('skills.retry')
@@ -272,13 +285,17 @@ async function loadStore(page) {
   results.innerHTML = `<div class="form-hint" style="padding:var(--space-xl);text-align:center">${t('skills.storeLoading')}</div>`
   try {
     _storeIndex = await api.skillhubIndex()
+    if (page !== _activePage || !page.isConnected || !results.isConnected) return
     // 获取已安装列表用于标记
     try {
       const data = await api.skillsList()
+      if (page !== _activePage || !page.isConnected || !results.isConnected) return
       _installedNames = new Set((data?.skills || []).map(s => s.name))
     } catch { _installedNames = new Set() }
+    if (page !== _activePage || !page.isConnected || !results.isConnected) return
     renderStoreItems(results, _storeIndex)
   } catch (e) {
+    if (page !== _activePage || !page.isConnected || !results.isConnected) return
     results.innerHTML = `<div style="color:var(--error);padding:var(--space-lg);text-align:center">${t('skills.storeLoadFailed')}: ${esc(e?.message || e)}</div>`
   }
 }
@@ -325,7 +342,7 @@ async function handleStoreSearch(page) {
 
   _searchTimer = setTimeout(async () => {
     _searchTimer = null
-    if (seq !== _searchSeq) return // 期间有新搜索，取消
+    if (seq !== _searchSeq || page !== _activePage || !page.isConnected || !results.isConnected) return // 期间有新搜索或页面已卸载，取消
 
     if (!q && _storeIndex) {
       renderStoreItems(results, _storeIndex)
@@ -337,7 +354,7 @@ async function handleStoreSearch(page) {
     results.innerHTML = `<div class="form-hint" style="padding:var(--space-sm)">${t('skills.searching')}</div>`
     try {
       const items = await api.skillhubSearch(input.value.trim())
-      if (seq !== _searchSeq) return
+      if (seq !== _searchSeq || page !== _activePage || !page.isConnected || !results.isConnected) return
       if (items && items.length > 0) {
         renderStoreItems(results, items)
         return
@@ -347,7 +364,7 @@ async function handleStoreSearch(page) {
     }
 
     // 服务端搜索无结果时回退到客户端过滤本地缓存
-    if (_storeIndex && seq === _searchSeq) {
+    if (_storeIndex && seq === _searchSeq && page === _activePage && page.isConnected && results.isConnected) {
       const filtered = _storeIndex.filter(item => {
         const slug = (item.slug || '').toLowerCase()
         const name = (item.display_name || item.displayName || item.name || '').toLowerCase()
@@ -355,7 +372,7 @@ async function handleStoreSearch(page) {
         const tags = (item.tags || []).join(' ').toLowerCase()
         return slug.includes(q) || name.includes(q) || desc.includes(q) || tags.includes(q)
       })
-      if (seq === _searchSeq) {
+      if (seq === _searchSeq && page === _activePage && page.isConnected && results.isConnected) {
         renderStoreItems(results, filtered)
       }
     }
@@ -368,6 +385,7 @@ async function handleStoreInstall(page, btn) {
   btn.textContent = t('skills.installing')
   try {
     await api.skillhubInstall(slug)
+    if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(t('skills.skillInstalled', { name: slug }), 'success')
     btn.textContent = t('skills.installed')
     btn.classList.remove('btn-primary')
@@ -375,6 +393,7 @@ async function handleStoreInstall(page, btn) {
     _installedNames.add(slug)
     loadSkills(page).catch(() => {})
   } catch (e) {
+    if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(`${t('skills.installFailed')}: ${e?.message || e}`, 'error')
     btn.disabled = false
     btn.textContent = t('skills.install')
@@ -389,9 +408,11 @@ async function handleSkillUninstall(page, btn) {
   btn.textContent = t('skills.uninstalling')
   try {
     await api.skillsUninstall(name)
+    if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(t('skills.uninstalled', { name }), 'success')
     await loadSkills(page)
   } catch (e) {
+    if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(`${t('skills.uninstallFailed')}: ${e?.message || e}`, 'error')
     btn.disabled = false
     btn.textContent = t('skills.uninstall')
