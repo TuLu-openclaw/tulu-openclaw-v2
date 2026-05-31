@@ -218,11 +218,16 @@ function cachedInvoke(cmd, args = {}, ttl = CACHE_TTL) {
     return _inflight.get(key)
   }
   const p = invoke(cmd, args, ttl).then(val => {
-    _cache.set(key, { val, ts: Date.now() })
-    _inflight.delete(key)
+    // invalidate() may run while this request is still in flight. In that case
+    // the response was started against stale state, so it must not repopulate
+    // the cache after the write-side invalidation has already completed.
+    if (_inflight.get(key) === p) {
+      _cache.set(key, { val, ts: Date.now() })
+      _inflight.delete(key)
+    }
     return val
   }).catch(err => {
-    _inflight.delete(key)
+    if (_inflight.get(key) === p) _inflight.delete(key)
     throw err
   })
   _inflight.set(key, p)
@@ -233,10 +238,14 @@ function cachedInvoke(cmd, args = {}, ttl = CACHE_TTL) {
 function invalidate(...cmds) {
   if (!cmds.length) {
     _cache.clear()
+    _inflight.clear()
     return
   }
   for (const [k] of _cache) {
     if (cmds.some(c => k.startsWith(c))) _cache.delete(k)
+  }
+  for (const [k] of _inflight) {
+    if (cmds.some(c => k.startsWith(c))) _inflight.delete(k)
   }
 }
 
