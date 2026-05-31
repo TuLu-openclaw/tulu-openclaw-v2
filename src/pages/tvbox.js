@@ -196,10 +196,14 @@ function esc(s) {
 }
 
 function getVodById(id) {
-  var lists = [S('homeList',{}), S('categoryList',[]), S('searchResults',[]), loadFavs(), loadHist()];
+  const homeList = S('homeList', {})
+  const homeItems = homeList && typeof homeList === 'object' && !Array.isArray(homeList)
+    ? Object.values(homeList).flat().filter(Boolean)
+    : []
+  var lists = [homeItems, S('categoryList',[]), S('searchResults',[]), loadFavs(), loadHist()];
   for (var li=0; li<lists.length; li++) {
     var lst = lists[li];
-    if (!lst || !lst.length) continue;
+    if (!Array.isArray(lst) || !lst.length) continue;
     for (var vi=0; vi<lst.length; vi++) {
       if (String(lst[vi].vod_id) === String(id)) return lst[vi];
     }
