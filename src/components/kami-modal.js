@@ -214,7 +214,7 @@ async function showKamiModal(isRetry) {
   setTimeout(function() { inputEl.focus() }, 50)
 
   // 密码显隐切换
-  var isPasswordVisible = !showPw
+  var isPasswordVisible = showPw
   toggleBtn.addEventListener('click', function() {
     isPasswordVisible = !isPasswordVisible
     inputEl.type = isPasswordVisible ? 'text' : 'password'
