@@ -88,6 +88,7 @@ async function loadConfig(page, state) {
     })
     if (before !== after) {
       console.log('[models] 自动修复了服务商 baseUrl，正在保存...')
+      api.clearRemoteModelCache?.()
       await api.writeOpenclawConfig(state.config)
       toast(t('models.autoFixUrl'), 'info')
     }
@@ -438,6 +439,7 @@ async function saveConfigOnly(state) {
     if (primary) applyDefaultModel(state)
     normalizeProviderUrls(state.config)
     disableAgentModelAllowlist(state.config)
+    api.clearRemoteModelCache?.()
     await api.writeOpenclawConfig(state.config)
   } catch (e) {
     toast(t('models.saveFailed') + ': ' + e, 'error')
@@ -450,6 +452,7 @@ async function doAutoSave(state) {
     if (primary) applyDefaultModel(state)
     normalizeProviderUrls(state.config)
     disableAgentModelAllowlist(state.config)
+    api.clearRemoteModelCache?.()
     await api.writeOpenclawConfig(state.config, { reload: false })
 
     // 重启 Gateway 使配置生效（Gateway 不支持 SIGHUP 热重载）
@@ -789,7 +792,7 @@ function bindTopActions(page, state) {
     btn.textContent = t('models.qtcoolFetching')
     btn.disabled = true
 
-    const models = await fetchQtcoolModels(bannerKey || undefined)
+    const models = await fetchQtcoolModels(bannerKey || undefined, { fresh: true })
 
     btn.innerHTML = `${icon('plus', 14)} ${t('models.qtcoolFetchModels')}`
     btn.disabled = false
@@ -1314,7 +1317,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
   btn.textContent = t('models.qtcoolFetching')
 
   try {
-    const remoteIds = await api.listRemoteModels(provider.baseUrl, provider.apiKey || '', provider.api || 'openai-completions')
+    const remoteIds = await api.listRemoteModels(provider.baseUrl, provider.apiKey || '', provider.api || 'openai-completions', { fresh: true })
     btn.disabled = false
     btn.textContent = t('models.fetchList')
 

@@ -367,6 +367,17 @@ async function cachedRemoteModels(baseUrl, apiKey, apiType = null) {
   return promise
 }
 
+const CONFIG_CHANGED_EVENT = 'openclaw-config-changed'
+
+function notifyConfigChanged(detail = {}) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(CONFIG_CHANGED_EVENT, { detail }))
+}
+
+function invalidateRemoteModelCaches() {
+  _remoteModelCache.clear()
+}
+
 // 导出 API
 export const api = {
   // 服务管理（状态用短缓存，操作不缓存）
@@ -387,6 +398,8 @@ export const api = {
     return invoke('write_openclaw_config', { config }).then(r => {
       invalidateGatewayCaches()
       if (options?.reload !== false) _debouncedReloadGateway()
+      invalidateRemoteModelCaches()
+      notifyConfigChanged({ source: 'writeOpenclawConfig', configChangedAt: Date.now(), modelsChanged: true })
       return r
     })
   },
@@ -420,7 +433,8 @@ export const api = {
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
   assistantChatOnce: (baseUrl, apiKey, modelId, apiType, messages, temperature = 0.7) => invoke('assistant_chat_once', { baseUrl, apiKey, modelId, apiType: apiType || null, messages, temperature }, 130000),
   translateText: (text, model = null) => invoke('translate_text', { text, model }, 90000),
-  listRemoteModels: (baseUrl, apiKey, apiType = null) => cachedRemoteModels(baseUrl, apiKey, apiType),
+  listRemoteModels: (baseUrl, apiKey, apiType = null, options = {}) => options?.fresh ? invoke('list_remote_models', { baseUrl, apiKey, apiType }) : cachedRemoteModels(baseUrl, apiKey, apiType),
+  clearRemoteModelCache: () => invalidateRemoteModelCaches(),
 
   // Agent 管理
   listAgents: () => cachedInvoke('list_agents'),

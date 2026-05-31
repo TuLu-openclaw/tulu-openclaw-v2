@@ -91,7 +91,7 @@ const QTCOOL_MODEL_CACHE_TTL = 10 * 60 * 1000
  * @param {string} [apiKey] - 自定义密钥；未传时尝试从已有配置读取
  * @returns {Promise<Array<{id:string, name:string, contextWindow:number, reasoning?:boolean}>>}
  */
-export async function fetchQtcoolModels(apiKey) {
+export async function fetchQtcoolModels(apiKey, options = {}) {
   let key = apiKey || QTCOOL.defaultKey
   // 没有 key 时尝试从已有的 qtcool provider 配置读取
   if (!key) {
@@ -104,7 +104,7 @@ export async function fetchQtcoolModels(apiKey) {
   const cacheKey = key || '__anonymous__'
   const now = Date.now()
   const cached = _qtcoolModelCache.get(cacheKey)
-  if (cached && cached.expires > now) return cached.promise
+  if (!options?.fresh && cached && cached.expires > now) return cached.promise
 
   const promise = (async () => {
     try {

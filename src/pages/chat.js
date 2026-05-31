@@ -140,6 +140,9 @@ let _lastSentTaskId = ''
 let _lastSessionList = []
 const TASK_PROGRESS = { queued: 5, sending: 10, thinking: 25, streaming: 45, tool: 65, finalizing: 90, done: 100, error: 100, aborted: 100 }
 
+const MODEL_CONFIG_CHANGED_EVENT = 'openclaw-config-changed'
+let _modelConfigRefreshTimer = null
+let _modelConfigChangeHandler = null
 
 // ── 托管 Agent ──
 const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
@@ -448,6 +451,7 @@ export async function render() {
   loadTaskContexts()
 
   loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
+  bindModelConfigSync()
   loadModelOptions()
   // 非阻塞：先返回 DOM，后台连接 Gateway
   connectGateway()
@@ -676,6 +680,21 @@ function bindEvents(page) {
     }
     hideCmdPanel()
   })
+}
+
+function bindModelConfigSync() {
+  if (typeof window === 'undefined' || _modelConfigChangeHandler) return
+  _modelConfigChangeHandler = () => {
+    clearTimeout(_modelConfigRefreshTimer)
+    _modelConfigRefreshTimer = setTimeout(async () => {
+      if (!_pageActive || !_modelSelectEl) return
+      await loadModelOptions(false)
+      if (wsClient.gatewayReady) {
+        try { await refreshRuntimeModelFromSessions(_sessionKey) } catch (_) {}
+      }
+    }, 80)
+  }
+  window.addEventListener(MODEL_CONFIG_CHANGED_EVENT, _modelConfigChangeHandler)
 }
 
 async function loadModelOptions(showToast = false) {
@@ -4557,6 +4576,12 @@ export function cleanup() {
   if (_unsubEvent) { _unsubEvent(); _unsubEvent = null }
   if (_unsubReady) { _unsubReady(); _unsubReady = null }
   if (_unsubStatus) { _unsubStatus(); _unsubStatus = null }
+  clearTimeout(_modelConfigRefreshTimer)
+  _modelConfigRefreshTimer = null
+  if (_modelConfigChangeHandler && typeof window !== 'undefined') {
+    window.removeEventListener(MODEL_CONFIG_CHANGED_EVENT, _modelConfigChangeHandler)
+    _modelConfigChangeHandler = null
+  }
   clearTimeout(_streamSafetyTimer)
   _cancelResponseWatchdog()
   clearTimeout(_postFinalCheck)
