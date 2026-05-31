@@ -1698,7 +1698,7 @@ function renderSessionCard(s) {
 function renderGroupSessionList() {
   if (!_sessionListGroupsEl) return
   if (!_chatGroups.length) {
-    _sessionListGroupsEl.innerHTML = `<div class="chat-session-empty">暂无群聊，点击上方“+ 群聊”创建</div>`
+    _sessionListGroupsEl.innerHTML = `<div class="chat-session-empty">${t('chat.noGroupChats')}</div>`
     return
   }
   _sessionListGroupsEl.innerHTML = _chatGroups.map(g => {
@@ -1707,15 +1707,15 @@ function renderGroupSessionList() {
     const roundSummary = getGroupRoundSummary(g)
     return `<div class="chat-session-card chat-group-card${active}" data-group-key="${escapeAttr(g.id)}">
       <div class="chat-session-card-header">
-        <span class="chat-session-label" title="群聊：${escapeAttr(g.name)}">${escapeAttr(g.name)}</span>
+        <span class="chat-session-label" title="${escapeAttr(t('chat.groupChatTitle', { name: g.name }))}">${escapeAttr(g.name)}</span>
         <span class="chat-group-actions">
-          <button class="chat-session-mini" data-group-edit="${escapeAttr(g.id)}" title="编辑群聊">编</button>
-          <button class="chat-session-del" data-group-del="${escapeAttr(g.id)}" title="删除群聊">×</button>
+          <button class="chat-session-mini" data-group-edit="${escapeAttr(g.id)}" title="${t('chat.editGroupChat')}">编</button>
+          <button class="chat-session-del" data-group-del="${escapeAttr(g.id)}" title="${t('chat.deleteGroupChat')}">×</button>
         </span>
       </div>
       <div class="chat-session-card-meta">
-        <span class="chat-session-agent">群聊</span>
-        <span>${members.length}成员</span>
+        <span class="chat-session-agent">${t('chat.groupChatBadge')}</span>
+        <span>${t('chat.membersCount', { count: members.length })}</span>
         <span class="chat-session-rounds" title="${escapeAttr(roundSummary.title)}">${escapeAttr(roundSummary.label)}</span>
       </div>
     </div>`
@@ -2242,7 +2242,7 @@ function updateMentionPanel() {
   const info = getMentionTokenInfo()
   if (!info) { hideMentionPanel(); return }
   const q = info.query.toLowerCase()
-  const entries = [{ label: '全部', value: '全部', hint: '通知群聊内全部 Agent' }]
+  const entries = [{ label: t('chat.mentionAll'), value: t('chat.mentionAll'), hint: t('chat.mentionAllHint') }]
   for (const m of group.members || []) {
     const label = getGroupMemberLabel(m, m.sessionKey)
     entries.push({ label, value: label, hint: m.agentId || parseSessionAgent(m.sessionKey) || 'Agent' })
@@ -2299,39 +2299,39 @@ function showGroupEditor(groupId = '') {
       return `<label class="chat-group-member-option"><input type="checkbox" value="${escapeAttr(key)}" ${checked}> <span>${escapeAttr(getDisplayLabel(key))}</span><small>${escapeAttr(parseSessionAgent(key) || 'main')}</small></label>`
     }).join('')
     const overlay = showContentModal({
-      title: group ? '编辑 Agent 群聊' : '新建 Agent 群聊',
+      title: group ? t('chat.editAgentGroupChat') : t('chat.newAgentGroupChat'),
       width: 620,
       content: `<div class="chat-group-editor">
-        <label class="form-label">群聊名称</label>
-        <input class="form-input" id="chat-group-name" value="${escapeAttr(group?.name || '')}" placeholder="例如：开发讨论组">
-        <div class="form-hint">选择要拉入群聊的 Agent 会话；群聊中可用 @Agent、@会话名 或 @全部 定向下达任务。</div>
-        <div class="chat-group-member-list">${options || '<div class="chat-session-empty">暂无可选会话</div>'}</div>
+        <label class="form-label">${t('chat.groupChatName')}</label>
+        <input class="form-input" id="chat-group-name" value="${escapeAttr(group?.name || '')}" placeholder="${t('chat.groupChatNamePlaceholder')}">
+        <div class="form-hint">${t('chat.groupChatMembersHint')}</div>
+        <div class="chat-group-member-list">${options || `<div class="chat-session-empty">${t('chat.noSelectableSessions')}</div>`}</div>
       </div>`,
-      buttons: [{ id: 'chat-group-save', label: '保存群聊', className: 'btn btn-primary btn-sm' }]
+      buttons: [{ id: 'chat-group-save', label: t('chat.saveGroupChat'), className: 'btn btn-primary btn-sm' }]
     })
     overlay.querySelector('#chat-group-save')?.addEventListener('click', () => {
       const name = overlay.querySelector('#chat-group-name')?.value.trim()
-      if (!name) { toast('请输入群聊名称', 'warning'); return }
+      if (!name) { toast(t('chat.enterGroupChatName'), 'warning'); return }
       const selected = Array.from(overlay.querySelectorAll('.chat-group-member-list input:checked')).map(input => {
         const key = input.value
         return { type: 'session', sourceSessionKey: key, agentId: parseSessionAgent(key) || 'main', label: getDisplayLabel(key) }
       })
-      if (!selected.length) { toast('至少选择一个 Agent 会话', 'warning'); return }
+      if (!selected.length) { toast(t('chat.selectAtLeastOneAgentSession'), 'warning'); return }
       const groupToSave = group || { id: uuid(), name: '', members: [], createdAt: Date.now(), updatedAt: Date.now() }
       Object.assign(groupToSave, { name, members: selected.map(m => normalizeGroupMember(groupToSave, m)), updatedAt: Date.now() })
       if (!group) _chatGroups.unshift(groupToSave)
       saveGroupSessions()
       renderGroupSessionList()
       overlay.close()
-      toast('群聊已保存', 'success')
+      toast(t('chat.groupChatSaved'), 'success')
     })
-  }).catch(e => toast(`加载会话失败: ${e.message}`, 'error'))
+  }).catch(e => toast(t('chat.loadSessionsFailed', { msg: e.message }), 'error'))
 }
 
 async function deleteGroupSession(groupId) {
   const group = ensureGroupIsolation(_chatGroups.find(g => g.id === groupId))
   if (!group) return
-  const yes = await showConfirm(`确认删除群聊“${group.name}”？不会删除真实 Agent 会话。`)
+  const yes = await showConfirm(t('chat.confirmDeleteGroupChat', { name: group.name }))
   if (!yes) return
   _chatGroups = _chatGroups.filter(g => g.id !== groupId)
   if (_currentGroupId === groupId) _currentGroupId = ''
@@ -2361,7 +2361,7 @@ async function switchGroupSession(groupId, options = {}) {
     })
   }
   if (!options.restore) {
-    toast(`已进入 Agent 群聊：${group.name}`, 'success')
+    toast(t('chat.enteredAgentGroupChat', { name: group.name }), 'success')
   }
   renderSessionList(_lastSessionList)
   updateSessionListActiveState()
@@ -2502,7 +2502,7 @@ function sendMessage() {
   }
   const activeGroup = _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
   if (activeGroup && _isSending) {
-    toast('群聊任务正在分发中，请稍后再发送', 'warning')
+    toast(t('chat.groupSendBusy'), 'warning')
     return
   }
   hideCmdPanel()
@@ -2537,37 +2537,28 @@ function rememberGroupMessage(group, message) {
 
 function buildGroupMemberPrompt(group, target, cleanText, originalText = '') {
   const memberLabel = getGroupMemberLabel(target, target?.sessionKey)
-  const members = (group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、') || '暂无成员'
+  const members = (group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、') || t('chat.groupNoMembers')
   const transcript = getGroupTranscript(group, 14)
     .map(msg => {
-      const who = msg.role === 'assistant' ? (msg.agentLabel || 'Agent') : (msg.role === 'user' ? '用户' : '系统')
+      const who = msg.role === 'assistant' ? (msg.agentLabel || 'Agent') : (msg.role === 'user' ? t('chat.groupUser') : t('chat.groupSystem'))
       const content = String(msg.content || '').replace(/\s+/g, ' ').trim()
       return content ? `${who}：${content.slice(0, 500)}` : ''
     })
     .filter(Boolean)
     .join('\n')
-  return `【OpenClaw Agent 群聊任务】
-群聊名称：${group.name}
-本轮发言者：${memberLabel}
-群聊成员：${members}
-
-重要规则：
-1. 你正在 Agent 群聊里发言，回复会显示在群聊界面，不要说“只有你和我”。
-2. 你可以看到下面的群聊上下文，但不要把它写入长期记忆；只用于本轮群聊协作，真实会话记忆必须保持隔离。
-3. 如果需要回应其他 Agent，请直接点名对方；如果用户 @ 了特定 Agent，只有被点名者需要重点回复。
-4. 回复要标明自己的观点，不要冒充其他 Agent。
-
-最近群聊上下文：
-${transcript || '暂无历史群聊上下文'}
-
-用户原始输入：${originalText || cleanText}
-
-请以“${memberLabel}”的身份在群聊中回复：${cleanText}`
+  return t('chat.groupMemberPrompt', {
+    groupName: group.name,
+    memberLabel,
+    members,
+    transcript: transcript || t('chat.groupNoHistory'),
+    originalText: originalText || cleanText,
+    cleanText,
+  })
 }
 
 async function doGroupSend(group, text, attachments = []) {
   const { targets, cleanText } = parseGroupMentions(text, group)
-  if (!targets.length) { toast('群聊没有可发送成员', 'warning'); return }
+  if (!targets.length) { toast(t('chat.groupNoSendableMembers'), 'warning'); return }
   _isSending = true
   updateSendState()
   appendUserMessage(text, attachments)
@@ -2577,7 +2568,7 @@ async function doGroupSend(group, text, attachments = []) {
   }
   rememberGroupMessage(group, storedUser)
   saveMessage(storedUser)
-  appendSystemMessage(`群聊任务已发送给：${targets.map(t => t.label || t.agentId || t.sessionKey).join('、')}`)
+  appendSystemMessage(t('chat.groupTaskSentTo', { targets: targets.map(t => t.label || t.agentId || t.sessionKey).join('、') }))
   maybeNotifyBusyGroupMembers(group, targets.map(t => t.sessionKey))
   try {
     for (const target of targets) {
@@ -2590,7 +2581,7 @@ async function doGroupSend(group, text, attachments = []) {
         updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
       } catch (err) {
         updateTask(task.id, { status: 'error', progress: 100, error: err.message })
-        appendSystemMessage(`发送给 ${target.label || sessionKey} 失败：${err.message}`)
+        appendSystemMessage(t('chat.groupSendFailed', { target: target.label || sessionKey, msg: err.message }))
       }
     }
   } finally {
