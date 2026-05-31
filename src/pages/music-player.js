@@ -146,8 +146,11 @@ async function playSong(song, addToHistoryFlag = true) {
   if (state.audioEl) state.audioEl.pause()
 
   state.currentSong = song
+  state.currentUrl = ''
   state.playing = false
   state.lyrics = ''
+  state.progress = 0
+  state.duration = 0
 
   // 更新队列
   const existingIdx = state.queue.findIndex(s => s.id === song.id && s.platform === song.platform)
