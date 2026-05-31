@@ -265,7 +265,7 @@ function renderContent(usage) {
       ${renderStatCard(
         t('usage.totalSessions'),
         String(usage.totalSessions),
-        t('usage.avgPerDay').replace('{n}', usage.avgSessionsPerDay.toFixed(1))
+        t('usage.avgPerDay', { n: usage.avgSessionsPerDay.toFixed(1) })
       )}
       ${renderStatCard(
         t('usage.estimatedCost'),

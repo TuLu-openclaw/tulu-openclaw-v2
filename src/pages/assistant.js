@@ -2219,7 +2219,7 @@ async function readSSEStream(resp, onEvent, signal) {
       // chunk 超时：如果 30 秒内没有收到任何数据，视为超时
       const readPromise = reader.read()
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(t('assistant.errStreamTimeout'))), TIMEOUT_CHUNK)
+        setTimeout(() => reject(new Error(t('assistant.errStreamTimeout', { seconds: Math.round(TIMEOUT_CHUNK / 1000) }))), TIMEOUT_CHUNK)
       )
       const { done, value } = await Promise.race([readPromise, timeoutPromise])
       if (done) {
@@ -3690,7 +3690,7 @@ function showSettings() {
         </button>
         <div class="ast-soul-file-info">
           <span class="ast-soul-file-name">${escHtml(f.name)}</span>
-          <span class="ast-soul-file-desc">${f.content?.split('\n').length || 0} ${t('assistant.kbLines')}</span>
+          <span class="ast-soul-file-desc">${t('assistant.kbLines', { count: f.content?.split('\n').length || 0 })}</span>
         </div>
         <span class="ast-soul-file-size">${fSize}</span>
         <button class="btn btn-sm" style="padding:2px 6px;font-size:11px;color:var(--error);background:none;border:none;cursor:pointer" data-kb-del="${i}" title="${t('common.delete')}">✕</button>

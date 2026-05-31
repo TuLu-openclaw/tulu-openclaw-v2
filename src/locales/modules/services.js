@@ -147,7 +147,7 @@ export default {
   saving: _('保存中...', 'Saving...', '儲存中...'),
   configSaved: _('配置已保存', 'Config saved', '設定已儲存'),
   configSavedRestarting: _('配置已保存，正在重启 Gateway...', 'Config saved, restarting Gateway...', '設定已儲存，正在重啟 Gateway...'),
-  gwRestarted: _('Gateway 已重启', 'Gateway restarted', 'Gateway 已重啟', 'Gateway が再起動しました (PID: {pid})', 'Gateway 재시작됨 (PID: {pid})'),
+  gwRestarted: _('Gateway 已重启', 'Gateway restarted', 'Gateway 已重啟', 'Gateway が再起動しました', 'Gateway 재시작됨'),
   configSavedGwFailed: _('配置已保存，但 Gateway 重启失败', 'Config saved, but Gateway restart failed', '設定已儲存，但 Gateway 重啟失敗'),
   configBackup: _('配置备份', 'Config Backups', '設定備份'),
   configBackupHint: _('备份范围：openclaw.json 主配置文件（含模型、Provider、Gateway 设置）。Agent 数据和记忆文件不在此备份范围内。', 'Backup scope: openclaw.json main config (models, providers, Gateway settings). Agent data and memory files are not included.', '備份範圍：openclaw.json 主設定檔案（含模型、Provider、Gateway 設定）。Agent 資料和記憶檔案不在此備份範圍內。'),

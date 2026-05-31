@@ -926,7 +926,7 @@ async function checkNewVersion(cards, panelVersion) {
         setTimeout(() => location.reload(), 1500)
       } catch (e) {
         setUpgrading(false)
-        toast(t('about.updateFailed') + ': ' + (e.message || e), 'error')
+        toast(t('about.updateFailed', { error: e.message || e }), 'error')
       }
     })
   } catch (e) {

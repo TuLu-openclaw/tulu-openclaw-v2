@@ -4324,7 +4324,7 @@ async function runHostedAgentStep() {
     _hostedRuntime.status = HOSTED_STATUS.PAUSED
     _hostedRuntime.lastError = 'Gateway not ready'
     persistHostedRuntime(); updateHostedBadge()
-    appendHostedOutput(t('chat.hostedNeedIntervention'))
+    appendHostedOutput(t('chat.hostedNeedIntervention', { reason: _hostedRuntime.lastError }))
     return
   }
   if (_hostedRuntime.errorCount >= _hostedSessionConfig.retryLimit) {
