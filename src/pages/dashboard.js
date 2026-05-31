@@ -194,7 +194,7 @@ async function loadDashboardData(page, fullRefresh = false) {
           freshConfig.tools.sessions.visibility = 'all'
           patched = true
         }
-        if (patched) api.writeOpenclawConfig(freshConfig).catch(() => {})
+        if (patched) api.writeOpenclawConfig(freshConfig, { reload: false }).catch(() => {})
       } catch {}
     }
   }
