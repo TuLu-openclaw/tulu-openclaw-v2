@@ -273,7 +273,7 @@ function createStore() {
   const activeKey = () => STORAGE_ACTIVE_PREFIX + profileKey(state.activeProfile)
   const pinnedKey = () => STORAGE_PINNED_PREFIX + profileKey(state.activeProfile)
   const collapsedKey = () => STORAGE_COLLAPSED_PREFIX + profileKey(state.activeProfile)
-  const messagesKey = (sid) => STORAGE_MSGS_PREFIX + profileKey(state.activeProfile) + '_' + sid
+  const messagesKey = (sid) => STORAGE_MSGS_PREFIX + profileKey(state.activeProfile) + '_' + encodeURIComponent(String(sid || ''))
 
   function persistSessions() {
     saveJson(sessionsKey(), state.sessions.map(s => ({ ...s, messages: [] })))
@@ -652,6 +652,9 @@ function createStore() {
         state.pendingAssistantId = msg.id
       }
       msg.content += delta
+      s.updatedAt = Date.now()
+      s.lastActiveAt = Date.now()
+      persistSessionMessages(s.id)
       notify()
     })
     const u2 = await tauriListen('hermes-run-tool', (e) => {
@@ -741,6 +744,8 @@ function createStore() {
       const err = e?.payload?.error || 'unknown error'
       const s = runSession()
       if (s) {
+        s.updatedAt = Date.now()
+        s.lastActiveAt = Date.now()
         s.messages.push({
           id: uid(),
           role: 'system',
@@ -748,6 +753,7 @@ function createStore() {
           timestamp: Date.now(),
         })
         persistSessionMessages(s.id)
+        persistSessions()
       }
       cleanupAfterRun()
     })
