@@ -173,9 +173,9 @@
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
-  /* 每行最多12个，自动换行 */
-  flex: 0 0 auto;
-  max-width: calc(100% / 12 - 6px);
+  /* 分类名来自不同远程源，宽度按内容自适应，避免长分类被强制压缩成不可读省略号 */
+  flex: 0 1 auto;
+  max-width: min(220px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
 }

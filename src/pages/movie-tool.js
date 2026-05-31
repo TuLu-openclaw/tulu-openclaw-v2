@@ -986,7 +986,7 @@ function initApp(el) {
         if (preferred) { cat = preferred.id; _currentTypeId = preferred.typeId }
       }
       container.innerHTML = '<span class="tvbox-catbar-label">分类</span>' +
-        cats.map(c => '<button class="tvbox-cat-chip' + (String(c.typeId) === String(_currentTypeId) ? ' active' : '') + '" data-typeid="' + c.typeId + '" data-catid="' + c.id + '">' + c.name + '</button>').join('')
+        cats.map(c => '<button class="tvbox-cat-chip' + (String(c.typeId) === String(_currentTypeId) ? ' active' : '') + '" data-typeid="' + escHtml(c.typeId) + '" data-catid="' + escHtml(c.id) + '" title="' + escHtml(c.name) + '">' + escHtml(c.name) + '</button>').join('')
       container.querySelectorAll('.tvbox-cat-chip').forEach(btn => {
         btn.addEventListener('click', () => {
           cat = btn.dataset.catid
