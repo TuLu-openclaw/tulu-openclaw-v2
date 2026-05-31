@@ -607,6 +607,12 @@ export const api = {
   downloadFullAppUpdate: (url, expectedHash, filename) => invoke('download_full_app_update', { url, expectedHash: expectedHash || '', filename: filename || null }),
   rollbackFrontendUpdate: () => invoke('rollback_frontend_update'),
   getUpdateStatus: () => invoke('get_update_status'),
+  openDesktopZip: async (path) => {
+    if (!path) return false
+    const { open } = await import('@tauri-apps/plugin-shell')
+    await open(path)
+    return true
+  },
 
   // 数据目录 & 图片存储
   ensureDataDir: () => invoke('assistant_ensure_data_dir'),

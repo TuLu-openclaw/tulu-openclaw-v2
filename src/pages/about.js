@@ -660,8 +660,13 @@ async function checkHotUpdate(cards, panelVersion) {
             <button class="btn btn-primary btn-sm" id="btn-hot-reload" style="padding:2px 8px;font-size:var(--font-size-xs)">🔄 ${t('about.reloadApp')}</button>
           `
           if (desktopZip) {
-            meta.querySelector('#btn-open-zip')?.addEventListener('click', () => {
-              api.openDesktopZip?.(desktopZip) || window.open('file:///' + desktopZip.replace(/\\/g, '/'))
+            meta.querySelector('#btn-open-zip')?.addEventListener('click', async () => {
+              try {
+                await api.openDesktopZip(desktopZip)
+              } catch (e) {
+                console.error('Open desktop update ZIP failed:', e)
+                toast(t('about.openZipFailed') + (e?.message || e), 'error')
+              }
             })
           }
           meta.querySelector('#btn-hot-reload')?.addEventListener('click', () => {

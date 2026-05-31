@@ -105,6 +105,7 @@ export default {
   downloading: _('下载中...', 'Downloading...', '下載中...', 'ダウンロード中...', '다운로드 중...'),
   downloadDone: _('下载完成，已保存到桌面并自动打开', 'Download complete, saved to Desktop and auto-opened', '下載完成，已儲存到桌面並自動打開', 'ダウンロード完了、デスクトップに保存し自動で開きました', '다운로드 완료, 바탕화면에 저장 및 자동 열기'),
   openZip: _('打开ZIP', 'Open ZIP', '開啟ZIP', 'ZIPを開く', 'ZIP 열기'),
+  openZipFailed: _('打开 ZIP 失败: ', 'Failed to open ZIP: ', '開啟 ZIP 失敗: ', 'ZIP を開けませんでした: ', 'ZIP 열기 실패: ', 'Không thể mở ZIP: '),
   downloadFailedShort: _('下载失败', 'Download failed', '下載失敗', 'ダウンロード失敗', '다운로드 실패', 'Tải xuống thất bại'),
   downloadFailed: _('下载失败: ', 'Download failed: ', '下載失敗: ', 'ダウンロード失敗: ', '다운로드 실패: '),
   retry: _('重试', 'Retry', '重試', '再試行', '재시도'),
