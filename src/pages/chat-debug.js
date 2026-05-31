@@ -83,6 +83,18 @@ async function openGatewayConflict(error = null) {
   await showGatewayConflictGuidance({ error, service: gw })
 }
 
+async function reconnectMainWsFromLatestConfig(delayMs = 300) {
+  const latestConfig = await api.readOpenclawConfig()
+  const latestGw = latestConfig?.gateway || {}
+  const rawToken = latestGw.auth?.token ?? latestGw.authToken ?? ''
+  const latestToken = typeof rawToken === 'string' ? rawToken : ''
+  if (!latestToken) return false
+  const latestHost = isTauriRuntime() ? `127.0.0.1:${latestGw.port || 18789}` : location.host
+  wsClient.disconnect()
+  setTimeout(() => wsClient.connect(latestHost, latestToken), delayMs)
+  return true
+}
+
 async function loadDebugInfo(page) {
   const el = page.querySelector('#debug-content')
 
@@ -359,6 +371,11 @@ async function handleDoctor(page, fix) {
     }
     toast(t('chatDebug.execFailed') + e, 'error')
   } finally {
+    if (fix) {
+      await refreshGatewayStatus().catch(() => {})
+      await reconnectMainWsFromLatestConfig().catch(() => false)
+      setTimeout(() => loadDebugInfo(page), 1500)
+    }
     if (btnCheck) { btnCheck.disabled = false; btnCheck.textContent = t('chatDebug.btnDiagConfig') }
     if (btnFix) { btnFix.disabled = false; btnFix.textContent = t('chatDebug.btnAutoFix') }
   }
@@ -688,12 +705,8 @@ async function fixPairing(page) {
             addLog(`${icon('lightbulb', 14)} ${t('chatDebug.fixReconnecting')}`)
             ws.close(1000)
             // 触发主应用的 wsClient 使用最新配置重连，避免继续复用旧 URL/旧 token
-            const latestConfig = await api.readOpenclawConfig()
-            const latestGw = latestConfig?.gateway || {}
-            const latestHost = isTauriRuntime() ? `127.0.0.1:${latestGw.port || 18789}` : location.host
-            const latestToken = latestGw.auth?.token || latestGw.authToken || ''
-            wsClient.disconnect()
-            wsClient.connect(latestHost, latestToken)
+            const reconnected = await reconnectMainWsFromLatestConfig()
+            if (!reconnected) addLog(`${statusIcon('warn', 14)} Gateway token 不是明文字符串，已刷新状态但不主动重连`)
             setTimeout(() => loadDebugInfo(page), 2000)
           } else {
             const errMsg = msg.error?.message || msg.error?.code || t('common.unknown')
