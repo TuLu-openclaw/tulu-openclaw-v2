@@ -526,6 +526,23 @@ export const api = {
   dockerClusterOverview: () => invoke('docker_cluster_overview', {}),
 
 
+  // 扩展工具：cftunnel + ClawApp
+  getCftunnelStatus: () => cachedInvoke('get_cftunnel_status', {}, 5000),
+  cftunnelAction: (action) => {
+    invalidate('get_cftunnel_status', 'get_cftunnel_logs')
+    return invoke('cftunnel_action', { action }, 60000)
+  },
+  getCftunnelLogs: (lines = 30) => cachedInvoke('get_cftunnel_logs', { lines }, 5000),
+  installCftunnel: () => {
+    invalidate('get_cftunnel_status', 'get_cftunnel_logs')
+    return invoke('install_cftunnel', {}, 300000)
+  },
+  getClawappStatus: () => cachedInvoke('get_clawapp_status', {}, 5000),
+  installClawapp: () => {
+    invalidate('get_clawapp_status')
+    return invoke('install_clawapp', {}, 300000)
+  },
+
   // 前端热更新 + 全量客户端更新
   checkFrontendUpdate: () => invoke('check_frontend_update'),
   downloadFrontendUpdate: (url, expectedHash) => invoke('download_frontend_update', { url, expectedHash: expectedHash || '' }),
