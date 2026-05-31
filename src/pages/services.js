@@ -117,13 +117,16 @@ export async function render() {
   `
 
   bindEvents(page)
-  loadAll(page)
+  loadAll(page).catch(e => console.warn('[services] initial load failed:', e))
   return page
 }
 
 async function loadAll(page) {
-  const tasks = [loadVersion(page), loadServices(page), loadDockerManager(page), loadBackups(page), loadConfigEditor(page)]
-  await Promise.all(tasks)
+  const tasks = [loadVersion, loadServices, loadDockerManager, loadBackups, loadConfigEditor]
+  await Promise.all(tasks.map(fn => {
+    if (!page?.isConnected) return Promise.resolve()
+    return fn(page).catch(e => console.warn(`[services] ${fn.name} failed:`, e))
+  }))
 }
 
 // ===== 版本检测 =====
