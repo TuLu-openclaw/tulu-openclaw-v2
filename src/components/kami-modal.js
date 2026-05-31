@@ -22,6 +22,15 @@ function _decodeHTML(str) {
     })
 }
 
+function _escapeAttr(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
 // =============================================
 //  微验卡密验证弹框组件
 //  功能：卡密输入 + 公告栏 + 记住卡密 + 显隐密码 + 验证状态
@@ -98,7 +107,7 @@ function buildModalHTML(initialKami, showPw, remembered, noticeText) {
   var pwType = showPw ? 'text' : 'password'
   var toggleTitle = showPw ? '隐藏密码' : '显示密码'
   var checkedAttr = remembered ? 'checked' : ''
-  var inputVal = initialKami ? ' value="' + initialKami + '"' : ''
+  var inputVal = initialKami ? ' value="' + _escapeAttr(initialKami) + '"' : ''
 
   // 公告区域（始终存在，动态内容由 JS 填充）
   var noticeHTML =
@@ -189,10 +198,10 @@ async function showKamiModal(isRetry) {
   document.body.appendChild(_modalEl)
 
   // 异步获取并填充真实公告
-  // textContent 自动处理所有 HTML 实体解码（&#xHEX; / &#DEC; / &named;），无二次解析风险
+  // 使用 textContent 渲染，先把服务器可能返回的 HTML 实体还原为可读文本，避免二次 HTML 解析。
   getNotice().then(function(noticeText) {
     var el = document.getElementById('kami-notice-text')
-    if (el && noticeText) el.textContent = noticeText
+    if (el && noticeText) el.textContent = _decodeHTML(noticeText)
   }).catch(function() { /* 网络失败则保留默认文案 */ })
 
   var inputEl = document.getElementById('kami-input')
