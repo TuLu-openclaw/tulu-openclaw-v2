@@ -53,6 +53,7 @@ let _days = 7
 
 async function loadUsage(page) {
   const el = page.querySelector('#usage-content')
+  if (!el) return
   el.innerHTML = `<div class="stat-card loading-placeholder" style="height:120px"></div>
     <div class="stat-card loading-placeholder" style="height:200px;margin-top:var(--space-md)"></div>`
 
@@ -65,7 +66,7 @@ async function loadUsage(page) {
     if (_unsubReady) _unsubReady()
     _unsubReady = wsClient.onReady(() => {
       if (_unsubReady) { _unsubReady(); _unsubReady = null }
-      if (_page) loadUsage(_page)
+      if (_page?.isConnected) loadUsage(_page)
     })
     return
   }
@@ -75,8 +76,10 @@ async function loadUsage(page) {
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
     const data = await wsClient.request('sessions.usage', { startDate: start, endDate: end, limit: 20 })
+    if (page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
+    if (page !== _page || !page.isConnected || !el.isConnected) return
     el.innerHTML = `<div class="usage-empty">
       <div style="color:var(--error);margin-bottom:8px">${t('usage.loadFailed')}: ${esc(e?.message || e)}</div>
       <div class="form-hint">${t('usage.loadFailedHint')}</div>
