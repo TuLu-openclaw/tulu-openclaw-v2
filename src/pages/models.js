@@ -87,9 +87,11 @@ async function loadConfig(page, state) {
       agentModelAllowlist: state.config?.agents?.defaults?.models || {}
     })
     if (before !== after) {
-      console.log('[models] 自动修复了服务商 baseUrl，正在保存...')
+      console.log('[models] 自动修复了服务商 baseUrl，正在保存（不自动重载 Gateway）...')
       api.clearRemoteModelCache?.()
-      await api.writeOpenclawConfig(state.config)
+      // 页面加载时的配置迁移不应隐式重载/重启 Gateway，避免进入模型页或执行测试前
+      // 触发后台 reload。真正需要让配置生效时，由用户的显式保存动作负责重启。
+      await api.writeOpenclawConfig(state.config, { reload: false })
       toast(t('models.autoFixUrl'), 'info')
     }
     renderDefaultBar(page, state)
