@@ -2091,9 +2091,14 @@ function pickDirectUrl(url) {
     const qBtn = document.getElementById('_fspeed')
     if (!qBtn) return
     let menu = null
+    const closeMenu = () => {
+      if (!menu) return
+      menu.remove()
+      menu = null
+    }
     qBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      if (menu) { menu.remove(); menu = null; return }
+      if (menu) { closeMenu(); return }
       menu = document.createElement('div')
       menu.style.cssText = 'position:absolute;bottom:100%;right:0;background:rgba(20,20,35,0.96);border:1px solid #444;border-radius:6px;padding:4px 0;z-index:999999;min-width:80px'
       levels.forEach((lv, i) => {
@@ -2101,16 +2106,16 @@ function pickDirectUrl(url) {
         const btn = document.createElement('button')
         btn.textContent = (hls.currentLevel === i ? '✅ ' : '') + label
         btn.style.cssText = 'display:block;width:100%;text-align:left;padding:5px 10px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer'
-        btn.addEventListener('click', () => { hls.currentLevel = i; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); btn.textContent = '✅ ' + label; menu = null })
+        btn.addEventListener('click', () => { hls.currentLevel = i; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); btn.textContent = '✅ ' + label; closeMenu() })
         menu.appendChild(btn)
       })
       const autoBtn = document.createElement('button')
       autoBtn.textContent = (hls.currentLevel === -1 ? '✅ ' : '') + '🔀 自动'
       autoBtn.style.cssText = 'display:block;width:100%;text-align:left;padding:5px 10px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer'
-      autoBtn.addEventListener('click', () => { hls.currentLevel = -1; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); autoBtn.textContent = '✅ 🔀 自动'; menu = null })
+      autoBtn.addEventListener('click', () => { hls.currentLevel = -1; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); autoBtn.textContent = '✅ 🔀 自动'; closeMenu() })
       menu.appendChild(autoBtn)
       qBtn.parentElement?.appendChild(menu)
-      document.addEventListener('click', () => { if (menu) { menu.remove(); menu = null } }, { once: true })
+      document.addEventListener('click', closeMenu, { once: true })
     })
   }
 
