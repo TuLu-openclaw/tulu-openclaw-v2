@@ -1261,6 +1261,11 @@ async function handleBatchDelete(section, page, state, providerKey) {
   toast(t('models.batchDeleted', { count: ids.length }), 'info')
 }
 
+function cssEscapeValue(value) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(String(value))
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, ch => `\\${ch.codePointAt(0).toString(16)} `)
+}
+
 // 批量测试：勾选的模型，没勾选则测试全部（记录耗时和状态）
 async function handleBatchTest(section, state, providerKey) {
   // 如果正在测试，点击则终止
@@ -1295,7 +1300,7 @@ async function handleBatchTest(section, state, providerKey) {
     const model = (provider.models || []).find(m => getModelId(m) === modelId)
     const resultTarget = model && typeof model === 'object' ? model : null
     // 标记当前正在测试的卡片
-    const card = section.querySelector(`.model-card[data-model-id="${modelId}"]`)
+    const card = section.querySelector(`.model-card[data-model-id="${cssEscapeValue(modelId)}"]`)
     if (card) card.style.outline = '2px solid var(--accent)'
 
     const start = Date.now()
