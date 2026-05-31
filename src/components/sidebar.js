@@ -319,12 +319,12 @@ export function renderSidebar(el) {
           <svg class="lang-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M18 15l-6-6-6 6"/></svg>
         </button>
         <div class="lang-dropdown" id="lang-dropdown">
-          ${langs.length > 4 ? '<div class="lang-search-wrap"><input class="lang-search" id="lang-search" type="text" placeholder="搜索语言..." autocomplete="off"></div>' : ''}
+          ${langs.length > 4 ? `<div class="lang-search-wrap"><input class="lang-search" id="lang-search" type="text" placeholder="${t('sidebar.langSearchPlaceholder')}" autocomplete="off"></div>` : ''}
           <div class="lang-options" id="lang-options">${langOptions}</div>
         </div>
       </div>
       <div class="sidebar-meta">
-        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" class="sidebar-link">反馈交流群</a>
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" class="sidebar-link">${t('sidebar.feedbackGroup')}</a>
         <span class="sidebar-version">v${APP_VERSION}</span>
       </div>
     </div>

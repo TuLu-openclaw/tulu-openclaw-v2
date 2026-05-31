@@ -57,5 +57,7 @@ export default {
   hermesExtensions: _('扩展中心', 'Extensions Center'),
   hermesServices: _('服务管理', 'Services'),
   hermesConfig: _('引擎配置', 'Engine Config'),
+  langSearchPlaceholder: _('搜索语言...', 'Search languages...', '搜尋語言...', '言語を検索...', '언어 검색...', 'Tìm ngôn ngữ...', 'Buscar idiomas...', 'Pesquisar idiomas...', 'Поиск языков...', 'Rechercher une langue...', 'Sprachen suchen...'),
+  feedbackGroup: _('反馈交流群', 'Feedback group', '意見交流群', 'フィードバックグループ', '피드백 그룹', 'Nhóm phản hồi', 'Grupo de comentarios', 'Grupo de feedback', 'Группа обратной связи', 'Groupe de retours', 'Feedback-Gruppe'),
   hermesEnv: _('环境变量', 'Environment Variables'),
 }
