@@ -357,7 +357,8 @@ function renderPage() {
     if (state.currentSong?.cover) setBackground(_page, state.currentSong.cover)
   } catch(e) {
     console.error('[music-player] renderPage error:', e)
-    if (_page) _page.innerHTML = `<div style="color:red;padding:40px;text-align:center">${t('music.renderError')}: ${e?.message||e}<br><button onclick="location.reload()">${t('music.reload')}</button></div>`
+    if (_page) _page.innerHTML = `<div style="color:red;padding:40px;text-align:center">${t('music.renderError')}: ${esc(e?.message || e)}<br><button type="button" id="xingmu-render-reload">${t('music.reload')}</button></div>`
+    _page?.querySelector('#xingmu-render-reload')?.addEventListener('click', () => location.reload())
   }
 }
 
