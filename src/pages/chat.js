@@ -1461,13 +1461,17 @@ async function connectGateway() {
       const bar = document.getElementById('chat-disconnect-bar')
       const overlay = document.getElementById('chat-connect-overlay')
       const desc = document.getElementById('chat-connect-desc')
+      if (['ready', 'connected', 'error', 'auth_failed', 'reconnecting', 'disconnected'].includes(status)) {
+        import('../lib/app-state.js').then(m => {
+          m.boostGatewayPolling?.()
+          return m.refreshGatewayStatus()
+        }).catch(() => {})
+      }
       if (status === 'ready' || status === 'connected') {
         _hasEverConnected = true
         if (bar) bar.style.display = 'none'
         if (overlay) overlay.style.display = 'none'
-        // WS 已连接，主动刷新 Gateway 状态以消除顶部横条延迟
-        import('../lib/app-state.js').then(m => m.refreshGatewayStatus()).catch(() => {})
-      } else if (status === 'error') {
+      } else if (status === 'error' || status === 'auth_failed') {
         // 连接错误：显示引导遮罩而非底部条
         if (bar) bar.style.display = 'none'
         if (overlay) {
@@ -1477,7 +1481,7 @@ async function connectGateway() {
       } else if (status === 'reconnecting' || status === 'disconnected') {
         // 首次连接或多次重连失败时，显示引导遮罩而非底部小条
         if (!_hasEverConnected) {
-          if (overlay) { overlay.style.display = 'flex'; if (desc) desc.textContent = t('chat.connectingGateway') }
+          if (overlay) { overlay.style.display = 'flex'; if (desc) desc.textContent = errorMsg || t('chat.connectingGateway') }
         } else {
           if (bar) { bar.textContent = t('chat.disconnected'); bar.style.display = 'flex' }
         }
