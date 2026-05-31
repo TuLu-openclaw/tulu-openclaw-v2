@@ -735,7 +735,7 @@ function bindEvents(page, nodeOk, detectState) {
         })
       }
     } catch (e) {
-      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: e })}</span>`
+      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: escapeHtml(e) })}</span>`
     } finally {
       btn.disabled = false
       btn.innerHTML = `${icon('search', 12)} ${t('setup.scanNodeBtn')}`
@@ -817,7 +817,7 @@ function bindEvents(page, nodeOk, detectState) {
         btn.textContent = t('setup.searchOpenclawManualBtn')
       }
     } catch (e) {
-      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: e })}</span>`
+      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: escapeHtml(e) })}</span>`
       btn.disabled = false
       btn.textContent = t('setup.searchOpenclawManualBtn')
     }
@@ -857,7 +857,7 @@ function bindEvents(page, nodeOk, detectState) {
         })
       })
     } catch (e) {
-      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: e })}</span>`
+      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: escapeHtml(e) })}</span>`
     } finally {
       btn.disabled = false
       btn.innerHTML = `${icon('search', 12)} ${t('setup.searchOpenclawBtn')}`
