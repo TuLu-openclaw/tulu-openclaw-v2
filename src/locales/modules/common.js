@@ -37,7 +37,7 @@ export default {
   operationFailed: _('操作失败', 'Operation failed', '操作失敗', '操作失敗', '작업 실패', 'Thao tác thất bại', 'Operación fallida', 'Operação falhou', 'Операция не удалась', 'Opération échouée', 'Vorgang fehlgeschlagen'),
   operationSuccess: _('操作成功', 'Operation succeeded', '', '操作成功', '작업 성공', 'Thao tác thành công', 'Operación exitosa', 'Operação bem-sucedida', 'Операция выполнена', 'Opération réussie', 'Vorgang erfolgreich'),
   noData: _('暂无数据', 'No data', '暫無資料', 'データなし', '데이터 없음', 'Không có dữ liệu', 'Sin datos', 'Sem dados', 'Нет данных', 'Aucune donnée', 'Keine Daten'),
-  unit: _('个', '', '個', '個', '개'),
+  unit: _('个', 'item', '個', '個', '개'),
   survivalRate: _('存活率', 'Uptime', '', '稼働率', '가동률', 'Tỷ lệ hoạt động', 'Disponibilidad', 'Disponibilidade', 'Доступность', 'Disponibilité', 'Verfügbarkeit'),
   settings: _('设置', 'Settings', '設定', '設定', '설정', 'Cài đặt', 'Configuración', 'Configurações', 'Настройки', 'Paramètres', 'Einstellungen'),
   update: _('更新', 'Update', '', '更新', '업데이트', 'Cập nhật', 'Actualizar', 'Atualizar', 'Обновить', 'Mettre à jour', 'Aktualisieren'),

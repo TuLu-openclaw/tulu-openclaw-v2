@@ -20,7 +20,7 @@ export default {
   qtcoolCheckinPage: _('签到页', 'check-in page', '簽到頁'),
   qtcoolCheckinHint: _('每日签到即可领取免费额度，在', 'for free daily credits, copy your Key from', '每日簽到即可领取免費额度，在'),
   qtcoolDashboard: _('用户后台', 'dashboard', '使用者後台'),
-  qtcoolCopyKey: _('复制你的 Key', '', '複製你的 Key'),
+  qtcoolCopyKey: _('复制你的 Key', 'copy your Key', '複製你的 Key'),
   qtcoolSelectTitle: _('选择要添加的模型', 'Select models to add', '選擇要新增的模型'),
   qtcoolSelectHint: _('从晴辰云获取到 {count} 个可用模型，勾选需要的模型后点击添加。', 'Fetched {count} available models from QingChen Cloud. Select and add.', '從星枢OpenClaw雲取得到 {count} 個可用模型，勾選需要的模型后点擊新增。'),
   qtcoolKeyLabel: _('API Key', 'API Key'),

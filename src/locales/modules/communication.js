@@ -81,7 +81,7 @@ export default {
   webhookSessionKey: _('默认 Session Key', 'Default Session Key', '預設 Session Key'),
   webhookSessionKeyHint: _('Webhook 触发的 Agent 会话标识。留空则每次自动生成', 'Session identifier for Webhook-triggered Agent. Leave empty for auto-generated.', 'Webhook 觸發的 Agent 對話標識。留空則每次自動生成'),
   webhookMaxBody: _('请求体大小限制（字节）', 'Max Body Size (bytes)', '請求體大小限制（位元組）'),
-  noLimit: _('默认无限制', '', '預設無限制'),
+  noLimit: _('默认无限制', 'Unlimited by default', '預設無限制'),
   approvalsTitle: _('执行审批转发', 'Execution Approval Forwarding', '執行審批轉發'),
   approvalsDesc: _('当 AI 请求执行命令时，将审批请求转发到消息渠道，方便在手机上审批', 'Forward approval requests to messaging channels when AI requests command execution, for mobile approval', '當 AI 請求執行命令時，將審批請求轉發到訊息頻道，方便在手機上審批'),
   approvalsEnabled: _('启用审批转发', 'Enable Approval Forwarding', '啟用審批轉發'),
