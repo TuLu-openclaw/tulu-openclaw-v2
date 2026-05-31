@@ -4,7 +4,7 @@
  * 自动注入当前页面上下文到 AI 助手会话
  */
 
-import { t } from '../lib/i18n.js'
+import { t, onLangChange } from '../lib/i18n.js'
 import { toast } from './toast.js'
 
 const BOT_ICON = '<svg viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="5" y="8" width="14" height="12" rx="2"/><path d="M9 13h0"/><path d="M15 13h0"/><path d="M10 17h4"/></svg>'
@@ -26,6 +26,8 @@ export function registerPageContext(route, provider) {
 
 // ── 单例 ──
 let _fab = null
+let _langListenerRegistered = false
+let _activeHint = null
 
 /** 初始化 FAB */
 export function initAIFab() {
@@ -36,6 +38,7 @@ export function initAIFab() {
   }
   if (_fab) return _fab
   _fab = createFab()
+  registerLanguageRefresh()
   showDragHintOnce(_fab.el)
   return _fab
 }
@@ -249,6 +252,20 @@ function keepFabInViewport(fab) {
   savePosition(side, top)
 }
 
+function refreshFabI18n() {
+  if (!_fab?.el) return
+  _fab.el.title = t('sidebar.assistant')
+  if (_activeHint?.isConnected) {
+    _activeHint.textContent = t('assistant.dragHint')
+  }
+}
+
+function registerLanguageRefresh() {
+  if (_langListenerRegistered) return
+  _langListenerRegistered = true
+  onLangChange(refreshFabI18n)
+}
+
 const HINT_KEY = '星枢OpenClaw-fab-hint-shown'
 function showDragHintOnce(el) {
   if (!el || localStorage.getItem(HINT_KEY)) return
@@ -256,6 +273,10 @@ function showDragHintOnce(el) {
   tip.className = 'ai-fab-hint'
   tip.textContent = t('assistant.dragHint')
   el.appendChild(tip)
+  _activeHint = tip
   localStorage.setItem(HINT_KEY, '1')
-  setTimeout(() => tip.remove(), 4000)
+  setTimeout(() => {
+    tip.remove()
+    if (_activeHint === tip) _activeHint = null
+  }, 4000)
 }
