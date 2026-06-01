@@ -1686,10 +1686,10 @@ function renderSessionCard(s) {
     </div>
     <div class="chat-session-card-meta">
       ${agentId && agentId !== 'main' ? `<span class="chat-session-agent">${escapeAttr(agentId)}</span>` : ''}
-      ${msgCount > 0 ? `<span>${msgCount} msgs</span>` : ''}
+      ${msgCount > 0 ? `<span>${t('chat.messagesCount', { count: msgCount })}</span>` : ''}
       ${model ? `<span class="chat-session-model" title="${escapeAttr(model)}">${escapeAttr(shortModelName(model))}</span>` : ''}
       <span class="chat-session-rounds" title="${escapeAttr(taskInfo.title)}">${escapeAttr(taskInfo.label)}</span>
-      ${ctxTokens > 0 ? `<span class="chat-session-context${ctxClass}" title="${compactNumber(totalTokens)} / ${compactNumber(ctxTokens)}">${percentUsed}% ctx</span>` : ''}
+      ${ctxTokens > 0 ? `<span class="chat-session-context${ctxClass}" title="${compactNumber(totalTokens)} / ${compactNumber(ctxTokens)}">${t('chat.contextPercent', { percent: percentUsed })}</span>` : ''}
       ${timeStr ? `<span>${timeStr}</span>` : ''}
     </div>
   </div>`
@@ -1709,7 +1709,7 @@ function renderGroupSessionList() {
       <div class="chat-session-card-header">
         <span class="chat-session-label" title="${escapeAttr(t('chat.groupChatTitle', { name: g.name }))}">${escapeAttr(g.name)}</span>
         <span class="chat-group-actions">
-          <button class="chat-session-mini" data-group-edit="${escapeAttr(g.id)}" title="${t('chat.editGroupChat')}">编</button>
+          <button class="chat-session-mini" data-group-edit="${escapeAttr(g.id)}" title="${t('chat.editGroupChat')}">${t('common.edit')}</button>
           <button class="chat-session-del" data-group-del="${escapeAttr(g.id)}" title="${t('chat.deleteGroupChat')}">×</button>
         </span>
       </div>
@@ -2040,8 +2040,14 @@ function getCurrentTaskRoundInfo(sessionKey, model) {
   const normalized = normalizeModelValue(model) || getSessionRuntimeModel(sessionKey) || _selectedModel || _primaryModel || 'unknown'
   const ctx = _taskContexts[taskContextKey(sessionKey, normalized)]
   const rounds = Number(ctx?.roundCount || 0)
-  const modelLabel = shortModelName(normalized) || '模型'
-  return { label: `${modelLabel} · 当前任务 ${rounds}轮`, title: ctx?.prompt ? `当前任务：${ctx.prompt}\n模型：${normalized}\n轮次：${rounds}` : `当前任务未开始\n模型：${normalized}\n轮次：${rounds}`, rounds }
+  const modelLabel = shortModelName(normalized) || t('chat.modelFallback')
+  return {
+    label: t('chat.currentTaskRoundsLabel', { model: modelLabel, rounds }),
+    title: ctx?.prompt
+      ? t('chat.currentTaskRoundsTitle', { prompt: ctx.prompt, model: normalized, rounds })
+      : t('chat.currentTaskNotStartedTitle', { model: normalized, rounds }),
+    rounds
+  }
 }
 
 function getGroupRoundSummary(group) {
@@ -2052,9 +2058,9 @@ function getGroupRoundSummary(group) {
     const model = getSessionDisplayModel(m.sessionKey)
     const info = getCurrentTaskRoundInfo(m.sessionKey, model)
     total += info.rounds
-    lines.push(`${m.label || getDisplayLabel(m.sessionKey)} / ${shortModelName(model)}：${info.rounds}轮`)
+    lines.push(t('chat.groupMemberRoundLine', { member: m.label || getDisplayLabel(m.sessionKey), model: shortModelName(model), rounds: info.rounds }))
   }
-  return { label: `当前任务 ${total}轮`, title: lines.join('\n') || '暂无成员轮次' }
+  return { label: t('chat.groupCurrentTaskRounds', { rounds: total }), title: lines.join('\n') || t('chat.groupNoMemberRounds') }
 }
 
 function createTaskRecord({ sessionKey, agentId = '', model = '', prompt = '', source = 'single', groupId = '', title = '' }) {
@@ -2062,7 +2068,7 @@ function createTaskRecord({ sessionKey, agentId = '', model = '', prompt = '', s
   const ctx = ensureTaskContext(sessionKey, normalizedModel, prompt)
   const task = {
     id: uuid(), taskId: ctx.taskId, sessionKey, agentId: agentId || parseSessionAgent(sessionKey) || 'main', model: normalizedModel,
-    title: title || prompt.slice(0, 48) || '新任务', prompt, status: 'sending', progress: TASK_PROGRESS.sending,
+    title: title || prompt.slice(0, 48) || t('chat.newTask'), prompt, status: 'sending', progress: TASK_PROGRESS.sending,
     runId: '', error: '', source, groupId, roundCount: ctx.roundCount || 0, createdAt: Date.now(), updatedAt: Date.now(), completedAt: null, highlighted: false,
   }
   _taskBoard.unshift(task)
@@ -2369,9 +2375,9 @@ async function switchGroupSession(groupId, options = {}) {
 
 function toggleTaskBoard() {
   const overlay = showContentModal({
-    title: '任务清单', width: 900,
-    content: '<div class="chat-task-toolbar"><button class="btn btn-sm btn-ghost" id="chat-task-select-all">全选</button><button class="btn btn-sm btn-danger" id="chat-task-delete-selected">删除选中</button></div><div id="chat-task-board-modal"></div>',
-    buttons: [{ id: 'chat-task-new', label: '新建任务', className: 'btn btn-secondary btn-sm' }]
+    title: t('chat.taskBoard'), width: 900,
+    content: `<div class="chat-task-toolbar"><button class="btn btn-sm btn-ghost" id="chat-task-select-all">${t('chat.selectAll')}</button><button class="btn btn-sm btn-danger" id="chat-task-delete-selected">${t('chat.deleteSelected')}</button></div><div id="chat-task-board-modal"></div>`,
+    buttons: [{ id: 'chat-task-new', label: t('chat.newTask'), className: 'btn btn-secondary btn-sm' }]
   })
   overlay.classList.add('chat-task-board-overlay')
   overlay.querySelector('#chat-task-new')?.addEventListener('click', () => showTaskEditor(null, overlay))
