@@ -754,10 +754,10 @@ function renderProjects(page) {
   el.innerHTML = `
     <div class="locked-section" id="projects-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
       <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-size:var(--font-size-sm);margin-bottom:12px">相关内容已上锁</div>
-      <input type="password" id="projects-pwd" placeholder="请输入解锁密码" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button onclick="unlockProjects()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">解锁</button>
-      <div id="projects-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">密码错误</div>
+      <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
+      <input type="password" id="projects-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
+      <button onclick="unlockProjects()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
+      <div id="projects-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
     </div>
     <div id="projects-content" style="display:none"></div>
   `
@@ -800,10 +800,10 @@ function renderContribute(page) {
   el.innerHTML = `
     <div class="locked-section" id="contribute-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
       <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-size:var(--font-size-sm);margin-bottom:12px">相关内容已上锁</div>
-      <input type="password" id="contribute-pwd" placeholder="请输入解锁密码" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button onclick="unlockContribute()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">解锁</button>
-      <div id="contribute-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">密码错误</div>
+      <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
+      <input type="password" id="contribute-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
+      <button onclick="unlockContribute()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
+      <div id="contribute-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
     </div>
     <div id="contribute-content" style="display:none">
       <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:12px">${t('about.contributeDesc')}</div>
@@ -835,10 +835,10 @@ function renderLinks(page) {
   el.innerHTML = `
     <div class="locked-section" id="links-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
       <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-size:var(--font-size-sm);margin-bottom:12px">相关内容已上锁</div>
-      <input type="password" id="links-pwd" placeholder="请输入解锁密码" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button onclick="unlockLinks()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">解锁</button>
-      <div id="links-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">密码错误</div>
+      <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
+      <input type="password" id="links-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
+      <button onclick="unlockLinks()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
+      <div id="links-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
     </div>
     <div id="links-content" style="display:none">
       <div style="display:flex;flex-wrap:wrap;gap:var(--space-sm)">
