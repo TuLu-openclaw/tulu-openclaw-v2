@@ -2393,17 +2393,17 @@ function updateTaskBoardModal(overlay) {
   const box = overlay?.querySelector('#chat-task-board-modal')
   if (!box) return
   if (!_taskBoard.length) {
-    box.innerHTML = '<div class="chat-task-empty">暂无任务。发送消息或新建任务后会自动记录。</div>'
+    box.innerHTML = `<div class="chat-task-empty">${t('chat.taskBoardEmpty')}</div>`
     return
   }
   const groups = [
-    ['running', '执行中', t => ['sending','queued','thinking','streaming','tool','finalizing','running'].includes(t.status)],
-    ['done', '已完成', t => t.status === 'done'],
-    ['error', '失败/中止', t => ['error','aborted'].includes(t.status)],
+    ['running', t('chat.taskGroupRunning'), t => ['sending','queued','thinking','streaming','tool','finalizing','running'].includes(t.status)],
+    ['done', t('chat.taskGroupDone'), t => t.status === 'done'],
+    ['error', t('chat.taskGroupError'), t => ['error','aborted'].includes(t.status)],
   ]
   box.innerHTML = groups.map(([cls, title, pred]) => {
     const tasks = _taskBoard.filter(pred)
-    return `<div class="chat-task-section"><h4>${title}</h4>${tasks.length ? tasks.map(renderTaskCard).join('') : '<div class="chat-task-empty small">暂无</div>'}</div>`
+    return `<div class="chat-task-section"><h4>${title}</h4>${tasks.length ? tasks.map(renderTaskCard).join('') : `<div class="chat-task-empty small">${t('chat.none')}</div>`}</div>`
   }).join('')
   box.onclick = (e) => {
     const edit = e.target.closest('[data-task-edit]')
@@ -2415,38 +2415,53 @@ function updateTaskBoardModal(overlay) {
   }
 }
 
+function getTaskStatusLabel(status) {
+  return ({
+    sending: t('chat.taskStatusSending'),
+    queued: t('chat.taskStatusQueued'),
+    thinking: t('chat.taskStatusThinking'),
+    streaming: t('chat.taskStatusStreaming'),
+    tool: t('chat.taskStatusTool'),
+    finalizing: t('chat.taskStatusFinalizing'),
+    done: t('chat.taskStatusDone'),
+    error: t('chat.taskStatusError'),
+    aborted: t('chat.taskStatusAborted'),
+    running: t('chat.taskStatusRunning'),
+  })[status] || status
+}
+
 function renderTaskCard(task) {
-  const statusLabel = ({ sending:'发送中', queued:'排队中', thinking:'思考中', streaming:'生成中', tool:'工具调用', finalizing:'整理中', done:'已完成', error:'失败', aborted:'已中止', running:'执行中' })[task.status] || task.status
+  const statusLabel = getTaskStatusLabel(task.status)
   return `<div class="chat-task-card ${escapeAttr(task.status)} ${task.highlighted ? 'highlight' : ''}">
-    <div class="chat-task-head"><label class="chat-task-title"><input type="checkbox" data-task-select value="${escapeAttr(task.id)}"><strong>${escapeAttr(task.title || task.prompt || '任务')}</strong></label><span>${escapeAttr(statusLabel)}</span></div>
-    <div class="chat-task-meta">Agent：${escapeAttr(task.agentId || 'main')} · 会话：${escapeAttr(getDisplayLabel(task.sessionKey))} · 模型：${escapeAttr(shortModelName(task.model))} · 当前任务 ${Number(task.roundCount || 0)}轮</div>
+    <div class="chat-task-head"><label class="chat-task-title"><input type="checkbox" data-task-select value="${escapeAttr(task.id)}"><strong>${escapeAttr(task.title || task.prompt || t('chat.taskFallbackTitle'))}</strong></label><span>${escapeAttr(statusLabel)}</span></div>
+    <div class="chat-task-meta">${t('chat.taskCardMeta', { agent: escapeAttr(task.agentId || 'main'), session: escapeAttr(getDisplayLabel(task.sessionKey)), model: escapeAttr(shortModelName(task.model)), round: Number(task.roundCount || 0) })}</div>
     <div class="chat-task-prompt">${escapeAttr(task.prompt || '')}</div>
     <div class="chat-task-progress"><div style="width:${Math.max(0, Math.min(100, Number(task.progress || 0)))}%"></div></div>
-    <div class="chat-task-actions"><button class="btn btn-sm btn-ghost" data-task-edit="${escapeAttr(task.id)}">编辑</button><button class="btn btn-sm btn-primary" data-task-rerun="${escapeAttr(task.id)}">提交重新执行</button><button class="btn btn-sm btn-danger" data-task-delete="${escapeAttr(task.id)}">删除</button></div>
+    <div class="chat-task-actions"><button class="btn btn-sm btn-ghost" data-task-edit="${escapeAttr(task.id)}">${t('chat.editTask')}</button><button class="btn btn-sm btn-primary" data-task-rerun="${escapeAttr(task.id)}">${t('chat.rerunTask')}</button><button class="btn btn-sm btn-danger" data-task-delete="${escapeAttr(task.id)}">${t('chat.delete')}</button></div>
   </div>`
 }
 
 async function deleteTask(taskId) {
   const task = _taskBoard.find(t => t.id === taskId)
   if (!task) return
-  const yes = await showConfirm(`确认删除任务“${task.title || task.prompt || '任务'}”？`)
+  const yes = await showConfirm(t('chat.confirmDeleteTask', { title: task.title || task.prompt || t('chat.taskFallbackTitle') }))
   if (!yes) return
   _taskBoard = _taskBoard.filter(t => t.id !== taskId)
   saveTaskBoard()
   updateOpenTaskBoardModal()
-  toast('任务已删除', 'success')
+  toast(t('chat.taskDeleted'), 'success')
 }
 
 async function deleteSelectedTasks(overlay) {
   const ids = Array.from(overlay?.querySelectorAll('[data-task-select]:checked') || []).map(i => i.value).filter(Boolean)
-  if (!ids.length) { toast('请先选择要删除的任务', 'warning'); return }
-  const yes = await showConfirm(`确认删除选中的 ${ids.length} 个任务？`)
+  if (!ids.length) { toast(t('chat.selectTaskToDelete'), 'warning'); return }
+  const yes = await showConfirm(t('chat.confirmDeleteSelectedTasks', { count: ids.length }))
   if (!yes) return
   const idSet = new Set(ids)
   _taskBoard = _taskBoard.filter(t => !idSet.has(t.id))
   saveTaskBoard()
   updateOpenTaskBoardModal()
-  toast(`已删除 ${ids.length} 个任务`, 'success')
+  toast(t('chat.selectedTasksDeleted', { count: ids.length }), 'success')
 }
 
 function showTaskEditor(taskId, parentOverlay = null) {
@@ -2454,15 +2469,15 @@ function showTaskEditor(taskId, parentOverlay = null) {
   wsClient.sessionsList(200, { includeGlobal: true, includeUnknown: true }).then(result => {
     const sessions = normalizeSessionList(result?.sessions || result || [])
     const options = sessions.map(s => `<option value="${escapeAttr(s.sessionKey || s.key)}" ${(s.sessionKey || s.key) === (task?.sessionKey || _sessionKey) ? 'selected' : ''}>${escapeAttr(getDisplayLabel(s.sessionKey || s.key))}</option>`).join('')
-    const overlay = showContentModal({ title: task ? '编辑任务' : '新建任务', width: 620, content: `<div class="chat-task-editor">
-      <label class="form-label">目标会话 / Agent</label><select class="form-input" id="task-session">${options}</select>
-      <label class="form-label">任务内容</label><textarea class="form-input" id="task-prompt" rows="6" style="resize:vertical">${escapeAttr(task?.prompt || '')}</textarea>
-      <div class="form-hint">提交后会为目标会话开启新的当前任务上下文，轮次从 0 重新计算。</div>
-    </div>`, buttons: [{ id: 'task-save-run', label: '提交执行', className: 'btn btn-primary btn-sm' }] })
+    const overlay = showContentModal({ title: task ? t('chat.editTask') : t('chat.newTask'), width: 620, content: `<div class="chat-task-editor">
+      <label class="form-label">${t('chat.targetSessionAgent')}</label><select class="form-input" id="task-session">${options}</select>
+      <label class="form-label">${t('chat.taskContent')}</label><textarea class="form-input" id="task-prompt" rows="6" style="resize:vertical">${escapeAttr(task?.prompt || '')}</textarea>
+      <div class="form-hint">${t('chat.taskSubmitHint')}</div>
+    </div>`, buttons: [{ id: 'task-save-run', label: t('chat.submitRun'), className: 'btn btn-primary btn-sm' }] })
     overlay.querySelector('#task-save-run')?.addEventListener('click', () => {
       const sessionKey = overlay.querySelector('#task-session')?.value
       const prompt = overlay.querySelector('#task-prompt')?.value.trim()
-      if (!sessionKey || !prompt) { toast('请选择会话并填写任务内容', 'warning'); return }
+      if (!sessionKey || !prompt) { toast(t('chat.selectSessionAndTask'), 'warning'); return }
       overlay.close()
       parentOverlay?.close?.()
       submitTaskToSession(sessionKey, prompt, task)
@@ -2474,12 +2489,12 @@ function submitTaskToSession(sessionKey, prompt, oldTask = null) {
   const model = getSessionDisplayModel(sessionKey)
   resetTaskContext(sessionKey, model, prompt)
   const task = createTaskRecord({ sessionKey, model, prompt, title: prompt.slice(0, 48), source: 'task-board' })
-  if (oldTask) updateTask(oldTask.id, { status: 'aborted', progress: 100, error: '已重新提交为新任务' })
+  if (oldTask) updateTask(oldTask.id, { status: 'aborted', progress: 100, error: t('chat.resubmittedAsNewTask') })
   wsClient.chatSend(sessionKey, prompt)
-    .then(() => toast('任务已提交', 'success'))
+    .then(() => toast(t('chat.taskSubmitted'), 'success'))
     .catch(e => {
       updateTask(task.id, { status: 'error', progress: 100, error: e.message })
-      toast(`任务提交失败：${e.message}`, 'error')
+      toast(t('chat.taskSubmitFailed', { msg: e.message }), 'error')
     })
 }
 
@@ -2616,7 +2631,7 @@ async function doSend(text, attachments = []) {
     _cancelResponseWatchdog()
     const errText = translateGatewayError(err.message)
     appendSystemMessage(`${t('chat.sendFailed')}${errText}`)
-    setReplyStatus('error', `${t('chat.sendFailed')}${errText}`, { runId: _currentRunId || '', activity: '发送失败，未进入模型处理' })
+    setReplyStatus('error', `${t('chat.sendFailed')}${errText}`, { runId: _currentRunId || '', activity: t('chat.sendFailedBeforeModel') })
     updateTask(currentTask.id, { status: 'error', progress: 100, error: errText })
   } finally {
     _isSending = false
@@ -2718,7 +2733,7 @@ function handleChatEvent(payload) {
       const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
       if (renderIntoCurrentGroup) appendSystemMessage(`${getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey)} 回复失败：${errMsg}`)
-      setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: '群聊成员回复失败' })
+      setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
     }
@@ -2910,7 +2925,7 @@ function handleChatEvent(payload) {
     // 连接级错误（origin/pairing/auth）拦截，不作为聊天消息显示
     if (/origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity changed|auth.*fail/i.test(errMsg)) {
       console.warn('[chat] 拦截连接级错误，不显示为聊天消息:', errMsg)
-      setReplyStatus('error', errMsg, { runId: _currentRunId, activity: '设备连接需要重新批准' })
+      setReplyStatus('error', errMsg, { runId: _currentRunId, activity: t('chat.deviceReconnectApprovalNeeded') })
       const overlay = document.getElementById('chat-connect-overlay')
       if (overlay) {
         overlay.style.display = 'flex'
@@ -2938,7 +2953,7 @@ function handleChatEvent(payload) {
     showTyping(false)
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
-    setReplyStatus('error', `${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId, activity: '请查看错误信息或重试任务' })
+    setReplyStatus('error', `${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId, activity: t('chat.checkErrorOrRetryTask') })
     resetStreamState()
     processMessageQueue()
     return
@@ -3518,7 +3533,7 @@ async function forceRefreshChat() {
     _lastHistoryHash = ''
     _isLoadingHistory = false
     await loadHistory()
-    toast('✅ 聊天数据已刷新', 'success')
+    toast(t('chat.chatDataRefreshed'), 'success')
   } catch (e) {
     toast(`刷新失败: ${e?.message || e}`, 'error')
   } finally {
@@ -3712,7 +3727,7 @@ async function translateMessageToChinese(btn) {
   if (!msgWrap || !rawText) return
   const target = bubble || msgWrap
   if (isMostlyChinese(rawText)) {
-    toast('这条消息已经主要是中文', 'info')
+    toast(t('chat.alreadyMostlyChinese'), 'info')
     return
   }
   let box = bubble.querySelector('.msg-translation')
@@ -3722,7 +3737,7 @@ async function translateMessageToChinese(btn) {
     return
   }
   if (!wsClient.gatewayReady) {
-    toast('网关未连接，暂时无法翻译', 'error')
+    toast(t('chat.gatewayNotConnectedTranslate'), 'error')
     return
   }
   if (!box) {
