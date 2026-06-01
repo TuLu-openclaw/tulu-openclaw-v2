@@ -205,19 +205,44 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   titleEl.textContent=title
   document.title=title
   if(pic){poster.src=pic;poster.style.display='block';bg.style.backgroundImage='url('+pic+')'}
-  topSub.innerHTML='<span class="top-badge">独立窗口</span><span>'+title+'</span>'
+  function setTopSub(text){
+    topSub.textContent=''
+    var badge=document.createElement('span')
+    badge.className='top-badge'
+    badge.textContent='独立窗口'
+    var label=document.createElement('span')
+    label.textContent=text||'视频'
+    topSub.appendChild(badge)
+    topSub.appendChild(label)
+  }
+  setTopSub(title)
   if(allEps.length>1){
     epGroup.style.display='flex'
-    epSelect.innerHTML=allEps.map(function(e,i){return'<option value="'+i+'"'+(e.url===url?' selected':'')+'>'+e.epName+'</option>'}).join('')
+    epSelect.textContent=''
+    allEps.forEach(function(e,i){
+      var opt=document.createElement('option')
+      opt.value=String(i)
+      opt.textContent=e&&e.epName?e.epName:'第 '+(i+1)+' 集'
+      if(e&&e.url===url)opt.selected=true
+      epSelect.appendChild(opt)
+    })
     epSelect.addEventListener('change',function(){
       var idx=parseInt(epSelect.value)
       var ep=allEps[idx]
+      if(!ep)return
       playUrl(ep.url,ep.epName,ep.pic||pic)
     })
   }
   if(allUrls.length>1){
     urlGroup.style.display='flex'
-    urlSelect.innerHTML=allUrls.map(function(u,i){return'<option value="'+i+'"'+(i===curUrlIdx?' selected':'')+'>线路 '+(i+1)+'</option>'}).join('')
+    urlSelect.textContent=''
+    allUrls.forEach(function(u,i){
+      var opt=document.createElement('option')
+      opt.value=String(i)
+      opt.textContent='线路 '+(i+1)
+      if(i===curUrlIdx)opt.selected=true
+      urlSelect.appendChild(opt)
+    })
     urlSelect.addEventListener('change',function(){playUrl(allUrls[parseInt(urlSelect.value)],title)})
   }
   var hls=null
