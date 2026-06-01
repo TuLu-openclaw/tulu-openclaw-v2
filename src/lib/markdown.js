@@ -236,21 +236,32 @@ function renderTable(rows) {
 }
 
 function inlineFormat(text) {
-  return text
+  const escapedText = escapeHtml(text)
+  return escapedText
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>')
     // 避免 (?<!\w) 负向后查找：旧版 Safari / 部分 WebView 会报 invalid group specifier name
     .replace(/(^|[^A-Za-z0-9_])_(.+?)_(?![A-Za-z0-9_])/g, '$1<em>$2</em>')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
-      const safeSrc = resolveImageSrc(src.trim())
-      const escapedSrc = escapeHtml(src).replace(/\\/g, '&#x5c;')
+      const rawSrc = unescapeHtmlEntities(src).trim()
+      const safeSrc = escapeHtml(resolveImageSrc(rawSrc)).replace(/\\/g, '&#x5c;')
+      const escapedSrc = escapeHtml(rawSrc).replace(/\\/g, '&#x5c;')
       return `<img src="${safeSrc}" alt="${alt}" class="msg-img" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'color:var(--text-tertiary);font-size:12px\\'>[图片无法加载: ${escapedSrc}]</span>')" />`
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-      const safe = /^https?:|^mailto:/i.test(url.trim()) ? url : '#'
-      return `<a href="${safe}" target="_blank" rel="noopener">${escapeHtml(label)}</a>`
+      const rawUrl = unescapeHtmlEntities(url).trim()
+      const safe = /^https?:|^mailto:/i.test(rawUrl) ? escapeHtml(rawUrl) : '#'
+      return `<a href="${safe}" target="_blank" rel="noopener">${label}</a>`
     })
+}
+
+function unescapeHtmlEntities(str) {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
 }
 
 window.__copyCode = function(btn) {
