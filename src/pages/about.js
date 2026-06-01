@@ -20,7 +20,7 @@ export async function render() {
       <img src="/images/logo-brand.png" alt="星枢OpenClaw" style="height:48px;width:auto">
       <div>
         <h1 class="page-title" style="margin:0">星枢OpenClaw</h1>
-        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">联系星枢官方</a></p>
+        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">${t('about.officialSupport')}</a></p>
       </div>
     </div>
     <div class="stat-cards" id="version-cards">
@@ -678,14 +678,14 @@ async function checkHotUpdate(cards, panelVersion) {
         }
       })
     } else if (!info.compatible) {
-      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">联系星枢官方</span>`
+      meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.needFullUpdate')}</span> <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener" style="padding:2px 8px;font-size:var(--font-size-xs)">GitHub</a> <span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('about.officialSupport')}</span>`
     } else {
       meta.innerHTML = `<span style="color:var(--success)">${t('about.upToDate')}</span>`
     }
   } catch (err) {
     const meta = el()
     if (!meta) return
-    meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <span style="color:var(--text-secondary);font-size:var(--font-size-xs)">联系星枢官方</span>`
+    meta.innerHTML = `<span style="color:var(--text-tertiary)">${t('about.checkUpdateFailed')}</span> <span style="color:var(--text-secondary);font-size:var(--font-size-xs)">${t('about.officialSupport')}</span>`
   }
 }
 
