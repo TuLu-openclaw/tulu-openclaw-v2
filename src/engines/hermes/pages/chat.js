@@ -13,7 +13,7 @@
  *
  * 状态存放在 `chat-store.js`；本模块只负责 DOM 与事件交互。
  */
-import { t } from '../../../lib/i18n.js'
+import { getLang, t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
 import { toast } from '../../../components/toast.js'
 import { showConfirm } from '../../../components/modal.js'
@@ -316,10 +316,15 @@ function formatTime(ts) {
   const d = new Date(ts)
   if (!Number.isFinite(d.getTime())) return ''
   const now = new Date()
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const locale = getLang() || undefined
+  const opts = d.toDateString() === now.toDateString()
+    ? { hour: '2-digit', minute: '2-digit', hour12: false }
+    : { month: 'numeric', day: 'numeric' }
+  try {
+    return d.toLocaleString(locale, opts)
+  } catch {
+    return d.toLocaleString(undefined, opts)
   }
-  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 
 function sessionDisplayTitle(s) {
