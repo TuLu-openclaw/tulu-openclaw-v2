@@ -341,9 +341,15 @@ export async function checkBackendHealth() {
 }
 
 const GATEWAY_CACHE_KEYS = ['read_openclaw_config', 'get_services_status', 'get_status_summary']
+const INSTALLATION_CACHE_KEYS = ['check_installation', 'get_deploy_config', 'list_backups']
 
 function invalidateGatewayCaches() {
   invalidate(...GATEWAY_CACHE_KEYS)
+}
+
+function invalidateInstallationCaches() {
+  invalidate(...INSTALLATION_CACHE_KEYS)
+  invalidateGatewayCaches()
 }
 
 // 配置保存后防抖重载 Gateway（3 秒内多次写入只触发一次重载）
@@ -401,7 +407,7 @@ export const api = {
   getVersionInfo: () => getVersionInfoViaJs(),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
-  calibrateOpenclawConfig: (mode = 'inherit') => { invalidate('check_installation', 'list_backups'); invalidateGatewayCaches(); return invoke('calibrate_openclaw_config', { mode }).then(r => { invalidateGatewayCaches(); _debouncedReloadGateway(); return r }) },
+  calibrateOpenclawConfig: (mode = 'inherit') => { invalidateInstallationCaches(); return invoke('calibrate_openclaw_config', { mode }).then(r => { invalidateInstallationCaches(); _debouncedReloadGateway(); return r }) },
   writeOpenclawConfig: (config, options = {}) => {
     invalidateGatewayCaches()
     return invoke('write_openclaw_config', { config }).then(r => {
@@ -425,10 +431,10 @@ export const api = {
     })
   },
   listOpenclawVersions: async (source = 'chinese') => fetchNpmAllVersions(source),
-  upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => invoke('upgrade_openclaw', { source, version, method }),
-  uninstallOpenclaw: (cleanConfig = false) => invoke('uninstall_openclaw', { cleanConfig }),
-  installGateway: () => invoke('install_gateway'),
-  uninstallGateway: () => invoke('uninstall_gateway'),
+  upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => { invalidateInstallationCaches(); return invoke('upgrade_openclaw', { source, version, method }, 300000).then(r => { invalidateInstallationCaches(); return r }) },
+  uninstallOpenclaw: (cleanConfig = false) => { invalidateInstallationCaches(); return invoke('uninstall_openclaw', { cleanConfig }, 60000).then(r => { invalidateInstallationCaches(); return r }) },
+  installGateway: () => { invalidateInstallationCaches(); return invoke('install_gateway', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
+  uninstallGateway: () => { invalidateInstallationCaches(); return invoke('uninstall_gateway', {}, 60000).then(r => { invalidateInstallationCaches(); return r }) },
   openLobsterOffice: () => invoke('open_lobster_office'),
   openGlobalBuiltinWindow: () => invoke('open_global_builtin_window'),
   openXingshuChatWindow: () => invoke('open_xingshu_chat_window'),
@@ -517,7 +523,7 @@ export const api = {
   checkOpenclawAtPath: (cliPath) => invoke('check_openclaw_at_path', { cliPath }),
   scanNodePaths: () => invoke('scan_node_paths'),
   scanOpenclawPaths: () => invoke('scan_openclaw_paths'),
-  saveCustomNodePath: (nodeDir) => invoke('save_custom_node_path', { nodeDir }).then(r => { invalidate('check_node', 'get_services_status'); invoke('invalidate_path_cache').catch(() => {}); return r }),
+  saveCustomNodePath: (nodeDir) => invoke('save_custom_node_path', { nodeDir }).then(r => { invalidate('check_node', 'get_services_status', 'get_status_summary'); invoke('invalidate_path_cache').catch(() => {}); return r }),
   invalidatePathCache: () => invoke('invalidate_path_cache'),
   checkGit: () => cachedInvoke('check_git', {}, 60000),
   scanGitPaths: () => invoke('scan_git_paths'),
