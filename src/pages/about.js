@@ -706,14 +706,14 @@ function renderCommunity(page) {
   el.innerHTML = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
       <div style="text-align:center">
-        <img src="/images/OpenClaw-QQ.png" alt="反馈交流群" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
-        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">反馈交流群</div>
+        <img src="/images/OpenClaw-QQ.png" alt="${t('about.qqGroup')}" style="width:140px;height:140px;border-radius:var(--radius-md);border:1px solid var(--border-primary)">
+        <div style="font-size:var(--font-size-sm);margin-top:8px;color:var(--text-secondary)">${t('about.qqGroup')}</div>
       </div>
       <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;padding-top:4px">
-        <div style="font-size:var(--font-size-md);color:var(--text-primary);font-weight:600">交流反馈请联系QQ群</div>
-        <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">遇到问题或有建议，欢迎加群交流</div>
+        <div style="font-size:var(--font-size-md);color:var(--text-primary);font-weight:600">${t('about.communityContactTitle')}</div>
+        <div style="font-size:var(--font-size-sm);color:var(--text-secondary)">${t('about.communityDesc')}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-          <a class="btn btn-primary btn-sm" href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener">加群交流</a>
+          <a class="btn btn-primary btn-sm" href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener">${t('about.joinQQ')}</a>
         </div>
       </div>
     </div>
@@ -791,7 +791,7 @@ function renderProjects(page) {
 }
 
 const LINKS = [
-  { label: '联系作者', url: 'https://qm.qq.com/q/FF8D891UWc' },
+  { label: t('about.contactAuthor'), url: 'https://qm.qq.com/q/FF8D891UWc' },
   { label: t('about.linkOpenClawZh'), url: 'https://github.com/1186258278/OpenClawChineseTranslation' },
 ]
 
@@ -873,12 +873,12 @@ function renderCompany(page) {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:var(--font-size-sm)">
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">联系作者</div>
-          <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" rel="noopener" style="color:var(--accent)">星枢官方客服</a>
+          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.contactAuthor')}</div>
+          <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" rel="noopener" style="color:var(--accent)">${t('about.officialSupport')}</a>
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary);text-align:center">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">扫码添加作者</div>
-          <img src="/images/xingshu-contact-qq.png" alt="QQ二维码" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, '星枢官方客服')">
+          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.scanAuthorQr')}</div>
+          <img src="/images/xingshu-contact-qq.png" alt="${t('about.qqQrCode')}" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, '${t('about.officialSupport')}')">
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">
@@ -892,10 +892,10 @@ function renderCompany(page) {
     overlay.className = 'modal-overlay'
     overlay.innerHTML = `
       <div class="modal" style="max-width:360px;text-align:center">
-        <div class="modal-title">${label || '二维码'}</div>
-        <img src="${src}" alt="二维码" style="width:240px;height:240px;border-radius:8px;margin:12px auto;display:block">
+        <div class="modal-title">${label || t('about.qrCode')}</div>
+        <img src="${src}" alt="${t('about.qrCode')}" style="width:240px;height:240px;border-radius:8px;margin:12px auto;display:block">
         <div class="modal-actions" style="margin-top:16px">
-          <button class="btn btn-secondary btn-sm" data-action="close">关闭</button>
+          <button class="btn btn-secondary btn-sm" data-action="close">${t('common.close')}</button>
         </div>
       </div>
     `
