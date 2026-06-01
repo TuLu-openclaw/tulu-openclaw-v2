@@ -4647,15 +4647,12 @@ export function cleanup() {
   _hostedPanelEl = null
   _hostedBadgeEl = null
   _hostedPromptEl = null
-  _hostedEnableEl = null
   _hostedMaxStepsEl = null
   _hostedStepDelayEl = null
   _hostedRetryLimitEl = null
   _hostedSaveBtn = null
-  _hostedPauseBtn = null
   _hostedStopBtn = null
   _hostedCloseBtn = null
-  _hostedGlobalSyncEl = null
   _hostedSessionConfig = null
   _hostedDefaults = null
   _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT }
