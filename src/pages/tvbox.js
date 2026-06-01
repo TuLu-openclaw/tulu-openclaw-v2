@@ -26,21 +26,36 @@ function getDefaultSources() {
   ];
 }
 
+function normalizeSources(value) {
+  const list = Array.isArray(value) ? value : [];
+  const sources = list.filter(function(src){
+    return src && typeof src === 'object' && src.key && src.name && src.api;
+  }).map(function(src){
+    return {
+      key: String(src.key),
+      name: String(src.name),
+      api: String(src.api),
+      type: src.type === '1080' ? '1080' : 'tvbox',
+    };
+  });
+  return sources.length ? sources : getDefaultSources();
+}
+
 function loadSources() {
-  try { const raw = localStorage.getItem(TVBOX_SOURCES_KEY); if (raw) return JSON.parse(raw); } catch(_) {}
+  try { const raw = localStorage.getItem(TVBOX_SOURCES_KEY); if (raw) return normalizeSources(JSON.parse(raw)); } catch(_) {}
   return getDefaultSources();
 }
-function saveSources(sources) { localStorage.setItem(TVBOX_SOURCES_KEY, JSON.stringify(sources)); }
+function saveSources(sources) { localStorage.setItem(TVBOX_SOURCES_KEY, JSON.stringify(normalizeSources(sources))); }
 function loadFavs() {
-  try { const raw = localStorage.getItem(TVBOX_FAVS_KEY); if (raw) return JSON.parse(raw); } catch(_) {}
+  try { const raw = localStorage.getItem(TVBOX_FAVS_KEY); if (raw) { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : []; } } catch(_) {}
   return [];
 }
-function saveFavs(favs) { localStorage.setItem(TVBOX_FAVS_KEY, JSON.stringify(favs)); }
+function saveFavs(favs) { localStorage.setItem(TVBOX_FAVS_KEY, JSON.stringify(Array.isArray(favs) ? favs : [])); }
 function loadHist() {
-  try { const raw = localStorage.getItem(TVBOX_HIST_KEY); if (raw) return JSON.parse(raw); } catch(_) {}
+  try { const raw = localStorage.getItem(TVBOX_HIST_KEY); if (raw) { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : []; } } catch(_) {}
   return [];
 }
-function saveHist(hist) { localStorage.setItem(TVBOX_HIST_KEY, JSON.stringify(hist)); }
+function saveHist(hist) { localStorage.setItem(TVBOX_HIST_KEY, JSON.stringify(Array.isArray(hist) ? hist : [])); }
 function getActiveSourceKey() { return localStorage.getItem(TVBOX_ACTIVE_KEY) || 'lziapi'; }
 function setActiveSourceKey(key) { localStorage.setItem(TVBOX_ACTIVE_KEY, key); }
 
@@ -62,9 +77,17 @@ async function tvReq(url, params, method) {
 }
 
 function getSource() {
-  const sources = S('sources', loadSources());
-  const key = S('activeSource', getActiveSourceKey());
-  return sources.find(function(s){ return s.key === key; }) || sources[0];
+  const sources = normalizeSources(S('sources', loadSources()));
+  S('sources', sources);
+  let key = S('activeSource', getActiveSourceKey());
+  let source = sources.find(function(s){ return s.key === key; });
+  if (!source) {
+    source = sources[0];
+    key = source.key;
+    S('activeSource', key);
+    setActiveSourceKey(key);
+  }
+  return source;
 }
 
 function isFaved(vodId) { return loadFavs().some(function(f){ return String(f.vod_id) === String(vodId); }); }
@@ -524,7 +547,17 @@ window.__tvbox = {
   delSrc: function(key){
     var sources = S('sources',loadSources());
     var idx = sources.findIndex(function(s){return s.key===key;});
-    if (idx>=0) { sources.splice(idx,1); saveSources(sources); S('sources',sources); render(); }
+    if (idx>=0) {
+      sources.splice(idx,1);
+      sources = normalizeSources(sources);
+      saveSources(sources);
+      S('sources',sources);
+      if (!sources.some(function(s){ return s.key === S('activeSource', getActiveSourceKey()); })) {
+        S('activeSource', sources[0].key);
+        setActiveSourceKey(sources[0].key);
+      }
+      render();
+    }
   },
   saveSrc: function(oldKey) {
     var name = document.getElementById('tvbox-edit-name').value.trim();
