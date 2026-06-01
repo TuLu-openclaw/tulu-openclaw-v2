@@ -41,15 +41,23 @@ function describeCron(raw) {
   if (parts.length !== 5) return expr
   const [min, hr, dom, , dow] = parts
   if (min === '*' && hr === '*') return t('engine.cronEveryMinute')
-  if (min.startsWith('*/')) return t('engine.cronEveryNMin').replace('{n}', min.slice(2))
+  if (min.startsWith('*/')) return t('engine.cronEveryNMin', { n: min.slice(2) })
   if (hr === '*' && min === '0') return t('engine.cronHourlyOnTheHour')
   if (dow !== '*' && dom === '*') {
-    const days = ['日', '一', '二', '三', '四', '五', '六']
+    const days = [
+      t('engine.cronWeekdaySun'),
+      t('engine.cronWeekdayMon'),
+      t('engine.cronWeekdayTue'),
+      t('engine.cronWeekdayWed'),
+      t('engine.cronWeekdayThu'),
+      t('engine.cronWeekdayFri'),
+      t('engine.cronWeekdaySat'),
+    ]
     const d = parseInt(dow)
-    return `每周${isNaN(d) ? dow : (days[d] || dow)} ${hr}:${min.padStart(2, '0')}`
+    return t('engine.cronWeeklyAt', { day: isNaN(d) ? dow : (days[d] || dow), time: `${hr}:${min.padStart(2, '0')}` })
   }
-  if (dom !== '*') return `每月${dom}日 ${hr}:${min.padStart(2, '0')}`
-  if (hr !== '*') return `每天 ${hr}:${min.padStart(2, '0')}`
+  if (dom !== '*') return t('engine.cronMonthlyOnDay', { day: dom, time: `${hr}:${min.padStart(2, '0')}` })
+  if (hr !== '*') return t('engine.cronDailyAt', { time: `${hr}:${min.padStart(2, '0')}` })
   return expr
 }
 
@@ -155,10 +163,10 @@ export function render() {
     else d = new Date(ts)
     const diff = Math.floor((d.getTime() - Date.now()) / 1000)
     if (diff < 0) return t('engine.cronOverdue')
-    if (diff < 60) return t('engine.cronInSeconds').replace('{n}', diff)
-    if (diff < 3600) return t('engine.cronInMinutes').replace('{n}', Math.floor(diff / 60))
-    if (diff < 86400) return t('engine.cronInHours').replace('{n}', Math.floor(diff / 3600))
-    return t('engine.cronInDays').replace('{n}', Math.floor(diff / 86400))
+    if (diff < 60) return t('engine.cronInSeconds', { n: diff })
+    if (diff < 3600) return t('engine.cronInMinutes', { n: Math.floor(diff / 60) })
+    if (diff < 86400) return t('engine.cronInHours', { n: Math.floor(diff / 3600) })
+    return t('engine.cronInDays', { n: Math.floor(diff / 86400) })
   }
 
   // ── 主渲染 ──
@@ -210,24 +218,24 @@ export function render() {
         <!-- KPI grid (4 stats) -->
         <div class="hm-kpi-grid">
           <div class="hm-kpi" data-tone="accent">
-            <div class="hm-kpi-label">${t('engine.cronTotal')}</div>
+            <div class="hm-kpi-label">${t('engine.cronTotal', { count: total })}</div>
             <div class="hm-kpi-value">${total}</div>
-            <div class="hm-kpi-foot">已定义任务数</div>
+            <div class="hm-kpi-foot">${t('engine.cronKpiDefined')}</div>
           </div>
           <div class="hm-kpi" data-tone="success">
             <div class="hm-kpi-label">${t('engine.cronRunning')}</div>
             <div class="hm-kpi-value">${runningCount}</div>
-            <div class="hm-kpi-foot">正在执行中</div>
+            <div class="hm-kpi-foot">${t('engine.cronKpiRunning')}</div>
           </div>
           <div class="hm-kpi" data-tone="${paused > 0 ? 'warn' : ''}">
             <div class="hm-kpi-label">${t('engine.cronPaused')}</div>
             <div class="hm-kpi-value">${paused}</div>
-            <div class="hm-kpi-foot">手动暂停中</div>
+            <div class="hm-kpi-foot">${t('engine.cronKpiPaused')}</div>
           </div>
           <div class="hm-kpi" data-tone="${failed > 0 ? 'error' : ''}">
             <div class="hm-kpi-label">${t('engine.cronFailed')}</div>
             <div class="hm-kpi-value">${failed}</div>
-            <div class="hm-kpi-foot">最近一次运行失败</div>
+            <div class="hm-kpi-foot">${t('engine.cronKpiFailed')}</div>
           </div>
         </div>
 
