@@ -286,36 +286,40 @@ export function render() {
     const isHigh = !!updateInfo?.localAboveRecommended
     const tone = updateInstalling ? 'is-installing' : isHigh ? 'is-warning' : updateInfo?.updateAvailable ? 'is-info' : 'is-ok'
     const msg = updateInstalling
-      ? 'Hermes Agent 正在切换版本，请不要关闭窗口。'
+      ? t('engine.dashUpdateInstallingVersion')
       : isHigh
-        ? `检测到你本地安装的是高于推荐稳定版的 ${installed}，可能存在接口、事件或配置兼容性问题。建议回退到 ${recommended}；如果你要继续使用高版本，请自行验证兼容性并关注 issue / release。`
+        ? t('engine.dashUpdateAboveRecommended')
+            .replace('{installed}', installed)
+            .replace('{recommended}', recommended)
         : updateInfo?.updateAvailable
-          ? `检测到最新上游 ${latest}，当前本地版本 ${installed}。如需升级，请点击切换版本。`
-          : `当前 Hermes Agent 版本正常。推荐稳定版: ${recommended}。`
+          ? t('engine.dashUpdateLatestAvailable')
+              .replace('{latest}', latest)
+              .replace('{installed}', installed)
+          : t('engine.dashUpdateVersionOk').replace('{recommended}', recommended)
     return `
       <div class="hm-update-card ${tone}">
         <div class="hm-update-head">
           <div>
-            <div class="hm-update-title">Hermes Agent · 本地</div>
+            <div class="hm-update-title">${t('engine.dashUpdateLocalTitle')}</div>
             <div class="hm-update-version">${esc(installed)}</div>
           </div>
           <button class="hm-btn hm-btn--ghost hm-btn--sm hm-update-dismiss" ${updateInstalling ? 'disabled' : ''}>${t('engine.dashDismiss')}</button>
         </div>
         <div class="hm-update-grid">
-          <div><span>推荐稳定版</span><strong>${esc(recommended)}</strong></div>
-          <div><span>最新上游</span><strong>${esc(latest)}</strong></div>
-          <div><span>发布页面</span><a href="${esc(updateInfo?.releaseUrl || '#')}" target="_blank">release</a></div>
+          <div><span>${t('engine.dashUpdateRecommended')}</span><strong>${esc(recommended)}</strong></div>
+          <div><span>${t('engine.dashUpdateLatest')}</span><strong>${esc(latest)}</strong></div>
+          <div><span>${t('engine.dashUpdateReleasePage')}</span><a href="${esc(updateInfo?.releaseUrl || '#')}" target="_blank">release</a></div>
         </div>
         ${updateProgressVisible ? `
           <div class="hm-update-progress-row">
-            <span>${esc(updateLog || '正在准备...')}</span><strong>${updateProgress}%</strong>
+            <span>${esc(updateLog || t('engine.dashUpdatePreparing'))}</span><strong>${updateProgress}%</strong>
           </div>
           <div class="hm-update-progress"><div style="width:${Math.max(0, Math.min(updateProgress, 100))}%"></div></div>
         ` : ''}
         <div class="hm-update-actions">
-          ${updateInfo?.canRollback ? `<button class="hm-btn hm-btn--warning hm-update-target" data-target="recommended">回退到推荐版</button>` : ''}
-          <button class="hm-btn hm-btn--primary hm-update-target" data-target="latest">切换版本</button>
-          <button class="hm-btn hm-btn--danger hm-update-uninstall">卸载</button>
+          ${updateInfo?.canRollback ? `<button class="hm-btn hm-btn--warning hm-update-target" data-target="recommended">${t('engine.dashUpdateRollbackRecommended')}</button>` : ''}
+          <button class="hm-btn hm-btn--primary hm-update-target" data-target="latest">${t('engine.dashUpdateSwitchVersion')}</button>
+          <button class="hm-btn hm-btn--danger hm-update-uninstall">${t('engine.cliUninstall')}</button>
         </div>
         <p class="hm-update-note">${esc(msg)}</p>
       </div>`
