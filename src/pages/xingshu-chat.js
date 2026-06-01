@@ -35,6 +35,34 @@ function nowTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
 }
 
+function createId() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function normalizeBannedWords(value) {
+  if (!Array.isArray(value)) return ['广告刷屏', '恶意辱骂']
+  return value.map(word => String(word || '').trim()).filter(Boolean)
+}
+
+function normalizeMessages(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return seedMessages()
+  return ROOMS.reduce((acc, room) => {
+    const list = Array.isArray(value[room.id]) ? value[room.id] : []
+    acc[room.id] = list
+      .filter(item => item && typeof item === 'object')
+      .slice(-500)
+      .map(item => ({
+        id: item.id || createId(),
+        time: item.time || nowTime(),
+        user: item.user || '用户',
+        text: String(item.text ?? ''),
+        system: !!item.system,
+        role: item.role || '',
+      }))
+    return acc
+  }, {})
+}
+
 function getValidRoomId(roomId) {
   return ROOMS.some(room => room.id === roomId) ? roomId : 'lobby'
 }
@@ -44,13 +72,13 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
     return {
       activeRoom: getValidRoomId(saved.activeRoom),
-      nickname: saved.nickname || '星枢用户',
-      serverUrl: saved.serverUrl || DEFAULT_SERVER,
+      nickname: String(saved.nickname || '星枢用户'),
+      serverUrl: String(saved.serverUrl || DEFAULT_SERVER),
       admin: !!saved.admin,
       muted: !!saved.muted,
-      messages: saved.messages || seedMessages(),
-      bannedWords: saved.bannedWords || ['广告刷屏', '恶意辱骂'],
-      announcement: saved.announcement || '欢迎来到星枢聊天室。请文明交流，售后问题请进入「售后支持」。',
+      messages: normalizeMessages(saved.messages),
+      bannedWords: normalizeBannedWords(saved.bannedWords),
+      announcement: String(saved.announcement || '欢迎来到星枢聊天室。请文明交流，售后问题请进入「售后支持」。'),
     }
   } catch {
     return { activeRoom: 'lobby', nickname: '星枢用户', serverUrl: DEFAULT_SERVER, admin: false, muted: false, messages: seedMessages(), bannedWords: ['广告刷屏', '恶意辱骂'], announcement: '欢迎来到星枢聊天室。', }
@@ -59,9 +87,9 @@ function loadState() {
 
 function seedMessages() {
   return {
-    lobby: [{ id: crypto.randomUUID(), system: true, user: '系统', text: '星枢聊天室已就绪：多房间、公告、禁言、清屏、导出、服务器连接预留全部启用。', time: nowTime() }],
-    support: [{ id: crypto.randomUUID(), system: true, user: '客服助手', text: '这里处理卡密、安装包、启动失败、更新失败等问题。', time: nowTime() }],
-    vip: [{ id: crypto.randomUUID(), system: true, user: 'VIP 管家', text: 'VIP 房间已开启，管理员可发布专属公告。', time: nowTime() }],
+    lobby: [{ id: createId(), system: true, user: '系统', text: '星枢聊天室已就绪：多房间、公告、禁言、清屏、导出、服务器连接预留全部启用。', time: nowTime() }],
+    support: [{ id: createId(), system: true, user: '客服助手', text: '这里处理卡密、安装包、启动失败、更新失败等问题。', time: nowTime() }],
+    vip: [{ id: createId(), system: true, user: 'VIP 管家', text: 'VIP 房间已开启，管理员可发布专属公告。', time: nowTime() }],
     ai: [], movie: [], music: [], dev: [], ops: [], admin: []
   }
 }
@@ -78,7 +106,7 @@ function saveState() {
 function addMessage(roomId, msg) {
   const room = roomId || state.activeRoom
   if (!state.messages[room]) state.messages[room] = []
-  state.messages[room].push({ id: crypto.randomUUID(), time: nowTime(), ...msg })
+  state.messages[room].push({ id: createId(), time: nowTime(), ...msg })
   if (state.messages[room].length > 500) state.messages[room] = state.messages[room].slice(-500)
   saveState()
   render(rootEl)
