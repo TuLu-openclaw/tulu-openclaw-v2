@@ -4041,7 +4041,10 @@ function showLightbox(src) {
   if (existing) existing.remove()
   const lb = document.createElement('div')
   lb.className = 'chat-lightbox'
-  lb.innerHTML = `<img src="${src}" class="chat-lightbox-img" />`
+  const img = document.createElement('img')
+  img.className = 'chat-lightbox-img'
+  img.src = src || ''
+  lb.appendChild(img)
   lb.onclick = (e) => { if (e.target === lb || e.target.tagName !== 'IMG') lb.remove() }
   document.body.appendChild(lb)
   // ESC 关闭
