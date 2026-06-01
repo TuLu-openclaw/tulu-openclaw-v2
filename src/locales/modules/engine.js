@@ -370,7 +370,7 @@ export default {
   chatSearchOpen: {"zh-CN": "打开", "en": "Open"},
   chatSearchPlaceholder: {"zh-CN": "搜索消息...", "en": "Search messages..."},
   chatSessions: {"zh-CN": "会话", "en": "Sessions"},
-  configFetchFailed: {"zh-CN": "获取配置失败", "en": "Failed to fetch config"},
+  configFetchFailed: {"zh-CN": "获取配置失败: {error}", "en": "Failed to fetch config: {error}"},
   configModelRequired: {"zh-CN": "请先选择模型", "en": "Please select a model first"},
   configSaved: {"zh-CN": "配置已保存", "en": "Config saved"},
   configValidApiKeyRequired: {"zh-CN": "请输入有效 API Key，占位/测试 Key 不能保存", "zh-TW": "請輸入有效 API Key，佔位/測試 Key 不能儲存", "en": "Please enter a valid API key. Placeholder or test keys cannot be saved."},

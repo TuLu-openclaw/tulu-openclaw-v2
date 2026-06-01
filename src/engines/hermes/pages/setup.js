@@ -311,7 +311,11 @@ export function render() {
   }
 
   function esc(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
+
+  function escAttr(s) {
+    return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   }
 
   // --- 事件绑定 ---
@@ -588,7 +592,7 @@ export function render() {
       if (resultEl) resultEl.innerHTML = `<span style="color:var(--success)">✓ ${t('engine.configFetchSuccess', { count: models.length })}</span>`
       if (dropdown) {
         dropdown.innerHTML = models.map(m =>
-          `<div class="hermes-model-option" data-model="${m}" style="padding:6px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-primary)">${m}</div>`
+          `<div class="hermes-model-option" data-model="${escAttr(m)}" style="padding:6px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-primary)">${esc(m)}</div>`
         ).join('')
         dropdown.style.display = 'block'
       }
@@ -705,13 +709,13 @@ function renderGroupedProviderButtons() {
 
   const btn = (p) => {
     const envHint = p.apiKeyEnvVars && p.apiKeyEnvVars.length
-      ? ` title="${p.apiKeyEnvVars[0]}"`
+      ? ` title="${escAttr(p.apiKeyEnvVars[0])}"`
       : ''
     return `<button class="btn btn-sm btn-secondary hermes-preset-btn"
-      data-key="${p.id}"
-      data-url="${p.baseUrl}"
+      data-key="${escAttr(p.id)}"
+      data-url="${escAttr(p.baseUrl)}"
       data-api="${p.transport === 'anthropic_messages' ? 'anthropic-messages' : p.transport === 'google_gemini' ? 'google-generative-ai' : 'openai-completions'}"${envHint}
-      style="font-size:12px;padding:3px 10px;margin:0 6px 6px 0">${p.name}</button>`
+      style="font-size:12px;padding:3px 10px;margin:0 6px 6px 0">${esc(p.name)}</button>`
   }
 
   const parts = []
@@ -727,7 +731,7 @@ function renderGroupedProviderButtons() {
   }
   if (hermesGroups.oauth.length) {
     const oauthItems = hermesGroups.oauth.map(p =>
-      `<div style="font-size:11px;color:var(--text-tertiary);margin-right:10px"><code>${p.name}</code>：${t('engine.providerOAuthHint', { cmd: `<code>${p.cliAuthHint}</code>` })}</div>`
+      `<div style="font-size:11px;color:var(--text-tertiary);margin-right:10px"><code>${esc(p.name)}</code>：${t('engine.providerOAuthHint', { cmd: `<code>${esc(p.cliAuthHint)}</code>` })}</div>`
     ).join('')
     parts.push(`<div style="${sectionStyle}"><div style="${titleStyle}">${t('engine.providerGroupOAuth')}</div><div style="display:flex;flex-wrap:wrap;gap:4px 0">${oauthItems}</div></div>`)
   }
