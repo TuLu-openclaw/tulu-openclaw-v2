@@ -244,8 +244,8 @@ export async function render() {
             <span class="chat-workspace-trigger-label">${t('chat.workspace')}</span>
             <span class="chat-workspace-trigger-agent" id="chat-workspace-trigger-agent">main</span>
           </button>
-          <button class="btn btn-sm btn-ghost" id="btn-task-board" title="查看所有 Agent / 会话任务清单">
-            任务清单
+          <button class="btn btn-sm btn-ghost" id="btn-task-board" title="${t('chat.taskBoardTitle')}">
+            ${t('chat.taskBoard')}
           </button>
           <button class="btn btn-sm btn-ghost" id="btn-cmd" title="${t('chat.shortcuts')}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z"/></svg>

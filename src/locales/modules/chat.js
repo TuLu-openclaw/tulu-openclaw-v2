@@ -55,6 +55,8 @@ export default {
   inputPlaceholder: _('输入消息，Enter 发送，/ 打开指令', 'Type a message, Enter to send, / for commands', '輸入訊息，Enter 發送，/ 開啟指令', 'メッセージを入力...', '메시지를 입력하세요...', 'Nhập tin nhắn...', 'Escribe un mensaje...', 'Digite uma mensagem...', 'Введите сообщение...', 'Tapez un message...', 'Nachricht eingeben...'),
   uploadImage: _('上传图片', 'Upload Image', '上傳圖片'),
   refreshModels: _('刷新模型列表', 'Refresh Models', '重新整理模型列表'),
+  taskBoard: _('任务清单', 'Task Board', '任務清單'),
+  taskBoardTitle: _('查看所有 Agent / 会话任务清单', 'View all Agent / session tasks', '查看所有 Agent / 對話任務清單'),
   send: _('发送', 'Send', '發送', '送信', '전송', 'Gửi', 'Enviar', 'Enviar', 'Отправить', 'Envoyer', 'Senden'),
   stopGeneration: _('停止生成', 'Stop Generation'),
   doubleClickRename: _('双击重命名', 'Double-click to rename', '雙擊重命名'),
