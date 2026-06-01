@@ -1068,7 +1068,7 @@ export function render() {
 
   async function doSaveModel() {
     syncFormFromDom()
-    if (!formApiKey || isPlaceholderApiKey(formApiKey)) { cfgMsg = `<span style="color:var(--warning)">请输入有效 API Key，占位/测试 Key 不能保存</span>`; draw(); return }
+    if (!formApiKey || isPlaceholderApiKey(formApiKey)) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configValidApiKeyRequired')}</span>`; draw(); return }
     if (!formModel) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configModelRequired')}</span>`; draw(); return }
 
     const matched = inferProviderByBaseUrl(hermesProviders, formBaseUrl)
@@ -1084,13 +1084,13 @@ export function render() {
     modelBusy = true; cfgMsg = ''; draw()
     try {
       await api.configureHermes(provider, formApiKey, formModel, formBaseUrl || null)
-      cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSaved')}，正在重启 Hermes Gateway 使新 Key 生效...</span>`
+      cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSavedRestarting')}</span>`
       draw()
       try {
         await api.hermesGatewayAction('restart')
-        cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSaved')}，Hermes Gateway 已重启，新配置已生效</span>`
+        cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSavedRestarted')}</span>`
       } catch (restartErr) {
-        cfgMsg = `<span style="color:var(--warning)">✓ ${t('engine.configSaved')}，但 Gateway 重启失败，请手动重启: ${String(restartErr).replace(/^Error:\s*/, '')}</span>`
+        cfgMsg = `<span style="color:var(--warning)">✓ ${t('engine.configSavedRestartFailed', { error: String(restartErr).replace(/^Error:\s*/, '') })}</span>`
       }
       // 刷新后端状态（不覆盖 form）
       try { hermesConfig = await api.hermesReadConfig() } catch (_) {}
@@ -1104,7 +1104,7 @@ export function render() {
   async function importOpenClawModel() {
     modelBusy = true
     importChoices = []
-    cfgMsg = `<span style="color:var(--text-tertiary)">正在扫描本地 OpenClaw 配置...</span>`
+    cfgMsg = `<span style="color:var(--text-tertiary)">${t('engine.importOpenClawScanning')}</span>`
     draw()
     try {
       const providers = []
@@ -1143,14 +1143,14 @@ export function render() {
       if (!providers.length) throw new Error(t('engine.dashImportOpenClawMissingModel'))
       importChoices = providers
       cfgMsg = `<div class="hm-import-list">
-        <div style="font-size:12px;font-weight:600;margin-bottom:8px">找到 ${providers.length} 个可导入配置，点击一项填入 Hermes：</div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">${t('engine.importOpenClawFound', { count: providers.length })}</div>
         ${providers.map((p, i) => {
-          const modelsStr = p.models.length ? p.models.join(', ') : '未声明模型'
+          const modelsStr = p.models.length ? p.models.join(', ') : t('engine.importOpenClawNoModels')
           const keyHint = maskKey(p.apiKey)
           return `<button type="button" class="hm-import-option" data-idx="${i}">
             <span class="hm-import-option-head"><strong>${esc(p.name)}</strong><em>${esc(p.source)}</em></span>
-            <span class="hm-import-option-url">${esc(p.baseUrl || '未设置 Base URL')} · ${esc(keyHint)}</span>
-            <span class="hm-import-option-models">模型：${esc(modelsStr)}</span>
+            <span class="hm-import-option-url">${esc(p.baseUrl || t('engine.importOpenClawNoBaseUrl'))} · ${esc(keyHint)}</span>
+            <span class="hm-import-option-models">${t('engine.importOpenClawModelLabel')}${esc(modelsStr)}</span>
           </button>`
         }).join('')}
       </div>`
