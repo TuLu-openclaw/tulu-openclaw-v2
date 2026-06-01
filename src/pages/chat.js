@@ -259,7 +259,7 @@ export async function render() {
         <div class="chat-reply-status-head">
           <span class="chat-reply-status-dot"></span>
           <span class="chat-reply-status-phase" id="chat-reply-status-phase">${replyStatusPhase('waiting')}</span>
-          <span class="chat-reply-status-elapsed" id="chat-reply-status-elapsed">--</span>
+          <span class="chat-reply-status-elapsed" id="chat-reply-status-elapsed">空闲</span>
         </div>
         <div class="chat-reply-status-body">
           <div class="chat-reply-status-text" id="chat-reply-status-text"></div>
@@ -3178,7 +3178,7 @@ function loadReplyStatus(sessionKey = _sessionKey) {
 }
 
 function formatStatusElapsed(status = _replyStatusState) {
-  if (!status?.ts) return '--'
+  if (!status?.ts) return '空闲'
   const seconds = Math.max(0, Math.floor((Date.now() - status.ts) / 1000))
   if (status.state === 'waiting') return '空闲'
   if (seconds < 60) return `${seconds}s`
