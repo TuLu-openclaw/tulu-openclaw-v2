@@ -71,7 +71,7 @@ function _toggleEngineDropdown() {
   dd.classList.add('open')
 }
 
-const NAV_ITEMS_OPENCLAW = [
+function NAV_ITEMS_OPENCLAW() { return [
   {
     section: t('sidebar.sectionMonitor'),
     items: [
@@ -123,9 +123,9 @@ const NAV_ITEMS_OPENCLAW = [
       { route: '/about', label: t('sidebar.about'), icon: 'about' },
     ]
   }
-]
+] }
 
-const NAV_ITEMS_HERMES = [
+function NAV_ITEMS_HERMES() { return [
   {
     section: '',
     items: [
@@ -145,11 +145,11 @@ const NAV_ITEMS_HERMES = [
       { route: '/h/env', label: t('sidebar.hermesEnv'), icon: 'settings' },
     ]
   },
-]
+] }
 
 function NAV_ITEMS_FULL() {
-  if (getActiveEngineId() === 'hermes') return NAV_ITEMS_HERMES
-  return NAV_ITEMS_OPENCLAW
+  if (getActiveEngineId() === 'hermes') return NAV_ITEMS_HERMES()
+  return NAV_ITEMS_OPENCLAW()
 }
 
 /** 返回引擎对应的侧边栏导航项（供 engine-manager 等外部模块调用） */
