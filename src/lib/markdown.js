@@ -1,3 +1,5 @@
+import { t } from './i18n.js'
+
 /**
  * Markdown 渲染器 - 轻量级，支持代码高亮
  * 从 clawapp 移植，去掉 MEDIA 路径处理
@@ -79,7 +81,8 @@ export function renderMarkdown(text) {
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const highlighted = highlightCode(code.trimEnd(), lang)
     const langLabel = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : ''
-    return `<pre data-lang="${escapeHtml(lang)}">${langLabel}<button class="code-copy-btn" onclick="window.__copyCode(this)">Copy</button><code>${highlighted}</code></pre>`
+    const copyLabel = escapeHtml(t('common.copy'))
+    return `<pre data-lang="${escapeHtml(lang)}">${langLabel}<button class="code-copy-btn" onclick="window.__copyCode(this)">${copyLabel}</button><code>${highlighted}</code></pre>`
   })
 
   // 行内代码
@@ -267,11 +270,12 @@ function unescapeHtmlEntities(str) {
 window.__copyCode = function(btn) {
   const pre = btn.closest('pre')
   const code = pre.querySelector('code')
+  const restoreLabel = t('common.copy')
   navigator.clipboard.writeText(code.innerText).then(() => {
     btn.textContent = '✓'
-    setTimeout(() => { btn.textContent = 'Copy' }, 1500)
+    setTimeout(() => { btn.textContent = restoreLabel }, 1500)
   }).catch(() => {
     btn.textContent = '✗'
-    setTimeout(() => { btn.textContent = 'Copy' }, 1500)
+    setTimeout(() => { btn.textContent = restoreLabel }, 1500)
   })
 }
