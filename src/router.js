@@ -39,7 +39,8 @@ async function loadRoute() {
   const routePath = hash.split('?')[0]
   const loader = routes[routePath]
 
-  // 路由未注册时（引擎刚切换、新路由尚未注册），显示 loading 而不是留空
+  // 路由未注册时（引擎刚切换、新路由尚未注册），短暂显示 loading 等待注册。
+  // 若重试后仍不存在，显示明确错误，避免用户永久卡在“加载中”。
   if (!loader) {
     if (_contentEl) {
       _contentEl.innerHTML = `
@@ -52,6 +53,8 @@ async function loadRoute() {
     await new Promise(r => setTimeout(r, 100))
     if (routes[routePath]) {
       loadRoute()
+    } else if (_contentEl) {
+      showLoadError(_contentEl, routePath, new Error('路由未注册'))
     }
     return
   }
