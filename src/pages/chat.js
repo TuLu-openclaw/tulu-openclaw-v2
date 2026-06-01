@@ -1845,9 +1845,8 @@ async function deleteSession(key) {
 async function resetCurrentSession() {
   if (!_sessionKey) return
   const group = _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
-  const label = group ? `群聊：${group.name}` : getDisplayLabel(_sessionKey)
-  const yes = await showConfirm(group ? `确认重置${label}？
-这会重置群聊内所有成员会话，并清零每个成员的当前任务轮次。` : t('chat.confirmResetSession', { label }))
+  const label = group ? t('chat.groupChatTitle', { name: group.name }) : getDisplayLabel(_sessionKey)
+  const yes = await showConfirm(group ? t('chat.confirmResetGroupChat', { label }) : t('chat.confirmResetSession', { label }))
   if (!yes) return
   try {
     if (group) {
@@ -1855,20 +1854,20 @@ async function resetCurrentSession() {
       for (const member of members) {
         if (!member.sessionKey) continue
         await wsClient.sessionsReset(member.sessionKey)
-        resetTaskContext(member.sessionKey, getSessionDisplayModel(member.sessionKey), '群聊重置后重新对话')
+        resetTaskContext(member.sessionKey, getSessionDisplayModel(member.sessionKey), t('chat.groupResetTaskReason'))
       }
       clearMessages()
       _lastHistoryHash = ''
-      appendSystemMessage(`群聊“${group.name}”已重置，所有成员当前任务轮次已清零。`)
-      toast('群聊已重置，当前任务轮次已清零', 'success')
+      appendSystemMessage(t('chat.groupResetDoneMessage', { name: group.name }))
+      toast(t('chat.groupResetDoneToast'), 'success')
       return
     }
     await wsClient.sessionsReset(_sessionKey)
     clearMessages()
     _lastHistoryHash = ''
-    resetTaskContext(_sessionKey, getSessionDisplayModel(_sessionKey), '重置会话后重新对话')
+    resetTaskContext(_sessionKey, getSessionDisplayModel(_sessionKey), t('chat.resetTaskReason'))
     appendSystemMessage(t('chat.sessionResetDone'))
-    toast(`${t('chat.sessionResetDone')}，当前任务轮次已清零`, 'success')
+    toast(t('chat.sessionResetWithTaskContext'), 'success')
   } catch (e) {
     toast(`${t('common.operationFailed')}: ${e.message}`, 'error')
   }
@@ -1878,7 +1877,7 @@ function updateSessionTitle() {
   const el = _page?.querySelector('#chat-title')
   if (el) {
     const group = _currentGroupId ? ensureGroupIsolation(_chatGroups.find(g => g.id === _currentGroupId)) : null
-    el.textContent = group ? `群聊：${group.name}` : getDisplayLabel(_sessionKey)
+    el.textContent = group ? t('chat.groupChatTitle', { name: group.name }) : getDisplayLabel(_sessionKey)
   }
   syncWorkspaceContext(false)
 }
