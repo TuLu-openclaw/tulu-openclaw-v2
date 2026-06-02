@@ -2659,7 +2659,10 @@ function processMessageQueue() {
 }
 
 function stopGeneration() {
-  if (_currentRunId) wsClient.chatAbort(_sessionKey, _currentRunId).catch(() => {})
+  if (!_sessionKey) return
+  wsClient.chatAbort(_sessionKey, _currentRunId || undefined).catch(() => {})
+  showTyping(false)
+  setReplyStatus('aborted', replyStatusText('aborted'), { runId: _currentRunId || '', activity: t('chat.replyActivityAborted') })
 }
 
 // ── 事件处理（参照 clawapp 实现） ──
@@ -2688,7 +2691,14 @@ function handleEvent(msg) {
     }
     // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
-    if (toolName && !_isStreaming) {
+    if (toolName && !_currentAiBubble) {
+      if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) return
+      if (_currentRunId && payload.runId && payload.runId !== _currentRunId) return
+      if (payload.runId) _currentRunId = payload.runId
+      _isStreaming = true
+      if (!_streamStartTime) _streamStartTime = Date.now()
+      updateSendState()
+      scheduleStreamSafetyTimeout()
       const toolLabel = formatToolDisplayName(toolName)
       const toolInput = summarizeToolInput(payload.data?.args || payload.data?.input || payload.data?.parameters || '')
       emitLobsterPhase('tool', `调用工具：${toolLabel}`)
@@ -2822,6 +2832,22 @@ function handleChatEvent(payload) {
   }
   if (runId && state === 'delta' && _seenRunIds.has(runId) && !_isStreaming) {
     console.log('[chat] 跳过已完成 run 的 delta, runId:', runId)
+    return
+  }
+
+  if (state === 'queued') {
+    if (_currentRunId && runId && runId !== _currentRunId) {
+      console.warn('[chat] 忽略非当前 run 的 queued，避免串流:', runId, 'current:', _currentRunId)
+      return
+    }
+    _cancelResponseWatchdog()
+    if (runId) _currentRunId = runId
+    _isStreaming = true
+    _streamStartTime = _streamStartTime || Date.now()
+    showTyping(true)
+    updateSendState()
+    setReplyStatus('queued', replyStatusText('queued'), { runId: runId || _currentRunId, activity: t('chat.replyActivityStreamReady') })
+    scheduleStreamSafetyTimeout()
     return
   }
 
