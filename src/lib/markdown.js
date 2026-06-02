@@ -47,6 +47,10 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
 }
 
+function escapeAttr(str) {
+  return escapeHtml(String(str ?? '')).replace(/'/g, '&#39;')
+}
+
 // 预加载 Tauri convertFileSrc
 let _convertFileSrc = null
 if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
@@ -248,9 +252,10 @@ function inlineFormat(text) {
     .replace(/(^|[^A-Za-z0-9_])_(.+?)_(?![A-Za-z0-9_])/g, '$1<em>$2</em>')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
       const rawSrc = unescapeHtmlEntities(src).trim()
-      const safeSrc = escapeHtml(resolveImageSrc(rawSrc)).replace(/\\/g, '&#x5c;')
-      const escapedSrc = escapeHtml(rawSrc).replace(/\\/g, '&#x5c;')
-      return `<img src="${safeSrc}" alt="${alt}" class="msg-img" onerror="this.onerror=null;this.style.display='none';this.insertAdjacentHTML('afterend','<span style=\\'color:var(--text-tertiary);font-size:12px\\'>[图片无法加载: ${escapedSrc}]</span>')" />`
+      const safeSrc = escapeAttr(resolveImageSrc(rawSrc)).replace(/\\/g, '&#x5c;')
+      const safeAlt = escapeAttr(alt)
+      const errorSrc = escapeAttr(rawSrc).replace(/\\/g, '&#x5c;')
+      return `<img src="${safeSrc}" alt="${safeAlt}" class="msg-img" data-error-src="${errorSrc}" />`
     })
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
       const rawUrl = unescapeHtmlEntities(url).trim()
@@ -265,6 +270,27 @@ function unescapeHtmlEntities(str) {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
+}
+
+function handleMarkdownImageError(evt) {
+  const img = evt?.target
+  if (!img?.classList?.contains('msg-img')) return
+  if (img.dataset.mdErrorHandled === '1') return
+  img.dataset.mdErrorHandled = '1'
+  img.style.display = 'none'
+  const next = img.nextElementSibling
+  if (next?.dataset?.markdownImageError === '1') return
+  const span = document.createElement('span')
+  span.dataset.markdownImageError = '1'
+  span.style.color = 'var(--text-tertiary)'
+  span.style.fontSize = '12px'
+  span.textContent = t('common.imageLoadFailedWithSrc', { src: img.dataset.errorSrc || img.getAttribute('src') || '' })
+  img.insertAdjacentElement('afterend', span)
+}
+
+if (typeof window !== 'undefined' && !window.__markdownImageErrorHandlerInstalled) {
+  window.__markdownImageErrorHandlerInstalled = true
+  window.addEventListener('error', handleMarkdownImageError, true)
 }
 
 window.__copyCode = function(btn) {
