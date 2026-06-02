@@ -83,8 +83,9 @@ async function loadUsage(page) {
     el.innerHTML = `<div class="usage-empty">
       <div style="color:var(--error);margin-bottom:8px">${t('usage.loadFailed')}: ${esc(e?.message || e)}</div>
       <div class="form-hint">${t('usage.loadFailedHint')}</div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="this.closest('.page').querySelector('#btn-usage-refresh').click()">${t('usage.retry')}</button>
+      <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-usage-retry">${t('usage.retry')}</button>
     </div>`
+    el.querySelector('#btn-usage-retry')?.addEventListener('click', () => page.querySelector('#btn-usage-refresh')?.click())
   }
 }
 
@@ -200,9 +201,13 @@ function renderUsage(el, data) {
     const bars = daily.map(d => {
       const pct = Math.max(1, Math.round((d.tokens || 0) / maxTokens * 100))
       const date = (d.date || '').slice(5) // MM-DD
-      return `<div class="usage-daily-bar-wrap" title="${d.date}: ${fmtTokens(d.tokens)} tokens · ${d.messages || 0} msgs">
+      return `<div class="usage-daily-bar-wrap" title="${escAttr(t('usage.dailyBarTitle', {
+        date: d.date,
+        tokens: fmtTokens(d.tokens),
+        count: d.messages || 0,
+      }))}">
         <div class="usage-daily-bar" style="height:${pct}%"></div>
-        <div class="usage-daily-label">${date}</div>
+        <div class="usage-daily-label">${esc(date)}</div>
       </div>`
     }).join('')
     dailyHtml = `
@@ -222,14 +227,19 @@ function renderUsage(el, data) {
       const key = esc(s.key || '').replace(/^agent:main:/, '')
       const model = s.model || u.modelUsage?.[0]?.model || ''
       const provider = u.modelUsage?.[0]?.provider || s.modelProvider || ''
+      const metaText = t('usage.sessionMeta', {
+        tokens: fmtTokens(u.totalTokens),
+        cost: fmtCost(u.totalCost),
+        count: u.messageCounts?.total || 0,
+      }) + (u.messageCounts?.errors ? ' · ' + t('usage.errorCount', { count: u.messageCounts.errors }) : '')
       return `<div class="session-row">
         <div class="session-row-header">
-          <span class="session-key" title="${esc(s.key || '')}">${key || s.sessionId?.slice(0, 12) || '—'}</span>
+          <span class="session-key" title="${escAttr(s.key || '')}">${key || esc(s.sessionId?.slice(0, 12) || '—')}</span>
           ${s.agentId ? `<span class="session-flag">${esc(s.agentId)}</span>` : ''}
           ${model ? `<span class="session-model">${esc(model)}</span>` : ''}
           ${provider ? `<span class="session-flag">${esc(provider)}</span>` : ''}
         </div>
-        <div class="session-row-meta">${esc(`${fmtTokens(u.totalTokens)} tokens · ${fmtCost(u.totalCost)} · ${(u.messageCounts?.total || 0)} msgs${u.messageCounts?.errors ? ' · ' + u.messageCounts.errors + ' err' : ''}`)}</div>
+        <div class="session-row-meta">${esc(metaText)}</div>
       </div>`
     }).join('')
     sessionsHtml = `
@@ -244,7 +254,7 @@ function renderUsage(el, data) {
 }
 
 function esc(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function escAttr(str) {

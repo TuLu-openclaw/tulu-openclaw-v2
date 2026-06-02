@@ -50,6 +50,9 @@ export default {
   refreshHero: _('Hermes Agent · 使用分析', 'Hermes Agent · Analytics', 'Hermes Agent · 使用分析'),
   times: _('{count} 次', '{count} times'),
   timesCall: _('{count} 次调用', '{count} calls', '{count} 次呼叫'),
+  dailyBarTitle: _('{date}: {tokens} tokens · {count} 条消息', '{date}: {tokens} tokens · {count} messages', '{date}: {tokens} tokens · {count} 則訊息'),
+  sessionMeta: _('{tokens} tokens · {cost} · {count} 条消息', '{tokens} tokens · {cost} · {count} messages', '{tokens} tokens · {cost} · {count} 則訊息'),
+  errorCount: _('{count} 个错误', '{count} errors', '{count} 個錯誤'),
   unknownModel: _('未知', 'Unknown'),
   unknownProvider: _('未知', 'Unknown'),
 }
