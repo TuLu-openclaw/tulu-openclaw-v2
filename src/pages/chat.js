@@ -3232,12 +3232,12 @@ function formatToolDisplayName(name = '') {
   const raw = String(name || '').trim()
   const lower = raw.toLowerCase()
   const map = {
-    exec: '执行命令', shell: '执行命令', read: '读取文件', write: '写入文件', edit: '修改文件',
-    web_search: '联网搜索', web_fetch: '读取网页', image: '图像分析', pdf: 'PDF 分析',
-    message: '发送消息', cron: '定时任务', nodes: '设备节点', canvas: '界面预览',
-    sessions_spawn: '启动子任务', sessions_send: '会话协作', gateway: '网关配置',
+    exec: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
+    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), pdf: t('chat.toolNamePdf'),
+    message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), nodes: t('chat.toolNameNodes'), canvas: t('chat.toolNameCanvas'),
+    sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), gateway: t('chat.toolNameGateway'),
   }
-  return map[lower] || raw || '工具'
+  return map[lower] || raw || t('chat.tool')
 }
 
 function summarizeToolInput(input) {
@@ -3256,10 +3256,10 @@ function buildReplyStatusDetail(status = _replyStatusState) {
   const parts = []
   const model = status.model || getSessionDisplayModel(status.sessionKey || _sessionKey) || getSessionRuntimeModel(status.sessionKey || _sessionKey) || _selectedModel || _primaryModel || ''
   const agent = status.agentId || parseSessionAgent(status.sessionKey || _sessionKey) || 'main'
-  if (agent) parts.push(`Agent：${agent}`)
-  if (model) parts.push(`模型：${shortModelName(model)}`)
-  if (status.runId) parts.push(`Run：${String(status.runId).slice(0, 8)}`)
-  if (status.activity) parts.push(`当前动作：${status.activity}`)
+  if (agent) parts.push(t('chat.replyDetailAgent', { agent }))
+  if (model) parts.push(t('chat.replyDetailModel', { model: shortModelName(model) }))
+  if (status.runId) parts.push(t('chat.replyDetailRun', { run: String(status.runId).slice(0, 8) }))
+  if (status.activity) parts.push(t('chat.replyDetailActivity', { activity: status.activity }))
   return parts.join(' · ')
 }
 
@@ -3280,14 +3280,14 @@ function renderReplyStatus(status = _replyStatusState) {
   if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(status)
   if (_replyStatusMetaEl) {
     const hint = ['queued','sending','thinking','tool','streaming','finalizing'].includes(status.state)
-      ? '系统正在持续接收执行进度，连接保持正常；若长时间无新事件，将自动进入超时保护。'
-      : (status.state === 'done' ? '本轮已完成，可继续输入新的任务。' : '等待新的任务。')
+      ? t('chat.replyMetaActive')
+      : (status.state === 'done' ? t('chat.replyMetaDone') : t('chat.replyMetaWaiting'))
     _replyStatusMetaEl.textContent = hint
   }
   if (_replyStatusToolsEl) {
     _replyStatusToolsEl.textContent = status.toolName
-      ? `工具：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · 第 ${status.toolCount} 次工具事件` : ''}${status.toolInput ? ` · 参数：${status.toolInput}` : ''}`
-      : (status.state === 'tool' ? '工具：等待工具名称回传' : '')
+      ? `${t('chat.tool')}：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · ${t('chat.toolEventCount', { count: status.toolCount })}` : ''}${status.toolInput ? ` · ${t('chat.toolParams')}：${status.toolInput}` : ''}`
+      : (status.state === 'tool' ? t('chat.toolWaitingName') : '')
   }
   markStatusMarquee()
   scheduleReplyStatusTimer(status)
