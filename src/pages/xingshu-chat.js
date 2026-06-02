@@ -1,3 +1,5 @@
+import { t } from '../lib/i18n.js'
+
 /**
  * 星枢聊天室
  * 售卖版独立聊天室：多房间、管理面板、本地持久化、可连接服务器 WebSocket。
@@ -239,29 +241,29 @@ async function handleAction(action) {
   if (action === 'admin-login') {
     const pass = document.getElementById('xs-admin-pass')?.value
     if (pass === ADMIN_PASS) { state.admin = true; saveState(); addMessage('admin', { system: true, user: '系统', text: '管理员权限已解锁。' }) }
-    else alert('管理密码错误')
+    else alert(t('xingshuChat.adminPasswordWrong'))
   }
-  if (!state.admin) return alert('需要管理员权限')
+  if (!state.admin) return alert(t('xingshuChat.adminRequired'))
   if (action === 'announce') {
-    const text = prompt('输入新公告', state.announcement)
-    if (text !== null) { state.announcement = text.trim(); saveState(); addMessage(state.activeRoom, { system: true, user: '公告', text: state.announcement || '管理员已删除公告。' }) }
+    const text = prompt(t('xingshuChat.announcementPrompt'), state.announcement)
+    if (text !== null) { state.announcement = text.trim(); saveState(); addMessage(state.activeRoom, { system: true, user: '公告', text: state.announcement || t('xingshuChat.announcementDeleted') }) }
   }
   if (action === 'delete-announcement') {
-    if (confirm('确定删除当前公告？')) { state.announcement = ''; saveState(); addMessage(state.activeRoom, { system: true, user: '公告', text: '管理员已删除公告。' }) }
+    if (confirm(t('xingshuChat.deleteAnnouncementConfirm'))) { state.announcement = ''; saveState(); addMessage(state.activeRoom, { system: true, user: '公告', text: t('xingshuChat.announcementDeleted') }) }
   }
   if (action === 'mute') { state.muted = !state.muted; saveState(); addMessage(state.activeRoom, { system: true, user: '管理', text: state.muted ? '已开启全员禁言。' : '已解除全员禁言。' }) }
-  if (action === 'clear-room') { if (confirm('确定清空当前房间？')) { state.messages[state.activeRoom] = []; saveState(); render(rootEl) } }
+  if (action === 'clear-room') { if (confirm(t('xingshuChat.clearRoomConfirm'))) { state.messages[state.activeRoom] = []; saveState(); render(rootEl) } }
   if (action === 'export') exportMessages()
-  if (action === 'save-banned') { state.bannedWords = (document.getElementById('xs-banned')?.value || '').split(/[，,]/).map(s => s.trim()).filter(Boolean); saveState(); alert('已保存') }
+  if (action === 'save-banned') { state.bannedWords = (document.getElementById('xs-banned')?.value || '').split(/[，,]/).map(s => s.trim()).filter(Boolean); saveState(); alert(t('xingshuChat.saved')) }
 }
 
 function sendMessage() {
   const input = document.getElementById('xs-message')
   const text = input?.value?.trim()
   if (!text) return
-  if (state.muted && !state.admin) return alert('当前已开启全员禁言')
+  if (state.muted && !state.admin) return alert(t('xingshuChat.muted'))
   const hit = state.bannedWords.find(w => w && text.includes(w))
-  if (hit) return alert(`消息包含违禁词：${hit}`)
+  if (hit) return alert(t('xingshuChat.bannedWordHit', { word: hit }))
   const payload = { room: state.activeRoom, user: state.nickname, text, time: nowTime() }
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload))
   addMessage(state.activeRoom, { user: state.nickname, role: state.admin ? '管理员' : '用户', text })
