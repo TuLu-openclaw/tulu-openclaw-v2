@@ -2826,6 +2826,10 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'delta') {
+    if (_currentRunId && runId && runId !== _currentRunId) {
+      console.warn('[chat] 忽略非当前 run 的 delta，避免串流:', runId, 'current:', _currentRunId)
+      return
+    }
     _cancelResponseWatchdog()
     const c = extractChatContent(payload.message)
     if (c?.images?.length) _currentAiImages = c.images
@@ -2835,8 +2839,8 @@ function handleChatEvent(payload) {
     if (c?.tools?.length) _currentAiTools = c.tools
     if (c?.text && applyStreamText(c.text)) {
       showTyping(false)
-      beginStreamBubble(payload.runId)
-      setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: payload.runId, activity: t('chat.replyActivityReceivingOutput') })
+      beginStreamBubble(runId)
+      setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: runId || _currentRunId, activity: t('chat.replyActivityReceivingOutput') })
       scheduleStreamSafetyTimeout()
       throttledRender()
     }
@@ -2844,6 +2848,10 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'final') {
+    if (_currentRunId && runId && runId !== _currentRunId) {
+      console.warn('[chat] 忽略非当前 run 的 final，避免覆盖当前流:', runId, 'current:', _currentRunId)
+      return
+    }
     _cancelResponseWatchdog()
     const c = extractChatContent(payload.message)
     const finalText = c?.text || ''
