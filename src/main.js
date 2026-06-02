@@ -727,17 +727,17 @@ function getGatewayBannerSnapshot(running, foreign = false) {
   const state = getGatewayHealthState()
   const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
   const health = state?.health || 'unknown'
-  const handshakeLabel = wsInfo.gatewayReady ? '已完成' : '未完成'
-  const wsLabel = wsInfo.connected ? '已连接' : '未连接'
+  const handshakeLabel = wsInfo.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending')
+  const wsLabel = wsInfo.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected')
   const reconnectLabel = wsInfo.reconnectState || 'idle'
-  const phase = wsInfo.status || (wsInfo.gatewayReady ? '网关连接已就绪' : wsInfo.connected ? '等待握手' : '尚未连接')
+  const phase = wsInfo.status || (wsInfo.gatewayReady ? t('dashboard.gatewayConnectionReady') : wsInfo.connected ? t('dashboard.waitingHandshake') : t('dashboard.notConnected'))
   const phaseDetail = wsInfo.statusDetail || ''
 
   if (foreign || state?.foreign) {
     return {
       tone: 'warning',
       text: t('dashboard.foreignGatewayBanner'),
-      detail: `状态：外部实例占用 · WS：${wsLabel} · 阶段：${phase}`,
+      detail: t('dashboard.gatewayForeignDetail', { ws: wsLabel, phase }),
     }
   }
 
@@ -745,38 +745,40 @@ function getGatewayBannerSnapshot(running, foreign = false) {
     return {
       tone: 'info',
       text: t('dashboard.controlUINotRunning'),
-      detail: `状态：未运行 · WS：${wsLabel} · 握手：${handshakeLabel}`,
+      detail: t('dashboard.gatewayStoppedDetail', { ws: wsLabel, handshake: handshakeLabel }),
     }
   }
 
   if (health === 'recovering') {
     return {
       tone: 'warning',
-      text: 'Gateway 自动恢复中，请稍候。',
-      detail: `状态：自动恢复中 · 当前阶段：${phase} · 重连：${reconnectLabel}`,
+      text: t('dashboard.gatewayRecoveringBanner'),
+      detail: t('dashboard.gatewayRecoveringDetail', { phase, reconnect: reconnectLabel }),
     }
   }
 
   if (health === 'starting') {
     return {
       tone: 'info',
-      text: 'Gateway 正在初始化，请稍候...',
-      detail: `状态：正在初始化 · 当前阶段：${phase} · WS：${wsLabel} · 握手：${handshakeLabel}`,
+      text: t('dashboard.gatewayStartingBanner'),
+      detail: t('dashboard.gatewayStartingDetail', { phase, ws: wsLabel, handshake: handshakeLabel }),
     }
   }
 
   if (health === 'degraded') {
     return {
       tone: 'warning',
-      text: 'Gateway 已启动，但连接尚未完全就绪。',
-      detail: `当前阶段：${phase} · WS：${wsLabel} · 握手：${handshakeLabel}${phaseDetail ? ` · 说明：${phaseDetail}` : ''} · 重连：${reconnectLabel}`,
+      text: t('dashboard.gatewayDegradedBanner'),
+      detail: phaseDetail
+        ? t('dashboard.gatewayDegradedDetailWithReason', { phase, ws: wsLabel, handshake: handshakeLabel, reason: phaseDetail, reconnect: reconnectLabel })
+        : t('dashboard.gatewayDegradedDetail', { phase, ws: wsLabel, handshake: handshakeLabel, reconnect: reconnectLabel }),
     }
   }
 
   return {
     tone: 'success',
-    text: 'Gateway 正在运行。',
-    detail: `状态：运行中（已就绪） · 当前阶段：${phase} · WS：${wsLabel} · 握手：${handshakeLabel}`,
+    text: t('dashboard.gatewayRunningBanner'),
+    detail: t('dashboard.gatewayRunningDetail', { phase, ws: wsLabel, handshake: handshakeLabel }),
   }
 }
 
