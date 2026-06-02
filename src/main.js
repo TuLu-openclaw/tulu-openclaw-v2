@@ -137,7 +137,7 @@ function showBackendDownOverlay() {
       </button>
       <div id="backend-retry-status" style="font-size:12px;color:var(--text-tertiary);margin-top:12px"></div>
       <div style="margin-top:16px;font-size:11px;color:#aaa">
-        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">${t('sidebar.feedbackGroup')}: 916149901</a>
         <span style="margin:0 6px">&middot;</span>v${APP_VERSION}
       </div>
     </div>
@@ -269,6 +269,7 @@ function showKamiFallbackModal() {
 
 let _loginFailCount = 0
 const CAPTCHA_THRESHOLD = 3
+const PW_CHANGE_SESSION_KEY = '星枢OpenClaw_must_change_pw'
 
 function _genCaptcha() {
   const a = Math.floor(Math.random() * 20) + 1
@@ -310,7 +311,7 @@ function showLoginOverlay(defaultPw) {
         </div>
       </details>` : ''}
       <div style="margin-top:${hasDefault ? '20' : '12'}px;font-size:11px;color:#aaa;text-align:center">
-        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">反馈交流群：916149901</a>
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">${t('sidebar.feedbackGroup')}: 916149901</a>
         <span style="margin:0 6px">·</span>v${APP_VERSION}
       </div>
     </div>
@@ -370,7 +371,7 @@ function showLoginOverlay(defaultPw) {
           overlay.classList.add('hide')
           setTimeout(() => overlay.remove(), 400)
           if (cfg.accessPassword === '123456') {
-            sessionStorage.setItem('星枢OpenClaw_must_change_pw', '1')
+            sessionStorage.setItem(PW_CHANGE_SESSION_KEY, '1')
           }
           resolve()
         } else {
@@ -396,7 +397,7 @@ function showLoginOverlay(defaultPw) {
           overlay.classList.add('hide')
           setTimeout(() => overlay.remove(), 400)
           if (data.mustChangePassword || data.defaultPassword === '123456') {
-            sessionStorage.setItem('星枢OpenClaw_must_change_pw', '1')
+            sessionStorage.setItem(PW_CHANGE_SESSION_KEY, '1')
           }
           resolve()
         }
@@ -551,15 +552,20 @@ window.addEventListener('lobster-work-end', () => {
   }
 
   // 默认密码提醒横幅
-  if (sessionStorage.getItem('星枢OpenClaw_must_change_pw') === '1') {
+  if (sessionStorage.getItem(PW_CHANGE_SESSION_KEY) === '1') {
     const banner = document.createElement('div')
     banner.id = 'pw-change-banner'
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:13px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,0.15)'
     banner.innerHTML = `
       <span>${statusIcon('warn', 14)} ${t('common.defaultPasswordBanner')}</span>
-      <a href="#/security" style="color:#fff;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600" onclick="document.getElementById('pw-change-banner').remove();sessionStorage.removeItem('星枢OpenClaw_must_change_pw')">${t('common.goSecurity')}</a>
-      <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px">✕</button>
+      <a id="pw-change-banner-link" href="#/security" style="color:#fff;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">${t('common.goSecurity')}</a>
+      <button id="pw-change-banner-close" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px">&times;</button>
     `
+    banner.querySelector('#pw-change-banner-link')?.addEventListener('click', () => {
+      banner.remove()
+      sessionStorage.removeItem(PW_CHANGE_SESSION_KEY)
+    })
+    banner.querySelector('#pw-change-banner-close')?.addEventListener('click', () => banner.remove())
     document.body.prepend(banner)
   }
 
@@ -1196,9 +1202,10 @@ function startUpdateChecker() {
         <div style="font-size:48px;margin-bottom:16px">⚠️</div>
         <div style="font-size:18px;font-weight:600;margin-bottom:8px;color:#18181b">${t('common.pageLoadFailed')}</div>
         <div style="font-size:13px;color:#71717a;max-width:400px;line-height:1.6;margin-bottom:16px">${String(bootErr?.message || bootErr).replace(/</g,'&lt;')}</div>
-        <button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-size:13px;cursor:pointer">${t('common.reloadRetry')}</button>
+        <button id="boot-reload-btn" style="padding:8px 20px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-size:13px;cursor:pointer">${t('common.reloadRetry')}</button>
         <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}<br><a href="https://github.com/qingchencloud/星枢OpenClaw/issues" target="_blank" style="color:#6366f1">GitHub Issues</a></div>
       </div>`
+    app.querySelector('#boot-reload-btn')?.addEventListener('click', () => location.reload())
   }
   startUpdateChecker()
 
