@@ -68,5 +68,7 @@ export default {
   upgradeCompleted: _('升级完成', 'Upgrade completed', '升級完成', 'アップグレード完了', '업그레이드 완료', 'Nâng cấp hoàn tất'),
   upgradeFailed: _('升级失败', 'Upgrade failed', '升級失敗', 'アップグレード失敗', '업그레이드 실패', 'Nâng cấp thất bại'),
   unknownCommand: _('未知命令', 'Unknown command', '未知命令', '不明なコマンド', '알 수 없는 명령', 'Lệnh không xác định'),
+  unknownRoute: _('路由未注册', 'Route is not registered', '路由未註冊', 'ルートが登録されていません', '라우트가 등록되지 않았습니다', 'Tuyến chưa được đăng ký', 'La ruta no está registrada', 'A rota não está registrada', 'Маршрут не зарегистрирован', 'La route n’est pas enregistrée', 'Route ist nicht registriert'),
+  moduleLoadTimeout: _('模块加载超时', 'Module load timed out', '模組載入逾時', 'モジュールの読み込みがタイムアウトしました', '모듈 로드 시간이 초과되었습니다', 'Tải mô-đun quá thời gian', 'Se agotó el tiempo de carga del módulo', 'Tempo limite ao carregar o módulo', 'Истекло время загрузки модуля', 'Le chargement du module a expiré', 'Zeitüberschreitung beim Laden des Moduls'),
   processing: _('处理中...', 'Processing...', '處理中...', '処理中...', '처리 중...', 'Đang xử lý...', 'Procesando...', 'Processando...', 'Обработка...', 'Traitement...', 'Verarbeitung...'),
 }

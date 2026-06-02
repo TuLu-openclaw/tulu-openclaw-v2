@@ -1,3 +1,5 @@
+import { t } from './lib/i18n.js'
+
 /**
  * 极简 hash 路由
  */
@@ -46,7 +48,7 @@ async function loadRoute() {
       _contentEl.innerHTML = `
         <div class="page-loader">
           <div class="page-loader-spinner"></div>
-          <div class="page-loader-text">加载中...</div>
+          <div class="page-loader-text">${t('common.loading')}</div>
         </div>`
     }
     // 100ms 后重试（等待引擎路由注册完成）
@@ -54,7 +56,7 @@ async function loadRoute() {
     if (routes[routePath]) {
       loadRoute()
     } else if (_contentEl) {
-      showLoadError(_contentEl, routePath, new Error('路由未注册'))
+      showLoadError(_contentEl, routePath, new Error(t('common.unknownRoute')))
     }
     return
   }
@@ -78,7 +80,7 @@ async function loadRoute() {
     _contentEl.innerHTML = `
       <div class="page-loader">
         <div class="page-loader-spinner"></div>
-        <div class="page-loader-text">加载中...</div>
+        <div class="page-loader-text">${t('common.loading')}</div>
       </div>`
 
     try {
@@ -134,7 +136,7 @@ async function loadRoute() {
 async function retryLoad(loader, maxRetries, delayMs) {
   for (let i = 0; i <= maxRetries; i++) {
     try {
-      return await withTimeout(loader(), 15000, '模块加载超时')
+      return await withTimeout(loader(), 15000, t('common.moduleLoadTimeout'))
     } catch (e) {
       const isNetworkError = /fetch|network|connection|ERR_/i.test(String(e?.message || e))
       if (i < maxRetries && isNetworkError) {
@@ -155,17 +157,21 @@ function withTimeout(promise, ms, msg) {
 }
 
 function showLoadError(container, hash, error) {
-  const name = hash.replace('/', '') || 'unknown'
+  const reloadButtonId = `route-reload-${Date.now()}-${Math.random().toString(36).slice(2)}`
   container.innerHTML = `
     <div class="page-loader">
       <div style="color:var(--error,#ef4444);margin-bottom:12px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
       </div>
-      <div class="page-loader-text" style="color:var(--text-primary)">页面加载失败</div>
+      <div class="page-loader-text" style="color:var(--text-primary)">${t('common.pageLoadFailed')}</div>
       <div style="color:var(--text-tertiary);font-size:12px;margin:8px 0 16px;max-width:400px;word-break:break-all">${escHtml(String(error?.message || error))}</div>
-      <button onclick="location.hash='${hash}';location.reload()" style="padding:6px 20px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;font-size:13px">重新加载</button>
+      <button id="${reloadButtonId}" type="button" style="padding:6px 20px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);cursor:pointer;font-size:13px">${t('common.reloadRetry')}</button>
     </div>
   `
+  container.querySelector(`#${reloadButtonId}`)?.addEventListener('click', () => {
+    location.hash = hash
+    location.reload()
+  })
 }
 
 function escHtml(s) {
