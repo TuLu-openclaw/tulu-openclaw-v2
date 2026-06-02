@@ -2775,12 +2775,16 @@ function beginStreamBubble(runId = '') {
 function scheduleStreamSafetyTimeout() {
   clearTimeout(_streamSafetyTimer)
   _streamSafetyTimer = setTimeout(() => {
+    _streamSafetyTimer = null
     if (_isStreaming) {
       console.warn('[chat] 流式输出超时（90s 无新数据），强制结束')
+      const timeoutText = t('chat.streamTimeout')
       if (_currentAiBubble && _currentAiText) {
-        _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
+        flushStreamRender()
       }
-      appendSystemMessage(t('chat.streamTimeout'))
+      appendSystemMessage(timeoutText)
+      updateTaskByRunOrSession(_currentRunId, _sessionKey, { status: 'error', progress: 100, error: timeoutText })
+      setReplyStatus('error', timeoutText, { runId: _currentRunId || '', activity: t('chat.checkErrorOrRetryTask') })
       resetStreamState()
       processMessageQueue()
     }
