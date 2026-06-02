@@ -108,6 +108,7 @@ let _sessionListEl = null, _sessionListNormalEl = null, _sessionListGroupsEl = n
 let _mentionPanelEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
+let _lastStreamDeltaFingerprint = ''
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
 let _lastRenderTime = 0, _renderPending = false, _renderTimer = null, _lastHistoryHash = ''
 let _autoScrollEnabled = true, _lastScrollTop = 0, _touchStartY = 0
@@ -2710,6 +2711,59 @@ function handleEvent(msg) {
   }
 }
 
+function applyStreamText(nextText = '') {
+  const text = String(nextText || '')
+  if (!text) return false
+  const fingerprint = `${text.length}:${text.slice(0, 32)}:${text.slice(-32)}`
+  if (fingerprint === _lastStreamDeltaFingerprint) return false
+  _lastStreamDeltaFingerprint = fingerprint
+
+  if (!_currentAiText) {
+    _currentAiText = text
+    return true
+  }
+  if (text === _currentAiText) return false
+  if (text.startsWith(_currentAiText)) {
+    _currentAiText = text
+    return true
+  }
+  // Some Gateway/provider paths emit token chunks instead of cumulative text.
+  // Treat non-prefix shorter/equal chunks as append-only deltas so streamed replies do not lose words.
+  if (text.length <= _currentAiText.length) {
+    if (_currentAiText.endsWith(text)) return false
+    _currentAiText += text
+    return true
+  }
+  // If the new text is longer but not a prefix, preserve existing output and append the new chunk.
+  _currentAiText += text
+  return true
+}
+
+function beginStreamBubble(runId = '') {
+  if (_currentAiBubble) return
+  _currentAiBubble = createStreamBubble()
+  _currentRunId = runId || _currentRunId
+  _isStreaming = true
+  _streamStartTime = Date.now()
+  updateSendState()
+  setReplyStatus('queued', replyStatusText('queued'), { runId: _currentRunId, activity: t('chat.replyActivityStreamReady') })
+}
+
+function scheduleStreamSafetyTimeout() {
+  clearTimeout(_streamSafetyTimer)
+  _streamSafetyTimer = setTimeout(() => {
+    if (_isStreaming) {
+      console.warn('[chat] 流式输出超时（90s 无新数据），强制结束')
+      if (_currentAiBubble && _currentAiText) {
+        _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
+      }
+      appendSystemMessage(t('chat.streamTimeout'))
+      resetStreamState()
+      processMessageQueue()
+    }
+  }, 90000)
+}
+
 function handleChatEvent(payload) {
   const { state } = payload
   const runId = payload.runId
@@ -2779,31 +2833,11 @@ function handleChatEvent(payload) {
     if (c?.audios?.length) _currentAiAudios = c.audios
     if (c?.files?.length) _currentAiFiles = c.files
     if (c?.tools?.length) _currentAiTools = c.tools
-    if (c?.text && c.text.length > _currentAiText.length) {
+    if (c?.text && applyStreamText(c.text)) {
       showTyping(false)
-      if (!_currentAiBubble) {
-        _currentAiBubble = createStreamBubble()
-        _currentRunId = payload.runId
-        _isStreaming = true
-        _streamStartTime = Date.now()
-        updateSendState()
-        setReplyStatus('queued', replyStatusText('queued'), { runId: payload.runId, activity: t('chat.replyActivityStreamReady') })
-      }
-      _currentAiText = c.text
+      beginStreamBubble(payload.runId)
       setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: payload.runId, activity: t('chat.replyActivityReceivingOutput') })
-      // 每次收到 delta 重置安全超时（90s 无新 delta 则强制结束）
-      clearTimeout(_streamSafetyTimer)
-      _streamSafetyTimer = setTimeout(() => {
-        if (_isStreaming) {
-          console.warn('[chat] 流式输出超时（90s 无新数据），强制结束')
-          if (_currentAiBubble && _currentAiText) {
-            _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
-          }
-          appendSystemMessage(t('chat.streamTimeout'))
-          resetStreamState()
-          processMessageQueue()
-        }
-      }, 90000)
+      scheduleStreamSafetyTimeout()
       throttledRender()
     }
     return
@@ -3436,6 +3470,7 @@ function resetStreamState() {
   _currentAiFiles = []
   _currentAiTools = []
   _currentRunId = null
+  _lastStreamDeltaFingerprint = ''
   _isStreaming = false
   _streamStartTime = 0
   _lastErrorMsg = null
