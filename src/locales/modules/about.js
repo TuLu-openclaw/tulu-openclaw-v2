@@ -135,7 +135,7 @@ export default {
   projectPasswordError: _('密码错误', 'Incorrect password', '密碼錯誤'),
   projectOpenClaw: _('AI Agent 框架，支持多模型协作、工具调用、记忆管理', 'AI Agent framework with multi-model collaboration, tool calling, memory management', 'AI Agent 框架，支援多模型协作、工具呼叫、記憶管理'),
   projectOpenClawZh: _('我们维护的 OpenClaw 汉化版，3000+ Star，中文界面 + 国内镜像优化', 'Our maintained Chinese translation of OpenClaw, 3000+ Stars, Chinese UI + domestic mirror optimization', '我們维护的 OpenClaw 漢化版，3000+ Star，中文界面 + 國內鏡像最佳化'),
-  project星枢OpenClaw: _('OpenClaw 可视化管理面板，Tauri v2 桌面应用', 'OpenClaw visual management panel, Tauri v2 desktop app', 'OpenClaw 可视化管理面板，Tauri v2 桌面應用'),
+  projectTuluOpenClaw: _('OpenClaw 可视化管理面板，Tauri v2 桌面应用', 'OpenClaw visual management panel, Tauri v2 desktop app', 'OpenClaw 可视化管理面板，Tauri v2 桌面應用'),
   projectClawApp: _('跨平台移动聊天客户端，H5 + 代理服务器架构，支持离线和流式传输', 'Cross-platform mobile chat client, H5 + proxy server architecture, offline and streaming support', '跨平台移動聊天用戶端，H5 + 代理伺服器架構，支援離線和流式傳輸'),
   projectCftunnel: _('全协议内网穿透工具，Cloud 模式免费 HTTP/WS + Relay 模式自建中继', 'Full-protocol tunnel tool, Cloud mode free HTTP/WS + Relay mode self-hosted', '全协議內網穿透工具，Cloud 模式免費 HTTP/WS + Relay 模式自建中繼'),
   domesticMirror: _('国内镜像', 'China Mirror', '國內鏡像'),

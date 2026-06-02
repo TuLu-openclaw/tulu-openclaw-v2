@@ -733,7 +733,7 @@ const PROJECTS = [
   },
   {
     name: '星枢OpenClaw',
-    desc: t('about.project星枢OpenClaw'),
+    desc: t('about.projectTuluOpenClaw'),
     url: 'https://github.com/TuLu-openclaw/tulu-openclaw-v2',
     gitee: 'https://gitee.com/QtCodeCreators/星枢OpenClaw',
   },

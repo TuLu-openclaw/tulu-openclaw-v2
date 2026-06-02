@@ -101,6 +101,7 @@ export default {
   groupMemberReplyFailed: _('群聊成员回复失败', 'Group member reply failed', '群組成員回覆失敗'),
   deviceReconnectApprovalNeeded: _('设备连接需要重新批准', 'Device connection needs re-approval', '設備連線需要重新批准'),
   checkErrorOrRetryTask: _('请查看错误信息或重试任务', 'Check the error details or retry the task', '請查看錯誤資訊或重試任務'),
+  none: _('无', 'None', '無', 'なし', '없음', 'Không', 'Ninguno', 'Nenhum', 'Нет', 'Aucun', 'Keine'),
   send: _('发送', 'Send', '發送', '送信', '전송', 'Gửi', 'Enviar', 'Enviar', 'Отправить', 'Envoyer', 'Senden'),
   stopGeneration: _('停止生成', 'Stop Generation'),
   doubleClickRename: _('双击重命名', 'Double-click to rename', '雙擊重命名'),
