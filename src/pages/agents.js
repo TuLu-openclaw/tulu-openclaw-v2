@@ -322,17 +322,22 @@ async function showEditAgentDialog(page, state, id) {
       const emoji = (result.emoji || '').trim()
       const model = (result.model || '').trim()
 
+      const currentEmoji = agent.identityEmoji || ''
+      const identityChanged = newName !== name || emoji !== currentEmoji
+
       try {
-        if (newName || emoji) {
+        if (identityChanged) {
           await api.updateAgentIdentity(id, newName || null, emoji || null)
         }
         if (model && model !== agent.model) {
           await api.updateAgentModel(id, model)
         }
 
-        // 手动更新 state 并重新渲染，确保立即生效
-        if (newName) agent.identityName = newName
-        if (emoji) agent.identityEmoji = emoji
+        // 手动更新 state 并重新渲染，确保立即生效（包含清空姓名/Emoji 的场景）
+        if (identityChanged) {
+          agent.identityName = newName
+          agent.identityEmoji = emoji
+        }
         if (model) agent.model = model
         renderAgents(page, state)
 
