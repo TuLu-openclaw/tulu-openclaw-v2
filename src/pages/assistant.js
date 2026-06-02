@@ -55,7 +55,7 @@ const API_TYPES = SHARED_API_TYPES
 function normalizeApiType(raw) {
   const type = (raw || '').trim()
   if (type === 'anthropic' || type === 'anthropic-messages') return 'anthropic-messages'
-  if (type === 'google-gemini' || type === 'google-generative-ai') return 'google-generative-ai'
+  if (type === 'google-gemini' || type === 'google-generative-ai' || type === 'google-generative') return 'google-generative-ai'
   if (type === 'ollama') return 'ollama'
   if (type === 'openai' || type === 'openai-completions' || type === 'openai-responses') return 'openai-completions'
   return 'openai-completions'
@@ -1759,11 +1759,11 @@ function cleanBaseUrl(raw, apiType) {
     if (!base.endsWith('/v1')) base += '/v1'
     return base
   }
-  if (type === 'google-gemini') {
+  if (type === 'google-generative-ai') {
     // Gemini: https://generativelanguage.googleapis.com/v1beta
     return base
   }
-  if (/:(11434)$/i.test(base) && !base.endsWith('/v1')) return `${base}/v1`
+  if (/:(11434)$/i.test(base)) return base
   // 不再强制追加 /v1，尊重用户填写的 URL（火山引擎等第三方用 /v3 等路径）
   return base
 }
@@ -1892,7 +1892,6 @@ async function _callAIOnce(messages, onChunk) {
     throw new Error(t('assistant.errConfigFirst'))
   }
 
-  const base = cleanBaseUrl(_config.baseUrl, apiType)
   _abortController = new AbortController()
   const allMessages = [{ role: 'system', content: buildSystemPrompt() }, ...messages]
 
@@ -1904,11 +1903,10 @@ async function _callAIOnce(messages, onChunk) {
   }, TIMEOUT_TOTAL)
 
   try {
-    // OpenAI-compatible/Anthropic/Gemini all go through the Tauri backend.
-    // Browser-side fetch hits CORS on many providers, which surfaced as
-    // a useless "Failed to fetch" in the assistant page while OpenClaw chat
-    // worked through its gateway.
-    const reply = await api.assistantChatOnce(base, _config.apiKey || '', _config.model, apiType, allMessages, _config.temperature || 0.7)
+    // All assistant model calls go through the Tauri backend proxy.
+    // This avoids WebView CORS/preflight restrictions and keeps normal mode
+    // aligned with tool mode instead of maintaining two competing paths.
+    const reply = await api.assistantChatOnce(_config.baseUrl, _config.apiKey || '', _config.model, apiType, allMessages, _config.temperature || 0.7)
     if (reply) onChunk(reply)
     return
   } finally {
@@ -2460,14 +2458,13 @@ async function executeToolWithSafety(toolName, args, tcForConfirm) {
   return { result, approved }
 }
 
-// 带工具调用的 AI 请求（流式，支持 tool_calls 循环 + 打字机效果）
+// 带工具调用的 AI 请求（后端代理，支持 tool_calls 循环 + 打字机效果）
 async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
   const apiType = normalizeApiType(_config.apiType)
   if (!_config.baseUrl || !_config.model || (requiresApiKey(apiType) && !_config.apiKey)) {
     throw new Error(t('assistant.errConfigFirst'))
   }
 
-  const base = cleanBaseUrl(_config.baseUrl, apiType)
   const tools = getEnabledTools()
   let currentMessages = [{ role: 'system', content: buildSystemPrompt() }, ...messages]
   const toolHistory = []
@@ -2513,18 +2510,14 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
       if (systemMsg) body.system = systemMsg
       if (tools.length > 0) body.tools = convertToolsForAnthropic(tools)
 
-      const resp = await fetchWithRetry(base + '/messages', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-        signal: _abortController.signal,
-      })
+      const resp = await api.assistantApiRequest(_config.baseUrl, _config.apiKey || '', apiType, 'messages', body)
       if (!resp.ok) {
-        const errText = await resp.text().catch(() => '')
         let errMsg = `API 错误 ${resp.status}`
-        try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
+        try { errMsg = JSON.parse(resp.body || '{}').error?.message || errMsg } catch {}
         throw new Error(errMsg)
       }
 
-      const data = await resp.json()
+      const data = JSON.parse(resp.body || '{}')
       const contentBlocks = data.content || []
       const toolUses = contentBlocks.filter(b => b.type === 'tool_use')
       const textContent = contentBlocks.filter(b => b.type === 'text').map(b => b.text).join('')
@@ -2558,7 +2551,7 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
     }
 
     // ── Gemini 工具调用 ──
-    if (apiType === 'google-gemini') {
+    if (apiType === 'google-generative-ai') {
       const systemMsg = currentMessages.find(m => m.role === 'system')?.content || ''
       const chatMsgs = currentMessages.filter(m => m.role !== 'system')
       const contents = chatMsgs.map(m => ({
@@ -2567,23 +2560,18 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
           ? [{ functionResponse: m.functionResponse }]
           : [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
       }))
-      const body = { contents, generationConfig: { temperature: _config.temperature || 0.7 } }
+      const body = { model: _config.model, contents, generationConfig: { temperature: _config.temperature || 0.7 } }
       if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg }] }
       if (tools.length > 0) body.tools = convertToolsForGemini(tools)
 
-      const url = `${base}/models/${_config.model}:generateContent?key=${_config.apiKey}`
-      const resp = await fetchWithRetry(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: _abortController.signal,
-      })
+      const resp = await api.assistantApiRequest(_config.baseUrl, _config.apiKey || '', apiType, 'gemini-generate', body)
       if (!resp.ok) {
-        const errText = await resp.text().catch(() => '')
         let errMsg = `API 错误 ${resp.status}`
-        try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
+        try { errMsg = JSON.parse(resp.body || '{}').error?.message || errMsg } catch {}
         throw new Error(errMsg)
       }
 
-      const data = await resp.json()
+      const data = JSON.parse(resp.body || '{}')
       const parts = data.candidates?.[0]?.content?.parts || []
       const funcCalls = parts.filter(p => p.functionCall)
       const textParts = parts.filter(p => p.text).map(p => p.text).join('')
@@ -2618,103 +2606,36 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
       model: _config.model,
       messages: currentMessages,
       temperature: _config.temperature || 0.7,
-      stream: true,
+      stream: false,
     }
     if (tools.length > 0) body.tools = tools
 
-    const resp = await fetchWithRetry(base + '/chat/completions', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-      signal: _abortController.signal,
-    })
+    const resp = await api.assistantApiRequest(_config.baseUrl, _config.apiKey || '', apiType, 'chat-completions', body)
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => '')
       let errMsg = `API 错误 ${resp.status}`
-      try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
+      try { errMsg = JSON.parse(resp.body || '{}').error?.message || errMsg } catch {}
       // #Compat-5: callAIWithTools 场景下 tools 带进 body 最容易踩 vLLM tool choice 限制，
       // 识别并给出启动参数指引，避免用户一脸懵
       throw new Error(enhanceModelCallError(errMsg))
     }
 
-    // 流式累积状态
-    let contentBuf = ''
-    let reasoningBuf = ''
-    let streamError = ''
-    const pendingToolCalls = []   // [{ id, type, function: { name, arguments } }]
-    let finishReason = ''
-
-    const ct = resp.headers.get('content-type') || ''
-    if (ct.includes('text/event-stream') || ct.includes('text/plain')) {
-      // ── SSE 流式解析 ──
-      await readSSEStream(resp, (json) => {
-        if (json.error) {
-          streamError = streamError || json.error?.message || json.error || ''
-        }
-        const choice = json.choices?.[0]
-        if (!choice) return
-        if (choice.finish_reason) finishReason = choice.finish_reason
-
-        const d = choice.delta
-        if (!d) return
-
-        // 累积 content → 打字机效果
-        if (d.content) {
-          contentBuf += d.content
-          if (onChunk) onChunk(d.content)
-        }
-
-        // 累积 reasoning_content
-        if (d.reasoning_content) {
-          reasoningBuf += d.reasoning_content
-        }
-
-        // 累积 tool_calls 分块
-        if (d.tool_calls) {
-          for (const tc of d.tool_calls) {
-            const idx = tc.index ?? pendingToolCalls.length
-            if (!pendingToolCalls[idx]) {
-              pendingToolCalls[idx] = {
-                id: tc.id || '',
-                type: tc.type || 'function',
-                function: { name: '', arguments: '' },
-              }
-            }
-            const slot = pendingToolCalls[idx]
-            if (tc.id) slot.id = tc.id
-            if (tc.function?.name) slot.function.name += tc.function.name
-            if (tc.function?.arguments) slot.function.arguments += tc.function.arguments
-          }
-          // 实时显示工具调用进度（显示已知名称）
-          const names = pendingToolCalls.filter(t => t.function.name).map(t => t.function.name)
-          if (names.length) {
-            onStatus(t('assistant.aiCallingTools', { tools: names.join(', ') }) || `调用工具: ${names.join(', ')}`)
-          }
-        }
-      }, _abortController?.signal)
-    } else {
-      // ── 非流式回退（API 忽略了 stream:true）──
-      const data = await resp.json()
-      const choice = data.choices?.[0]
-      const msg = choice?.message
-      if (!msg) {
-        const errMsg = data.error?.message || ''
-        throw new Error(errMsg || t('assistant.errInvalidResponse'))
-      }
-      finishReason = choice.finish_reason || ''
-      contentBuf = msg.content || msg.reasoning_content || ''
-      if (contentBuf && onChunk) onChunk(contentBuf)
-      if (msg.tool_calls) {
-        for (const tc of msg.tool_calls) {
-          pendingToolCalls.push(tc)
-        }
-      }
+    const data = JSON.parse(resp.body || '{}')
+    const choice = data.choices?.[0]
+    const msg = choice?.message
+    if (!msg) {
+      const errMsg = data.error?.message || ''
+      throw new Error(errMsg || t('assistant.errInvalidResponse'))
     }
+    const finishReason = choice.finish_reason || ''
+    let contentBuf = msg.content || msg.reasoning_content || ''
+    let reasoningBuf = msg.reasoning_content || ''
+    const pendingToolCalls = msg.tool_calls ? [...msg.tool_calls] : []
+    if (contentBuf && onChunk) onChunk(contentBuf)
 
     // 流式完成但无任何内容且无工具调用 → 无效响应
     if (!contentBuf && !reasoningBuf && pendingToolCalls.length === 0) {
-      throw new Error(streamError || t('assistant.errInvalidResponse'))
+      throw new Error(t('assistant.errInvalidResponse'))
     }
 
     // 无 content 但有 reasoning → 作为回复

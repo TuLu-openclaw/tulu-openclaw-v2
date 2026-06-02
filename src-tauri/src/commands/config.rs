@@ -4965,7 +4965,8 @@ fn normalize_base_url(raw: &str) -> String {
 fn normalize_model_api_type(raw: &str) -> &'static str {
     match raw.trim() {
         "anthropic" | "anthropic-messages" => "anthropic-messages",
-        "google-gemini" => "google-gemini",
+        "google-gemini" | "google-generative-ai" | "google-generative" => "google-gemini",
+        "ollama" => "openai-completions",
         "openai" | "openai-completions" | "openai-responses" | "" => "openai-completions",
         _ => "openai-completions",
     }
@@ -4983,7 +4984,10 @@ fn normalize_base_url_for_api(raw: &str, api_type: &str) -> String {
         "google-gemini" => base,
         _ => {
             // 不再强制追加 /v1，尊重用户填写的 URL（火山引擎等第三方用 /v3 等路径）
-            // 仅 Ollama (端口 11434) 自动补 /v1
+            // 仅 Ollama (端口 11434) 自动补 /v1，保证用户填写 http://127.0.0.1:11434 即可使用。
+            if base.contains(":11434") && !base.ends_with("/v1") {
+                base.push_str("/v1");
+            }
             base
         }
     }
@@ -5184,6 +5188,82 @@ pub async fn translate_text(text: String, model: Option<String>) -> Result<Strin
 }
 
 /// 测试模型连通性：向 provider 发送一个简单的 chat completion 请求
+#[tauri::command]
+pub async fn assistant_api_request(
+    base_url: String,
+    api_key: String,
+    api_type: Option<String>,
+    path: String,
+    body: Value,
+) -> Result<Value, String> {
+    let api_type = normalize_model_api_type(api_type.as_deref().unwrap_or("openai-completions"));
+    let base = normalize_base_url_for_api(&base_url, api_type);
+    let client =
+        crate::commands::build_http_client_no_proxy(std::time::Duration::from_secs(120), None)
+            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let path = path.trim();
+    let resp = match (api_type, path) {
+        ("anthropic-messages", "messages") => {
+            let url = format!("{}/messages", base);
+            let mut req = client
+                .post(&url)
+                .header("anthropic-version", "2023-06-01")
+                .json(&body);
+            if !api_key.is_empty() {
+                req = req.header("x-api-key", api_key.clone());
+            }
+            req.send()
+        }
+        ("google-gemini", "gemini-generate") => {
+            let model_id = body
+                .get("model")
+                .and_then(|v| v.as_str())
+                .ok_or("Gemini 请求缺少 model")?;
+            let mut gemini_body = body.clone();
+            if let Some(obj) = gemini_body.as_object_mut() {
+                obj.remove("model");
+            }
+            let url = format!("{}/models/{}:generateContent?key={}", base, model_id, api_key);
+            client.post(&url).json(&gemini_body).send()
+        }
+        (_, "chat-completions") => {
+            let url = format!("{}/chat/completions", base);
+            let mut req = client.post(&url).json(&body);
+            if !api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {api_key}"));
+            }
+            req.send()
+        }
+        _ => return Err(format!("不支持的助手模型请求路径: {path}")),
+    }
+    .await
+    .map_err(|e| {
+        if e.is_timeout() {
+            "请求超时 (120s)".to_string()
+        } else if e.is_connect() {
+            format!("连接失败: {e}")
+        } else {
+            format!("请求失败: {e}")
+        }
+    })?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let text = resp.text().await.unwrap_or_default();
+    Ok(json!({
+        "ok": status.is_success(),
+        "status": status.as_u16(),
+        "contentType": content_type,
+        "body": text,
+    }))
+}
+
 #[tauri::command]
 pub async fn assistant_chat_once(
     base_url: String,

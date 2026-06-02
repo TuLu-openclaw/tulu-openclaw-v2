@@ -99,6 +99,7 @@ pub fn run() {
             config::delete_backup,
             config::reload_gateway,
             config::restart_gateway,
+            config::assistant_api_request,
             config::assistant_chat_once,
             config::test_model,
             config::translate_text,
