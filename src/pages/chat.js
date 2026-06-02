@@ -1327,7 +1327,7 @@ async function applySelectedModel() {
   _isApplyingModel = true
   renderModelSelect()
   try {
-    toast(targetModel ? `正在切换模型：${targetModel}` : '正在恢复默认模型', 'info')
+    toast(targetModel ? t('chat.modelSwitching', { model: targetModel }) : t('chat.modelRestoringDefault'), 'info')
     await wsClient.sessionModelSet(_sessionKey, targetModel)
     if (targetModel) _sessionModels.set(_sessionKey, targetModel)
     else _sessionModels.delete(_sessionKey)
@@ -1335,7 +1335,7 @@ async function applySelectedModel() {
     await refreshSessionList()
     await refreshRuntimeModelFromSessions(_sessionKey)
     const actualModel = getSessionRuntimeModel(_sessionKey)
-    toast(actualModel ? `切换成功：${actualModel}` : '已恢复默认模型', 'success')
+    toast(actualModel ? t('chat.modelSwitchSuccess', { model: actualModel }) : t('chat.modelDefaultRestored'), 'success')
   } catch (e) {
     if (previousModel) _sessionModels.set(_sessionKey, previousModel)
     else _sessionModels.delete(_sessionKey)
@@ -3541,7 +3541,7 @@ async function forceRefreshChat() {
     await loadHistory()
     toast(t('chat.chatDataRefreshed'), 'success')
   } catch (e) {
-    toast(`刷新失败: ${e?.message || e}`, 'error')
+    toast(t('chat.refreshFailed', { msg: e?.message || e }), 'error')
   } finally {
     if (btn) {
       btn.classList.remove('spinning')

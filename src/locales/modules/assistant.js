@@ -136,6 +136,7 @@ export default {
   settingsTitle: _('助手设置', 'Assistant Settings', '助手設定', 'アシスタント設定', '어시스턴트 설정', 'Cài đặt trợ lý', 'Configuración del asistente', 'Configurações do assistente', 'Настройки ассистента', 'Paramètres de l\'assistant', 'Assistenten-Einstellungen'),
   settings: _('设置', 'Settings', '設定', '設定', '설정', 'Cài đặt', 'Configuración', 'Configurações', 'Настройки', 'Paramètres', 'Einstellungen'),
   settingsSaved: _('设置已保存', 'Settings saved', '設定已儲存', '設定を保存しました', '설정 저장됨', 'Đã lưu cài đặt', 'Configuración guardada', 'Configurações salvas', 'Настройки сохранены', 'Paramètres enregistrés', 'Einstellungen gespeichert'),
+  validApiKeyRequired: _('请输入有效 API Key，占位/测试 Key 不能保存', 'Please enter a valid API key. Placeholder or test keys cannot be saved.', '請輸入有效 API Key，佔位/測試 Key 不能儲存'),
   settingsTabApi: _('API 配置', 'API Config', 'API 設定', 'API 設定', 'API 설정', 'Cấu hình API'),
   settingsTabTools: _('工具', 'Tools', '', 'ツール', '도구', 'Công cụ'),
   settingsTabPersona: _('人设', 'Persona', '人設', 'ペルソナ', '페르소나', 'Nhân dạng'),

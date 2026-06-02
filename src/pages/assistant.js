@@ -4186,7 +4186,7 @@ function showSettings() {
     _config.temperature = parseFloat(overlay.querySelector('#ast-temp').value) || 0.7
     _config.apiType = normalizeApiType(overlay.querySelector('#ast-apitype').value || 'openai-completions')
     if (requiresApiKey(_config.apiType) && isPlaceholderApiKey(_config.apiKey)) {
-      toast('请输入有效 API Key，占位/测试 Key 不能保存', 'warning')
+      toast(t('assistant.validApiKeyRequired'), 'warning')
       return
     }
     // 工具开关
