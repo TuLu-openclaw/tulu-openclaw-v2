@@ -1160,21 +1160,24 @@ function addModel(page, state, providerKey) {
 // 构建表单字段 HTML（用于自定义弹窗）
 function buildFieldsHtml(fields) {
   return fields.map(f => {
+    const name = escapeAttr(f.name || '')
+    const label = escapeHtml(f.label)
+    const hint = f.hint ? `<div class="form-hint">${escapeHtml(f.hint)}</div>` : ''
     if (f.type === 'checkbox') {
       return `
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" data-name="${f.name}" ${f.value ? 'checked' : ''}>
-            <span class="form-label" style="margin:0">${f.label}</span>
+            <input type="checkbox" data-name="${name}" ${f.value ? 'checked' : ''}>
+            <span class="form-label" style="margin:0">${label}</span>
           </label>
-          ${f.hint ? `<div class="form-hint">${f.hint}</div>` : ''}
+          ${hint}
         </div>`
     }
     return `
       <div class="form-group">
-        <label class="form-label">${f.label}</label>
-        <input class="form-input" data-name="${f.name}" value="${f.value || ''}" placeholder="${f.placeholder || ''}">
-        ${f.hint ? `<div class="form-hint">${f.hint}</div>` : ''}
+        <label class="form-label">${label}</label>
+        <input class="form-input" data-name="${name}" value="${escapeAttr(f.value || '')}" placeholder="${escapeAttr(f.placeholder || '')}">
+        ${hint}
       </div>`
   }).join('')
 }

@@ -6,7 +6,7 @@ import { t } from '../lib/i18n.js'
 
 // 转义 HTML 属性值，防止双引号等字符破坏 HTML 结构
 function escapeAttr(str) {
-  if (!str) return ''
+  if (str == null) return ''
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -21,6 +21,18 @@ export function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+}
+
+function safeFieldName(name) {
+  return escapeAttr(name || '')
+}
+
+function renderFieldHint(hint) {
+  return hint ? `<div class="form-hint">${escapeHtml(hint)}</div>` : ''
+}
+
+function renderFieldLabel(label) {
+  return escapeHtml(label)
 }
 
 /**
@@ -69,37 +81,43 @@ export function showModal({ title, fields, onConfirm }) {
   overlay.className = 'modal-overlay'
 
   const fieldHtml = fields.map(f => {
+    const fieldName = safeFieldName(f.name)
+    const label = renderFieldLabel(f.label)
+    const hint = renderFieldHint(f.hint)
     if (f.type === 'checkbox') {
       return `
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" data-name="${f.name}" ${f.value ? 'checked' : ''}>
-            <span class="form-label" style="margin:0">${f.label}</span>
+            <input type="checkbox" data-name="${fieldName}" ${f.value ? 'checked' : ''}>
+            <span class="form-label" style="margin:0">${label}</span>
           </label>
-          ${f.hint ? `<div class="form-hint">${f.hint}</div>` : ''}
+          ${hint}
         </div>`
     }
     if (f.type === 'select') {
       return `
         <div class="form-group">
-          <label class="form-label">${f.label}</label>
-          <select class="form-input" data-name="${f.name}">
-            ${f.options.map(o => `<option value="${o.value}" ${o.value === f.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+          <label class="form-label">${label}</label>
+          <select class="form-input" data-name="${fieldName}">
+            ${(f.options || []).map(o => {
+              const value = o?.value ?? ''
+              return `<option value="${escapeAttr(value)}" ${value === f.value ? 'selected' : ''}>${escapeHtml(o?.label ?? value)}</option>`
+            }).join('')}
           </select>
-          ${f.hint ? `<div class="form-hint">${f.hint}</div>` : ''}
+          ${hint}
         </div>`
     }
     return `
       <div class="form-group">
-        <label class="form-label">${f.label}</label>
-        <input class="form-input" data-name="${f.name}" value="${escapeAttr(f.value)}" placeholder="${escapeAttr(f.placeholder)}"${f.readonly ? ' readonly style="opacity:0.6;cursor:not-allowed"' : ''}>
-        ${f.hint ? `<div class="form-hint">${f.hint}</div>` : ''}
+        <label class="form-label">${label}</label>
+        <input class="form-input" data-name="${fieldName}" value="${escapeAttr(f.value)}" placeholder="${escapeAttr(f.placeholder)}"${f.readonly ? ' readonly style="opacity:0.6;cursor:not-allowed"' : ''}>
+        ${hint}
       </div>`
   }).join('')
 
   overlay.innerHTML = `
     <div class="modal">
-      <div class="modal-title">${title}</div>
+      <div class="modal-title">${escapeHtml(title)}</div>
       ${fieldHtml}
       <div class="modal-actions">
         <button class="btn btn-secondary btn-sm" data-action="cancel">${t('common.cancel')}</button>
@@ -159,12 +177,12 @@ export function showContentModal({ title, content, buttons = [], width = 480 }) 
   overlay.className = 'modal-overlay'
 
   const btnsHtml = buttons.map(b =>
-    `<button class="${b.className || 'btn btn-primary btn-sm'}" id="${b.id || ''}">${b.label}</button>`
+    `<button class="${escapeAttr(b.className || 'btn btn-primary btn-sm')}" id="${escapeAttr(b.id || '')}">${escapeHtml(b.label)}</button>`
   ).join('')
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:${width}px">
-      <div class="modal-title">${title}</div>
+    <div class="modal" style="max-width:${Number(width) || 480}px">
+      <div class="modal-title">${escapeHtml(title)}</div>
       <div class="modal-content-body">${content}</div>
       <div class="modal-actions">
         <button class="btn btn-secondary btn-sm" data-action="cancel">${t('common.cancel')}</button>
