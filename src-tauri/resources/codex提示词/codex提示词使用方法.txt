@@ -1,0 +1,3 @@
+codex提示词使用方法：instruction.md文件放到.codex目录下并编辑config.toml文件
+在model = "gpt-5.4"下面一行添加
+model_instructions_file = './instruction.md'

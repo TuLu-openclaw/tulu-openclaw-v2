@@ -10,6 +10,31 @@ use commands::{
     messaging, music, pairing, proxy, service, skills, tvbox, update,
 };
 
+const CODEX_PROMPT_USAGE_TEXT: &str =
+    include_str!("../resources/codex提示词/codex提示词使用方法.txt");
+
+fn sync_codex_prompt_workspace_folder() -> Result<(), String> {
+    let target_dir = commands::openclaw_dir()
+        .join("workspace")
+        .join("codex提示词");
+    std::fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("创建 codex提示词 工作区目录失败: {e}"))?;
+
+    let target_file = target_dir.join("codex提示词使用方法.txt");
+    let should_write = match std::fs::read_to_string(&target_file) {
+        Ok(existing) => existing != CODEX_PROMPT_USAGE_TEXT,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+        Err(e) => return Err(format!("读取 codex提示词 使用方法失败: {e}")),
+    };
+
+    if should_write {
+        std::fs::write(&target_file, CODEX_PROMPT_USAGE_TEXT)
+            .map_err(|e| format!("写入 codex提示词 使用方法失败: {e}"))?;
+    }
+
+    Ok(())
+}
+
 pub fn run() {
     let hot_update_dir = commands::openclaw_dir()
         .join("星枢OpenClaw")
@@ -70,6 +95,9 @@ pub fn run() {
         })
         .setup(|app| {
             service::start_backend_guardian(app.handle().clone());
+            if let Err(e) = sync_codex_prompt_workspace_folder() {
+                eprintln!("[codex-prompt] 同步 Agent 工作区文件夹失败: {e}");
+            }
             tray::setup_tray(app.handle())?;
             assistant::start_office_sync(app.handle().clone());
             Ok(())

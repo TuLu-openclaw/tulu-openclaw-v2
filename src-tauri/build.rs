@@ -1,20 +1,29 @@
 fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    sync_resource_dir(&manifest_dir, "Star-Office-UI-master");
+    sync_resource_dir(&manifest_dir, "codex提示词");
+
+    tauri_build::build()
+}
+
+fn sync_resource_dir(manifest_dir: &str, name: &str) {
     let src = std::path::Path::new(&manifest_dir)
         .join("..")
         .join("_vendor")
-        .join("Star-Office-UI-master");
+        .join(name);
     let dst = std::path::Path::new(&manifest_dir)
         .join("resources")
-        .join("Star-Office-UI-master");
+        .join(name);
 
     println!(
-        "cargo:warning=Star-Office-UI src: {} (exists: {})",
+        "cargo:warning={} src: {} (exists: {})",
+        name,
         src.display(),
         src.exists()
     );
     println!(
-        "cargo:warning=Star-Office-UI dst: {} (exists: {})",
+        "cargo:warning={} dst: {} (exists: {})",
+        name,
         dst.display(),
         dst.exists()
     );
@@ -22,17 +31,15 @@ fn main() {
     if src.exists() {
         if !dst.exists() {
             match copy_dir_recursive(&src, &dst) {
-                Ok(()) => println!("cargo:warning=Star-Office-UI copied OK"),
-                Err(e) => println!("cargo:warning=Star-Office-UI copy FAILED: {}", e),
+                Ok(()) => println!("cargo:warning={} copied OK", name),
+                Err(e) => println!("cargo:warning={} copy FAILED: {}", name, e),
             }
         } else {
-            println!("cargo:warning=Star-Office-UI dst already exists, skipping copy");
+            println!("cargo:warning={} dst already exists, skipping copy", name);
         }
     } else {
-        println!("cargo:warning=Star-Office-UI src NOT FOUND");
+        println!("cargo:warning={} src NOT FOUND", name);
     }
-
-    tauri_build::build()
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
