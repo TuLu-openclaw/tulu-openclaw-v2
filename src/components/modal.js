@@ -5,7 +5,7 @@
 import { t } from '../lib/i18n.js'
 
 // 转义 HTML 属性值，防止双引号等字符破坏 HTML 结构
-function escapeAttr(str) {
+export function escapeAttr(str) {
   if (str == null) return ''
   return String(str)
     .replace(/&/g, '&amp;')

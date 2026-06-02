@@ -4,7 +4,7 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { showUpgradeModal, showConfirm, escapeHtml } from '../components/modal.js'
+import { showUpgradeModal, showConfirm, escapeAttr, escapeHtml } from '../components/modal.js'
 import { setUpgrading } from '../lib/app-state.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t, getLang } from '../lib/i18n.js'
@@ -505,7 +505,8 @@ async function showVersionPicker(page, currentVersion) {
       const nightlyCount = allVersions.length - stable.length
       select.innerHTML = versions.map((v, idx) => {
         const isCurrent = isInstalled && v === currentVersion.current && source === currentVersion.source
-        return `<option value="${v}">${v}${idx === 0 ? ` (${t('about.recommended')})` : ''}${isCurrent ? ` (${t('about.current')})` : ''}</option>`
+        const label = `${v}${idx === 0 ? ` (${t('about.recommended')})` : ''}${isCurrent ? ` (${t('about.current')})` : ''}`
+        return `<option value="${escapeAttr(v)}">${escapeHtml(label)}</option>`
       }).join('')
       // nightly 切换提示
       const toggleEl = overlay.querySelector('#nightly-toggle')
@@ -522,7 +523,7 @@ async function showVersionPicker(page, currentVersion) {
       }
       updateHint()
     } catch (e) {
-      select.innerHTML = `<option value="">${t('common.loadFailed')}: ${e.message || e}</option>`
+      select.innerHTML = `<option value="">${escapeHtml(t('common.loadFailed'))}: ${escapeHtml(e.message || e)}</option>`
     }
   }
 
