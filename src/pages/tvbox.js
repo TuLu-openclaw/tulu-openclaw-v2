@@ -346,10 +346,11 @@ function renderSourceManager() {
         '<button class="tvbox-source-del-btn" onclick="window.__tvbox.delSrc(\''+escInlineJsArg(src.key)+'\');">删除</button>'+
       '</div></div>';
   }).join('');
-  return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ 添加新源</button></div>'+renderSourceEditModal(S('editingSrc', null));
+  return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ 添加新源</button></div>'+renderSourceEditModal(S('editingSrc', false));
 }
 
 function renderSourceEditModal(srcToEdit) {
+  if (srcToEdit === false) return '';
   var ed = srcToEdit || {};
   var isNew = !ed.key;
   return '<div class="tvbox-edit-modal" id="tvbox-edit-modal" onclick="if(event.target===this)window.__tvbox.closeEdit();">'+
@@ -595,7 +596,7 @@ window.__tvbox = {
   closeEdit: function() {
     var m = document.getElementById('tvbox-edit-modal');
     if (m) m.style.display='none';
-    S('editingSrc', null); render();
+    S('editingSrc', false); render();
   },
 };
 
