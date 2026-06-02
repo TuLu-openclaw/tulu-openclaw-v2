@@ -10,15 +10,15 @@ const DEFAULT_SERVER = 'wss://www.aiyu.jx.cn/xingshu-chat'
 const ADMIN_PASS = '2552667173'
 
 const ROOMS = [
-  { id: 'lobby', name: '星枢大厅', icon: '✨', desc: '所有用户默认大厅，适合公告、交流和新手接待', level: '公开' },
-  { id: 'support', name: '售后支持', icon: '🛠️', desc: '卡密、安装、启动失败、更新问题集中处理', level: '公开' },
-  { id: 'vip', name: 'VIP 贵宾室', icon: '💎', desc: '售卖版用户专属服务与优先响应', level: '会员' },
-  { id: 'ai', name: 'AI 协同室', icon: '🤖', desc: 'OpenClaw / Hermes / 模型配置讨论', level: '公开' },
-  { id: 'movie', name: '影视资源室', icon: '🎬', desc: '影视源、直播源、播放器体验反馈', level: '公开' },
-  { id: 'music', name: '音乐交流室', icon: '🎵', desc: '音乐播放器、歌单、下载体验交流', level: '公开' },
-  { id: 'dev', name: '开发者房间', icon: '🧑‍💻', desc: '二开、插件、接口、部署与问题排查', level: '开发' },
-  { id: 'ops', name: '服务器运维', icon: '🛰️', desc: '远程实例、服务器、网关和网络状态', level: '管理' },
-  { id: 'admin', name: '管理控制室', icon: '👑', desc: '公告、禁言、清屏、导出、房间治理', level: '管理员' },
+  { id: 'lobby', nameKey: 'roomLobbyName', icon: '✨', descKey: 'roomLobbyDesc', levelKey: 'levelPublic' },
+  { id: 'support', nameKey: 'roomSupportName', icon: '🛠️', descKey: 'roomSupportDesc', levelKey: 'levelPublic' },
+  { id: 'vip', nameKey: 'roomVipName', icon: '💎', descKey: 'roomVipDesc', levelKey: 'levelMember' },
+  { id: 'ai', nameKey: 'roomAiName', icon: '🤖', descKey: 'roomAiDesc', levelKey: 'levelPublic' },
+  { id: 'movie', nameKey: 'roomMovieName', icon: '🎬', descKey: 'roomMovieDesc', levelKey: 'levelPublic' },
+  { id: 'music', nameKey: 'roomMusicName', icon: '🎵', descKey: 'roomMusicDesc', levelKey: 'levelPublic' },
+  { id: 'dev', nameKey: 'roomDevName', icon: '🧑‍💻', descKey: 'roomDevDesc', levelKey: 'levelDev' },
+  { id: 'ops', nameKey: 'roomOpsName', icon: '🛰️', descKey: 'roomOpsDesc', levelKey: 'levelAdmin' },
+  { id: 'admin', nameKey: 'roomAdminName', icon: '👑', descKey: 'roomAdminDesc', levelKey: 'levelAdministrator' },
 ]
 
 function esc(s) {
@@ -34,7 +34,7 @@ function formatMessageText(text) {
 }
 
 function nowTime() {
-  return new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
+  return new Date().toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' })
 }
 
 function createId() {
@@ -42,7 +42,7 @@ function createId() {
 }
 
 function normalizeBannedWords(value) {
-  if (!Array.isArray(value)) return ['广告刷屏', '恶意辱骂']
+  if (!Array.isArray(value)) return [t('xingshuChat.defaultBannedAd'), t('xingshuChat.defaultBannedAbuse')]
   return value.map(word => String(word || '').trim()).filter(Boolean)
 }
 
@@ -56,7 +56,7 @@ function normalizeMessages(value) {
       .map(item => ({
         id: item.id || createId(),
         time: item.time || nowTime(),
-        user: item.user || '用户',
+        user: item.user || t('xingshuChat.userFallback'),
         text: String(item.text ?? ''),
         system: !!item.system,
         role: item.role || '',
@@ -74,31 +74,31 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
     return {
       activeRoom: getValidRoomId(saved.activeRoom),
-      nickname: String(saved.nickname || '星枢用户'),
+      nickname: String(saved.nickname || t('xingshuChat.defaultNickname')),
       serverUrl: String(saved.serverUrl || DEFAULT_SERVER),
       admin: !!saved.admin,
       muted: !!saved.muted,
       messages: normalizeMessages(saved.messages),
       bannedWords: normalizeBannedWords(saved.bannedWords),
-      announcement: String(saved.announcement || '欢迎来到星枢聊天室。请文明交流，售后问题请进入「售后支持」。'),
+      announcement: String(saved.announcement || t('xingshuChat.defaultAnnouncementLong')),
     }
   } catch {
-    return { activeRoom: 'lobby', nickname: '星枢用户', serverUrl: DEFAULT_SERVER, admin: false, muted: false, messages: seedMessages(), bannedWords: ['广告刷屏', '恶意辱骂'], announcement: '欢迎来到星枢聊天室。', }
+    return { activeRoom: 'lobby', nickname: t('xingshuChat.defaultNickname'), serverUrl: DEFAULT_SERVER, admin: false, muted: false, messages: seedMessages(), bannedWords: [t('xingshuChat.defaultBannedAd'), t('xingshuChat.defaultBannedAbuse')], announcement: t('xingshuChat.defaultAnnouncement'), }
   }
 }
 
 function seedMessages() {
   return {
-    lobby: [{ id: createId(), system: true, user: '系统', text: '星枢聊天室已就绪：多房间、公告、禁言、清屏、导出、服务器连接预留全部启用。', time: nowTime() }],
-    support: [{ id: createId(), system: true, user: '客服助手', text: '这里处理卡密、安装包、启动失败、更新失败等问题。', time: nowTime() }],
-    vip: [{ id: createId(), system: true, user: 'VIP 管家', text: 'VIP 房间已开启，管理员可发布专属公告。', time: nowTime() }],
+    lobby: [{ id: createId(), system: true, user: t('xingshuChat.systemUser'), text: t('xingshuChat.seedLobby'), time: nowTime() }],
+    support: [{ id: createId(), system: true, user: t('xingshuChat.supportBot'), text: t('xingshuChat.seedSupport'), time: nowTime() }],
+    vip: [{ id: createId(), system: true, user: t('xingshuChat.vipButler'), text: t('xingshuChat.seedVip'), time: nowTime() }],
     ai: [], movie: [], music: [], dev: [], ops: [], admin: []
   }
 }
 
 let state = loadState()
 let socket = null
-let socketStatus = '离线'
+let socketStatus = 'offline'
 let rootEl = null
 
 function saveState() {
@@ -118,14 +118,14 @@ function renderRooms() {
   return ROOMS.map(room => `
     <button class="xs-room ${state.activeRoom === room.id ? 'active' : ''}" data-room="${room.id}">
       <span class="xs-room-icon">${room.icon}</span>
-      <span class="xs-room-main"><b>${esc(room.name)}</b><small>${esc(room.desc)}</small></span>
-      <span class="xs-room-level">${esc(room.level)}</span>
+      <span class="xs-room-main"><b>${esc(t(`xingshuChat.${room.nameKey}`))}</b><small>${esc(t(`xingshuChat.${room.descKey}`))}</small></span>
+      <span class="xs-room-level">${esc(t(`xingshuChat.${room.levelKey}`))}</span>
     </button>`).join('')
 }
 
 function renderMessages() {
   const list = state.messages[state.activeRoom] || []
-  if (!list.length) return '<div class="xs-empty">这个房间还没有消息，发第一条吧。</div>'
+  if (!list.length) return `<div class="xs-empty">${esc(t('xingshuChat.emptyRoom'))}</div>`
   return list.map(m => `
     <div class="xs-msg ${m.system ? 'system' : ''}">
       <div class="xs-avatar">${m.system ? '★' : esc((m.user || '?').slice(0, 1))}</div>
@@ -133,7 +133,7 @@ function renderMessages() {
         <div class="xs-meta"><b>${esc(m.user)}</b><span>${esc(m.time)}</span>${m.role ? `<em>${esc(m.role)}</em>` : ''}</div>
         <div class="xs-text">${formatMessageText(m.text)}</div>
       </div>
-      ${state.admin && !m.system ? `<button class="xs-mini danger" data-del="${m.id}">删除</button>` : ''}
+      ${state.admin && !m.system ? `<button class="xs-mini danger" data-del="${m.id}">${esc(t('xingshuChat.deleteMessage'))}</button>` : ''}
     </div>`).join('')
 }
 
@@ -144,22 +144,22 @@ function activeRoom() {
 function renderAdminPanel() {
   return `
     <div class="xs-admin-card">
-      <div class="xs-card-title">👑 管理权限</div>
+      <div class="xs-card-title">👑 ${esc(t('xingshuChat.adminTitle'))}</div>
       ${state.admin ? `
         <div class="xs-admin-grid">
-          <button class="xs-btn" data-action="announce">编辑公告</button>
-          <button class="xs-btn danger" data-action="delete-announcement">删除公告</button>
-          <button class="xs-btn" data-action="mute">${state.muted ? '解除全员禁言' : '全员禁言'}</button>
-          <button class="xs-btn danger" data-action="clear-room">清空当前房间</button>
-          <button class="xs-btn" data-action="export">导出聊天记录</button>
+          <button class="xs-btn" data-action="announce">${esc(t('xingshuChat.editAnnouncement'))}</button>
+          <button class="xs-btn danger" data-action="delete-announcement">${esc(t('xingshuChat.deleteAnnouncement'))}</button>
+          <button class="xs-btn" data-action="mute">${esc(state.muted ? t('xingshuChat.unmuteAll') : t('xingshuChat.muteAll'))}</button>
+          <button class="xs-btn danger" data-action="clear-room">${esc(t('xingshuChat.clearRoom'))}</button>
+          <button class="xs-btn" data-action="export">${esc(t('xingshuChat.exportMessages'))}</button>
         </div>
-        <label class="xs-label">违禁词管理</label>
+        <label class="xs-label">${esc(t('xingshuChat.bannedWordsLabel'))}</label>
         <input class="xs-input" id="xs-banned" value="${esc(state.bannedWords.join('，'))}" />
-        <button class="xs-btn full" data-action="save-banned">保存违禁词</button>
+        <button class="xs-btn full" data-action="save-banned">${esc(t('xingshuChat.saveBannedWords'))}</button>
       ` : `
-        <div class="xs-muted">输入管理密码解锁公告、禁言、清屏、删消息、导出等权限。</div>
-        <input class="xs-input" id="xs-admin-pass" type="password" placeholder="管理密码" />
-        <button class="xs-btn full" data-action="admin-login">解锁管理面板</button>
+        <div class="xs-muted">${esc(t('xingshuChat.adminUnlockHint'))}</div>
+        <input class="xs-input" id="xs-admin-pass" type="password" placeholder="${esc(t('xingshuChat.adminPasswordPlaceholder'))}" />
+        <button class="xs-btn full" data-action="admin-login">${esc(t('xingshuChat.unlockAdmin'))}</button>
       `}
     </div>`
 }
@@ -170,45 +170,45 @@ function render(el) {
   const room = activeRoom()
   const ann = state.announcement
     ? `<div class="xs-announcement">📢 ${formatMessageText(state.announcement)}</div>`
-    : `<div class="xs-announcement muted">📢 当前暂无公告</div>`
+    : `<div class="xs-announcement muted">📢 ${esc(t('xingshuChat.noAnnouncement'))}</div>`
 
   el.innerHTML = `
     <div class="xingshu-chat-page">
       <div class="xs-hero">
         <div>
-          <div class="xs-eyebrow">售卖版 · 独立聊天室</div>
-          <h1>星枢聊天室</h1>
-          <p>多房间、管理员控制、公告、禁言、清屏、导出、本地持久化，默认通过域名 WSS 安全中继连接。</p>
+          <div class="xs-eyebrow">${esc(t('xingshuChat.eyebrow'))}</div>
+          <h1>${esc(t('xingshuChat.title'))}</h1>
+          <p>${esc(t('xingshuChat.subtitle'))}</p>
         </div>
         <div class="xs-hero-actions">
-          <span class="xs-status ${socketStatus === '在线' ? 'online' : ''}">${socketStatus}</span>
-          <button class="xs-btn glow" data-action="open-window">打开独立窗口</button>
+          <span class="xs-status ${socketStatus === 'online' ? 'online' : ''}">${esc(t(`xingshuChat.status${socketStatus[0].toUpperCase()}${socketStatus.slice(1)}`))}</span>
+          <button class="xs-btn glow" data-action="open-window">${esc(t('xingshuChat.openWindow'))}</button>
         </div>
       </div>
       <div class="xs-layout">
         <aside class="xs-sidebar">
           <div class="xs-profile">
-            <label class="xs-label">昵称</label>
+            <label class="xs-label">${esc(t('xingshuChat.nicknameLabel'))}</label>
             <input id="xs-nick" class="xs-input" value="${esc(state.nickname)}" />
-            <label class="xs-label">服务器地址</label>
+            <label class="xs-label">${esc(t('xingshuChat.serverLabel'))}</label>
             <input id="xs-server" class="xs-input" value="${esc(state.serverUrl)}" />
-            <button class="xs-btn full" data-action="connect">连接服务器</button>
+            <button class="xs-btn full" data-action="connect">${esc(t('xingshuChat.connectServer'))}</button>
           </div>
-          <div class="xs-section-title">房间列表</div>
+          <div class="xs-section-title">${esc(t('xingshuChat.roomList'))}</div>
           <div class="xs-room-list">${renderRooms()}</div>
         </aside>
         <main class="xs-main">
-          <div class="xs-room-header"><div><h2>${room.icon} ${esc(room.name)}</h2><p>${esc(room.desc)}</p></div><span>${esc(room.level)}</span></div>
+          <div class="xs-room-header"><div><h2>${room.icon} ${esc(t(`xingshuChat.${room.nameKey}`))}</h2><p>${esc(t(`xingshuChat.${room.descKey}`))}</p></div><span>${esc(t(`xingshuChat.${room.levelKey}`))}</span></div>
           ${ann}
           <div class="xs-messages" id="xs-messages">${renderMessages()}</div>
           <div class="xs-compose">
-            <input id="xs-message" class="xs-input" placeholder="输入消息，Enter 发送..." ${state.muted && !state.admin ? 'disabled' : ''} />
-            <button class="xs-btn glow" data-action="send" ${state.muted && !state.admin ? 'disabled' : ''}>发送</button>
+            <input id="xs-message" class="xs-input" placeholder="${esc(t('xingshuChat.messagePlaceholder'))}" ${state.muted && !state.admin ? 'disabled' : ''} />
+            <button class="xs-btn glow" data-action="send" ${state.muted && !state.admin ? 'disabled' : ''}>${esc(t('xingshuChat.send'))}</button>
           </div>
         </main>
         <aside class="xs-tools">
-          <div class="xs-card"><div class="xs-card-title">房间能力</div>
-            <ul class="xs-feature-list"><li>全房间实时消息</li><li>本地历史记录</li><li>服务器 WebSocket 预留</li><li>房间级清屏/导出</li><li>敏感词拦截</li><li>管理员删消息</li></ul>
+          <div class="xs-card"><div class="xs-card-title">${esc(t('xingshuChat.roomCapabilities'))}</div>
+            <ul class="xs-feature-list"><li>${esc(t('xingshuChat.featureRealtime'))}</li><li>${esc(t('xingshuChat.featureHistory'))}</li><li>${esc(t('xingshuChat.featureWebsocket'))}</li><li>${esc(t('xingshuChat.featureRoomOps'))}</li><li>${esc(t('xingshuChat.featureBannedWords'))}</li><li>${esc(t('xingshuChat.featureAdminDelete'))}</li></ul>
           </div>
           ${renderAdminPanel()}
         </aside>
@@ -221,7 +221,7 @@ function render(el) {
 function wireEvents(el) {
   el.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => { state.activeRoom = getValidRoomId(btn.dataset.room); saveState(); render(el) })
   const nick = el.querySelector('#xs-nick')
-  if (nick) nick.onchange = () => { state.nickname = nick.value.trim() || '星枢用户'; saveState() }
+  if (nick) nick.onchange = () => { state.nickname = nick.value.trim() || t('xingshuChat.defaultNickname'); saveState() }
   const server = el.querySelector('#xs-server')
   if (server) server.onchange = () => { state.serverUrl = server.value.trim() || DEFAULT_SERVER; saveState() }
   const msg = el.querySelector('#xs-message')
@@ -240,18 +240,18 @@ async function handleAction(action) {
   if (action === 'open-window') return openStandalone()
   if (action === 'admin-login') {
     const pass = document.getElementById('xs-admin-pass')?.value
-    if (pass === ADMIN_PASS) { state.admin = true; saveState(); addMessage('admin', { system: true, user: '系统', text: '管理员权限已解锁。' }) }
+    if (pass === ADMIN_PASS) { state.admin = true; saveState(); addMessage('admin', { system: true, user: t('xingshuChat.systemUser'), text: t('xingshuChat.adminUnlocked') }) }
     else alert(t('xingshuChat.adminPasswordWrong'))
   }
   if (!state.admin) return alert(t('xingshuChat.adminRequired'))
   if (action === 'announce') {
     const text = prompt(t('xingshuChat.announcementPrompt'), state.announcement)
-    if (text !== null) { state.announcement = text.trim(); saveState(); addMessage(state.activeRoom, { system: true, user: '公告', text: state.announcement || t('xingshuChat.announcementDeleted') }) }
+    if (text !== null) { state.announcement = text.trim(); saveState(); addMessage(state.activeRoom, { system: true, user: t('xingshuChat.announcementUser'), text: state.announcement || t('xingshuChat.announcementDeleted') }) }
   }
   if (action === 'delete-announcement') {
-    if (confirm(t('xingshuChat.deleteAnnouncementConfirm'))) { state.announcement = ''; saveState(); addMessage(state.activeRoom, { system: true, user: '公告', text: t('xingshuChat.announcementDeleted') }) }
+    if (confirm(t('xingshuChat.deleteAnnouncementConfirm'))) { state.announcement = ''; saveState(); addMessage(state.activeRoom, { system: true, user: t('xingshuChat.announcementUser'), text: t('xingshuChat.announcementDeleted') }) }
   }
-  if (action === 'mute') { state.muted = !state.muted; saveState(); addMessage(state.activeRoom, { system: true, user: '管理', text: state.muted ? '已开启全员禁言。' : '已解除全员禁言。' }) }
+  if (action === 'mute') { state.muted = !state.muted; saveState(); addMessage(state.activeRoom, { system: true, user: t('xingshuChat.managementUser'), text: state.muted ? t('xingshuChat.muteEnabledMessage') : t('xingshuChat.muteDisabledMessage') }) }
   if (action === 'clear-room') { if (confirm(t('xingshuChat.clearRoomConfirm'))) { state.messages[state.activeRoom] = []; saveState(); render(rootEl) } }
   if (action === 'export') exportMessages()
   if (action === 'save-banned') { state.bannedWords = (document.getElementById('xs-banned')?.value || '').split(/[，,]/).map(s => s.trim()).filter(Boolean); saveState(); alert(t('xingshuChat.saved')) }
@@ -266,24 +266,24 @@ function sendMessage() {
   if (hit) return alert(t('xingshuChat.bannedWordHit', { word: hit }))
   const payload = { room: state.activeRoom, user: state.nickname, text, time: nowTime() }
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload))
-  addMessage(state.activeRoom, { user: state.nickname, role: state.admin ? '管理员' : '用户', text })
+  addMessage(state.activeRoom, { user: state.nickname, role: state.admin ? t('xingshuChat.adminRole') : t('xingshuChat.userRole'), text })
   input.value = ''
 }
 
 function connectServer() {
   try { if (socket) socket.close() } catch {}
-  socketStatus = '连接中'; render(rootEl)
+  socketStatus = 'connecting'; render(rootEl)
   try {
     socket = new WebSocket(state.serverUrl || DEFAULT_SERVER)
-    socket.onopen = () => { socketStatus = '在线'; addMessage(state.activeRoom, { system: true, user: '服务器', text: '已连接星枢服务器。' }) }
+    socket.onopen = () => { socketStatus = 'online'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.serverConnected') }) }
     socket.onmessage = ev => {
-      try { const m = JSON.parse(ev.data); addMessage(m.room || state.activeRoom, { user: m.user || '远程用户', text: m.text || ev.data }) }
-      catch { addMessage(state.activeRoom, { user: '服务器', text: ev.data }) }
+      try { const m = JSON.parse(ev.data); addMessage(m.room || state.activeRoom, { user: m.user || t('xingshuChat.remoteUser'), text: m.text || ev.data }) }
+      catch { addMessage(state.activeRoom, { user: t('xingshuChat.serverUser'), text: ev.data }) }
     }
-    socket.onerror = () => { socketStatus = '离线'; addMessage(state.activeRoom, { system: true, user: '服务器', text: '服务器暂未响应，已切换本地聊天室模式。' }) }
-    socket.onclose = () => { socketStatus = '离线'; render(rootEl) }
+    socket.onerror = () => { socketStatus = 'offline'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.serverNoResponse') }) }
+    socket.onclose = () => { socketStatus = 'offline'; render(rootEl) }
   } catch (e) {
-    socketStatus = '离线'; addMessage(state.activeRoom, { system: true, user: '服务器', text: `连接失败：${e.message}` })
+    socketStatus = 'offline'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.connectFailed', { error: e.message }) })
   }
 }
 
@@ -303,7 +303,7 @@ function exportMessages() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `星枢聊天室-${room.name}-${Date.now()}.txt`
+  a.download = `${t('xingshuChat.exportFilePrefix')}-${t(`xingshuChat.${room.nameKey}`)}-${Date.now()}.txt`
   a.click()
   URL.revokeObjectURL(url)
 }
