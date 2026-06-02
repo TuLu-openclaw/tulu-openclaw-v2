@@ -218,6 +218,23 @@ function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+function escJsString(s) {
+  return String(s || '').replace(/[\\'\n\r\u2028\u2029]/g, function(ch) {
+    return {
+      '\\': '\\\\',
+      "'": "\\'",
+      '\n': '\\n',
+      '\r': '\\r',
+      '\u2028': '\\u2028',
+      '\u2029': '\\u2029',
+    }[ch];
+  });
+}
+
+function escInlineJsArg(s) {
+  return esc(escJsString(s));
+}
+
 function getVodById(id) {
   const homeList = S('homeList', {})
   const homeItems = homeList && typeof homeList === 'object' && !Array.isArray(homeList)
@@ -249,8 +266,8 @@ function renderVodCard(vod) {
   var tag = catTag || srcTag;
   var img = '<div class="tvbox-cover"><img src="'+esc(vod.vod_pic)+'" alt="'+esc(vod.vod_name)+'" loading="lazy" onerror="window.__tvbox.imgErr(this)"/>'+tag+scoreTag+'<div class="tvbox-card-overlay"><div class="tvbox-play-btn">&#9658;</div></div></div>';
   var name = '<div class="tvbox-name">'+esc(vod.vod_name)+'</div>';
-  var favBtn = '<button class="tvbox-fav-btn'+(faved?' faved':'')+'" onclick="event.stopPropagation();window.__tvbox.fav(\''+esc(String(vod.vod_id))+'\');">'+(faved?'♥':'♡')+'</button>';
-  return '<div class="tvbox-card" onclick="window.__tvbox.detail(\''+esc(String(vod.vod_id))+'\');">'+favBtn+img+name+'</div>';
+  var favBtn = '<button class="tvbox-fav-btn'+(faved?' faved':'')+'" onclick="event.stopPropagation();window.__tvbox.fav(\''+escInlineJsArg(String(vod.vod_id))+'\');">'+(faved?'♥':'♡')+'</button>';
+  return '<div class="tvbox-card" onclick="window.__tvbox.detail(\''+escInlineJsArg(String(vod.vod_id))+'\');">'+favBtn+img+name+'</div>';
 }
 
 function renderHome() {
@@ -305,10 +322,10 @@ function renderLibrary() {
     if (!hist.length) content = '<div class="tvbox-empty"><div class="tvbox-empty-icon">&#9201;</div><div class="tvbox-empty-text">暂无观看记录</div></div>';
     else {
       content = hist.map(function(h){
-        return '<div class="tvbox-history-item" onclick="window.__tvbox.histPlay(\''+esc(String(h.vod_id))+'\');">'+
+        return '<div class="tvbox-history-item" onclick="window.__tvbox.histPlay(\''+escInlineJsArg(String(h.vod_id))+'\');">'+
           '<img class="tvbox-history-thumb" src="'+esc(h.vod_pic)+'" onerror="this.style.display=\'none\'"/>'+
           '<div class="tvbox-history-info"><div class="tvbox-history-name">'+esc(h.vod_name)+'</div><div class="tvbox-history-meta">'+(h.episode_name||'')+'</div></div>'+
-          '<button class="tvbox-history-del" onclick="event.stopPropagation();window.__tvbox.histDel(\''+esc(String(h.vod_id))+'\');">&#10005;</button></div>';
+          '<button class="tvbox-history-del" onclick="event.stopPropagation();window.__tvbox.histDel(\''+escInlineJsArg(String(h.vod_id))+'\');">&#10005;</button></div>';
       }).join('');
     }
   }
@@ -325,8 +342,8 @@ function renderSourceManager() {
     return '<div class="tvbox-source-item">'+
       '<div><div class="tvbox-source-item-name">'+esc(src.name)+'</div><div class="tvbox-source-item-api">'+esc(src.api)+'</div></div>'+
       '<div class="tvbox-source-item-actions">'+
-        '<button class="tvbox-source-edit-btn" onclick="window.__tvbox.editSrc(\''+esc(src.key)+'\');">编辑</button>'+
-        '<button class="tvbox-source-del-btn" onclick="window.__tvbox.delSrc(\''+esc(src.key)+'\');">删除</button>'+
+        '<button class="tvbox-source-edit-btn" onclick="window.__tvbox.editSrc(\''+escInlineJsArg(src.key)+'\');">编辑</button>'+
+        '<button class="tvbox-source-del-btn" onclick="window.__tvbox.delSrc(\''+escInlineJsArg(src.key)+'\');">删除</button>'+
       '</div></div>';
   }).join('');
   return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ 添加新源</button></div>'+renderSourceEditModal(S('editingSrc', null));
@@ -345,7 +362,7 @@ function renderSourceEditModal(srcToEdit) {
         '<option value="1080" '+(ed.type==='1080'?'selected':'')+'>1080 API</option>'+
       '</select></div>'+
       '<div class="tvbox-edit-actions">'+
-        '<button class="tvbox-edit-save" onclick="window.__tvbox.saveSrc('+(isNew?'null':'\''+esc(ed.key)+'\'')+');">保存</button>'+
+        '<button class="tvbox-edit-save" onclick="window.__tvbox.saveSrc('+(isNew?'null':'\''+escInlineJsArg(ed.key)+'\'')+');">保存</button>'+
         '<button class="tvbox-edit-cancel" onclick="window.__tvbox.closeEdit();">取消</button>'+
       '</div>'+
     '</div></div>';
@@ -409,7 +426,7 @@ function renderSourceBar() {
   var sources = S('sources',loadSources());
   var key = S('activeSource',getActiveSourceKey());
   var html = '<span class="tvbox-source-label">线路</span>';
-  sources.forEach(function(src){ html += '<button class="tvbox-source-btn '+(src.key===key?'active':'')+'" onclick="window.__tvbox.switchSrc(\''+esc(src.key)+'\');">'+esc(src.name)+'</button>'; });
+  sources.forEach(function(src){ html += '<button class="tvbox-source-btn '+(src.key===key?'active':'')+'" onclick="window.__tvbox.switchSrc(\''+escInlineJsArg(src.key)+'\');">'+esc(src.name)+'</button>'; });
   return html;
 }
 
