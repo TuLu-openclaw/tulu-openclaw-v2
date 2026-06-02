@@ -3018,9 +3018,24 @@ function handleChatEvent(payload) {
     _lastErrorMsg = errMsg
     _errorTimer = now
 
-    // 如果正在流式输出，说明消息已经部分成功，不显示错误
+    // If an error belongs to another active run, do not let it interrupt the current stream.
+    if (_currentRunId && runId && runId !== _currentRunId) {
+      console.warn('[chat] 忽略非当前 run 的 error，避免中断当前流:', runId, 'current:', _currentRunId)
+      return
+    }
+
+    // 如果流式输出中收到错误，保留已收到的内容，但必须结束当前流，避免发送按钮和队列卡死。
     if (_isStreaming || _currentAiBubble) {
-      console.warn('[chat] 流式中收到错误，但消息已部分成功，忽略错误提示:', errMsg)
+      console.warn('[chat] 流式中收到错误，保留部分输出并结束当前流:', errMsg)
+      showTyping(false)
+      if (_currentAiBubble && _currentAiText) {
+        flushStreamRender()
+      }
+      appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
+      updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
+      setReplyStatus('error', `${t('chat.errorPrefix') || ''}${errMsg}`, { runId: runId || _currentRunId, activity: t('chat.checkErrorOrRetryTask') })
+      resetStreamState()
+      processMessageQueue()
       return
     }
 
