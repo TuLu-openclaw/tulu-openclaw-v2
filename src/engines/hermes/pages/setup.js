@@ -620,12 +620,12 @@ export function render() {
     const matched = inferProviderByBaseUrl(hermesProviders, baseUrl)
     const provider = matched?.id || 'custom'
     if (provider === 'custom' && !baseUrl) {
-      alert('自定义 OpenAI 兼容服务必须填写 Base URL')
+      alert(t('engine.configCustomBaseUrlRequired'))
       return
     }
 
     if (!apiKey || ['wrongkey', 'testkey', 'your-key-here', 'sk-xxx', 'changeme'].includes(apiKey.toLowerCase())) {
-      alert('请输入有效 API Key，占位/测试 Key 不能保存')
+      alert(t('engine.configValidApiKeyRequired'))
       return
     }
     try {
@@ -634,7 +634,7 @@ export function render() {
       phase = 'gateway'
       await refreshHermes()
     } catch (e) {
-      alert(`配置保存失败: ${e}`)
+      alert(t('engine.configSaveFailed', { error: e?.message || String(e) }))
     }
   }
 

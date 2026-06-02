@@ -374,6 +374,8 @@ export default {
   configFetchFailed: {"zh-CN": "获取配置失败: {error}", "en": "Failed to fetch config: {error}"},
   configModelRequired: {"zh-CN": "请先选择模型", "en": "Please select a model first"},
   configSaved: {"zh-CN": "配置已保存", "en": "Config saved"},
+  configCustomBaseUrlRequired: {"zh-CN": "自定义 OpenAI 兼容服务必须填写 Base URL", "zh-TW": "自訂 OpenAI 相容服務必須填寫 Base URL", "en": "Custom OpenAI-compatible services require a Base URL."},
+  configSaveFailed: {"zh-CN": "配置保存失败: {error}", "zh-TW": "設定儲存失敗：{error}", "en": "Failed to save config: {error}"},
   configValidApiKeyRequired: {"zh-CN": "请输入有效 API Key，占位/测试 Key 不能保存", "zh-TW": "請輸入有效 API Key，佔位/測試 Key 不能儲存", "en": "Please enter a valid API key. Placeholder or test keys cannot be saved."},
   configSavedRestarting: {"zh-CN": "配置已保存，正在重启 Hermes Gateway 使新 Key 生效...", "zh-TW": "設定已儲存，正在重新啟動 Hermes Gateway 讓新 Key 生效...", "en": "Config saved. Restarting Hermes Gateway to apply the new key..."},
   configSavedRestarted: {"zh-CN": "配置已保存，Hermes Gateway 已重启，新配置已生效", "zh-TW": "設定已儲存，Hermes Gateway 已重新啟動，新設定已生效", "en": "Config saved. Hermes Gateway restarted and the new config is active."},
