@@ -43,7 +43,10 @@ pub async fn device_info() -> Result<DeviceInfo, String> {
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "unknown".into());
     let mac_address = read_primary_mac_address().await;
-    Ok(DeviceInfo { hostname, mac_address })
+    Ok(DeviceInfo {
+        hostname,
+        mac_address,
+    })
 }
 
 async fn read_primary_mac_address() -> Option<String> {
@@ -73,10 +76,14 @@ async fn read_primary_mac_address() -> Option<String> {
         if let Ok(mut entries) = tokio::fs::read_dir("/sys/class/net").await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name == "lo" { continue; }
+                if name == "lo" {
+                    continue;
+                }
                 let path = entry.path().join("address");
                 if let Ok(bytes) = tokio::fs::read(path).await {
-                    if let Some(mac) = parse_mac_output(&bytes) { return Some(mac); }
+                    if let Some(mac) = parse_mac_output(&bytes) {
+                        return Some(mac);
+                    }
                 }
             }
         }

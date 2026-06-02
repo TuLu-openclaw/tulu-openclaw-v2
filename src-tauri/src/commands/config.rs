@@ -5224,7 +5224,10 @@ pub async fn assistant_api_request(
             if let Some(obj) = gemini_body.as_object_mut() {
                 obj.remove("model");
             }
-            let url = format!("{}/models/{}:generateContent?key={}", base, model_id, api_key);
+            let url = format!(
+                "{}/models/{}:generateContent?key={}",
+                base, model_id, api_key
+            );
             client.post(&url).json(&gemini_body).send()
         }
         (_, "chat-completions") => {
