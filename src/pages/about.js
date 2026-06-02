@@ -756,13 +756,13 @@ function renderProjects(page) {
       <div style="font-size:32px;margin-bottom:8px">🔒</div>
       <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
       <input type="password" id="projects-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button onclick="unlockProjects()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
+      <button id="projects-unlock-btn" type="button" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
       <div id="projects-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
     </div>
     <div id="projects-content" style="display:none"></div>
   `
 
-  window.unlockProjects = function() {
+  function unlockProjects() {
     const pwd = el.querySelector('#projects-pwd').value
     if (pwd === '2552667173') {
       el.querySelector('#projects-locked').style.display = 'none'
@@ -788,6 +788,9 @@ function renderProjects(page) {
       setTimeout(() => { err.style.display = 'none' }, 2000)
     }
   }
+
+  el.querySelector('#projects-unlock-btn')?.addEventListener('click', unlockProjects)
+  el.querySelector('#projects-pwd')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockProjects() })
 }
 
 const LINKS = [
@@ -802,7 +805,7 @@ function renderContribute(page) {
       <div style="font-size:32px;margin-bottom:8px">🔒</div>
       <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
       <input type="password" id="contribute-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button onclick="unlockContribute()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
+      <button id="contribute-unlock-btn" type="button" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
       <div id="contribute-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
     </div>
     <div id="contribute-content" style="display:none">
@@ -817,7 +820,7 @@ function renderContribute(page) {
     </div>
   `
 
-  window.unlockContribute = function() {
+  function unlockContribute() {
     const pwd = el.querySelector('#contribute-pwd').value
     if (pwd === '2552667173') {
       el.querySelector('#contribute-locked').style.display = 'none'
@@ -828,6 +831,9 @@ function renderContribute(page) {
       setTimeout(() => { err.style.display = 'none' }, 2000)
     }
   }
+
+  el.querySelector('#contribute-unlock-btn')?.addEventListener('click', unlockContribute)
+  el.querySelector('#contribute-pwd')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockContribute() })
 }
 
 function renderLinks(page) {
@@ -837,7 +843,7 @@ function renderLinks(page) {
       <div style="font-size:32px;margin-bottom:8px">🔒</div>
       <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
       <input type="password" id="links-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button onclick="unlockLinks()" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
+      <button id="links-unlock-btn" type="button" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
       <div id="links-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
     </div>
     <div id="links-content" style="display:none">
@@ -847,7 +853,7 @@ function renderLinks(page) {
     </div>
   `
 
-  window.unlockLinks = function() {
+  function unlockLinks() {
     const pwd = el.querySelector('#links-pwd').value
     if (pwd === '2552667173') {
       el.querySelector('#links-locked').style.display = 'none'
@@ -858,6 +864,9 @@ function renderLinks(page) {
       setTimeout(() => { err.style.display = 'none' }, 2000)
     }
   }
+
+  el.querySelector('#links-unlock-btn')?.addEventListener('click', unlockLinks)
+  el.querySelector('#links-pwd')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockLinks() })
 }
 
 function renderCompany(page) {
@@ -878,7 +887,7 @@ function renderCompany(page) {
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary);text-align:center">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.scanAuthorQr')}</div>
-          <img src="/images/xingshu-contact-qq.png" alt="${t('about.qqQrCode')}" style="width:100px;height:100px;border-radius:6px;cursor:pointer" onclick="showQRPreview(this.src, '${t('about.officialSupport')}')">
+          <img id="xingshu-contact-qr" src="/images/xingshu-contact-qq.png" alt="${t('about.qqQrCode')}" style="width:100px;height:100px;border-radius:6px;cursor:pointer">
         </div>
       </div>
       <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">
@@ -887,7 +896,7 @@ function renderCompany(page) {
     </div>
   `
 
-  window.showQRPreview = function(src, label) {
+  function showQRPreview(src, label) {
     const overlay = document.createElement('div')
     overlay.className = 'modal-overlay'
     overlay.innerHTML = `
@@ -901,8 +910,12 @@ function renderCompany(page) {
     `
     document.body.appendChild(overlay)
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
-    overlay.querySelector('[data-action="close"]').onclick = () => overlay.remove()
+    overlay.querySelector('[data-action="close"]')?.addEventListener('click', () => overlay.remove())
   }
+
+  el.querySelector('#xingshu-contact-qr')?.addEventListener('click', (e) => {
+    showQRPreview(e.currentTarget.src, t('about.officialSupport'))
+  })
 }
 
 // 版本检测（热更新检测），渲染 #panel-update-meta
