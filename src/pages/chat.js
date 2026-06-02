@@ -814,16 +814,16 @@ function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cos
   if (durationMs > 0) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${(durationMs / 1000).toFixed(1)}s</span>`)
   const u = normalizeUsage(usage)
   if (u) {
-    if (u.input) parts.push(`<span class="meta-sep">·</span><span class="msg-tokens msg-token-in" title="Input tokens">↑${compactNumber(u.input)}</span>`)
-    if (u.output) parts.push(`<span class="msg-tokens msg-token-out" title="Output tokens">↓${compactNumber(u.output)}</span>`)
-    if (u.cacheRead) parts.push(`<span class="msg-tokens msg-token-cache" title="Cache read tokens">R${compactNumber(u.cacheRead)}</span>`)
-    if (u.cacheWrite) parts.push(`<span class="msg-tokens msg-token-cache" title="Cache write tokens">W${compactNumber(u.cacheWrite)}</span>`)
+    if (u.input) parts.push(`<span class="meta-sep">·</span><span class="msg-tokens msg-token-in" title="${escapeAttr(t('chat.inputTokens'))}">↑${compactNumber(u.input)}</span>`)
+    if (u.output) parts.push(`<span class="msg-tokens msg-token-out" title="${escapeAttr(t('chat.outputTokens'))}">↓${compactNumber(u.output)}</span>`)
+    if (u.cacheRead) parts.push(`<span class="msg-tokens msg-token-cache" title="${escapeAttr(t('chat.cacheReadTokens'))}">R${compactNumber(u.cacheRead)}</span>`)
+    if (u.cacheWrite) parts.push(`<span class="msg-tokens msg-token-cache" title="${escapeAttr(t('chat.cacheWriteTokens'))}">W${compactNumber(u.cacheWrite)}</span>`)
     const ctxBase = Number(contextWindow) || 0
     const ctxUsed = u.input + u.cacheRead + u.cacheWrite
     if (ctxBase > 0 && ctxUsed > 0) {
       const pct = Math.min(Math.round((ctxUsed / ctxBase) * 100), 100)
       const cls = pct >= 90 ? 'msg-context msg-context-danger' : pct >= 75 ? 'msg-context msg-context-warn' : 'msg-context'
-      parts.push(`<span class="${cls}" title="Context usage">${pct}% ctx</span>`)
+      parts.push(`<span class="${cls}" title="${escapeAttr(t('chat.contextUsage'))}">${escapeHtml(t('chat.contextPercent', { percent: pct }))}</span>`)
     }
   }
   const totalCost = normalizeCost(cost)

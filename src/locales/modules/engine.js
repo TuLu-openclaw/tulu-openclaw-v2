@@ -243,6 +243,7 @@ export default {
   chatSlashRedirect:             {"zh-CN": "已为你跳转到 {page}", "en": "Redirected to {page}"},
   chatStopped:                   {"zh-CN": "已停止本次生成", "en": "Stopped"},
   chatJumpBottom:                {"zh-CN": "回到底部", "en": "Jump to bottom"},
+  chatRenameSessionHint:         {"zh-CN": "双击重命名会话", "zh-TW": "雙擊重新命名對話", "en": "Double-click to rename session"},
   chatRenameTitleHint:           {"zh-CN": "双击重命名当前会话", "en": "Double-click to rename current session"},
   chatGatewayLabel:              {"zh-CN": "网关", "en": "Gateway"},
   chatProviderWarning:           {"zh-CN": "未配置推理 Provider — 点击此处自动跳转到「设置」页面配置 API Key", "en": "Inference provider is not configured — click here to open Settings and configure an API key"},

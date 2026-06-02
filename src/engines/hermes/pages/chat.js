@@ -600,7 +600,7 @@ export function render() {
           <div class="hm-chat-session-title-row">
             ${isLive ? `<span class="hm-chat-session-spinner" aria-hidden="true">${ICONS.spinner}</span>` : ''}
             ${isPinned ? `<span class="hm-chat-session-pin" aria-hidden="true">${ICONS.pin}</span>` : ''}
-            <span class="hm-chat-session-title" data-sid-rename="${escAttr(s.id)}" title="双击重命名会话">${escHtml(sessionDisplayTitle(s))}</span>
+            <span class="hm-chat-session-title" data-sid-rename="${escAttr(s.id)}" title="${escAttr(t('engine.chatRenameSessionHint'))}">${escHtml(sessionDisplayTitle(s))}</span>
             ${isLive ? `<span class="hm-chat-session-live"><span class="hm-chat-live-dot"></span>${escHtml(t('engine.chatLive'))}</span>` : ''}
           </div>
           <div class="hm-chat-session-meta">
