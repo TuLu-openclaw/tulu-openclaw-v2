@@ -86,7 +86,7 @@ export function renderMarkdown(text) {
     const highlighted = highlightCode(code.trimEnd(), lang)
     const langLabel = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : ''
     const copyLabel = escapeHtml(t('common.copy'))
-    return `<pre data-lang="${escapeHtml(lang)}">${langLabel}<button class="code-copy-btn" onclick="window.__copyCode(this)">${copyLabel}</button><code>${highlighted}</code></pre>`
+    return `<pre data-lang="${escapeHtml(lang)}">${langLabel}<button class="code-copy-btn" type="button">${copyLabel}</button><code>${highlighted}</code></pre>`
   })
 
   // 行内代码
@@ -293,9 +293,10 @@ if (typeof window !== 'undefined' && !window.__markdownImageErrorHandlerInstalle
   window.addEventListener('error', handleMarkdownImageError, true)
 }
 
-window.__copyCode = function(btn) {
+function copyMarkdownCode(btn) {
   const pre = btn.closest('pre')
-  const code = pre.querySelector('code')
+  const code = pre?.querySelector('code')
+  if (!code) return
   const restoreLabel = t('common.copy')
   navigator.clipboard.writeText(code.innerText).then(() => {
     btn.textContent = '✓'
@@ -303,5 +304,14 @@ window.__copyCode = function(btn) {
   }).catch(() => {
     btn.textContent = '✗'
     setTimeout(() => { btn.textContent = restoreLabel }, 1500)
+  })
+}
+
+if (typeof window !== 'undefined' && !window.__markdownCodeCopyHandlerInstalled) {
+  window.__markdownCodeCopyHandlerInstalled = true
+  document.addEventListener('click', (evt) => {
+    const btn = evt.target?.closest?.('.code-copy-btn')
+    if (!btn) return
+    copyMarkdownCode(btn)
   })
 }
