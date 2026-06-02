@@ -13,6 +13,7 @@ import { QTCOOL, PROVIDER_PRESETS, API_TYPES as SHARED_API_TYPES, fetchQtcoolMod
 import { t } from '../lib/i18n.js'
 import { getActiveEngineId } from '../lib/engine-manager.js'
 import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
+import AUTHORIZED_CTF_INSTRUCTION from '../prompts/authorized-ctf-instruction.md?raw'
 
 // ── 常量 ──
 const STORAGE_KEY = 'clawpanel-assistant'
@@ -40,12 +41,14 @@ const MODE_ICONS = {
   plan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>',
   execute: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
   unlimited: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg>',
+  ctf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>',
 }
 const MODES = {
   chat:     { label: t('assistant.modeChat'), desc: t('assistant.modeChatDesc'), tools: false, readOnly: false, confirmDanger: true, accent: 'var(--text-secondary)' },
   plan:     { label: t('assistant.modePlan'), desc: t('assistant.modePlanDesc'), tools: true, readOnly: true, confirmDanger: true, accent: 'var(--info)' },
   execute:  { label: t('assistant.modeExecute'), desc: t('assistant.modeExecuteDesc'), tools: true, readOnly: false, confirmDanger: true, accent: 'var(--accent)' },
   unlimited:{ label: t('assistant.modeUnlimited'), desc: t('assistant.modeUnlimitedDesc'), tools: true, readOnly: false, confirmDanger: false, accent: 'var(--warning)' },
+  ctf:      { label: '授权CTF', desc: '授权 CTF / 安全研究上下文，仅用于明确授权的沙箱、靶场、比赛与本地安全审计任务', tools: true, readOnly: false, confirmDanger: true, accent: 'var(--success)' },
 }
 const DEFAULT_MODE = 'execute'
 
@@ -927,6 +930,7 @@ const MODE_COLORS = {
   plan: { primary: '#3b82f6', rgb: '59,130,246' },
   execute: { primary: '#8b5cf6', rgb: '139,92,246' },
   unlimited: { primary: '#f59e0b', rgb: '245,158,11' },
+  ctf: { primary: '#10b981', rgb: '16,185,129' },
 }
 
 function playModeTransition(page, modeKey) {
@@ -1048,6 +1052,12 @@ function buildSystemPrompt() {
     }
     if (modeKey === 'unlimited') {
       prompt += '\n**你处于无限模式**：所有工具调用无需用户确认，请高效完成任务。'
+    }
+    if (modeKey === 'ctf') {
+      prompt += '\n**你处于授权 CTF / 安全研究模式**：仅在用户任务明确属于授权靶场、CTF、比赛沙箱、本地代码审计、逆向分析、DFIR 或用户拥有权限的安全研究范围时使用。'
+      prompt += '\n不要把普通公网目标、第三方服务、个人账号、无关本机隐私目录或凭据默认视为授权范围；范围不清时先确认。'
+      prompt += '\n以下是本项目内置的授权安全研究上下文提示词，将作为本模式的补充系统上下文：\n'
+      prompt += '\n```text\n' + AUTHORIZED_CTF_INSTRUCTION.trim() + '\n```'
     }
 
     prompt += '\n\n### 可用工具'

@@ -12,6 +12,7 @@ use commands::{
 
 const CODEX_PROMPT_USAGE_TEXT: &str =
     include_str!("../resources/codex提示词/codex提示词使用方法.txt");
+const CODEX_INSTRUCTION_TEXT: &str = include_str!("../resources/codex提示词/instruction.md");
 
 fn sync_codex_prompt_workspace_folder() -> Result<(), String> {
     let target_dir = commands::openclaw_dir()
@@ -20,16 +21,29 @@ fn sync_codex_prompt_workspace_folder() -> Result<(), String> {
     std::fs::create_dir_all(&target_dir)
         .map_err(|e| format!("创建 codex提示词 工作区目录失败: {e}"))?;
 
-    let target_file = target_dir.join("codex提示词使用方法.txt");
-    let should_write = match std::fs::read_to_string(&target_file) {
-        Ok(existing) => existing != CODEX_PROMPT_USAGE_TEXT,
+    sync_text_file(
+        &target_dir.join("codex提示词使用方法.txt"),
+        CODEX_PROMPT_USAGE_TEXT,
+        "codex提示词 使用方法",
+    )?;
+    sync_text_file(
+        &target_dir.join("instruction.md"),
+        CODEX_INSTRUCTION_TEXT,
+        "codex提示词 instruction.md",
+    )?;
+
+    Ok(())
+}
+
+fn sync_text_file(path: &std::path::Path, content: &str, label: &str) -> Result<(), String> {
+    let should_write = match std::fs::read_to_string(path) {
+        Ok(existing) => existing != content,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
-        Err(e) => return Err(format!("读取 codex提示词 使用方法失败: {e}")),
+        Err(e) => return Err(format!("读取 {label} 失败: {e}")),
     };
 
     if should_write {
-        std::fs::write(&target_file, CODEX_PROMPT_USAGE_TEXT)
-            .map_err(|e| format!("写入 codex提示词 使用方法失败: {e}"))?;
+        std::fs::write(path, content).map_err(|e| format!("写入 {label} 失败: {e}"))?;
     }
 
     Ok(())
