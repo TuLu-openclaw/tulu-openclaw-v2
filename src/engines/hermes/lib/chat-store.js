@@ -223,6 +223,7 @@ function createStore() {
     streaming: false,
     runningSessionId: null,
     pendingAssistantId: null,  // id of the currently streaming assistant message
+    currentRunId: null,        // backend run_id for filtering stale SSE events
     error: null,
     profiles: [],
     activeProfile: safeGet(STORAGE_PROFILE) || 'default',
@@ -637,10 +638,32 @@ function createStore() {
   // ---------- streaming ----------
 
   const unlisteners = []
+  function getRunId(payload) {
+    return payload?.run_id || payload?.runId || payload?.id || null
+  }
+
+  function isCurrentRunEvent(payload) {
+    const eventRunId = getRunId(payload)
+    // Newer Hermes builds include run_id on every SSE-derived event. Until
+    // the matching `hermes-run-started` arrives, ignore run-scoped events so
+    // late deltas/done from a previously stopped background run cannot mutate
+    // or prematurely finish the next visible chat run.
+    if (eventRunId) return state.currentRunId != null && eventRunId === state.currentRunId
+    // Older builds did not tag every event; keep them working by accepting
+    // untagged payloads for the active listener set.
+    return true
+  }
+
   async function attachStreamListeners(runSessionId) {
     detachStreamListeners()
+    state.currentRunId = null
     const runSession = () => state.sessions.find(x => x.id === runSessionId) || null
+    const u0 = await tauriListen('hermes-run-started', (e) => {
+      const runId = getRunId(e?.payload)
+      if (runId) state.currentRunId = runId
+    })
     const u1 = await tauriListen('hermes-run-delta', (e) => {
+      if (!isCurrentRunEvent(e?.payload)) return
       const delta = e?.payload?.delta || ''
       if (!delta) return
       const s = runSession()
@@ -658,6 +681,7 @@ function createStore() {
       notify()
     })
     const u2 = await tauriListen('hermes-run-tool', (e) => {
+      if (!isCurrentRunEvent(e?.payload)) return
       const evt = e?.payload || {}
       const evtType = evt.event || ''
       const toolName = evt.tool || evt.tool_name || evt.name || 'tool'
@@ -702,7 +726,8 @@ function createStore() {
       }
       notify()
     })
-    const u3 = await tauriListen('hermes-run-done', () => {
+    const u3 = await tauriListen('hermes-run-done', (e) => {
+      if (!isCurrentRunEvent(e?.payload)) return
       const s = runSession()
       if (!s) { cleanupAfterRun(); return }
 
@@ -741,6 +766,7 @@ function createStore() {
       cleanupAfterRun()
     })
     const u4 = await tauriListen('hermes-run-error', (e) => {
+      if (!isCurrentRunEvent(e?.payload)) return
       const err = e?.payload?.error || 'unknown error'
       const s = runSession()
       if (s) {
@@ -757,7 +783,7 @@ function createStore() {
       }
       cleanupAfterRun()
     })
-    unlisteners.push(u1, u2, u3, u4)
+    unlisteners.push(u0, u1, u2, u3, u4)
   }
 
   function detachStreamListeners() {
@@ -771,6 +797,7 @@ function createStore() {
     state.streaming = false
     state.runningSessionId = null
     state.pendingAssistantId = null
+    state.currentRunId = null
     state.liveTools = []
     detachStreamListeners()
     notify()
