@@ -377,10 +377,14 @@ function upsertPlayHistory(item) {
   h.unshift({ ...item, updatedAt: Date.now() })
   savePlayHistory(h.slice(0, 50))
 }
-function updatePlayProgress(id, source, progress, epName) {
+function updatePlayProgress(id, source, progress, epName, duration) {
   let h = getPlayHistory()
   let idx = h.findIndex(s => s.id === id && s.source === source && (epName == null || s.epName === epName))
-  if (idx >= 0) { h[idx].progress = progress; h[idx].updatedAt = Date.now() }
+  if (idx >= 0) {
+    h[idx].progress = progress
+    if (typeof duration === 'number' && duration > 0) h[idx].duration = duration
+    h[idx].updatedAt = Date.now()
+  }
   savePlayHistory(h)
 }
 function clearPlayHistory() { savePlayHistory([]) }
@@ -403,10 +407,9 @@ function handlePlayerMessage(d) {
   const { id, source, epName } = d.playbackCtx || {}
   if (!id || !source) return
   if (d.type === 'playerProgress') {
-    const pct = d.duration > 0 ? Math.round((d.currentTime / d.duration) * 1000) / 10 : 0
-    updatePlayProgress(id, source, pct, epName)
+    updatePlayProgress(id, source, Number(d.currentTime) || 0, epName, Number(d.duration) || 0)
   } else if (d.type === 'playerEnded') {
-    updatePlayProgress(id, source, 999, epName)
+    updatePlayProgress(id, source, 999, epName, Number(d.duration) || 0)
   }
 }
 // postMessage fallback（保留给 web 模式或其他不适用 Tauri event 的场景）
@@ -857,7 +860,7 @@ function initApp(el) {
   function renderSearchHistory() {
     const tags = el.querySelector('#t-history-tags')
     tags.innerHTML = getSearchHistory().map(s =>
-      '<span class="tvbox-history-tag" data-q="' + s + '">' + s + '</span>'
+      '<span class="tvbox-history-tag" data-q="' + escHtml(s) + '">' + escHtml(s) + '</span>'
     ).join('')
     tags.querySelectorAll('.tvbox-history-tag').forEach(tag => {
       tag.addEventListener('click', () => {
@@ -886,14 +889,14 @@ function initApp(el) {
       const posterHtml = renderPosterImg(item.pic, item.name, srcKey, srcApi, '🎬')
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
-      html += '<div class="tvbox-hist-card" data-id="' + item.id + '" data-source="' + item.source + '" data-name="' + item.name + '" data-pic="' + item.pic + '" data-epname="' + (item.epName || '') + '" data-epurl="' + (item.epUrl || '') + '" data-progress="' + item.progress + '" data-duration="' + (item.duration || 0) + '">' +
+      html += '<div class="tvbox-hist-card" data-id="' + escHtml(item.id) + '" data-source="' + escHtml(item.source) + '" data-name="' + escHtml(item.name) + '" data-pic="' + escHtml(item.pic) + '" data-epname="' + escHtml(item.epName || '') + '" data-epurl="' + escHtml(item.epUrl || '') + '" data-progress="' + escHtml(item.progress || 0) + '" data-duration="' + escHtml(item.duration || 0) + '">' +
         '<div class="tvbox-hist-pic">' +
         posterHtml +
-          (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + resumeLabel + '</span>' : '') +
+          (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + escHtml(resumeLabel) + '</span>' : '') +
           '<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1)"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--accent),#ec4899)"></div></div>' +
         '</div>' +
-        '<div class="tvbox-hist-name">' + item.name + '</div>' +
-        '<div class="tvbox-hist-ep">' + (item.epName || '') + '</div>' +
+        '<div class="tvbox-hist-name">' + escHtml(item.name) + '</div>' +
+        '<div class="tvbox-hist-ep">' + escHtml(item.epName || '') + '</div>' +
       '</div>'
     })
     html += '</div>'
@@ -1535,10 +1538,10 @@ function setDebug(msg, detail) {
         firstUrls.map((ep, i) => {
           const isResume = hist && hist.epName === ep.name
           return '<button class="tvbox-ep-btn' + (isResume?' playing':'') + '" ' +
-            'data-url="' + ep.url + '" data-name="' + item.vod_name + ' ' + ep.name + '" ' +
-            'data-epname="' + ep.name + '" data-pic="' + item.vod_pic + '" ' +
-            'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' +
-            (isResume?'▶ ':'') + ep.name + '</button>'
+            'data-url="' + escHtml(ep.url) + '" data-name="' + escHtml(item.vod_name + ' ' + ep.name) + '" ' +
+            'data-epname="' + escHtml(ep.name) + '" data-pic="' + escHtml(item.vod_pic) + '" ' +
+            'data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(sourceName) + '">' +
+            (isResume?'▶ ':'') + escHtml(ep.name) + '</button>'
         }).join('') +
       '</div>'
 
@@ -1557,7 +1560,7 @@ function setDebug(msg, detail) {
         grid.innerHTML = eps.map((ep, i) =>
           '<button class="tvbox-ep-btn" data-url="' + escHtml(ep.url) + '" data-name="' + escHtml(item.vod_name + ' ' + ep.name) + '" ' +
             'data-epname="' + escHtml(ep.name) + '" data-pic="' + escHtml(item.vod_pic) + '" ' +
-            'data-id="' + item.vod_id + '" data-source="' + sourceName + '">' + escHtml(ep.name) + '</button>'
+            'data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(sourceName) + '">' + escHtml(ep.name) + '</button>'
         ).join('')
         body.querySelectorAll('[data-si]').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
@@ -2720,7 +2723,7 @@ function pickDirectUrl(url) {
     if (resume === 0) {
       try {
         const h = getPlayHistory().filter(s => s.source === 'crawl')
-        const prev = h.find(s => s.url === url)
+        const prev = h.find(s => s.epUrl === url || s.url === url)
         if (prev && prev.progress > 0 && prev.progress < 999) resume = prev.progress
       } catch {}
     }
