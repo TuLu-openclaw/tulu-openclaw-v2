@@ -2749,6 +2749,19 @@ function applyStreamText(nextText = '') {
   return true
 }
 
+function reconcileFinalText(finalText = '') {
+  const text = String(finalText || '')
+  if (!text) return false
+  if (text === _currentAiText) return false
+  // The final message is the authoritative assistant response. Delta streams can
+  // be chunk-based, cumulative, or interrupted by reconnects; replacing here
+  // fixes speculative duplicate/missing text before rendering, copying, and
+  // local persistence.
+  _currentAiText = text
+  _lastStreamDeltaFingerprint = ''
+  return true
+}
+
 function beginStreamBubble(runId = '') {
   if (_currentAiBubble) return
   _currentAiBubble = createStreamBubble()
@@ -2911,6 +2924,8 @@ function handleChatEvent(payload) {
     if (!_currentAiBubble && hasContent) {
       _currentAiBubble = createStreamBubble()
       _currentAiText = finalText
+    } else if (finalText) {
+      reconcileFinalText(finalText)
     }
     if (_currentAiBubble) {
       setReplyStatus('finalizing', replyStatusText('finalizing'), { runId: runId || _currentRunId, activity: t('chat.replyActivityFinalizing', { count: finalTools.length || _currentAiTools.length || 0 }) })
