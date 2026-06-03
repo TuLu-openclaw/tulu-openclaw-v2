@@ -3512,10 +3512,11 @@ function formatToolDisplayName(name = '') {
   const normalized = lower.replace(/[.-]/g, '_')
   const map = {
     exec: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), process: t('chat.toolNameProcess'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
-    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), image_generate: t('chat.toolNameImageGenerate'), pdf: t('chat.toolNamePdf'),
-    message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), nodes: t('chat.toolNameNodes'), canvas: t('chat.toolNameCanvas'),
-    sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), sessions_yield: t('chat.toolNameSessionsYield'), subagents: t('chat.toolNameSubagents'), gateway: t('chat.toolNameGateway'),
-    tool: t('chat.tool'),
+    memory_search: t('chat.toolNameMemorySearch'), memory_get: t('chat.toolNameMemoryGet'), session_status: t('chat.toolNameSessionStatus'),
+    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), image_generate: t('chat.toolNameImageGenerate'), video_generate: t('chat.toolNameVideoGenerate'), pdf: t('chat.toolNamePdf'), tts: t('chat.toolNameTts'),
+    message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), nodes: t('chat.toolNameNodes'), canvas: t('chat.toolNameCanvas'), gateway: t('chat.toolNameGateway'),
+    sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), sessions_yield: t('chat.toolNameSessionsYield'), sessions_list: t('chat.toolNameSessionsList'), sessions_history: t('chat.toolNameSessionsHistory'), subagents: t('chat.toolNameSubagents'), agents_list: t('chat.toolNameAgentsList'),
+    tool: t('chat.tool'), update_plan: t('chat.toolNameUpdatePlan'),
   }
   return map[normalized] || raw || t('chat.tool')
 }
