@@ -329,10 +329,16 @@ function bindConfigEvents(el) {
 }
 
 async function reconnectGatewayWithSavedConfig(port, auth, seq) {
+  const isPasswordAuth = auth?.mode === 'password'
+  const hasSecretToken = auth?.mode === 'token' && auth?.token && typeof auth.token !== 'string'
   const token = typeof auth?.token === 'string' ? auth.token : ''
-  if (!token) return
   const host = `127.0.0.1:${port || 18789}`
   if (_reconnectTimer) clearTimeout(_reconnectTimer)
+  if (isPasswordAuth) {
+    wsClient.disconnect()
+    return
+  }
+  if (hasSecretToken) return
   wsClient.disconnect()
   _reconnectTimer = setTimeout(() => {
     _reconnectTimer = null
