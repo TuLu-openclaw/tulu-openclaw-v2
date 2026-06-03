@@ -19,7 +19,7 @@ export async function render() {
       <p class="page-desc">${t('models.desc')}</p>
     </div>
     <div class="config-actions">
-      <button class="btn btn-primary btn-sm" id="btn-add-provider">${t('models.addProvider')}</button>
+      <button class="btn btn-primary btn-sm" id="btn-add-provider" disabled>${t('models.addProvider')}</button>
       <button class="btn btn-secondary btn-sm" id="btn-undo" disabled>${t('models.undo')}</button>
     </div>
     <div class="form-hint" style="margin-bottom:var(--space-md)">
@@ -96,6 +96,7 @@ async function loadConfig(page, state) {
     }
     renderDefaultBar(page, state)
     renderProviders(page, state)
+    page.querySelector('#btn-add-provider').disabled = false
   } catch (e) {
     listEl.innerHTML = '<div style="color:var(--error);padding:20px">' + t('models.configLoadFailed') + ': ' + e + '</div>'
     toast(t('models.configLoadFailed') + ': ' + e, 'error')
@@ -821,7 +822,10 @@ function applyDefaultModel(state) {
 
 // 顶部按钮事件
 function bindTopActions(page, state) {
-  page.querySelector('#btn-add-provider').onclick = () => addProvider(page, state)
+  page.querySelector('#btn-add-provider').onclick = () => {
+    if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
+    addProvider(page, state)
+  }
   page.querySelector('#btn-undo').onclick = () => undo(page, state)
 
   // 晴辰云：获取模型列表 → 弹窗让用户选择要添加的模型

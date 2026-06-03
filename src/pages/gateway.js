@@ -44,7 +44,7 @@ export async function render() {
       <div class="config-section"><div class="stat-card loading-placeholder" style="height:80px"></div></div>
     </div>
     <div class="gw-save-bar">
-      <button class="btn btn-primary" id="btn-save-gw">
+      <button class="btn btn-primary" id="btn-save-gw" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
         ${t('gateway.saveApply')}
       </button>
@@ -56,6 +56,10 @@ export async function render() {
   // 非阻塞：先返回 DOM，后台加载数据
   loadConfig(page, state)
   page.querySelector('#btn-save-gw').onclick = async () => {
+    if (!state.config) {
+      toast(t('gateway.configNotReady'), 'warning')
+      return
+    }
     const btn = page.querySelector('#btn-save-gw')
     btn.disabled = true
     btn.classList.add('btn-loading')
@@ -85,6 +89,7 @@ async function loadConfig(page, state) {
     state.config = await api.readOpenclawConfig()
     state._origToken = state.config?.gateway?.auth?.token ?? null
     renderConfig(page, state)
+    page.querySelector('#btn-save-gw').disabled = false
   } catch (e) {
     el.innerHTML = '<div style="color:var(--error);padding:20px">' + t('gateway.loadFailed') + ': ' + _escapeHtml(e) + '</div>'
     toast(t('gateway.loadFailed') + ': ' + e, 'error')
