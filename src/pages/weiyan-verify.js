@@ -1,52 +1,54 @@
+import { t } from '../lib/i18n.js'
+
 /**
  * 微验验证页面
  * 网络卡密验证系统 · 基于微验API
  */
 
 export default function render(el) {
-  const ANNOUNCEMENT = 'v3.3.4 更新公告：修复已知问题，优化播放体验。卡密问题联系 星枢官方客服'
+  const ANNOUNCEMENT = t('verify.weiyanAnnouncement')
 
   el.innerHTML = `
     ${ANNOUNCEMENT ? `<div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px 12px;margin:16px 16px 0;font-size:12px;color:#a5b4fc;line-height:1.6">📢 ${ANNOUNCEMENT}</div>` : ''}
     <div class="page-header">
-      <div class="page-title">微验验证</div>
-      <div class="page-desc">网络卡密验证系统 · 快速接入验证服务</div>
+      <div class="page-title">${t('verify.weiyanTitle')}</div>
+      <div class="page-desc">${t('verify.weiyanDesc')}</div>
     </div>
     <div class="verify-container">
       <div class="verify-card">
         <div class="verify-card-header">
-          <span class="verify-badge">微验验证</span>
-          <span class="verify-status online">服务正常</span>
+          <span class="verify-badge">${t('verify.weiyanTitle')}</span>
+          <span class="verify-status online">${t('verify.serviceOnline')}</span>
         </div>
         <div class="verify-card-body">
           <div class="verify-form">
             <div class="verify-form-group">
-              <label class="verify-form-label">卡密</label>
-              <input type="text" id="weiyan-key" class="verify-form-input" placeholder="请输入卡密" autocomplete="off">
+              <label class="verify-form-label">${t('verify.licenseKey')}</label>
+              <input type="text" id="weiyan-key" class="verify-form-input" placeholder="${t('verify.licensePlaceholder')}" autocomplete="off">
             </div>
             <div class="verify-form-group">
-              <label class="verify-form-label">应用标识</label>
-              <input type="text" id="weiyan-appid" class="verify-form-input" placeholder="请输入应用标识(AppID)" value="67696" autocomplete="off">
+              <label class="verify-form-label">${t('verify.appId')}</label>
+              <input type="text" id="weiyan-appid" class="verify-form-input" placeholder="${t('verify.appIdPlaceholder')}" value="67696" autocomplete="off">
             </div>
             <div id="weiyan-result" style="display:none" class="verify-result"></div>
             <button id="weiyan-btn" class="btn btn-primary btn-lg" style="width:100%;margin-top:8px">
-              验证卡密
+              ${t('verify.verifyKey')}
             </button>
           </div>
-          <div class="verify-divider"><span>或</span></div>
+          <div class="verify-divider"><span>${t('verify.or')}</span></div>
           <div class="verify-actions">
             <a class="btn btn-secondary btn-lg" href="https://wy.llua.cn/" target="_blank" rel="noopener" style="display:block;text-align:center">
-              访问微验官网
+              ${t('verify.visitWeiyan')}
             </a>
             <a class="btn btn-secondary btn-lg" href="https://wy.llua.cn/buy" target="_blank" rel="noopener" style="display:block;text-align:center">
-              购买卡密
+              ${t('verify.buyKey')}
             </a>
           </div>
         </div>
       </div>
       <div class="verify-info-box">
-        <div class="verify-info-title">接口参数</div>
-        <div class="verify-info-row"><span>API地址</span><code>https://wy.llua.cn</code></div>
+        <div class="verify-info-title">${t('verify.apiParams')}</div>
+        <div class="verify-info-row"><span>${t('verify.apiAddress')}</span><code>https://wy.llua.cn</code></div>
         <div class="verify-info-row"><span>AppID</span><code>67696</code></div>
         <div class="verify-info-row"><span>AppKey</span><code>sd47K5r8v7K0KsH0</code></div>
       </div>
@@ -62,12 +64,12 @@ export default function render(el) {
     if (!key) {
       resultEl.style.display = ''
       resultEl.className = 'verify-result verify-result-error'
-      resultEl.textContent = '请输入卡密'
+      resultEl.textContent = t('verify.emptyKey')
       return
     }
 
     btn.disabled = true
-    btn.textContent = '验证中...'
+    btn.textContent = t('verify.verifying')
     resultEl.style.display = 'none'
 
     try {
@@ -81,18 +83,18 @@ export default function render(el) {
       resultEl.style.display = ''
       if (data.success || data.code === 2552667173 || data.ret === 2552667173) {
         resultEl.className = 'verify-result verify-result-success'
-        resultEl.textContent = '验证成功，卡密有效'
+        resultEl.textContent = t('verify.verifySuccess')
       } else {
         resultEl.className = 'verify-result verify-result-error'
-        resultEl.textContent = '验证失败，卡密无效或已过期'
+        resultEl.textContent = t('verify.invalidOrExpired')
       }
     } catch (e) {
       resultEl.style.display = ''
       resultEl.className = 'verify-result verify-result-error'
-      resultEl.textContent = '验证失败：' + (e.message || '网络错误')
+      resultEl.textContent = t('verify.verifyFailedWithReason', { reason: e.message || t('verify.networkError') })
     } finally {
       btn.disabled = false
-      btn.textContent = '验证卡密'
+      btn.textContent = t('verify.verifyKey')
     }
   })
 
