@@ -47,6 +47,10 @@ export async function saveMessage(message) {
       model: message.model || '',
       contextWindow: message.contextWindow || 0,
       attachments: message.attachments || [],
+      videos: message.videos || [],
+      audios: message.audios || [],
+      files: message.files || [],
+      tools: message.tools || [],
       sync: true,
       agentLabel: message.agentLabel || '',
       sourceSessionKey: message.sourceSessionKey || ''
@@ -75,6 +79,10 @@ export async function saveMessages(messages) {
         model: msg.model || '',
         contextWindow: msg.contextWindow || 0,
         attachments: msg.attachments || [],
+        videos: msg.videos || [],
+        audios: msg.audios || [],
+        files: msg.files || [],
+        tools: msg.tools || [],
         sync: true,
         agentLabel: msg.agentLabel || '',
         sourceSessionKey: msg.sourceSessionKey || ''

@@ -3179,12 +3179,16 @@ function handleChatEvent(payload) {
     completeTaskRound(doneTask)
     setReplyStatus('done', replyStatusText('done'), { runId: runId || _currentRunId, activity: t('chat.replyActivityDone') })
     refreshSessionList()
-    if (_currentAiText || _currentAiImages.length) {
+    if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
         content: _currentAiText, timestamp: Date.now(),
         usage: extractMessageUsage(finalMetaSource), cost: extractMessageCost(finalMetaSource), model: extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey), contextWindow: getContextWindow(_sessionKey),
-        attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content)
+        attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content),
+        videos: _currentAiVideos,
+        audios: _currentAiAudios,
+        files: _currentAiFiles,
+        tools: _currentAiTools,
       })
     }
     // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
@@ -3802,7 +3806,7 @@ async function loadHistory() {
         if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
         else if (msg.role === 'assistant') {
           const images = (msg.attachments || []).filter(a => a.category === 'image').map(a => ({ mediaType: a.mimeType, data: a.content, url: a.url }))
-          appendAiMessage(msg.content || '', msgTime, images, [], [], [], [], { usage: msg.usage, cost: msg.cost, model: msg.model, contextWindow: msg.contextWindow, sessionKey: msg.sessionKey })
+          appendAiMessage(msg.content || '', msgTime, images, msg.videos || [], msg.audios || [], msg.files || [], msg.tools || [], { usage: msg.usage, cost: msg.cost, model: msg.model, contextWindow: msg.contextWindow, sessionKey: msg.sessionKey })
         }
       })
       scrollToBottom()
@@ -3826,7 +3830,7 @@ async function loadHistory() {
       saveMessages(result.messages.map(m => {
         const c = extractContent(m)
         const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-        return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey) }
+        return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey), videos: c?.videos || [], audios: c?.audios || [], files: c?.files || [], tools: c?.tools || [] }
       }))
       _isLoadingHistory = false
       return
@@ -3855,7 +3859,7 @@ async function loadHistory() {
     saveMessages(result.messages.map(m => {
       const c = extractContent(m)
       const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-      return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey) }
+      return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey), videos: c?.videos || [], audios: c?.audios || [], files: c?.files || [], tools: c?.tools || [] }
     }))
     scrollToBottom()
     restoreReplyStatus()
