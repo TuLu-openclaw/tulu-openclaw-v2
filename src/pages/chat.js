@@ -3510,15 +3510,21 @@ function formatToolDisplayName(name = '') {
   const raw = String(name || '').trim()
   const lower = raw.toLowerCase()
   const normalized = lower.replace(/[.-]/g, '_')
+  const leaf = lower.split(/[.:/]/).filter(Boolean).pop() || lower
+  const leafNormalized = leaf.replace(/[.-]/g, '_')
   const map = {
     exec: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), process: t('chat.toolNameProcess'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
     memory_search: t('chat.toolNameMemorySearch'), memory_get: t('chat.toolNameMemoryGet'), session_status: t('chat.toolNameSessionStatus'),
     web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), image_generate: t('chat.toolNameImageGenerate'), video_generate: t('chat.toolNameVideoGenerate'), pdf: t('chat.toolNamePdf'), tts: t('chat.toolNameTts'),
     message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), nodes: t('chat.toolNameNodes'), canvas: t('chat.toolNameCanvas'), gateway: t('chat.toolNameGateway'),
     sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), sessions_yield: t('chat.toolNameSessionsYield'), sessions_list: t('chat.toolNameSessionsList'), sessions_history: t('chat.toolNameSessionsHistory'), subagents: t('chat.toolNameSubagents'), agents_list: t('chat.toolNameAgentsList'),
+    multi_tool_use_parallel: t('chat.toolNameParallelTools'), parallel: t('chat.toolNameParallelTools'),
     tool: t('chat.tool'), update_plan: t('chat.toolNameUpdatePlan'),
   }
-  return map[normalized] || raw || t('chat.tool')
+  if (map[normalized]) return map[normalized]
+  if (normalized.startsWith('functions_') && map[normalized.slice('functions_'.length)]) return map[normalized.slice('functions_'.length)]
+  if (normalized.startsWith('tools_') && map[normalized.slice('tools_'.length)]) return map[normalized.slice('tools_'.length)]
+  return map[leafNormalized] || raw || t('chat.tool')
 }
 
 function formatToolStatus(status = '') {
