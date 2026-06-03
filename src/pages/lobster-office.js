@@ -5,20 +5,21 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
+import { t } from '../lib/i18n.js'
 
 const PREVIEW_PRESETS = {
-  ack: { emoji: '🟡', title: '已收到', desc: '已收到新任务，等待进入处理' },
-  thinking: { emoji: '💭', title: '思考中', desc: '正在分析和组织方案' },
-  planning: { emoji: '🧭', title: '规划中', desc: '正在拆解步骤并安排执行' },
-  tool: { emoji: '🛠️', title: '工具调用', desc: '正在调用工具或执行外部步骤' },
-  working: { emoji: '🔴', title: '处理中', desc: '正在持续处理任务' },
-  streaming: { emoji: '✍️', title: '生成中', desc: '正在生成回复内容' },
-  verifying: { emoji: '🔍', title: '校验中', desc: '正在校验结果和收尾' },
-  syncing: { emoji: '🔄', title: '同步中', desc: '正在同步 Gateway / Agent 状态' },
-  done: { emoji: '🟢', title: '已完成', desc: '任务已处理完成' },
-  idle: { emoji: '🟢', title: '待命', desc: '当前无任务，保持待命' },
-  error: { emoji: '🔴', title: '异常', desc: '发现问题，正在等待处理' },
-  aborted: { emoji: '🟠', title: '已中止', desc: '本次任务已中止' },
+  ack: { emoji: '🟡', titleKey: 'lobsterOffice.stateAckTitle', descKey: 'lobsterOffice.stateAckDesc' },
+  thinking: { emoji: '💭', titleKey: 'lobsterOffice.stateThinkingTitle', descKey: 'lobsterOffice.stateThinkingDesc' },
+  planning: { emoji: '🧭', titleKey: 'lobsterOffice.statePlanningTitle', descKey: 'lobsterOffice.statePlanningDesc' },
+  tool: { emoji: '🛠️', titleKey: 'lobsterOffice.stateToolTitle', descKey: 'lobsterOffice.stateToolDesc' },
+  working: { emoji: '🔴', titleKey: 'lobsterOffice.stateWorkingTitle', descKey: 'lobsterOffice.stateWorkingDesc' },
+  streaming: { emoji: '✍️', titleKey: 'lobsterOffice.stateStreamingTitle', descKey: 'lobsterOffice.stateStreamingDesc' },
+  verifying: { emoji: '🔍', titleKey: 'lobsterOffice.stateVerifyingTitle', descKey: 'lobsterOffice.stateVerifyingDesc' },
+  syncing: { emoji: '🔄', titleKey: 'lobsterOffice.stateSyncingTitle', descKey: 'lobsterOffice.stateSyncingDesc' },
+  done: { emoji: '🟢', titleKey: 'lobsterOffice.stateDoneTitle', descKey: 'lobsterOffice.stateDoneDesc' },
+  idle: { emoji: '🟢', titleKey: 'lobsterOffice.stateIdleTitle', descKey: 'lobsterOffice.stateIdleDesc' },
+  error: { emoji: '🔴', titleKey: 'lobsterOffice.stateErrorTitle', descKey: 'lobsterOffice.stateErrorDesc' },
+  aborted: { emoji: '🟠', titleKey: 'lobsterOffice.stateAbortedTitle', descKey: 'lobsterOffice.stateAbortedDesc' },
 }
 
 function readLiveLobsterState() {
@@ -32,87 +33,87 @@ function readLiveLobsterState() {
 export default function render(el) {
   el.innerHTML = `
     <div class="page-header">
-      <div class="page-title">🦞 龙虾办公室</div>
-      <div class="page-desc">像素风 AI 状态可视化 · 独立窗口运行</div>
+      <div class="page-title">🦞 ${t('lobsterOffice.title')}</div>
+      <div class="page-desc">${t('lobsterOffice.subtitle')}</div>
     </div>
     <div class="lobster-intro">
       <div class="intro-card">
         <div class="intro-icon">🦞</div>
         <div class="intro-content">
-          <h2>你的 AI 助手正在等你参观</h2>
-          <p>龙虾办公室是你的 AI 状态可视化面板。在独立窗口中运行，不影响任何工作。</p>
+          <h2>${t('lobsterOffice.heroTitle')}</h2>
+          <p>${t('lobsterOffice.heroDesc')}</p>
           <div class="intro-features">
             <div class="feature-item">
               <span class="feature-icon">🎨</span>
-              <span>像素风格，视觉舒适</span>
+              <span>${t('lobsterOffice.featurePixel')}</span>
             </div>
             <div class="feature-item">
               <span class="feature-icon">🛋️</span>
-              <span>6 种状态自动映射</span>
+              <span>${t('lobsterOffice.featureAutoMapping')}</span>
             </div>
             <div class="feature-item">
               <span class="feature-icon">🎭</span>
-              <span>独立窗口，沉浸体验</span>
+              <span>${t('lobsterOffice.featureWindow')}</span>
             </div>
             <div class="feature-item">
               <span class="feature-icon">⚡</span>
-              <span>不影响指令和任务</span>
+              <span>${t('lobsterOffice.featureNonBlocking')}</span>
             </div>
           </div>
         </div>
       </div>
 
       <div class="state-demo">
-        <div class="demo-title">状态预览</div>
+        <div class="demo-title">${t('lobsterOffice.statePreview')}</div>
         <div class="live-preview" id="lobster-live-preview">
           <div class="live-preview-emoji" id="lobster-live-emoji">🟢</div>
           <div class="live-preview-body">
-            <div class="live-preview-title" id="lobster-live-title">待命</div>
-            <div class="live-preview-desc" id="lobster-live-desc">当前无任务，保持待命</div>
-            <div class="live-preview-meta" id="lobster-live-meta">状态: 空闲</div>
+            <div class="live-preview-title" id="lobster-live-title">${t('lobsterOffice.stateIdleTitle')}</div>
+            <div class="live-preview-desc" id="lobster-live-desc">${t('lobsterOffice.stateIdleDesc')}</div>
+            <div class="live-preview-meta" id="lobster-live-meta">${t('lobsterOffice.liveMeta', { phase: t('lobsterOffice.phaseIdle'), state: t('lobsterOffice.stateIdleLabel') })}</div>
           </div>
         </div>
         <div class="demo-grid">
           <div class="demo-item">
             <div class="demo-dot" style="background:#8892b0"></div>
             <div class="demo-info">
-              <div class="demo-name">待命</div>
-              <div class="demo-desc">休息区沙发</div>
+              <div class="demo-name">${t('lobsterOffice.demoIdle')}</div>
+              <div class="demo-desc">${t('lobsterOffice.demoIdleDesc')}</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#fbbf24"></div>
             <div class="demo-info">
-              <div class="demo-name">写代码</div>
-              <div class="demo-desc">工作区办公桌</div>
+              <div class="demo-name">${t('lobsterOffice.demoCoding')}</div>
+              <div class="demo-desc">${t('lobsterOffice.demoDesk')}</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#60a5fa"></div>
             <div class="demo-info">
-              <div class="demo-name">调研</div>
-              <div class="demo-desc">工作区</div>
+              <div class="demo-name">${t('lobsterOffice.demoResearch')}</div>
+              <div class="demo-desc">${t('lobsterOffice.demoWorkArea')}</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#fbbf24"></div>
             <div class="demo-info">
-              <div class="demo-name">执行</div>
-              <div class="demo-desc">工作区</div>
+              <div class="demo-name">${t('lobsterOffice.demoExecuting')}</div>
+              <div class="demo-desc">${t('lobsterOffice.demoWorkArea')}</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#a78bfa"></div>
             <div class="demo-info">
-              <div class="demo-name">同步</div>
-              <div class="demo-desc">工作区</div>
+              <div class="demo-name">${t('lobsterOffice.demoSyncing')}</div>
+              <div class="demo-desc">${t('lobsterOffice.demoWorkArea')}</div>
             </div>
           </div>
           <div class="demo-item">
             <div class="demo-dot" style="background:#f87171"></div>
             <div class="demo-info">
-              <div class="demo-name">报错</div>
-              <div class="demo-desc">Bug 区</div>
+              <div class="demo-name">${t('lobsterOffice.demoError')}</div>
+              <div class="demo-desc">${t('lobsterOffice.demoBugArea')}</div>
             </div>
           </div>
         </div>
@@ -120,9 +121,9 @@ export default function render(el) {
 
       <div class="open-action">
         <button id="open-lobster-btn" class="btn btn-primary btn-xl">
-          🦞 打开龙虾办公室
+          🦞 ${t('lobsterOffice.openButton')}
         </button>
-        <p class="open-hint">在独立窗口中打开，不影响主界面</p>
+        <p class="open-hint">${t('lobsterOffice.openHint')}</p>
       </div>
     </div>
   `
@@ -166,9 +167,9 @@ export default function render(el) {
     const phase = state.phase || (state.state === 'idle' ? 'idle' : 'working')
     const preset = PREVIEW_PRESETS[phase] || PREVIEW_PRESETS.working
     const emoji = state.emoji || preset.emoji
-    const title = preset.title
-    const desc = state.message || preset.desc
-    const meta = `状态: ${phase} · 阶段: ${state.state || 'working'}`
+    const title = t(preset.titleKey)
+    const desc = state.message || t(preset.descKey)
+    const meta = t('lobsterOffice.liveMeta', { phase, state: state.state || 'working' })
     const emojiEl = el.querySelector('#lobster-live-emoji')
     const titleEl = el.querySelector('#lobster-live-title')
     const descEl = el.querySelector('#lobster-live-desc')
@@ -189,25 +190,25 @@ export default function render(el) {
     const btn = el.querySelector('#open-lobster-btn')
     if (_lobsterWin && !_lobsterWin.closed) {
       _lobsterWin.focus()
-      toast('龙虾办公室已打开', 'info')
+      toast(t('lobsterOffice.alreadyOpen'), 'info')
       return
     }
     btn.disabled = true
-    btn.textContent = '正在打开...'
+    btn.textContent = t('lobsterOffice.opening')
     try {
       await api.openLobsterOffice()
-      toast('龙虾办公室已打开！', 'success')
+      toast(t('lobsterOffice.opened'), 'success')
     } catch (e) {
       // Tauri 命令本身会创建独立窗口；只有命令不可用时才退回到浏览器窗口。
       _lobsterWin = window.open('/lobster-office.html', 'lobster', 'width=1024,height=640,menubar=no,toolbar=no')
       if (!_lobsterWin) {
-        toast('打开失败：' + e, 'error')
+        toast(t('lobsterOffice.openFailed', { error: String(e) }), 'error')
       } else {
-        toast('已使用浏览器窗口打开龙虾办公室', 'info')
+        toast(t('lobsterOffice.browserWindowOpened'), 'info')
       }
     } finally {
       btn.disabled = false
-      btn.textContent = '🦞 打开龙虾办公室'
+      btn.textContent = `🦞 ${t('lobsterOffice.openButton')}`
     }
   })
 
