@@ -3041,13 +3041,19 @@ function scheduleStreamSafetyTimeout() {
         _lastHistoryHash = ''
         loadHistory().then(async () => {
           if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
-            setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
+            const doneRunId = runId || _currentRunId || ''
+            setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId: doneRunId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
+            showTyping(false)
             resetStreamState()
             // loadHistory deliberately avoids repainting while a stream is active.
             // When a silent/long-running run only completes in history (no final WS event),
             // render once more after clearing stream state so the completed answer is visible.
             _lastHistoryHash = ''
             await loadHistory()
+            const doneTask = updateTaskByRunOrSession(doneRunId, _sessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
+            completeTaskRound(doneTask)
+            setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: t('chat.replyActivityDone') })
+            refreshSessionList()
             processMessageQueue()
           }
         }).catch(() => {})
