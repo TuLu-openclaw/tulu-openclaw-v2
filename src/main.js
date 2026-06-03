@@ -483,6 +483,13 @@ function normalizeLobsterDetail(detail = {}) {
   return { phase, state, emoji, message }
 }
 
+function hasActiveLobsterAgentState() {
+  try {
+    const payload = JSON.parse(localStorage.getItem('lobsterState') || 'null')
+    return ['ack', 'thinking', 'planning', 'tool', 'working', 'verifying', 'streaming', 'syncing', 'error'].includes(payload?.phase || payload?.state)
+  } catch { return false }
+}
+
 window.updateLobsterState = function(state, message, extra = {}) {
   try {
     const payload = {
@@ -503,7 +510,7 @@ window.updateLobsterState = function(state, message, extra = {}) {
 // 监听路由变化，认为一次路由变化 = 一次工作周期开始
 window.addEventListener('hashchange', () => {
   const route = location.hash.replace('#', '') || location.pathname
-  if (route && route !== '/') {
+  if (route && route !== '/' && !hasActiveLobsterAgentState()) {
     window.updateLobsterState('working', '导航到 ' + route, { phase: 'working', emoji: '🔴' })
   }
 })
