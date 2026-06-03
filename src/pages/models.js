@@ -20,7 +20,10 @@ export async function render() {
     </div>
     <div class="config-actions">
       <button class="btn btn-primary btn-sm" id="btn-add-provider" disabled>${t('models.addProvider')}</button>
+      <button class="btn btn-secondary btn-sm" id="btn-import-models">${t('models.importConfig')}</button>
+      <button class="btn btn-secondary btn-sm" id="btn-export-models">${t('models.exportConfig')}</button>
       <button class="btn btn-secondary btn-sm" id="btn-undo" disabled>${t('models.undo')}</button>
+      <input type="file" id="model-import-file" accept="application/json,.json" style="display:none">
     </div>
     <div class="form-hint" style="margin-bottom:var(--space-md)">
       ${t('models.providerHint')}
@@ -826,6 +829,73 @@ function applyDefaultModel(state) {
   // 强制覆盖会导致 #142：重开 星枢OpenClaw 后子 Agent 模型配置被重置
 }
 
+function exportModelConfig(state) {
+  if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    models: state.config.models || { providers: {} },
+    defaults: {
+      model: state.config.agents?.defaults?.model || {},
+    },
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  link.href = url
+  link.download = `openclaw-models-${stamp}.json`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+  toast(t('models.exported'), 'success')
+}
+
+function parseImportedModelConfig(payload) {
+  const source = payload && typeof payload === 'object' ? payload : null
+  if (!source) throw new Error(t('models.importInvalid'))
+  const models = source.models?.providers
+    ? source.models
+    : source.providers
+      ? { providers: source.providers }
+      : null
+  if (!models?.providers || typeof models.providers !== 'object' || Array.isArray(models.providers)) {
+    throw new Error(t('models.importInvalid'))
+  }
+  return {
+    models,
+    defaultModel: source.defaults?.model || source.agents?.defaults?.model || null,
+  }
+}
+
+async function importModelConfig(file, page, state) {
+  if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
+  if (!file) return
+  let parsed
+  try {
+    parsed = parseImportedModelConfig(JSON.parse(await file.text()))
+  } catch (e) {
+    toast(`${t('models.importFailed')}: ${e?.message || e}`, 'error')
+    return
+  }
+  const count = Object.keys(parsed.models.providers || {}).length
+  const ok = await showConfirm(t('models.importConfirm', { count }))
+  if (!ok) return
+  pushUndo(state)
+  state.config.models = parsed.models
+  if (!state.config.agents) state.config.agents = {}
+  if (!state.config.agents.defaults) state.config.agents.defaults = {}
+  if (parsed.defaultModel && typeof parsed.defaultModel === 'object') {
+    state.config.agents.defaults.model = { ...parsed.defaultModel }
+  }
+  ensureValidPrimary(state)
+  renderModelInventory(page, state)
+  updateUndoBtn(page, state)
+  autoSave(state)
+  toast(t('models.imported', { count }), 'success')
+}
+
 // 顶部按钮事件
 function bindTopActions(page, state) {
   page.querySelector('#btn-add-provider').onclick = () => {
@@ -833,6 +903,13 @@ function bindTopActions(page, state) {
     addProvider(page, state)
   }
   page.querySelector('#btn-undo').onclick = () => undo(page, state)
+  page.querySelector('#btn-export-models').onclick = () => exportModelConfig(state)
+  page.querySelector('#btn-import-models').onclick = () => page.querySelector('#model-import-file')?.click()
+  page.querySelector('#model-import-file').onchange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    await importModelConfig(file, page, state)
+  }
 
   // 晴辰云：获取模型列表 → 弹窗让用户选择要添加的模型
   page.querySelector('#btn-qtcool-oneclick').onclick = async () => {
