@@ -2713,7 +2713,7 @@ function rememberGroupMessage(group, message) {
 
 function buildGroupMemberPrompt(group, target, cleanText, originalText = '') {
   const memberLabel = getGroupMemberLabel(target, target?.sessionKey)
-  const members = (group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join('、') || t('chat.groupNoMembers')
+  const members = (group.members || []).map(m => getGroupMemberLabel(m, m.sessionKey)).join(t('chat.groupMemberListSeparator')) || t('chat.groupNoMembers')
   const transcript = getGroupTranscript(group, 14)
     .map(msg => {
       const who = msg.role === 'assistant' ? (msg.agentLabel || 'Agent') : (msg.role === 'user' ? t('chat.groupUser') : t('chat.groupSystem'))
@@ -2744,7 +2744,7 @@ async function doGroupSend(group, text, attachments = []) {
   }
   rememberGroupMessage(group, storedUser)
   saveMessage(storedUser)
-  appendSystemMessage(t('chat.groupTaskSentTo', { targets: targets.map(t => t.label || t.agentId || t.sessionKey).join('、') }))
+  appendSystemMessage(t('chat.groupTaskSentTo', { targets: targets.map(t => t.label || t.agentId || t.sessionKey).join(t('chat.groupMemberListSeparator')) }))
   maybeNotifyBusyGroupMembers(group, targets.map(t => t.sessionKey))
   try {
     for (const target of targets) {
@@ -2846,7 +2846,7 @@ function handleEvent(msg) {
     }
     // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
-    if (toolName && !_currentAiBubble) {
+    if (toolName) {
       if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) return
       if (_currentRunId && payload.runId && payload.runId !== _currentRunId) return
       if (payload.runId) _currentRunId = payload.runId
