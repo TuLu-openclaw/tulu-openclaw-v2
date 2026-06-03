@@ -2161,11 +2161,7 @@ function emitLobsterPhase(phase, message, replyState = '') {
   try {
     const lobsterState = mapReplyStateToLobsterState(replyState) || (phase === 'done' ? 'idle' : 'executing')
     window.dispatchEvent(new CustomEvent('lobster-work-start', {
-      detail: {
-        phase,
-        state: lobsterState,
-        message: message || phase,
-      }
+      detail: { phase, state: lobsterState, message: message || phase }
     }))
     if (phase === 'done') window.dispatchEvent(new CustomEvent('lobster-work-end'))
   } catch {}
@@ -3056,11 +3052,11 @@ function handleChatEvent(payload) {
 
   // 重复 run 过滤：跳过已完成的 runId 的后续事件（Gateway 可能对同一消息触发多个 run）
   if (runId && state === 'final' && _seenRunIds.has(runId)) {
-    console.log('[chat] 跳过重复 final, runId:', runId)
+    console.debug('[chat] 跳过重复 final, runId:', runId)
     return
   }
   if (runId && state === 'delta' && _seenRunIds.has(runId) && !_isStreaming) {
-    console.log('[chat] 跳过已完成 run 的 delta, runId:', runId)
+    console.debug('[chat] 跳过已完成 run 的 delta, runId:', runId)
     return
   }
 
@@ -3723,7 +3719,7 @@ function _startResponseWatchdog() {
     _responseWatchdog = null
     // 如果还在等待（未开始流式），强制刷新历史
     if (!_isStreaming && _sessionKey && _messagesEl && _pageActive) {
-      console.log('[chat] 响应看门狗触发：15s 无 delta，刷新历史')
+      console.debug('[chat] 响应看门狗触发：15s 无 delta，刷新历史')
       const oldHash = _lastHistoryHash
       _lastHistoryHash = ''
       await loadHistory()

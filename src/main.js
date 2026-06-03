@@ -14,6 +14,7 @@ import { api, checkBackendHealth, isBackendOnline, isTauriRuntime, onBackendStat
 import { version as APP_VERSION } from '../package.json'
 import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
+import { escapeHtml } from './lib/html-utils.js'
 
 import { initI18n, t } from './lib/i18n.js'
 import { initEngineManager, registerEngine } from './lib/engine-manager.js'
@@ -63,11 +64,6 @@ import './engines/hermes/style/skills-hub.css'
 // 初始化主题 + 国际化
 initTheme()
 initI18n()
-
-/** HTML 转义，防止 XSS 注入 */
-function escapeHtml(str) {
-  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
 
 async function openGatewayConflict(error = null) {
   const services = await api.getServicesStatus().catch(() => [])
@@ -481,7 +477,7 @@ function getLobsterPhaseEmoji(phase, fallback) {
 function normalizeLobsterDetail(detail = {}) {
   const phase = detail?.phase || ''
   const preset = LOBSTER_PHASE_PRESETS[phase] || null
-  const state = detail?.state || preset?.state || 'working'
+  const state = preset?.state || detail?.state || 'working'
   const emoji = detail?.emoji || getLobsterPhaseEmoji(phase, preset?.emoji) || ''
   const message = detail?.message || preset?.message || ''
   return { phase, state, emoji, message }
@@ -489,13 +485,18 @@ function normalizeLobsterDetail(detail = {}) {
 
 window.updateLobsterState = function(state, message, extra = {}) {
   try {
-    localStorage.setItem('lobsterState', JSON.stringify({
+    const payload = {
       state: state,
       message: message || '',
       emoji: extra?.emoji || '',
       phase: extra?.phase || '',
       ts: Date.now()
-    }))
+    }
+    localStorage.setItem('lobsterState', JSON.stringify(payload))
+    try {
+      window.__lobsterBroadcast ||= new BroadcastChannel('lobster-office-state')
+      window.__lobsterBroadcast.postMessage(payload)
+    } catch {}
   } catch (e) {}
 }
 
@@ -665,7 +666,7 @@ window.addEventListener('lobster-work-end', () => {
 async function autoConnectWebSocket() {
   try {
     const inst = getActiveInstance()
-    console.log(`[main] 自动连接 WebSocket (实例: ${inst.name})...`)
+    console.debug(`[main] 自动连接 WebSocket (实例: ${inst.name})...`)
     const config = await api.readOpenclawConfig()
     const port = config?.gateway?.port || 18789
     const rawToken = config?.gateway?.auth?.token
@@ -687,14 +688,14 @@ async function autoConnectWebSocket() {
     // 启动时优先直连，避免被预修复流程阻塞；握手失败后再走 ws-client 内置自动修复
     boostGatewayPolling()
     wsClient.connect(host, token)
-    console.log(`[main] WebSocket 连接已启动 -> ${host}`)
+    console.debug(`[main] WebSocket 连接已启动 -> ${host}`)
 
     // 非阻塞后台修补：仅用于提升后续稳定性，不阻塞首连速度
     queueMicrotask(async () => {
       let needReload = false
       try {
         const pairResult = await api.autoPairDevice()
-        console.log('[main] 后台设备配对 + origins 检查完成:', pairResult)
+        console.debug('[main] 后台设备配对 + origins 检查完成:', pairResult)
         if (typeof pairResult === 'object' && pairResult.changed) {
           needReload = true
         } else if (typeof pairResult === 'string' && pairResult !== '设备已配对') {
@@ -707,7 +708,7 @@ async function autoConnectWebSocket() {
       try {
         const patched = await api.patchModelVision()
         if (patched) {
-          console.log('[main] 已为模型添加 vision 支持')
+          console.debug('[main] 已为模型添加 vision 支持')
           needReload = true
         }
       } catch (visionErr) {
@@ -718,7 +719,7 @@ async function autoConnectWebSocket() {
         try {
           boostGatewayPolling()
           await api.reloadGateway()
-          console.log('[main] Gateway 已后台重载，准备重新连接')
+          console.debug('[main] Gateway 已后台重载，准备重新连接')
           wsClient.reconnect()
         } catch (reloadErr) {
           console.warn('[main] reloadGateway 失败（后台非致命）:', reloadErr)

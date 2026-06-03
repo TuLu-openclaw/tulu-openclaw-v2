@@ -599,14 +599,35 @@ body {
 
 <script>
 // ── 状态映射 ──────────────────────────────────────────────
-const STATES = {
-  idle:        { label: '待命中',    color: '#8892b0', zone: 'sofa',  x: '72%',  y: '36%'  },
-  writing:     { label: '写代码中',  color: '#fbbf24', zone: 'work',  x: '18%',  y: '36%'  },
-  researching: { label: '调研中',   color: '#60a5fa', zone: 'work',  x: '28%',  y: '36%'  },
-  executing:   { label: '执行任务', color: '#fbbf24', zone: 'work',  x: '38%',  y: '36%'  },
-  syncing:     { label: '同步数据', color: '#a78bfa', zone: 'work',  x: '48%',  y: '36%'  },
-  error:       { label: '排查问题', color: '#f87171', zone: 'bug',   x: '50%',  y: '36%'  },
+const PHASE_TO_STATE = {
+  ack: 'ack',
+  thinking: 'thinking',
+  planning: 'planning',
+  tool: 'tool',
+  working: 'working',
+  verifying: 'verifying',
+  streaming: 'streaming',
+  done: 'done',
+  idle: 'idle',
 }
+const STATES = {
+  idle:        { label: '待命中',   color: '#8892b0', zone: 'sofa', x: '72%', y: '36%', mood: 'idle',    card: 'idle',       expires: true  },
+  ack:         { label: '收到任务', color: '#fbbf24', zone: 'work', x: '18%', y: '36%', mood: 'active',  card: 'writing',    expires: false },
+  thinking:    { label: '思考中',   color: '#60a5fa', zone: 'work', x: '26%', y: '36%', mood: 'thinking',card: 'researching',expires: false },
+  planning:    { label: '规划中',   color: '#60a5fa', zone: 'work', x: '30%', y: '36%', mood: 'thinking',card: 'researching',expires: false },
+  writing:     { label: '写代码中', color: '#fbbf24', zone: 'work', x: '18%', y: '36%', mood: 'active',  card: 'writing',    expires: false },
+  researching: { label: '调研中',   color: '#60a5fa', zone: 'work', x: '28%', y: '36%', mood: 'thinking',card: 'researching',expires: false },
+  executing:   { label: '执行任务', color: '#fbbf24', zone: 'work', x: '38%', y: '36%', mood: 'tool',    card: 'executing',  expires: false },
+  tool:        { label: '调用工具', color: '#fbbf24', zone: 'work', x: '38%', y: '36%', mood: 'tool',    card: 'executing',  expires: false },
+  working:     { label: '处理中',   color: '#fbbf24', zone: 'work', x: '34%', y: '36%', mood: 'active',  card: 'executing',  expires: false },
+  verifying:   { label: '校验中',   color: '#a78bfa', zone: 'work', x: '48%', y: '36%', mood: 'syncing', card: 'syncing',    expires: false },
+  streaming:   { label: '写作中',   color: '#fbbf24', zone: 'work', x: '22%', y: '36%', mood: 'active',  card: 'writing',    expires: false },
+  syncing:     { label: '同步数据', color: '#a78bfa', zone: 'work', x: '48%', y: '36%', mood: 'syncing', card: 'syncing',    expires: false },
+  done:        { label: '任务完成', color: '#4ade80', zone: 'sofa', x: '72%', y: '36%', mood: 'done',    card: 'idle',       expires: true  },
+  error:       { label: '排查问题', color: '#f87171', zone: 'bug',  x: '50%', y: '36%', mood: 'error',   card: 'error',      expires: false },
+}
+const STATE_TTL_MS = 15000
+const DONE_HOLD_MS = 5000
 
 const lobster = document.getElementById('lobster')
 const speech = document.getElementById('speech-bubble')
@@ -617,26 +638,57 @@ const stateLabel = document.getElementById('state-label')
 let currentState = 'idle'
 let startTime = Date.now()
 let msgCount = 0
+let _lastStateKey = ''
+let _expireTimer = null
+let _doneTimer = null
 
-function normalizeOfficeState(state) {
-  const aliases = { working: 'executing', tool: 'executing', aborted: 'error' }
-  return STATES[state] ? state : (aliases[state] || 'idle')
+function normalizeIncomingState(input = {}) {
+  const phase = input.phase || ''
+  let state = PHASE_TO_STATE[phase] || input.state || 'idle'
+  if (!STATES[state]) {
+    if (state === 'acknowledged') state = 'ack'
+    else if (state === 'running') state = 'working'
+    else if (state === 'aborted') state = 'error'
+    else state = 'working'
+  }
+  const s = STATES[state] || STATES.idle
+  return {
+    state,
+    phase,
+    message: input.message || s.label,
+    emoji: input.emoji || '',
+    ts: Number(input.ts || Date.now()),
+  }
 }
 
+function scheduleFallback(payload) {
+  clearTimeout(_expireTimer)
+  clearTimeout(_doneTimer)
+  const s = STATES[payload.state] || STATES.idle
+  if (payload.state === 'done') {
+    _doneTimer = setTimeout(() => setState('idle', '待命中'), DONE_HOLD_MS)
+    return
+  }
+  if (s.expires && payload.state !== 'idle') {
+    _expireTimer = setTimeout(() => setState('idle', '状态已过期，回到待命'), STATE_TTL_MS)
+  }
+}
 // ── 状态切换 ──────────────────────────────────────────────
-function setState(state, message) {
-  state = normalizeOfficeState(state)
-  const s = STATES[state] || STATES.idle
-  currentState = state
+function setState(state, message, meta = {}) {
+  const payload = normalizeIncomingState({ state, message, ...meta })
+  const s = STATES[payload.state] || STATES.idle
+  currentState = payload.state
 
   // 更新 dot 和文字
-  dot.className = state
-  statusText.textContent = message || s.label
-  stateLabel.textContent = state
+  dot.className = payload.state
+  dot.style.background = s.color
+  dot.style.boxShadow = `0 0 8px ${s.color}`
+  statusText.textContent = payload.emoji ? `${payload.emoji} ${payload.message || s.label}` : (payload.message || s.label)
+  stateLabel.textContent = payload.phase ? `${payload.state} / ${payload.phase}` : payload.state
 
-  // 更新右侧卡片高亮
+  // 更新右侧卡片高亮：真实 Agent 阶段映射到办公室可视状态卡片
   document.querySelectorAll('.state-card').forEach(c => {
-    c.classList.toggle('active', c.dataset.state === state)
+    c.classList.toggle('active', c.dataset.state === (s.card || payload.state))
   })
 
   // 龙虾移动
@@ -644,22 +696,27 @@ function setState(state, message) {
   lobster.style.bottom = s.y
 
   // 气泡
-  speech.textContent = message || s.label
+  speech.textContent = payload.emoji ? `${payload.emoji} ${payload.message || s.label}` : (payload.message || s.label)
   speech.classList.add('show')
   clearTimeout(window._bubbleTimer)
-  window._bubbleTimer = setTimeout(() => speech.classList.remove('show'), 4000)
+  window._bubbleTimer = setTimeout(() => speech.classList.remove('show'), payload.state === 'error' ? 7000 : 4000)
 
-  // 动画
-  lobster.classList.remove('idle-lobster', 'walking')
-  if (state === 'idle') {
+  // 动画：等待/思考/工具/写作/异常/完成各自真实切换
+  lobster.classList.remove('idle-lobster', 'walking', 'blinking')
+  dot.classList.remove('blinking')
+  if (s.mood === 'idle' || s.mood === 'done') {
     lobster.classList.add('idle-lobster')
   } else {
     lobster.classList.add('walking')
   }
+  if (s.mood === 'thinking' || s.mood === 'tool' || s.mood === 'syncing') dot.classList.add('blinking')
+  if (s.mood === 'error') lobster.classList.add('blinking')
+
+  scheduleFallback(payload)
 
   // 通知父窗口（如果有）
   if (window.opener && !window.opener.closed) {
-    window.opener.postMessage({ type: 'lobsterStateChange', state, message }, '*')
+    window.opener.postMessage({ type: 'lobsterStateChange', state: payload.state, phase: payload.phase, message: payload.message }, '*')
   }
 }
 
@@ -710,38 +767,44 @@ window.addEventListener('message', e => {
 })
 
 // ── 本地存储轮询（跨窗口状态同步）─────────────────────────
-// 主窗口调用 updateLobsterState(state, message) 写入 localStorage
-// 这里轮询读取，实现跨窗口状态同步
-let _lastStateSig = null
-setInterval(() => {
+// 主窗口调用 updateLobsterState(state, message) 写入 localStorage，并通过 BroadcastChannel 低延迟广播。
+function applyStoredLobsterState(raw, { allowExpired = false } = {}) {
   try {
-    const stored = localStorage.getItem('lobsterState')
-    if (stored) {
-      const { state, message, ts } = JSON.parse(stored)
-      const sig = `${state || ''}|${message || ''}|${ts || ''}`
-      // 忽略过期超过 10 秒的旧状态；同一状态的新消息/新时间戳也要同步
-      if (Date.now() - ts < 10000 && sig !== _lastStateSig) {
-        _lastStateSig = sig
-        setState(state, message)
-      }
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!data || typeof data !== 'object') return
+    const payload = normalizeIncomingState(data)
+    const key = `${payload.state}|${payload.phase}|${payload.message}|${payload.ts}`
+    if (key === _lastStateKey) return
+    const age = Date.now() - payload.ts
+    if (!allowExpired && age > STATE_TTL_MS) {
+      if (currentState !== 'idle') setState('idle', '状态已过期，回到待命')
+      return
     }
+    _lastStateKey = key
+    setState(payload.state, payload.message, payload)
   } catch (e) {}
-}, 2000)
+}
+
+try {
+  const channel = new BroadcastChannel('lobster-office-state')
+  channel.onmessage = e => applyStoredLobsterState(e.data)
+} catch {}
+
+setInterval(() => {
+  try { applyStoredLobsterState(localStorage.getItem('lobsterState')) } catch (e) {}
+}, 1000)
+
+window.addEventListener('storage', e => {
+  if (e.key === 'lobsterState') applyStoredLobsterState(e.newValue)
+})
 
 // ── 初始化：读取本地存储的最近状态 + 请求父窗口同步 ──────
 window.addEventListener('load', () => {
   // 先读本地存储恢复状态
   try {
     const stored = localStorage.getItem('lobsterState')
-    if (stored) {
-      const { state, message, ts } = JSON.parse(stored)
-      if (state) {
-        setState(state, message)
-        _lastStateSig = `${state || ''}|${message || ''}|${ts || ''}`
-      }
-    } else {
-      setState('idle')
-    }
+    if (stored) applyStoredLobsterState(stored)
+    else setState('idle')
   } catch (e) { setState('idle') }
 
   // 通知主窗口我打开了
