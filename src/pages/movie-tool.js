@@ -1607,21 +1607,51 @@ function setDebug(msg, detail) {
     })
   }
 
-  function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress, allEps) {
-    // 全部改为独立 Tauri 窗口播放（关闭内嵌播放器）
+  async function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress, allEps) {
+    // 优先使用独立 Tauri 窗口播放；失败时回退到内嵌播放器并给出可见反馈。
     if (!url || url === '#') return
     playingEp = { id, source, epName, pic, epUrl: url, allUrls: fallbackUrls || [], allEps: allEps || null }
     const resume = (typeof startProgress === 'number' && startProgress > 0 && startProgress < 999) ? startProgress : 0
-    const ctx = JSON.stringify({ id, source, epName })
-    import('@tauri-apps/api/core').then(({ invoke }) => {
-      invoke('open_player_window', {
-        url, title: name, resume,
+    const opened = await openStandalonePlayer({
+      url, title: name, resume,
+      allEps: allEps || [],
+      allUrls: fallbackUrls || [url],
+      playbackCtx: { id, source, epName },
+      pic,
+    })
+    if (!opened) showEmbeddedPlayerFallback(name, url, resume, fallbackUrls || [url])
+  }
+
+  async function openStandalonePlayer({ url, title, resume, allEps, allUrls, playbackCtx, pic }) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+      if (!invoke) throw new Error('Tauri API 不可用')
+      await invoke('open_player_window', {
+        url, title, resume,
         allEps: JSON.stringify(allEps || []),
-        allUrls: JSON.stringify(fallbackUrls || [url]),
-        playbackCtx: ctx,
+        allUrls: JSON.stringify(allUrls || [url]),
+        playbackCtx: JSON.stringify(playbackCtx || {}),
         pic: pic || '',
-      }).catch(() => {})
-    }).catch(() => {})
+      })
+      return true
+    } catch (e) {
+      console.warn('[movie] 独立播放器打开失败，回退内嵌播放:', e?.message || e)
+      return false
+    }
+  }
+
+  function showEmbeddedPlayerFallback(name, url, resume, fallbackUrls) {
+    const overlay = el.querySelector('#t-player-overlay')
+    const title = el.querySelector('#t-player-title')
+    const body = el.querySelector('#t-player-body')
+    if (!overlay || !body) {
+      alert('播放器窗口打开失败，请稍后重试')
+      return
+    }
+    if (title) title.textContent = name || '播放'
+    overlay.style.display = 'flex'
+    body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#f6c177;margin-bottom:14px">独立播放器打开失败，已切换为内嵌播放。</p></div>'
+    loadVideoPlayer(url, isDirectVideoUrl(url), resume || 0, fallbackUrls || [url])
   }
 
   async function loadVideoPlayer(videoUrl, isM3u8, startProgress, fallbackUrls) {
@@ -1818,22 +1848,20 @@ function setDebug(msg, detail) {
   }
 
   
-  function openFloatPlayer(name, url, id, source, epName, pic, allUrls, startProgress, allEps) {
-    // 鍏ㄩ儴鏀逛负鐙珛 Tauri 绐楀彛鎾斁
+  async function openFloatPlayer(name, url, id, source, epName, pic, allUrls, startProgress, allEps) {
+    // 优先使用独立 Tauri 窗口播放；失败时回退到内嵌播放器并给出可见反馈。
     if (!url || url === '#') return
     const useUrl = pickDirectUrl(url)
     const resume = (typeof startProgress === 'number' && startProgress > 0 && startProgress < 999) ? startProgress : 0
     playingEp = { id, source, epName, epUrl: useUrl, pic, allUrls: allUrls || [], allEps: allEps || [] }
-    const ctx = JSON.stringify({ id, source, epName })
-    import('@tauri-apps/api/core').then(({ invoke }) => {
-      invoke('open_player_window', {
-        url: useUrl, title: name, resume,
-        allEps: JSON.stringify(allEps || []),
-        allUrls: JSON.stringify(allUrls || [useUrl]),
-        playbackCtx: ctx,
-        pic: pic || '',
-      }).catch(() => {})
-    }).catch(() => {})
+    const opened = await openStandalonePlayer({
+      url: useUrl, title: name, resume,
+      allEps: allEps || [],
+      allUrls: allUrls || [useUrl],
+      playbackCtx: { id, source, epName },
+      pic,
+    })
+    if (!opened) showEmbeddedPlayerFallback(name, useUrl, resume, allUrls || [useUrl])
   }
 
 function pickDirectUrl(url) {
