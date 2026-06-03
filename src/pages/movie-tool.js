@@ -1925,12 +1925,14 @@ function pickDirectUrl(url) {
     const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
     const isM3u8 = nextUrl.includes('.m3u8'); const isMp4 = nextUrl.includes('.mp4')
     if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(nextUrl, resumeProgress); else loadMp4IntoFloat(nextUrl, resumeProgress) }
+    else if (vidWrap) vidWrap.innerHTML = renderFloatPlaybackError(nextUrl, '当前地址不是可直接播放的视频链接')
   }
 
   async function loadVideoIntoFloat(url, resumeProgress = 0) {
     await ensureHls()
     const vidWrap = document.querySelector('#_fvid')
     if (!vidWrap) return
+    if (window._floatHls) { window._floatHls.destroy(); window._floatHls = null }
     const video = document.createElement('video')
     video.controls = true
     vidWrap.appendChild(video)
@@ -1952,24 +1954,25 @@ function pickDirectUrl(url) {
       let timedOut = false
       let errCount = 0
       const MAX_ERR = 3
+      const clearLoadTimer = () => { clearTimeout(timer) }
       const timer = setTimeout(() => {
         if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
           vidWrap.innerHTML = renderFloatPlaybackError(url, 'm3u8 加载超时（15秒）')
         }
       }, 15000)
       hls.on(window.Hls.Events.ERROR, (evt, data) => {
-        clearTimeout(timer)
         if (data.fatal) {
           errCount++
           if (errCount < MAX_ERR && (data.type === window.Hls.ErrorTypes.NETWORK_ERROR || data.type === window.Hls.ErrorTypes.MEDIA_ERROR)) {
             console.warn('[FloatHLS] 可恢复错误，尝试恢复 (#' + errCount + '):', data.type, data.details)
             hls.startLoad(); return
           }
+          clearLoadTimer()
           timedOut = true; hls.destroy(); window._floatHls = null
           vidWrap.innerHTML = renderFloatPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）')
         }
       })
-      hls.on(window.Hls.Events.MANIFEST_PARSED, () => clearTimeout(timer))
+      hls.on(window.Hls.Events.MANIFEST_PARSED, clearLoadTimer)
       setupFloatControls(video, hls)
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url
@@ -1978,7 +1981,12 @@ function pickDirectUrl(url) {
           video.currentTime = Math.min(resumeProgress, video.duration)
         }, { once: true })
       }
+      const nativeTimer = setTimeout(() => {
+        vidWrap.innerHTML = renderFloatPlaybackError(url, 'm3u8 加载超时（15秒）')
+      }, 15000)
+      video.addEventListener('loadedmetadata', () => clearTimeout(nativeTimer), { once: true })
       video.addEventListener('error', () => {
+        clearTimeout(nativeTimer)
         vidWrap.innerHTML = renderFloatPlaybackError(url, '播放失败')
       })
       setupFloatControls(video, null)
@@ -1999,7 +2007,12 @@ function pickDirectUrl(url) {
         video.currentTime = Math.min(resumeProgress, video.duration)
       }, { once: true })
     }
+    const loadTimer = setTimeout(() => {
+      vidWrap.innerHTML = renderFloatPlaybackError(url, 'mp4 加载超时（15秒）')
+    }, 15000)
+    video.addEventListener('loadedmetadata', () => clearTimeout(loadTimer), { once: true })
     video.addEventListener('error', () => {
+      clearTimeout(loadTimer)
       vidWrap.innerHTML = renderFloatPlaybackError(url, '播放失败')
     })
     setupFloatControls(video, null)
@@ -2066,7 +2079,7 @@ function pickDirectUrl(url) {
       updateTime()
       if (!_dragging && playingEp) {
         const pct = (video.currentTime / video.duration) * 100
-        if (pct > 1) updatePlayProgress(playingEp.id, playingEp.source, video.currentTime, playingEp.epName)
+        if (pct > 1) updatePlayProgress(playingEp.id, playingEp.source, video.currentTime, playingEp.epName, video.duration)
       }
     })
 
