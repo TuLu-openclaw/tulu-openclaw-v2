@@ -1479,8 +1479,30 @@ async function handleBatchTest(section, state, providerKey) {
 }
 
 // 从服务商远程获取模型列表
+function clearRemoteFetchNotice(btn) {
+  btn?.closest('[data-provider]')?.querySelector('.remote-fetch-notice')?.remove()
+}
+
+function renderRemoteFetchNotice(btn, page, state, providerKey, error) {
+  const section = btn?.closest('[data-provider]')
+  if (!section) return
+  clearRemoteFetchNotice(btn)
+  const notice = document.createElement('div')
+  notice.className = 'remote-fetch-notice'
+  notice.style.cssText = 'margin-top:8px;padding:8px 10px;border-radius:var(--radius-sm);background:var(--error-muted, #fee2e2);color:var(--error);font-size:var(--font-size-xs);display:flex;align-items:center;gap:8px;flex-wrap:wrap'
+  notice.innerHTML = `
+    <span style="flex:1;min-width:180px">${t('models.fetchFailed', { error: escapeHtml(error) })}</span>
+    <button class="btn btn-sm btn-secondary" data-action="retry-fetch-models">${t('models.retryFetch')}</button>
+  `
+  notice.querySelector('[data-action="retry-fetch-models"]')?.addEventListener('click', () => {
+    if (btn?.isConnected) fetchRemoteModels(btn, page, state, providerKey)
+  })
+  section.querySelector('.config-section-title')?.after(notice)
+}
+
 async function fetchRemoteModels(btn, page, state, providerKey) {
   const provider = state.config.models.providers[providerKey]
+  clearRemoteFetchNotice(btn)
   btn.disabled = true
   btn.textContent = t('models.qtcoolFetching')
 
@@ -1516,11 +1538,18 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
     const listEl = overlay.querySelector('#remote-model-list')
     const filterInput = overlay.querySelector('#remote-filter')
     const countEl = overlay.querySelector('#remote-selected-count')
+    const toggleBtn = overlay.querySelector('#remote-toggle-all')
+    const confirmBtn = overlay.querySelector('[data-action="confirm"]')
 
     function renderRemoteList(filter) {
       const filtered = filter
         ? remoteIds.filter(id => id.toLowerCase().includes(filter.toLowerCase()))
         : remoteIds
+      if (!filtered.length) {
+        listEl.innerHTML = `<div style="padding:18px 8px;text-align:center;color:var(--text-tertiary);font-size:var(--font-size-sm)">${t('models.remoteEmpty')}</div>`
+        updateCount()
+        return
+      }
       listEl.innerHTML = filtered.map(id => {
         const exists = existingIds.includes(id)
         const safeId = escapeAttr(id)
@@ -1537,6 +1566,8 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
     function updateCount() {
       const n = listEl.querySelectorAll('.remote-cb:checked').length
       countEl.textContent = t('models.remoteSelected', { count: n })
+      if (confirmBtn) confirmBtn.disabled = n === 0
+      if (toggleBtn) toggleBtn.disabled = !listEl.querySelector('.remote-cb:not(:disabled)')
     }
 
     renderRemoteList('')
@@ -1552,7 +1583,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
 
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
     overlay.querySelector('[data-action="cancel"]').onclick = () => overlay.remove()
-    overlay.querySelector('[data-action="confirm"]').onclick = () => {
+    confirmBtn.onclick = () => {
       const selected = [...listEl.querySelectorAll('.remote-cb:checked')].map(cb => cb.dataset.id)
       if (!selected.length) { toast(t('models.selectAtLeast'), 'warning'); return }
       pushUndo(state)
@@ -1573,6 +1604,7 @@ async function fetchRemoteModels(btn, page, state, providerKey) {
     if (!page?.isConnected || !btn?.isConnected) return
     btn.disabled = false
     btn.textContent = t('models.fetchList')
+    renderRemoteFetchNotice(btn, page, state, providerKey, e)
     toast(t('models.fetchFailed', { error: e }), 'error')
   }
 }

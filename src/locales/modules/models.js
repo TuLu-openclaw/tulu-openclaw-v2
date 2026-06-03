@@ -148,6 +148,8 @@ export default {
   addSelected: _('添加选中', 'Add Selected', '新增選中'),
   selectAtLeast: _('请至少选择一个模型', 'Please select at least one model', '請至少選擇一個模型'),
   fetchFailed: _('获取模型列表失败: {error}', 'Failed to fetch model list: {error}', '取得模型列表失敗: {error}', 'モデルリスト取得失敗', '모델 목록 가져오기 실패'),
+  retryFetch: _('重试获取', 'Retry Fetch', '重試取得'),
+  remoteEmpty: _('没有获取到可添加的模型，请检查服务商地址/API Key，或稍后重试。', 'No addable models were fetched. Check the provider URL/API key, or try again later.', '沒有取得到可新增的模型，請檢查服務商位址/API Key，或稍后重試。'),
   configNotReady: _('配置未加载完成，请稍候', 'Config not loaded yet, please wait', '設定未載入完成，請稍候'),
   fetchRemoteFailed: _('无法获取模型列表，请检查网络或稍后重试', 'Cannot fetch model list. Check network or try later.', '無法取得模型列表，請檢查網路或稍后重試'),
   configLoadFailed: _('加载配置失败', 'Failed to load config', '載入設定失敗'),
