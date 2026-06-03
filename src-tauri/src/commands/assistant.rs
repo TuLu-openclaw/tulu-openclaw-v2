@@ -917,7 +917,7 @@ pub async fn open_player_window(
 
     let player_url = if html_path.exists() {
         format!(
-            "file:///{}/player.html?url={}&title={}&resume={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
+            "file:///{}?url={}&title={}&resume={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
             html_path.to_string_lossy().replace('\\', "/"),
             encoded_url,
             encoded_title,
@@ -986,8 +986,8 @@ fn urlencoding_encode(s: &str) -> String {
                 r.push(b as char)
             }
             _ => {
+                r.push('%');
                 for c in format!("{:02X}", b).chars() {
-                    r.push('%');
                     r.push(c);
                 }
             }
