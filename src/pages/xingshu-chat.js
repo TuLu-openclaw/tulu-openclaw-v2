@@ -105,6 +105,50 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 }
 
+function sendPresence() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return
+  socket.send(JSON.stringify({ type: 'presence', nick: state.nickname, room: state.activeRoom }))
+}
+
+function normalizeServerError(error) {
+  const text = String(error || '').trim()
+  const known = {
+    '密码错误': t('xingshuChat.serverErrorBadPassword'),
+    '当前已禁言': t('xingshuChat.serverErrorMuted'),
+    '权限不足': t('xingshuChat.serverErrorPermission'),
+    'permission denied': t('xingshuChat.serverErrorPermission'),
+  }
+  return known[text] || text || t('xingshuChat.serverUnknownError')
+}
+
+function handleServerEvent(event) {
+  if (!event || typeof event !== 'object') return false
+  if (event.type === 'hello') {
+    sendPresence()
+    return true
+  }
+  if (event.type === 'message') {
+    const m = event.message || {}
+    addMessage(getValidRoomId(m.room || state.activeRoom), { user: m.user || t('xingshuChat.remoteUser'), role: m.role || '', text: m.text || '' })
+    return true
+  }
+  if (event.type === 'error') {
+    addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: normalizeServerError(event.error) })
+    return true
+  }
+  if (event.type === 'settings') {
+    const ann = event.settings?.announcement
+    if (typeof ann === 'string') {
+      state.announcement = ann
+      saveState()
+      render(rootEl)
+    }
+    return true
+  }
+  if (event.type === 'role' || event.type === 'online' || event.type === 'kick') return true
+  return false
+}
+
 function addMessage(roomId, msg) {
   const room = roomId || state.activeRoom
   if (!state.messages[room]) state.messages[room] = []
@@ -219,9 +263,9 @@ function render(el) {
 }
 
 function wireEvents(el) {
-  el.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => { state.activeRoom = getValidRoomId(btn.dataset.room); saveState(); render(el) })
+  el.querySelectorAll('[data-room]').forEach(btn => btn.onclick = () => { state.activeRoom = getValidRoomId(btn.dataset.room); saveState(); sendPresence(); render(el) })
   const nick = el.querySelector('#xs-nick')
-  if (nick) nick.onchange = () => { state.nickname = nick.value.trim() || t('xingshuChat.defaultNickname'); saveState() }
+  if (nick) nick.onchange = () => { state.nickname = nick.value.trim() || t('xingshuChat.defaultNickname'); saveState(); sendPresence() }
   const server = el.querySelector('#xs-server')
   if (server) server.onchange = () => { state.serverUrl = server.value.trim() || DEFAULT_SERVER; saveState() }
   const msg = el.querySelector('#xs-message')
@@ -265,7 +309,9 @@ function sendMessage() {
   const hit = state.bannedWords.find(w => w && text.includes(w))
   if (hit) return alert(t('xingshuChat.bannedWordHit', { word: hit }))
   const payload = { room: state.activeRoom, user: state.nickname, text, time: nowTime() }
-  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload))
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: 'message', message: payload }))
+  }
   addMessage(state.activeRoom, { user: state.nickname, role: state.admin ? t('xingshuChat.adminRole') : t('xingshuChat.userRole'), text })
   input.value = ''
 }
@@ -275,9 +321,14 @@ function connectServer() {
   socketStatus = 'connecting'; render(rootEl)
   try {
     socket = new WebSocket(state.serverUrl || DEFAULT_SERVER)
-    socket.onopen = () => { socketStatus = 'online'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.serverConnected') }) }
+    socket.onopen = () => { socketStatus = 'online'; sendPresence(); addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.serverConnected') }) }
     socket.onmessage = ev => {
-      try { const m = JSON.parse(ev.data); addMessage(m.room || state.activeRoom, { user: m.user || t('xingshuChat.remoteUser'), text: m.text || ev.data }) }
+      try {
+        const event = JSON.parse(ev.data)
+        if (!handleServerEvent(event)) {
+          addMessage(event.room || state.activeRoom, { user: event.user || t('xingshuChat.remoteUser'), text: event.text || ev.data })
+        }
+      }
       catch { addMessage(state.activeRoom, { user: t('xingshuChat.serverUser'), text: ev.data }) }
     }
     socket.onerror = () => { socketStatus = 'offline'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.serverNoResponse') }) }

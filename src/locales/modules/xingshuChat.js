@@ -92,5 +92,9 @@ export default {
   serverConnected: _('已连接星枢服务器。', 'Connected to the Xingshu server.'),
   serverNoResponse: _('服务器暂未响应，已切换本地聊天室模式。', 'The server did not respond; switched to local chat mode.'),
   connectFailed: _('连接失败：{error}', 'Connection failed: {error}'),
+  serverErrorBadPassword: _('服务器提示：密码错误', 'Server error: incorrect password'),
+  serverErrorMuted: _('服务器提示：当前已禁言', 'Server error: muted'),
+  serverErrorPermission: _('服务器提示：权限不足', 'Server error: permission denied'),
+  serverUnknownError: _('服务器返回未知错误', 'Server returned an unknown error'),
   exportFilePrefix: _('星枢聊天室', 'Xingshu-Chatroom'),
 }
