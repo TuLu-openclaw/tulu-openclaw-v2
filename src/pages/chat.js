@@ -3821,7 +3821,7 @@ async function loadHistory() {
       return
     }
     const deduped = dedupeHistory(result.messages)
-    const hash = deduped.map(m => `${m.role}:${(m.text || '').length}:${m.images?.length || 0}:${m.videos?.length || 0}:${m.audios?.length || 0}:${m.files?.length || 0}:${m.tools?.length || 0}`).join('|')
+    const hash = deduped.map(historyMessageSignature).join('|')
     if (hash === _lastHistoryHash && hasExisting) return
     _lastHistoryHash = hash
 
@@ -3927,6 +3927,38 @@ function dedupeHistory(messages) {
     deduped.push({ role, text: c.text, images: c.images, videos: c.videos, audios: c.audios, files: c.files, tools, timestamp: msg.timestamp, usage: extractMessageUsage(msg), cost: extractMessageCost(msg), model: extractMessageModel(msg) })
   }
   return deduped
+}
+
+function stableHistoryString(value) {
+  if (value == null || value === '') return ''
+  if (typeof value === 'string') return value
+  try { return JSON.stringify(value) } catch { return String(value) }
+}
+
+function historyToolSignature(tool = {}) {
+  return hashSessionPart([
+    tool.id || tool.tool_call_id || tool.toolCallId || '',
+    tool.name || tool.tool || tool.tool_name || tool.toolName || '',
+    tool.status || '',
+    stableHistoryString(tool.input),
+    stableHistoryString(tool.output || tool.result),
+  ].join('\u001f'))
+}
+
+function historyMessageSignature(message = {}) {
+  return [
+    message.role || '',
+    message.timestamp || '',
+    hashSessionPart(message.text || ''),
+    hashSessionPart((message.images || []).map(i => i.url || i.data || i.mediaType || '').join('\u001f')),
+    hashSessionPart((message.videos || []).map(v => v.url || v.data || v.mediaType || '').join('\u001f')),
+    hashSessionPart((message.audios || []).map(a => a.url || a.data || a.mediaType || '').join('\u001f')),
+    hashSessionPart((message.files || []).map(f => f.url || f.name || f.data || '').join('\u001f')),
+    (message.tools || []).map(historyToolSignature).join(','),
+    hashSessionPart(stableHistoryString(message.usage)),
+    hashSessionPart(stableHistoryString(message.cost)),
+    message.model || '',
+  ].join(':')
 }
 
 function extractContent(msg) {
