@@ -90,6 +90,11 @@ export async function render() {
       <div id="openclaw-dir-bar"><div class="stat-card loading-placeholder" style="height:48px"></div></div>
     </div>
 
+    <div class="config-section" id="standalone-install-dir-section">
+      <div class="config-section-title">${t('settings.standaloneInstallDir')}</div>
+      <div id="standalone-install-dir-bar"><div class="stat-card loading-placeholder" style="height:72px"></div></div>
+    </div>
+
     <div class="config-section" id="openclaw-search-section">
       <div class="config-section-title">${t('settings.openclawSearchPaths')}</div>
       <div id="openclaw-search-bar"><div class="stat-card loading-placeholder" style="height:96px"></div></div>
@@ -128,7 +133,7 @@ export async function render() {
 }
 
 async function loadAll(page) {
-  const tasks = [loadProxyConfig(page), loadModelProxyConfig(page), loadOpenclawDir(page), loadOpenclawSearchPaths(page), loadDockerDefaults(page), loadGitPath(page), loadCliBinding(page)]
+  const tasks = [loadProxyConfig(page), loadModelProxyConfig(page), loadOpenclawDir(page), loadStandaloneInstallDir(page), loadOpenclawSearchPaths(page), loadDockerDefaults(page), loadGitPath(page), loadCliBinding(page)]
   tasks.push(loadRegistry(page))
   if (window.__TAURI_INTERNALS__) tasks.push(loadAutostart(page))
   await Promise.all(tasks)
@@ -290,6 +295,53 @@ async function handleResetOpenclawDir(page) {
     return
   }
   await promptRestart(t('settings.defaultRestored'))
+}
+
+async function loadStandaloneInstallDir(page) {
+  const bar = page.querySelector('#standalone-install-dir-bar')
+  if (!bar) return
+  try {
+    const cfg = await api.readPanelConfig()
+    const value = cfg?.openclawStandaloneInstallDir || ''
+    bar.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <input class="form-input" data-name="standalone-install-dir" placeholder="${t('settings.standaloneInstallDirPlaceholder')}" value="${escapeHtml(value)}" style="max-width:680px;font-family:var(--font-mono)">
+        <div style="display:flex;align-items:center;gap:var(--space-sm);flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" data-action="save-standalone-install-dir">${t('common.save')}</button>
+          ${value ? `<button class="btn btn-secondary btn-sm" data-action="reset-standalone-install-dir">${t('common.reset')}</button>` : ''}
+        </div>
+      </div>
+      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.6">
+        ${t('settings.standaloneInstallDirHint')}
+      </div>
+      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.6;color:var(--warning)">
+        ${t('settings.standaloneMigrationHint')}
+      </div>
+    `
+  } catch (e) {
+    bar.innerHTML = `<div style="color:var(--error)">${t('common.loadFailed')}: ${escapeHtml(String(e))}</div>`
+  }
+}
+
+async function handleSaveStandaloneInstallDir(page) {
+  const input = page.querySelector('[data-name="standalone-install-dir"]')
+  const value = (input?.value || '').trim()
+  const cfg = await api.readPanelConfig()
+  if (value) cfg.openclawStandaloneInstallDir = value
+  else delete cfg.openclawStandaloneInstallDir
+  await savePanelConfigAndRefreshPaths(cfg)
+  await loadStandaloneInstallDir(page)
+  await loadCliBinding(page)
+  toast(value ? t('settings.standaloneInstallDirSaved') : t('settings.standaloneInstallDirCleared'), 'success')
+}
+
+async function handleResetStandaloneInstallDir(page) {
+  const cfg = await api.readPanelConfig()
+  delete cfg.openclawStandaloneInstallDir
+  await savePanelConfigAndRefreshPaths(cfg)
+  await loadStandaloneInstallDir(page)
+  await loadCliBinding(page)
+  toast(t('settings.standaloneInstallDirCleared'), 'success')
 }
 
 async function loadOpenclawSearchPaths(page) {
@@ -472,6 +524,12 @@ function bindEvents(page) {
           break
         case 'reset-openclaw-dir':
           await handleResetOpenclawDir(page)
+          break
+        case 'save-standalone-install-dir':
+          await handleSaveStandaloneInstallDir(page)
+          break
+        case 'reset-standalone-install-dir':
+          await handleResetStandaloneInstallDir(page)
           break
         case 'save-openclaw-search-paths':
           await handleSaveOpenclawSearchPaths(page)
@@ -722,7 +780,7 @@ async function loadCliBinding(page) {
         const isBound = boundPath && inst.path === boundPath
         html += `<div style="display:flex;align-items:center;gap:var(--space-sm);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);${isBound ? 'background:var(--bg-active);border-color:var(--accent)' : ''}">
           <div style="flex:1;min-width:0">
-            <div style="font-size:var(--font-size-xs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(inst.path)}">${escapeHtml(inst.path)}</div>
+            <div style="font-size:var(--font-size-xs);font-family:var(--font-mono);overflow-wrap:anywhere;word-break:break-all" title="${escapeHtml(inst.path)}">${escapeHtml(inst.path)}</div>
             <div style="font-size:11px;color:var(--text-tertiary)">${sourceLabel(inst.source)}${inst.version ? ' · v' + inst.version : ''}</div>
           </div>
           ${isBound ? '<span style="color:var(--success);font-size:var(--font-size-xs)">✓ ' + t('settings.cliBound') + '</span>' : `<button class="btn btn-secondary btn-xs" data-action="bind-cli" data-path="${escapeHtml(inst.path)}">${t('common.confirm')}</button>`}
