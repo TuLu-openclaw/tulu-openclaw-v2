@@ -1895,6 +1895,38 @@ function pickDirectUrl(url) {
     return idx0 >= 0 ? parts[0].slice(idx0 + 1) : parts[0]
   }
 
+  function renderFloatPlaybackError(url, message) {
+    const safeUrl = normalizeHttpUrl(url) || url || '#'
+    return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:#f87171;font-size:13px;text-align:center;padding:12px">' +
+      '<div>' + escHtml(message || '播放失败') + '</div>' +
+      (safeUrl && safeUrl !== '#' ? '<a href="' + escHtml(safeUrl) + '" target="_blank" rel="noopener" style="color:#a78bfa;text-decoration:none">↗ 在浏览器中打开</a>' : '') +
+    '</div>'
+  }
+
+  function getFloatEpisodeByUrl(url) {
+    if (!_floatState?.epList || !url) return null
+    return _floatState.epList.find(ep => ep.url === url) || null
+  }
+
+  function switchFloatEpisode(nextUrl, resumeProgress = 0) {
+    if (!_floatState || !nextUrl) return
+    const vid = document.querySelector('#_fvid video')
+    if (vid && vid.duration > 0 && playingEp) updatePlayProgress(playingEp.id, playingEp.source, vid.currentTime, playingEp.epName, vid.duration)
+    if (window._floatHls) { window._floatHls.destroy(); window._floatHls = null }
+    const ep = getFloatEpisodeByUrl(nextUrl)
+    _floatState.currentUrl = nextUrl
+    if (playingEp) playingEp = { ...playingEp, epName: ep?.epName || ep?.name || playingEp.epName, epUrl: nextUrl }
+    if (playingEp?.id && playingEp?.source) {
+      upsertPlayHistory({
+        id: playingEp.id, name: _floatState.title || playingEp.epName || '播放中', pic: playingEp.pic || '',
+        source: playingEp.source, epName: playingEp.epName, epUrl: nextUrl, progress: 0, duration: 0,
+      })
+    }
+    const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
+    const isM3u8 = nextUrl.includes('.m3u8'); const isMp4 = nextUrl.includes('.mp4')
+    if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(nextUrl, resumeProgress); else loadMp4IntoFloat(nextUrl, resumeProgress) }
+  }
+
   async function loadVideoIntoFloat(url, resumeProgress = 0) {
     await ensureHls()
     const vidWrap = document.querySelector('#_fvid')
@@ -1922,7 +1954,7 @@ function pickDirectUrl(url) {
       const MAX_ERR = 3
       const timer = setTimeout(() => {
         if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
-          vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">m3u8 加载超时（15秒）</div>'
+          vidWrap.innerHTML = renderFloatPlaybackError(url, 'm3u8 加载超时（15秒）')
         }
       }, 15000)
       hls.on(window.Hls.Events.ERROR, (evt, data) => {
@@ -1934,7 +1966,7 @@ function pickDirectUrl(url) {
             hls.startLoad(); return
           }
           timedOut = true; hls.destroy(); window._floatHls = null
-          vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;font-size:13px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</div>'
+          vidWrap.innerHTML = renderFloatPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）')
         }
       })
       hls.on(window.Hls.Events.MANIFEST_PARSED, () => clearTimeout(timer))
@@ -1946,9 +1978,12 @@ function pickDirectUrl(url) {
           video.currentTime = Math.min(resumeProgress, video.duration)
         }, { once: true })
       }
+      video.addEventListener('error', () => {
+        vidWrap.innerHTML = renderFloatPlaybackError(url, '播放失败')
+      })
       setupFloatControls(video, null)
     } else {
-      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">浏览器不支持 HLS</div>'
+      vidWrap.innerHTML = renderFloatPlaybackError(url, '浏览器不支持 HLS')
     }
   }
 
@@ -1964,6 +1999,9 @@ function pickDirectUrl(url) {
         video.currentTime = Math.min(resumeProgress, video.duration)
       }, { once: true })
     }
+    video.addEventListener('error', () => {
+      vidWrap.innerHTML = renderFloatPlaybackError(url, '播放失败')
+    })
     setupFloatControls(video, null)
   }
 
@@ -2020,10 +2058,7 @@ function pickDirectUrl(url) {
         const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
         if (idx >= 0 && idx < _floatState.allUrls.length - 1) {
           const next = _floatState.allUrls[idx + 1]
-          _floatState.currentUrl = next
-          const isM3u8 = next.includes('.m3u8'); const isMp4 = next.includes('.mp4')
-          const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
-          if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(next, 0); else loadMp4IntoFloat(next, 0) }
+          switchFloatEpisode(next, 0)
         }
       }
     })
@@ -2056,10 +2091,7 @@ function pickDirectUrl(url) {
       const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
       if (idx > 0) {
         const prev = _floatState.allUrls[idx - 1]
-        _floatState.currentUrl = prev
-        const isM3u8 = prev.includes('.m3u8'); const isMp4 = prev.includes('.mp4')
-        const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
-        if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(prev, 0); else loadMp4IntoFloat(prev, 0) }
+        switchFloatEpisode(prev, 0)
       }
     })
     nextBtn?.addEventListener('click', () => {
@@ -2067,10 +2099,7 @@ function pickDirectUrl(url) {
       const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
       if (idx >= 0 && idx < _floatState.allUrls.length - 1) {
         const next = _floatState.allUrls[idx + 1]
-        _floatState.currentUrl = next
-        const isM3u8 = next.includes('.m3u8'); const isMp4 = next.includes('.mp4')
-        const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
-        if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(next, 0); else loadMp4IntoFloat(next, 0) }
+        switchFloatEpisode(next, 0)
       }
     })
 
@@ -2129,11 +2158,7 @@ function pickDirectUrl(url) {
       btn.textContent = ep.epName || ep.name || ep.url
       btn.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;color:' + (ep.url === _floatState.currentUrl ? '#e74c3c' : '#ccc') + ';font-size:12px;cursor:pointer'
       btn.addEventListener('click', () => {
-        const isM3u8 = ep.url.includes('.m3u8'); const isMp4 = ep.url.includes('.mp4')
-        _floatState.currentUrl = ep.url
-        playingEp = { ...playingEp, epName: ep.epName || ep.name, epUrl: ep.url }
-        const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
-        if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(ep.url, 0); else loadMp4IntoFloat(ep.url, 0) }
+        switchFloatEpisode(ep.url, 0)
         menu.remove()
       })
       menu.appendChild(btn)
