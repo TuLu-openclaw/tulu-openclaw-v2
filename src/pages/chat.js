@@ -3509,13 +3509,25 @@ function markStatusMarquee() {
 function formatToolDisplayName(name = '') {
   const raw = String(name || '').trim()
   const lower = raw.toLowerCase()
+  const normalized = lower.replace(/[.-]/g, '_')
   const map = {
-    exec: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
-    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), pdf: t('chat.toolNamePdf'),
+    exec: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), process: t('chat.toolNameProcess'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
+    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), image_generate: t('chat.toolNameImageGenerate'), pdf: t('chat.toolNamePdf'),
     message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), nodes: t('chat.toolNameNodes'), canvas: t('chat.toolNameCanvas'),
-    sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), gateway: t('chat.toolNameGateway'),
+    sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), sessions_yield: t('chat.toolNameSessionsYield'), subagents: t('chat.toolNameSubagents'), gateway: t('chat.toolNameGateway'),
+    tool: t('chat.tool'),
   }
-  return map[lower] || raw || t('chat.tool')
+  return map[normalized] || raw || t('chat.tool')
+}
+
+function formatToolStatus(status = '') {
+  const normalized = String(status || '').trim().toLowerCase().replace(/[.-]/g, '_')
+  if (['ok', 'success', 'succeeded', 'done', 'complete', 'completed'].includes(normalized)) return t('chat.toolStatusSuccess')
+  if (['error', 'failed', 'fail', 'failure'].includes(normalized)) return t('chat.toolStatusFailed')
+  if (['running', 'in_progress', 'progress', 'started'].includes(normalized)) return t('chat.toolStatusRunning')
+  if (['pending', 'queued', 'waiting'].includes(normalized)) return t('chat.toolStatusPending')
+  if (['cancelled', 'canceled', 'aborted', 'stopped'].includes(normalized)) return t('chat.toolStatusAborted')
+  return normalized ? t('chat.toolStatusValue', { status }) : t('chat.toolStatusSuccess')
 }
 
 function summarizeToolInput(input) {
@@ -4318,10 +4330,10 @@ function appendToolsToEl(el, tools) {
     const details = document.createElement('details')
     details.className = 'msg-tool-item'
     const summary = document.createElement('summary')
-    const status = tool.status === 'error' ? t('chat.toolFailed') : t('chat.toolSuccess')
+    const status = formatToolStatus(tool.status)
     const timeValue = getToolTime(tool) || resolveToolTime(tool.id || tool.tool_call_id, tool.messageTimestamp)
     const timeText = timeValue ? formatTime(new Date(timeValue)) : ''
-    summary.innerHTML = `${escapeHtml(tool.name || 'tool')} · ${status}${timeText ? ' · ' + timeText : ''}`
+    summary.innerHTML = `${escapeHtml(formatToolDisplayName(tool.name))} · ${escapeHtml(status)}${timeText ? ' · ' + escapeHtml(timeText) : ''}`
     const body = document.createElement('div')
     body.className = 'msg-tool-body'
     const inputJson = stripAnsi(safeStringify(tool.input))
