@@ -898,14 +898,14 @@ function initApp(el) {
       '<button id="_h-export" class="tvbox-clear-btn" style="margin-left:4px">📤 导出</button>' +
       '<button id="t-clear-play" class="tvbox-clear-btn" style="margin-left:auto">清除全部</button></div>'
     html += '<div style="display:flex;gap:10px;overflow-x:auto;padding:8px 0 16px;scrollbar-width:none"><style>.tvbox-hist-card{flex-shrink:0;width:100px;cursor:pointer}.tvbox-hist-card:hover .tvbox-card-inner{transform:translateY(-2px);border-color:var(--border-hover)}.tvbox-hist-pic{position:relative;aspect-ratio:2/3;background:var(--bg-elevated);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border);margin-bottom:6px}.tvbox-hist-pic img{width:100%;height:100%;object-fit:cover;display:block}.tvbox-hist-name{font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}.tvbox-hist-ep{font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}</style>'
-    h.forEach(item => {
+    h.forEach((item, i) => {
       const source = [...VOD_SOURCES, ...TVBOX_BUILTIN].find(s => s.key === item._srcKey || s.name === item.source)
       const srcKey = source?.key || item.source
       const srcApi = source?.api || source?.url || ''
       const posterHtml = renderPosterImg(item.pic, item.name, srcKey, srcApi, '🎬')
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
       const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
-      html += '<div class="tvbox-hist-card" data-id="' + escHtml(item.id) + '" data-source="' + escHtml(item.source) + '" data-name="' + escHtml(item.name) + '" data-pic="' + escHtml(item.pic) + '" data-epname="' + escHtml(item.epName || '') + '" data-epurl="' + escHtml(item.epUrl || '') + '" data-progress="' + escHtml(item.progress || 0) + '" data-duration="' + escHtml(item.duration || 0) + '">' +
+      html += '<div class="tvbox-hist-card" data-hi="' + i + '" data-progress="' + escHtml(item.progress || 0) + '" data-duration="' + escHtml(item.duration || 0) + '">' +
         '<div class="tvbox-hist-pic">' +
         posterHtml +
           (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + escHtml(resumeLabel) + '</span>' : '') +
@@ -926,13 +926,14 @@ function initApp(el) {
     content.querySelectorAll('.tvbox-hist-card').forEach(card => {
       card.addEventListener('click', () => {
         const d = card.dataset
+        const item = h[parseInt(d.hi)] || {}
         const pct = d.duration > 0 ? Math.round((parseFloat(d.progress) / parseFloat(d.duration)) * 100) : 0
         const progress = pct > 2 ? parseFloat(d.progress) : 0
         // 续播提示
         if (progress > 0) {
           const mins = Math.floor(progress / 60)
           const secs = Math.round(progress % 60)
-          openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, progress)
+          openResumePlayer(item.name, item.pic, item.id, item.source, item.epName, item.epUrl, progress, item.allUrls, item.allEps)
           // 显示续播提示
           try {
             const body = document.querySelector('#t-player-body')
@@ -945,26 +946,27 @@ function initApp(el) {
               tip.textContent = '▶ 从 ' + mins + '分' + secs + '秒继续播放'
               tip.addEventListener('click', () => {
                 tip.remove()
-                openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, progress)
+                openResumePlayer(item.name, item.pic, item.id, item.source, item.epName, item.epUrl, progress, item.allUrls, item.allEps)
               })
               body.insertBefore(tip, body.firstChild)
               setTimeout(() => tip.remove(), 5000)
             }
           } catch {}
         } else {
-          openResumePlayer(d.name, d.pic, d.id, d.epname, d.epurl, 0)
+          openResumePlayer(item.name, item.pic, item.id, item.source, item.epName, item.epUrl, 0, item.allUrls, item.allEps)
         }
       })
     })
     loadList()
   }
 
-  function openResumePlayer(name, pic, id, epName, epUrl, progress) {
+  function openResumePlayer(name, pic, id, source, epName, epUrl, progress, allUrls, allEps) {
     if (!epUrl || epUrl === '#' || epUrl === 'undefined') return
     // 先隐藏旧播放器浮层，再打开独立窗口
     const overlay = el.querySelector('#t-player-overlay')
     if (overlay) overlay.style.display = 'none'
-    openPlayerVod(name, epUrl, id, 'vod_history', epName, pic, [epUrl], progress, [])
+    const urls = Array.isArray(allUrls) && allUrls.length ? allUrls : [epUrl]
+    openPlayerVod(name, epUrl, id, source || 'vod_history', epName, pic, urls, progress, allEps || [])
   }
 
   // 从源 API 获取自适应分类列表
@@ -1593,17 +1595,19 @@ function setDebug(msg, detail) {
       const epUrl = btn.dataset.url
       const hist = getPlayHistory().find(h => h.id == btn.dataset.id && h.source === btn.dataset.source && h.epName === btn.dataset.epname)
       const sp = (hist && hist.progress > 0 && hist.progress < 999) ? parseFloat(hist.progress) : 0
-      upsertPlayHistory({
-        id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
-        source: btn.dataset.source, epName: btn.dataset.epname,
-        epUrl: epUrl, progress: sp, duration: 0,
-      })
       // 获取当前显示的源的 si（从 active 的 [data-si] 按钮获取）
       const activeSiBtn = body.querySelector('[data-si].active')
       const si = activeSiBtn ? parseInt(activeSiBtn.dataset.si) : preferredSi
-      // 传入当前剧集所有集数列表（用于悬浮窗选集）
+      // 保存当前线路的完整剧集上下文，保证从历史续播也能切集/切线路
+      const allUrls = (episodes[si]?.urls || []).map(e => e.url)
       const allEps = (episodes[si]?.urls || []).map(e => ({ epName: e.name, url: e.url }))
-      openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, (episodes[si]?.urls || []).map(e => e.url), sp, allEps)
+      upsertPlayHistory({
+        id: btn.dataset.id, name: btn.dataset.name, pic: btn.dataset.pic,
+        source: btn.dataset.source, epName: btn.dataset.epname,
+        epUrl: epUrl, progress: sp, duration: hist?.duration || 0,
+        allUrls, allEps,
+      })
+      openPlayerVod(btn.dataset.name, epUrl, btn.dataset.id, btn.dataset.source, btn.dataset.epname, btn.dataset.pic, allUrls, sp, allEps)
     })
   }
 
@@ -1920,6 +1924,7 @@ function pickDirectUrl(url) {
       upsertPlayHistory({
         id: playingEp.id, name: _floatState.title || playingEp.epName || '播放中', pic: playingEp.pic || '',
         source: playingEp.source, epName: playingEp.epName, epUrl: nextUrl, progress: 0, duration: 0,
+        allUrls: playingEp.allUrls || _floatState.allUrls || [], allEps: playingEp.allEps || [],
       })
     }
     const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
