@@ -298,6 +298,8 @@ export default {
   toolStatusSkipped: _('已跳过', 'Skipped', '已略過'),
   toolStatusAborted: _('已中止', 'Aborted', '已中止'),
   toolStatusValue: _('{status}', '{status}', '{status}'),
+  toolRecordSummary: _('{name} · {status}', '{name} · {status}', '{name} · {status}'),
+  toolRecordSummaryWithTime: _('{name} · {status} · {time}', '{name} · {status} · {time}', '{name} · {status} · {time}'),
   toolNameExec: _('执行命令', 'Run command', '執行命令'),
   toolNameProcess: _('进程管理', 'Process manager', '程序管理'),
   toolNameRead: _('读取文件', 'Read file', '讀取檔案'),

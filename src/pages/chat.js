@@ -4417,13 +4417,16 @@ function appendToolsToEl(el, tools) {
     const status = formatToolStatus(tool.status)
     const timeValue = getToolTime(tool) || resolveToolTime(tool.id || tool.tool_call_id, tool.messageTimestamp)
     const timeText = timeValue ? formatTime(new Date(timeValue)) : ''
-    summary.innerHTML = `${escapeHtml(formatToolDisplayName(tool.name))} · ${escapeHtml(status)}${timeText ? ' · ' + escapeHtml(timeText) : ''}`
+    const summaryText = timeText
+      ? t('chat.toolRecordSummaryWithTime', { name: formatToolDisplayName(tool.name), status, time: timeText })
+      : t('chat.toolRecordSummary', { name: formatToolDisplayName(tool.name), status })
+    summary.textContent = summaryText
     const body = document.createElement('div')
     body.className = 'msg-tool-body'
     const inputJson = stripAnsi(safeStringify(tool.input))
     const outputJson = stripAnsi(safeStringify(tool.output))
-    body.innerHTML = `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputJson || '-')}</pre></div>`
-      + `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputJson || '-')}</pre></div>`
+    body.innerHTML = `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputJson || t('chat.noParams'))}</pre></div>`
+      + `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputJson || t('chat.noResult'))}</pre></div>`
     details.appendChild(summary)
     details.appendChild(body)
     container.appendChild(details)
