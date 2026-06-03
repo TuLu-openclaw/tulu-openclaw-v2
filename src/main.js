@@ -1224,31 +1224,38 @@ function startUpdateChecker() {
     initAIFab()
 
     // 注册各页面上下文提供器
+    const formatGatewayContextStatus = (gw) => {
+      if (gw.foreign) return t('common.gatewayForeign')
+      if (gw.health === 'running') return t('common.gatewayReady')
+      if (gw.health === 'degraded') return t('common.gatewayDegraded')
+      if (gw.health === 'recovering') return t('common.gatewayRecovering')
+      return t('common.notRunning')
+    }
+    const boolLabel = (value) => value ? t('common.yes') : t('common.no')
+    const connectedLabel = (value) => value ? t('common.connected') : t('common.notConnected')
+    const installedLabel = (value) => value ? t('common.installed') : t('common.notInstalled')
+
     registerPageContext('/chat-debug', async () => {
       const { isOpenclawReady, getGatewayHealthState } = await import('./lib/app-state.js')
       const { wsClient } = await import('./lib/ws-client.js')
       const { api } = await import('./lib/tauri-api.js')
-      const lines = ['## 系统诊断快照']
+      const lines = [`## ${t('common.systemDiagnosticsSnapshot')}`]
       const gw = getGatewayHealthState()
-      const gwLabel = gw.foreign
-        ? '外部实例占用'
-        : gw.health === 'running'
-          ? '运行中（已就绪）'
-          : gw.health === 'degraded'
-            ? '运行中（未完全就绪）'
-            : gw.health === 'recovering'
-              ? '自动恢复中'
-              : '未运行'
-      lines.push(`- OpenClaw: ${isOpenclawReady() ? '就绪' : '未就绪'}`)
+      const gwLabel = formatGatewayContextStatus(gw)
+      lines.push(`- OpenClaw: ${boolLabel(isOpenclawReady())}`)
       lines.push(`- Gateway: ${gwLabel}`)
-      lines.push(`- WebSocket: ${wsClient.connected ? '已连接' : '未连接'}`)
+      lines.push(`- WebSocket: ${connectedLabel(wsClient.connected)}`)
       try {
         const node = await api.checkNode()
-        lines.push(`- Node.js: ${node?.version || '未知'}`)
+        lines.push(`- Node.js: ${node?.version || t('common.unknown')}`)
       } catch {}
       try {
         const ver = await api.getVersionInfo()
-        lines.push(`- 版本: 当前 ${ver?.current || '?'} / 推荐 ${ver?.recommended || '?'} / 最新 ${ver?.latest || '?'}${ver?.ahead_of_recommended ? ' / 当前版本高于推荐版' : ''}`)
+        const current = ver?.current || '?'
+        const recommended = ver?.recommended || '?'
+        const latest = ver?.latest || '?'
+        const ahead = ver?.ahead_of_recommended ? ` / ${t('common.currentAheadRecommended')}` : ''
+        lines.push(`- ${t('common.version')}: ${t('common.current')} ${current} / ${t('common.recommended')} ${recommended} / ${t('common.latest')} ${latest}${ahead}`)
       } catch {}
       return { detail: lines.join('\n') }
     })
@@ -1256,23 +1263,15 @@ function startUpdateChecker() {
     registerPageContext('/services', async () => {
       const { getGatewayHealthState } = await import('./lib/app-state.js')
       const { api } = await import('./lib/tauri-api.js')
-      const lines = ['## 服务状态']
+      const lines = [`## ${t('common.serviceStatus')}`]
       const gw = getGatewayHealthState()
-      const gwLabel = gw.foreign
-        ? '外部实例占用'
-        : gw.health === 'running'
-          ? '运行中（已就绪）'
-          : gw.health === 'degraded'
-            ? '运行中（未完全就绪）'
-            : gw.health === 'recovering'
-              ? '自动恢复中'
-              : '未运行'
+      const gwLabel = formatGatewayContextStatus(gw)
       lines.push(`- Gateway: ${gwLabel}`)
       try {
         const svc = await api.getServicesStatus()
         if (svc?.[0]) {
-          lines.push(`- CLI: ${svc[0].cli_installed ? '已安装' : '未安装'}`)
-          lines.push(`- PID: ${svc[0].pid || '无'}`)
+          lines.push(`- CLI: ${installedLabel(svc[0].cli_installed)}`)
+          lines.push(`- PID: ${svc[0].pid || t('common.none')}`)
         }
       } catch {}
       return { detail: lines.join('\n') }
@@ -1283,17 +1282,17 @@ function startUpdateChecker() {
       try {
         const config = await api.readOpenclawConfig()
         const gw = config?.gateway || {}
-        const lines = ['## Gateway 配置']
-        lines.push(`- 端口: ${gw.port || 18789}`)
-        lines.push(`- 模式: ${gw.mode || 'local'}`)
-        lines.push(`- Token: ${gw.auth?.token ? '已设置' : '未设置'}`)
+        const lines = [`## ${t('common.gatewayConfig')}`]
+        lines.push(`- ${t('common.port')}: ${gw.port || 18789}`)
+        lines.push(`- ${t('common.mode')}: ${gw.mode || 'local'}`)
+        lines.push(`- Token: ${gw.auth?.token ? t('common.configured') : t('common.notConfigured')}`)
         if (gw.controlUi?.allowedOrigins) lines.push(`- Origins: ${JSON.stringify(gw.controlUi.allowedOrigins)}`)
         return { detail: lines.join('\n') }
       } catch { return null }
     })
 
     registerPageContext('/setup', () => {
-      return { detail: '用户正在进行 OpenClaw 初始安装，请帮助检查 Node.js 环境和网络状况' }
+      return { detail: t('common.setupContextHelp') }
     })
 
     // 挂到全局，供安装/升级失败时调用
