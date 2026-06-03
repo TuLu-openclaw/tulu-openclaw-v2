@@ -1967,6 +1967,21 @@ function toggleCmdPanel() {
   else { _textarea.value = '/'; showCmdPanel(); _textarea.focus() }
 }
 
+function mapReplyStateToLobsterPhase(state) {
+  return ({
+    queued: 'ack',
+    sending: 'working',
+    thinking: 'thinking',
+    tool: 'tool',
+    streaming: 'streaming',
+    finalizing: 'verifying',
+    done: 'done',
+    waiting: 'idle',
+    error: 'error',
+    aborted: 'aborted',
+  })[state] || 'working'
+}
+
 function emitLobsterPhase(phase, message) {
   try {
     window.dispatchEvent(new CustomEvent('lobster-work-start', {
@@ -3415,6 +3430,7 @@ function setReplyStatus(state, detail = '', options = {}) {
   _replyStatusState = next
   persistReplyStatus(next)
   renderReplyStatus(next)
+  emitLobsterPhase(mapReplyStateToLobsterPhase(next.state), next.detail || replyStatusText(next.state))
   return next
 }
 

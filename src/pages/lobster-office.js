@@ -9,10 +9,16 @@ import { toast } from '../components/toast.js'
 const PREVIEW_PRESETS = {
   ack: { emoji: '🟡', title: '已收到', desc: '已收到新任务，等待进入处理' },
   thinking: { emoji: '💭', title: '思考中', desc: '正在分析和组织方案' },
+  planning: { emoji: '🧭', title: '规划中', desc: '正在拆解步骤并安排执行' },
   tool: { emoji: '🛠️', title: '工具调用', desc: '正在调用工具或执行外部步骤' },
   working: { emoji: '🔴', title: '处理中', desc: '正在持续处理任务' },
+  streaming: { emoji: '✍️', title: '生成中', desc: '正在生成回复内容' },
+  verifying: { emoji: '🔍', title: '校验中', desc: '正在校验结果和收尾' },
+  syncing: { emoji: '🔄', title: '同步中', desc: '正在同步 Gateway / Agent 状态' },
   done: { emoji: '🟢', title: '已完成', desc: '任务已处理完成' },
   idle: { emoji: '🟢', title: '待命', desc: '当前无任务，保持待命' },
+  error: { emoji: '🔴', title: '异常', desc: '发现问题，正在等待处理' },
+  aborted: { emoji: '🟠', title: '已中止', desc: '本次任务已中止' },
 }
 
 function readLiveLobsterState() {

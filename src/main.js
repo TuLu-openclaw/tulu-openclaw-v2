@@ -447,6 +447,7 @@ const LOBSTER_PHASE_PRESETS = {
   ack: { state: 'ack', emoji: '🟡', message: '已收到任务' },
   thinking: { state: 'thinking', emoji: '💭', message: '思考中' },
   planning: { state: 'planning', emoji: '🧭', message: '规划执行方案' },
+  syncing: { state: 'syncing', emoji: '🔄', message: '同步状态中' },
   tool: { state: 'tool', emoji: '🛠️', message: '调用工具中' },
   working: { state: 'working', emoji: '🔴', message: '处理中' },
   verifying: { state: 'verifying', emoji: '🔍', message: '校验结果中' },

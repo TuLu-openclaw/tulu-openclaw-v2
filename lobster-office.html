@@ -71,8 +71,8 @@ body {
 }
 
 #status-dot.idle { background: var(--text-dim); box-shadow: 0 0 6px var(--text-dim); }
-#status-dot.writing, #status-dot.researching, #status-dot.executing { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
-#status-dot.error { background: var(--error); box-shadow: 0 0 6px var(--error); }
+#status-dot.writing, #status-dot.working, #status-dot.planning, #status-dot.thinking, #status-dot.streaming, #status-dot.verifying, #status-dot.tool, #status-dot.researching, #status-dot.executing { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+#status-dot.error, #status-dot.aborted { background: var(--error); box-shadow: 0 0 6px var(--error); }
 #status-dot.syncing { background: var(--syncing); box-shadow: 0 0 6px var(--syncing); }
 
 #topbar .time {
@@ -600,12 +600,21 @@ body {
 <script>
 // ── 状态映射 ──────────────────────────────────────────────
 const STATES = {
-  idle:        { label: '待命中',    color: '#8892b0', zone: 'sofa',  x: '72%',  y: '36%'  },
-  writing:     { label: '写代码中',  color: '#fbbf24', zone: 'work',  x: '18%',  y: '36%'  },
-  researching: { label: '调研中',   color: '#60a5fa', zone: 'work',  x: '28%',  y: '36%'  },
-  executing:   { label: '执行任务', color: '#fbbf24', zone: 'work',  x: '38%',  y: '36%'  },
-  syncing:     { label: '同步数据', color: '#a78bfa', zone: 'work',  x: '48%',  y: '36%'  },
-  error:       { label: '排查问题', color: '#f87171', zone: 'bug',   x: '50%',  y: '36%'  },
+  idle:        { label: '待命中',     color: '#8892b0', zone: 'sofa',  x: '72%',  y: '36%'  },
+  ack:         { label: '已收到任务', color: '#fbbf24', zone: 'work',  x: '14%',  y: '36%'  },
+  thinking:    { label: '思考中',     color: '#60a5fa', zone: 'work',  x: '24%',  y: '36%'  },
+  planning:    { label: '规划中',     color: '#60a5fa', zone: 'work',  x: '30%',  y: '36%'  },
+  working:     { label: '处理中',     color: '#fbbf24', zone: 'work',  x: '36%',  y: '36%'  },
+  tool:        { label: '调用工具',   color: '#fbbf24', zone: 'work',  x: '42%',  y: '36%'  },
+  streaming:   { label: '生成回复',   color: '#fbbf24', zone: 'work',  x: '48%',  y: '36%'  },
+  verifying:   { label: '校验结果',   color: '#a78bfa', zone: 'work',  x: '54%',  y: '36%'  },
+  syncing:     { label: '同步数据',   color: '#a78bfa', zone: 'work',  x: '60%',  y: '36%'  },
+  done:        { label: '任务完成',   color: '#4ade80', zone: 'sofa',  x: '72%',  y: '36%'  },
+  aborted:     { label: '任务中止',   color: '#fb923c', zone: 'bug',   x: '50%',  y: '36%'  },
+  error:       { label: '排查问题',   color: '#f87171', zone: 'bug',   x: '50%',  y: '36%'  },
+  writing:     { label: '写代码中',   color: '#fbbf24', zone: 'work',  x: '18%',  y: '36%'  },
+  researching: { label: '调研中',     color: '#60a5fa', zone: 'work',  x: '28%',  y: '36%'  },
+  executing:   { label: '执行任务',   color: '#fbbf24', zone: 'work',  x: '38%',  y: '36%'  },
 }
 
 const lobster = document.getElementById('lobster')
@@ -712,9 +721,10 @@ setInterval(() => {
     const stored = localStorage.getItem('lobsterState')
     if (stored) {
       const { state, message, ts } = JSON.parse(stored)
-      // 忽略过期超过 10 秒的旧状态
-      if (Date.now() - ts < 10000 && state !== _lastState) {
-        _lastState = state
+      // 忽略过期超过 10 秒的旧状态；同一状态下消息变化也要刷新，确保实时阶段文本同步
+      const signature = `${state || ''}|${message || ''}`
+      if (Date.now() - ts < 10000 && signature !== _lastState) {
+        _lastState = signature
         setState(state, message)
       }
     }
@@ -728,7 +738,7 @@ window.addEventListener('load', () => {
     const stored = localStorage.getItem('lobsterState')
     if (stored) {
       const { state, message } = JSON.parse(stored)
-      if (state) { setState(state, message); _lastState = state }
+      if (state) { setState(state, message); _lastState = `${state || ''}|${message || ''}` }
     } else {
       setState('idle')
     }
