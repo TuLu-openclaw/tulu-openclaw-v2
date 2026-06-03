@@ -3566,7 +3566,7 @@ function formatToolDisplayName(name = '') {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-  return readable ? t('chat.toolNameFallback', { name: readable }) : t('chat.tool')
+  return readable ? t('chat.toolNameUnknown') : t('chat.tool')
 }
 
 function formatToolStatus(status = '') {
