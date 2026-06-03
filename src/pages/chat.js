@@ -144,6 +144,7 @@ let _lastSentTaskId = ''
 let _lastSessionList = []
 let _isSessionMultiSelectMode = false
 let _selectedSessionKeys = new Set()
+let _isDeletingSelectedSessions = false
 const TASK_PROGRESS = { queued: 5, sending: 10, thinking: 25, streaming: 45, tool: 65, finalizing: 90, done: 100, error: 100, aborted: 100 }
 
 const MODEL_CONFIG_CHANGED_EVENT = 'openclaw-config-changed'
@@ -1913,6 +1914,7 @@ async function deleteSession(key) {
 }
 
 function setSessionMultiSelectMode(enabled) {
+  if (_isDeletingSelectedSessions) return
   _isSessionMultiSelectMode = !!enabled
   if (!_isSessionMultiSelectMode) _selectedSessionKeys.clear()
   _page?.querySelector('#btn-session-multi-select')?.toggleAttribute('hidden', _isSessionMultiSelectMode)
@@ -1928,7 +1930,7 @@ function getVisibleDeletableSessionKeys() {
 }
 
 function toggleSessionSelection(key) {
-  if (!key) return
+  if (!key || _isDeletingSelectedSessions) return
   const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
   if (key === mainKey) { toast(t('chat.cannotDeleteMain'), 'warning'); return }
   if (_selectedSessionKeys.has(key)) _selectedSessionKeys.delete(key)
@@ -1937,11 +1939,13 @@ function toggleSessionSelection(key) {
 }
 
 function selectAllVisibleSessions() {
+  if (_isDeletingSelectedSessions) return
   for (const key of getVisibleDeletableSessionKeys()) _selectedSessionKeys.add(key)
   updateSessionListActiveState()
 }
 
 function clearSessionSelection() {
+  if (_isDeletingSelectedSessions) return
   _selectedSessionKeys.clear()
   updateSessionListActiveState()
 }
@@ -1949,24 +1953,40 @@ function clearSessionSelection() {
 function updateSessionMultiToolbar() {
   const countEl = _page?.querySelector('#chat-session-selected-count')
   const delBtn = _page?.querySelector('#btn-session-delete-selected')
+  const selectAllBtn = _page?.querySelector('#btn-session-select-all')
+  const clearBtn = _page?.querySelector('#btn-session-clear-selection')
+  const cancelBtn = _page?.querySelector('#btn-session-multi-cancel')
   const count = _selectedSessionKeys.size
   if (countEl) countEl.textContent = t('chat.selectedSessionsCount', { count })
-  if (delBtn) delBtn.disabled = count === 0
+  if (delBtn) {
+    delBtn.disabled = count === 0 || _isDeletingSelectedSessions
+    delBtn.textContent = _isDeletingSelectedSessions ? t('chat.deletingSelected') : t('chat.deleteSelected')
+  }
+  if (selectAllBtn) selectAllBtn.disabled = _isDeletingSelectedSessions
+  if (clearBtn) clearBtn.disabled = _isDeletingSelectedSessions
+  if (cancelBtn) cancelBtn.disabled = _isDeletingSelectedSessions
 }
 
 async function deleteSelectedSessions() {
+  if (_isDeletingSelectedSessions) return
   const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
   const keys = Array.from(_selectedSessionKeys).filter(key => key && key !== mainKey)
   if (!keys.length) { toast(t('chat.selectSessionsToDelete'), 'warning'); return }
   const yes = await showConfirm(t('chat.confirmDeleteSelectedSessions', { count: keys.length }))
   if (!yes) return
   const failed = []
-  for (const key of keys) {
-    try {
-      await wsClient.sessionsDelete(key)
-    } catch (e) {
-      failed.push({ key, message: e?.message || String(e) })
+  _isDeletingSelectedSessions = true
+  updateSessionMultiToolbar()
+  try {
+    for (const key of keys) {
+      try {
+        await wsClient.sessionsDelete(key)
+      } catch (e) {
+        failed.push({ key, message: e?.message || String(e) })
+      }
     }
+  } finally {
+    _isDeletingSelectedSessions = false
   }
   for (const key of keys) {
     if (!failed.some(item => item.key === key)) {

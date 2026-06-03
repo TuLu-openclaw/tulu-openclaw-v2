@@ -128,6 +128,7 @@ export default {
   selectedSessionsDeleted: _('已删除 {count} 个会话', 'Deleted {count} sessions', '已刪除 {count} 個對話'),
   selectedSessionsDeleteFailed: _('有 {count} 个会话删除失败：{msg}', '{count} sessions failed to delete: {msg}', '有 {count} 個對話刪除失敗：{msg}'),
   deleteSelected: _('删除选中', 'Delete selected', '刪除選中'),
+  deletingSelected: _('正在删除…', 'Deleting…', '正在刪除…'),
   modelFallback: _('模型', 'Model', '模型'),
   currentTaskRoundsLabel: _('{model} · 当前任务 {rounds}轮', '{model} · current task round {rounds}', '{model} · 目前任務 {rounds} 輪'),
   currentTaskRoundsTitle: _('当前任务：{prompt}\n模型：{model}\n轮次：{rounds}', 'Current task: {prompt}\nModel: {model}\nRound: {rounds}', '目前任務：{prompt}\n模型：{model}\n輪次：{rounds}'),
