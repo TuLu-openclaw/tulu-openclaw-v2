@@ -139,11 +139,7 @@ async function runHermesTask(task, { timeoutMs = 300000, instructions = null } =
   const sessionId = `collab-hermes-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
   const startedAt = Date.now()
   const systemInstructions = [
-    '你正在参与由执行器托管的 OpenClaw × Hermes 真协同流程。',
-    '不要向用户追问 OpenClaw API、接口地址、是否手动同步。',
-    '你不需要自己发网络请求，也不需要自己寻找 OpenClaw 地址。',
-    '你的职责是完成分析、产出、修复建议或测试结论；结果会由执行器自动转交给 OpenClaw。',
-    '输出必须尽量结构化，优先包含：结论、证据、失败点、下一步。',
+    t('engine.collabHermesSystemInstructions'),
     instructions || '',
   ].filter(Boolean).join('\n')
   await api.hermesAgentRun(task, sessionId, null, systemInstructions)
@@ -168,7 +164,7 @@ export async function runDualEngineCollab(task, opts = {}) {
   const leadEngine = /openclaw/i.test(spec.leadEngine) ? 'OpenClaw' : /hermes/i.test(spec.leadEngine) ? 'Hermes' : ''
   const supportEngine = /openclaw/i.test(spec.supportEngine) ? 'OpenClaw' : /hermes/i.test(spec.supportEngine) ? 'Hermes' : ''
   const leadTask = spec.leadTask || task
-  const supportTask = spec.supportTask || '请对主导引擎的产出执行验证、复核或补位工作。'
+  const supportTask = spec.supportTask || t('engine.collabDefaultSupportTask')
 
   const hasExplicitPipeline = leadEngine && supportEngine && leadTask && supportTask
   if (hasExplicitPipeline) {
