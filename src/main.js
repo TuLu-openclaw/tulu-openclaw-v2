@@ -440,16 +440,16 @@ async function boot() {
 // ── 龙虾办公室状态同步 ─────────────────────────────────
 // 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
 const LOBSTER_PHASE_PRESETS = {
-  ack: { state: 'ack', emoji: '🟡', message: '已收到任务' },
-  thinking: { state: 'thinking', emoji: '💭', message: '思考中' },
-  planning: { state: 'planning', emoji: '🧭', message: '规划执行方案' },
-  syncing: { state: 'syncing', emoji: '🔄', message: '同步状态中' },
-  tool: { state: 'tool', emoji: '🛠️', message: '调用工具中' },
-  working: { state: 'working', emoji: '🔴', message: '处理中' },
-  verifying: { state: 'verifying', emoji: '🔍', message: '校验结果中' },
-  streaming: { state: 'streaming', emoji: '✍️', message: '生成输出中' },
-  done: { state: 'done', emoji: '🟢', message: '任务完成' },
-  idle: { state: 'idle', emoji: '🟢', message: '待命中' },
+  ack: { state: 'ack', emoji: '🟡', messageKey: 'chat.lobsterPresetAck' },
+  thinking: { state: 'thinking', emoji: '💭', messageKey: 'chat.lobsterPresetThinking' },
+  planning: { state: 'planning', emoji: '🧭', messageKey: 'chat.lobsterPresetPlanning' },
+  syncing: { state: 'syncing', emoji: '🔄', messageKey: 'chat.lobsterPresetSyncing' },
+  tool: { state: 'tool', emoji: '🛠️', messageKey: 'chat.lobsterPresetTool' },
+  working: { state: 'working', emoji: '🔴', messageKey: 'chat.lobsterPresetWorking' },
+  verifying: { state: 'verifying', emoji: '🔍', messageKey: 'chat.lobsterPresetVerifying' },
+  streaming: { state: 'streaming', emoji: '✍️', messageKey: 'chat.lobsterPresetStreaming' },
+  done: { state: 'done', emoji: '🟢', messageKey: 'chat.lobsterPresetDone' },
+  idle: { state: 'idle', emoji: '🟢', messageKey: 'chat.lobsterPresetIdle' },
 }
 let _lobsterPhaseOverrides = {}
 
@@ -479,7 +479,7 @@ function normalizeLobsterDetail(detail = {}) {
   const preset = LOBSTER_PHASE_PRESETS[phase] || null
   const state = preset?.state || detail?.state || 'working'
   const emoji = detail?.emoji || getLobsterPhaseEmoji(phase, preset?.emoji) || ''
-  const message = detail?.message || preset?.message || ''
+  const message = detail?.message || (preset?.messageKey ? t(preset.messageKey) : '')
   return { phase, state, emoji, message }
 }
 
@@ -511,14 +511,14 @@ window.updateLobsterState = function(state, message, extra = {}) {
 window.addEventListener('hashchange', () => {
   const route = location.hash.replace('#', '') || location.pathname
   if (route && route !== '/' && !hasActiveLobsterAgentState()) {
-    window.updateLobsterState('working', '导航到 ' + route, { phase: 'working', emoji: '🔴' })
+    window.updateLobsterState('working', t('chat.lobsterRouteNavigating', { route }), { phase: 'working', emoji: '🔴' })
   }
 })
 
 // AI 消息发送时通知龙虾（通过自定义事件）
 window.addEventListener('lobster-work-start', e => {
   const detail = normalizeLobsterDetail(e.detail || {})
-  window.updateLobsterState(detail.state, detail.message || '工作中', { phase: detail.phase, emoji: detail.emoji })
+  window.updateLobsterState(detail.state, detail.message || t('chat.lobsterPresetWorking'), { phase: detail.phase, emoji: detail.emoji })
 })
 window.addEventListener('lobster-work-end', () => {
   const detail = normalizeLobsterDetail({ phase: 'done' })
