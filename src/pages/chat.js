@@ -1883,6 +1883,39 @@ function clearSessionLocalState(key) {
   try { localStorage.removeItem(getReplyStatusKey(key)) } catch {}
 }
 
+function clearGroupLocalState(group) {
+  const key = getGroupStorageKey(group)
+  if (!key) return
+  _groupTranscripts.delete(key)
+  clearSessionMessages(key).catch(() => {})
+  try { localStorage.removeItem(getReplyStatusKey(key)) } catch {}
+}
+
+function pruneDeletedSessionsFromGroups(keys) {
+  const deleted = new Set((Array.isArray(keys) ? keys : [keys]).filter(Boolean))
+  if (!deleted.size || !_chatGroups.length) return
+  let changed = false
+  const removedGroups = []
+  for (const group of _chatGroups) {
+    const before = group.members || []
+    const nextMembers = before.filter(m => !deleted.has(m.sessionKey) && !deleted.has(m.sourceSessionKey))
+    if (nextMembers.length !== before.length) {
+      group.members = nextMembers
+      group.updatedAt = Date.now()
+      changed = true
+    }
+    if (!nextMembers.length) removedGroups.push(group)
+  }
+  if (removedGroups.length) {
+    const removedIds = new Set(removedGroups.map(g => g.id))
+    _chatGroups = _chatGroups.filter(g => !removedIds.has(g.id))
+    removedGroups.forEach(clearGroupLocalState)
+    if (removedIds.has(_currentGroupId)) _currentGroupId = ''
+    changed = true
+  }
+  if (changed) saveGroupSessions()
+}
+
 function clearSessionResetLocalState(key, model, prompt) {
   if (!key) return
   _sessionTokenTotals.delete(key)
@@ -1907,6 +1940,7 @@ async function deleteSession(key) {
   try {
     await wsClient.sessionsDelete(key)
     clearSessionLocalState(key)
+    pruneDeletedSessionsFromGroups(key)
     _selectedSessionKeys.delete(key)
     toast(t('chat.sessionDeleted'), 'success')
     if (key === _sessionKey) void switchSession(mainKey, { forceWorkspace: true })
@@ -1979,6 +2013,7 @@ async function deleteSelectedSessions() {
   const yes = await showConfirm(t('chat.confirmDeleteSelectedSessions', { count: keys.length }))
   if (!yes) return
   const failed = []
+  const deletedKeys = []
   _isDeletingSelectedSessions = true
   updateSessionMultiToolbar()
   try {
@@ -1995,9 +2030,11 @@ async function deleteSelectedSessions() {
   for (const key of keys) {
     if (!failed.some(item => item.key === key)) {
       clearSessionLocalState(key)
+      deletedKeys.push(key)
       _selectedSessionKeys.delete(key)
     }
   }
+  pruneDeletedSessionsFromGroups(deletedKeys)
   const deletedCount = keys.length - failed.length
   if (deletedCount) toast(t('chat.selectedSessionsDeleted', { count: deletedCount }), 'success')
   if (failed.length) toast(t('chat.selectedSessionsDeleteFailed', { count: failed.length, msg: failed[0].message }), 'error')
@@ -2530,6 +2567,7 @@ async function deleteGroupSession(groupId) {
   const yes = await showConfirm(t('chat.confirmDeleteGroupChat', { name: group.name }))
   if (!yes) return
   _chatGroups = _chatGroups.filter(g => g.id !== groupId)
+  clearGroupLocalState(group)
   if (_currentGroupId === groupId) _currentGroupId = ''
   saveGroupSessions()
   renderGroupSessionList()
