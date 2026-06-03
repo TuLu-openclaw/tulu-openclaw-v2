@@ -1497,7 +1497,7 @@ function setDebug(msg, detail) {
       const alt = await searchDetailFallback(source, name)
       if (alt) return showEpisodePicker(alt, source.name)
     }
-    if (!item) { content.innerHTML = '<div class="tvbox-empty">未找到该影片</div>'; return }
+    if (!item) { content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('movieNotFound')) + '</div>'; return }
     await showEpisodePicker(item, source.name)
   }
 
@@ -1533,10 +1533,10 @@ function setDebug(msg, detail) {
       preferredSi = scored[0].i
     }
 
-    const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">← 返回列表</button></div>'
+    const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">' + escHtml(mt('backToList')) + '</button></div>'
     const firstUrls = episodes[preferredSi]?.urls || []
     const siHtml = episodes.length > 1
-      ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">选择源：</span>' +
+      ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">' + escHtml(mt('selectSource')) + '</span>' +
           episodes.map((e, i) => '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + (i===preferredSi?' ★':'') + '</button>').join('') +
         '</div>'
       : ''
@@ -1548,10 +1548,10 @@ function setDebug(msg, detail) {
       '<div class="tvbox-ep-info">' +
         renderPosterImg(item.vod_pic, item.vod_name, sourceForPic.key || item._srcKey, sourceForPic.api || item._api || '').replace('<img ', '<img class="tvbox-ep-pic" ') +
         (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
-        '<div class="tvbox-ep-desc">' + (item.vod_content || '暂无简介') + '</div>' +
+        '<div class="tvbox-ep-desc">' + (item.vod_content || mt('noDescription')) + '</div>' +
       '</div>' +
       siHtml +
-      '<div class="tvbox-ep-list-title">播放列表 ' + firstUrls.length + ' 集</div>' +
+      '<div class="tvbox-ep-list-title">' + escHtml(mt('episodeListCount', { count: firstUrls.length })) + '</div>' +
       '<div class="tvbox-ep-grid" id="t-ep-grid">' +
         firstUrls.map((ep, i) => {
           const isResume = hist && hist.epName === ep.name
@@ -1629,7 +1629,7 @@ function setDebug(msg, detail) {
   async function openStandalonePlayer({ url, title, resume, allEps, allUrls, playbackCtx, pic }) {
     try {
       const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
-      if (!invoke) throw new Error('Tauri API 不可用')
+      if (!invoke) throw new Error(mt('standaloneApiUnavailable'))
       await invoke('open_player_window', {
         url, title, resume,
         allEps: JSON.stringify(allEps || []),
@@ -1649,12 +1649,12 @@ function setDebug(msg, detail) {
     const title = el.querySelector('#t-player-title')
     const body = el.querySelector('#t-player-body')
     if (!overlay || !body) {
-      alert('播放器窗口打开失败，请稍后重试')
+      alert(mt('playerOpenFailedRetry'))
       return
     }
-    if (title) title.textContent = name || '播放'
+    if (title) title.textContent = name || mt('playbackTitleFallback')
     overlay.style.display = 'flex'
-    body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#f6c177;margin-bottom:14px">独立播放器打开失败，已切换为内嵌播放。</p></div>'
+    body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#f6c177;margin-bottom:14px">' + escHtml(mt('standaloneFallbackNotice')) + '</p></div>'
     loadVideoPlayer(url, isDirectVideoUrl(url), resume || 0, fallbackUrls || [url], allEps || [])
   }
 
@@ -1681,7 +1681,7 @@ function setDebug(msg, detail) {
       const titleEl = el.querySelector('#t-player-title')
       if (titleEl && nextEpName) titleEl.textContent = nextEpName
       upsertPlayHistory({
-        id: playingEp.id, name: titleEl?.textContent || nextEpName || '播放中', pic: playingEp.pic || '',
+        id: playingEp.id, name: titleEl?.textContent || nextEpName || mt('playingTitleFallback'), pic: playingEp.pic || '',
         source: playingEp.source, epName: playingEp.epName, epUrl: nextUrl, progress: 0, duration: 0,
         allUrls: playingEp.allUrls || fallbackArr || [], allEps: playingEp.allEps || episodeArr || [],
         updated: Date.now()
@@ -1689,7 +1689,7 @@ function setDebug(msg, detail) {
       el.querySelector('#t-ext-link')?.setAttribute('href', nextUrl)
     }
 
-    function fallbackTargetText() { return fallbackUrlsAreEpisodes ? '剧集' : '线路' }
+    function fallbackTargetText() { return fallbackUrlsAreEpisodes ? mt('fallbackTargetEpisode') : mt('fallbackTargetLine') }
 
     function showOtip(vid, msg) {
       let tip = document.getElementById('_ttip')
@@ -1735,12 +1735,12 @@ function setDebug(msg, detail) {
     }
 
     function renderPlaybackError(url, message) {
-      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">' + escHtml(message || '播放失败') + '</p><a href="' + escHtml(url) + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
+      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">' + escHtml(message || mt('playbackFailed')) + '</p><a href="' + escHtml(url) + '" target="_blank" class="tvbox-open-ext">' + escHtml(mt('openInBrowser')) + '</a></div>'
     }
 
     async function tryPlay(url, isM3u8, sp) {
       syncEmbeddedEpisodeContext(url)
-      if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
+      if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">' + escHtml(mt('noPlaybackUrl')) + '</p></div>'; return }
 
       if (isM3u8) {
         await ensureHls()
@@ -1756,9 +1756,9 @@ function setDebug(msg, detail) {
           let hlsTimedOut = false
           const hlsTimer = setTimeout(async () => {
             if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
-              renderPlaybackError(url, 'm3u8 加载超时（15秒），正在尝试切换' + fallbackTargetText())
+              renderPlaybackError(url, mt('m3u8TimeoutSwitching', { target: fallbackTargetText() }))
               const switched = await tryNextLine(url)
-              if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
+              if (!switched) renderPlaybackError(url, mt('allFallbackUnavailable', { target: fallbackTargetText() }))
             }
           }, 15000)
           hls.on(window.Hls.Events.ERROR, async (evt, data) => {
@@ -1770,9 +1770,9 @@ function setDebug(msg, detail) {
                 hls.startLoad(); return
               }
               hlsTimedOut = true; hls.destroy(); window._movieHls = null
-              renderPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '），正在尝试切换' + fallbackTargetText())
+              renderPlaybackError(url, mt('playbackInterruptedSwitching', { reason: errCount >= MAX_ERR ? mt('multipleRetriesFailed') : data.details, target: fallbackTargetText() }))
               const switched = await tryNextLine(url)
-              if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
+              if (!switched) renderPlaybackError(url, mt('allFallbackUnavailable', { target: fallbackTargetText() }))
             }
           })
           hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer); hls.currentLevel = -1 })
@@ -1790,7 +1790,7 @@ function setDebug(msg, detail) {
           addTouchGesture(video)
           video.addEventListener('error', async () => {
             const switched = await tryNextLine(url)
-            if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
+            if (!switched) renderPlaybackError(url, mt('allFallbackUnavailable', { target: fallbackTargetText() }))
           })
           wrap.appendChild(video)
           body.innerHTML = ''; body.appendChild(wrap)
@@ -1808,7 +1808,7 @@ function setDebug(msg, detail) {
         video.addEventListener('ended', () => markFinished())
         video.addEventListener('error', async () => {
           const switched = await tryNextLine(url)
-          if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
+          if (!switched) renderPlaybackError(url, mt('allFallbackUnavailable', { target: fallbackTargetText() }))
         })
         video.src = url
         if (sp > 0) video.currentTime = sp
