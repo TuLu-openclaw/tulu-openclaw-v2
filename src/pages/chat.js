@@ -2915,6 +2915,16 @@ function handleEvent(msg) {
   }
 }
 
+function findStreamOverlapSuffix(existing = '', incoming = '') {
+  const a = String(existing || '')
+  const b = String(incoming || '')
+  const max = Math.min(a.length, b.length)
+  for (let len = max; len > 0; len--) {
+    if (a.slice(-len) === b.slice(0, len)) return len
+  }
+  return 0
+}
+
 function applyStreamText(nextText = '') {
   const text = String(nextText || '')
   if (!text) return false
@@ -2931,15 +2941,11 @@ function applyStreamText(nextText = '') {
     _currentAiText = text
     return true
   }
-  // Some Gateway/provider paths emit token chunks instead of cumulative text.
-  // Treat non-prefix shorter/equal chunks as append-only deltas so streamed replies do not lose words.
-  if (text.length <= _currentAiText.length) {
-    if (_currentAiText.endsWith(text)) return false
-    _currentAiText += text
-    return true
-  }
-  // If the new text is longer but not a prefix, preserve existing output and append the new chunk.
-  _currentAiText += text
+
+  const overlap = findStreamOverlapSuffix(_currentAiText, text)
+  const appendText = overlap > 0 ? text.slice(overlap) : text
+  if (!appendText) return false
+  _currentAiText += appendText
   return true
 }
 
