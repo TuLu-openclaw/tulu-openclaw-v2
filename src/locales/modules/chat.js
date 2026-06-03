@@ -326,6 +326,7 @@ export default {
   toolNameAgentsList: _('Agent 列表', 'Agent list', 'Agent 列表'),
   toolNameParallelTools: _('并行工具调用', 'Parallel tool calls', '並行工具調用'),
   toolNameUpdatePlan: _('更新计划', 'Update plan', '更新計畫'),
+  toolNameFallback: _('工具：{name}', 'Tool: {name}', '工具：{name}'),
   workspace: _('工作区', 'Workspace', '工作區'),
   openWorkspace: _('打开工作区文件面板', 'Open workspace files panel', '打開工作區檔案面板'),
   workspaceFiles: _('工作区文件', 'Workspace Files', '工作區檔案'),

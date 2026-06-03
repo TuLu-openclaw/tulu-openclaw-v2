@@ -3524,7 +3524,14 @@ function formatToolDisplayName(name = '') {
   if (map[normalized]) return map[normalized]
   if (normalized.startsWith('functions_') && map[normalized.slice('functions_'.length)]) return map[normalized.slice('functions_'.length)]
   if (normalized.startsWith('tools_') && map[normalized.slice('tools_'.length)]) return map[normalized.slice('tools_'.length)]
-  return map[leafNormalized] || raw || t('chat.tool')
+  if (map[leafNormalized]) return map[leafNormalized]
+  if (!raw) return t('chat.tool')
+  const readable = leafNormalized
+    .split('_')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+  return readable ? t('chat.toolNameFallback', { name: readable }) : t('chat.tool')
 }
 
 function formatToolStatus(status = '') {
