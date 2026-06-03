@@ -1698,7 +1698,14 @@ function setDebug(msg, detail) {
     async function tryNextLine(failedUrl) {
       lineIdx++
       const next = fallbackArr.find((u, i) => i >= lineIdx && u !== failedUrl)
-      if (next) { lineIdx = fallbackArr.indexOf(next); await tryPlay(next, next.includes('.m3u8') || next.includes('.mp4'), 0) }
+      if (!next) return false
+      lineIdx = fallbackArr.indexOf(next)
+      await tryPlay(next, next.includes('.m3u8') || next.includes('.mp4'), 0)
+      return true
+    }
+
+    function renderPlaybackError(url, message) {
+      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">' + escHtml(message || '播放失败') + '</p><a href="' + escHtml(url) + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
     }
 
     async function tryPlay(url, isM3u8, sp) {
@@ -1716,10 +1723,10 @@ function setDebug(msg, detail) {
           hls.loadSource(url)
           hls.attachMedia(video)
           let hlsTimedOut = false
-          const hlsTimer = setTimeout(() => {
+          const hlsTimer = setTimeout(async () => {
             if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
-              body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">m3u8 加载超时（15秒）</p><a href="' + url + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
-              if (fallbackArr.length > 0) tryNextLine(url)
+              renderPlaybackError(url, 'm3u8 加载超时（15秒）')
+              await tryNextLine(url)
             }
           }, 15000)
           hls.on(window.Hls.Events.ERROR, (evt, data) => {
@@ -1731,8 +1738,8 @@ function setDebug(msg, detail) {
                 hls.startLoad(); return
               }
               hlsTimedOut = true; hls.destroy(); window._movieHls = null
-              body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）</p><a href="' + url + '" target="_blank" class="tvbox-open-ext">&#8599; 在浏览器中打开</a></div>'
-              if (fallbackArr.length > 0) tryNextLine(url)
+              renderPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）')
+              tryNextLine(url)
             }
           })
           hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer); hls.currentLevel = -1 })
@@ -1748,9 +1755,9 @@ function setDebug(msg, detail) {
           video.src = url
           const pipBtn = addPipBtn(video); if (pipBtn) wrap.appendChild(pipBtn)
           addTouchGesture(video)
-          video.addEventListener('error', () => {
-            if (fallbackArr.length > 0) tryNextLine(url)
-            else { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">播放失败</p><a href="' + url + '" target="_blank" class="tvbox-open-ext">↗ 在浏览器中打开</a></div>' }
+          video.addEventListener('error', async () => {
+            const switched = await tryNextLine(url)
+            if (!switched) renderPlaybackError(url, '播放失败')
           })
           wrap.appendChild(video)
           body.innerHTML = ''; body.appendChild(wrap)
@@ -1766,7 +1773,10 @@ function setDebug(msg, detail) {
         addTouchGesture(video)
         video.addEventListener('timeupdate', () => trackProgress(video))
         video.addEventListener('ended', () => markFinished())
-        video.addEventListener('error', () => { if (fallbackArr.length > 0) tryNextLine(url) })
+        video.addEventListener('error', async () => {
+          const switched = await tryNextLine(url)
+          if (!switched) renderPlaybackError(url, '播放失败')
+        })
         video.src = url
         if (sp > 0) video.currentTime = sp
         video.play().catch(() => {})
