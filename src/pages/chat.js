@@ -13,6 +13,7 @@ import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 const RENDER_THROTTLE = 30
+const STREAM_IDLE_NOTICE_MS = 90000
 const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
 const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
@@ -2926,23 +2927,44 @@ function beginStreamBubble(runId = '') {
   setReplyStatus('queued', replyStatusText('queued'), { runId: _currentRunId, activity: t('chat.replyActivityStreamReady') })
 }
 
+function isLongRunningReplyState(state = _replyStatusState?.state) {
+  return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing'].includes(state)
+}
+
 function scheduleStreamSafetyTimeout() {
   clearTimeout(_streamSafetyTimer)
   _streamSafetyTimer = setTimeout(() => {
     _streamSafetyTimer = null
-    if (_isStreaming) {
-      console.warn('[chat] 流式输出超时（90s 无新数据），强制结束')
-      const timeoutText = t('chat.streamTimeout')
-      if (_currentAiBubble && _currentAiText) {
-        flushStreamRender()
-      }
-      appendSystemMessage(timeoutText)
-      updateTaskByRunOrSession(_currentRunId, _sessionKey, { status: 'error', progress: 100, error: timeoutText })
-      setReplyStatus('error', timeoutText, { runId: _currentRunId || '', activity: t('chat.checkErrorOrRetryTask') })
-      resetStreamState()
-      processMessageQueue()
+    if (!_isStreaming) return
+
+    const runId = _currentRunId || _replyStatusState?.runId || ''
+    const activeState = _replyStatusState?.state || 'thinking'
+    if (_currentAiBubble && _currentAiText) {
+      flushStreamRender()
     }
-  }, 90000)
+
+    if (isLongRunningReplyState(activeState)) {
+      const elapsed = _streamStartTime ? Date.now() - _streamStartTime : 0
+      const detail = activeState === 'tool'
+        ? t('chat.streamToolStillRunning')
+        : t('chat.streamStillRunning')
+      console.warn('[chat] 流式输出暂时无新数据，但 run 仍处于活动状态，继续等待:', runId || '(no-run)')
+      setReplyStatus(activeState === 'streaming' ? 'streaming' : activeState, detail, {
+        runId,
+        activity: t('chat.replyActivityAwaitingMoreEvents', { seconds: Math.max(1, Math.round(elapsed / 1000)) }),
+      })
+      showTyping(true, detail)
+      scheduleStreamSafetyTimeout()
+      return
+    }
+
+    const timeoutText = t('chat.streamTimeout')
+    appendSystemMessage(timeoutText)
+    updateTaskByRunOrSession(runId, _sessionKey, { status: 'error', progress: 100, error: timeoutText })
+    setReplyStatus('error', timeoutText, { runId, activity: t('chat.checkErrorOrRetryTask') })
+    resetStreamState()
+    processMessageQueue()
+  }, STREAM_IDLE_NOTICE_MS)
 }
 
 function handleChatEvent(payload) {
