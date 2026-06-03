@@ -1656,31 +1656,91 @@ export function render() {
     const preferredLead = active === 'hermes' ? 'Hermes' : 'OpenClaw'
     const preferredPeer = active === 'hermes' ? 'OpenClaw' : 'Hermes'
     const lowered = goal.toLowerCase()
-    let mode = '通用任务'
-    let extra = '请按通用复杂任务的方式，自动判断主导/协作关系并分工执行。'
-    let leadDuties = ['拆解任务', '推进主线执行', '汇总结论', '输出最终结果']
-    let peerDuties = ['补充分析', '交叉验证', '检查遗漏', '处理分支子任务']
-    let riskHints = ['避免主导与协作职责重叠', '如结论不一致，必须说明冲突点', '最终只保留一份合并结果']
+    let mode = t('engine.collabAutoModeGeneral')
+    let extra = t('engine.collabAutoExtraGeneral')
+    let leadDuties = [
+      t('engine.collabAutoGeneralLeadBreakdown'),
+      t('engine.collabAutoGeneralLeadDrive'),
+      t('engine.collabAutoGeneralLeadSummarize'),
+      t('engine.collabAutoGeneralLeadFinal'),
+    ]
+    let peerDuties = [
+      t('engine.collabAutoGeneralPeerAnalysis'),
+      t('engine.collabAutoGeneralPeerVerify'),
+      t('engine.collabAutoGeneralPeerGaps'),
+      t('engine.collabAutoGeneralPeerBranches'),
+    ]
+    let riskHints = [
+      t('engine.collabAutoGeneralRiskOverlap'),
+      t('engine.collabAutoGeneralRiskConflict'),
+      t('engine.collabAutoGeneralRiskMerged'),
+    ]
     if (/code|编码|编程|修复|bug|debug|脚本|开发|函数|接口|build|构建/.test(lowered)) {
-      mode = '代码/工程任务'
-      extra = '优先让更擅长工程落地的引擎主导，让协作引擎负责代码审查、边界条件和回归验证。'
-      leadDuties = ['负责代码修改与实现路径选择', '推进构建、调试与修复主线', '整合最终变更说明']
-      peerDuties = ['负责代码审查', '检查边界条件与潜在副作用', '补充回归验证建议']
-      riskHints = ['避免只修表面现象而遗漏根因', '避免改动破坏现有构建链路', '输出中必须说明验证范围']
+      mode = t('engine.collabAutoModeCode')
+      extra = t('engine.collabAutoExtraCode')
+      leadDuties = [
+        t('engine.collabAutoCodeLeadImplement'),
+        t('engine.collabAutoCodeLeadDebug'),
+        t('engine.collabAutoCodeLeadSummary'),
+      ]
+      peerDuties = [
+        t('engine.collabAutoCodePeerReview'),
+        t('engine.collabAutoCodePeerEdges'),
+        t('engine.collabAutoCodePeerRegression'),
+      ]
+      riskHints = [
+        t('engine.collabAutoCodeRiskRootCause'),
+        t('engine.collabAutoCodeRiskBuild'),
+        t('engine.collabAutoCodeRiskValidation'),
+      ]
     } else if (/文档|README|说明|翻译|i18n|多语言|文案|总结/.test(goal)) {
-      mode = '文档/多语言任务'
-      extra = '优先让更擅长结构化表达的引擎主导，让协作引擎负责术语统一、漏项检查和风格校正。'
-      leadDuties = ['负责整体结构设计', '统一主叙事与输出顺序', '完成最终文案定稿']
-      peerDuties = ['检查术语一致性', '检查漏项与歧义', '修正语言风格与多语言偏差']
-      riskHints = ['避免术语前后不一致', '避免翻译语义漂移', '如改动文档名称，需注意历史语义与品牌影响']
+      mode = t('engine.collabAutoModeDocs')
+      extra = t('engine.collabAutoExtraDocs')
+      leadDuties = [
+        t('engine.collabAutoDocsLeadStructure'),
+        t('engine.collabAutoDocsLeadNarrative'),
+        t('engine.collabAutoDocsLeadDraft'),
+      ]
+      peerDuties = [
+        t('engine.collabAutoDocsPeerTerms'),
+        t('engine.collabAutoDocsPeerGaps'),
+        t('engine.collabAutoDocsPeerStyle'),
+      ]
+      riskHints = [
+        t('engine.collabAutoDocsRiskTerms'),
+        t('engine.collabAutoDocsRiskMeaning'),
+        t('engine.collabAutoDocsRiskNames'),
+      ]
     } else if (/排查|故障|日志|异常|崩溃|诊断|why|error|trace/.test(lowered)) {
-      mode = '排障/诊断任务'
-      extra = '优先让更擅长诊断链路的引擎主导，让协作引擎负责交叉验证、假设枚举和根因收敛。'
-      leadDuties = ['负责建立问题假设', '推进日志/链路诊断主线', '收敛根因并给出修复方向']
-      peerDuties = ['枚举替代假设', '交叉验证证据链', '指出诊断盲区与误判风险']
-      riskHints = ['避免把症状误判为根因', '避免忽略环境因素或配置差异', '输出中必须区分已证实与待验证项']
+      mode = t('engine.collabAutoModeDiagnosis')
+      extra = t('engine.collabAutoExtraDiagnosis')
+      leadDuties = [
+        t('engine.collabAutoDiagnosisLeadHypothesis'),
+        t('engine.collabAutoDiagnosisLeadLogs'),
+        t('engine.collabAutoDiagnosisLeadRootCause'),
+      ]
+      peerDuties = [
+        t('engine.collabAutoDiagnosisPeerAlternatives'),
+        t('engine.collabAutoDiagnosisPeerEvidence'),
+        t('engine.collabAutoDiagnosisPeerBlindSpots'),
+      ]
+      riskHints = [
+        t('engine.collabAutoDiagnosisRiskSymptom'),
+        t('engine.collabAutoDiagnosisRiskEnvironment'),
+        t('engine.collabAutoDiagnosisRiskProof'),
+      ]
     }
-    inputValue = `# 自动双引擎协同编排\n\n[任务类型]\n- ${mode}\n\n[当前引擎上下文]\n- 当前激活引擎: ${active}\n- 建议主导引擎: ${preferredLead}\n- 建议协作引擎: ${preferredPeer}\n\n[当前任务]\n${goal || '- [请在这里填写任务目标]'}\n\n[编排偏好]\n- ${extra}\n\n[建议主导职责]\n${leadDuties.map(x => `- ${x}`).join('\n')}\n\n[建议协作职责]\n${peerDuties.map(x => `- ${x}`).join('\n')}\n\n[风险点]\n${riskHints.map(x => `- ${x}`).join('\n')}\n\n[自动决策要求]\n1. 先判断哪个引擎更适合作为主导引擎，哪个更适合作为协作引擎；若当前激活引擎不适合主导，要明确说明原因。\n2. 输出结构化的“执行计划 / 主导职责 / 协作职责 / 风险点 / 协同复核”。\n3. 如需调用工具或拆分子任务，明确写出每一步由谁负责。\n4. 协同复核必须说明协作引擎验证了什么、补充了什么、否定了什么。\n5. 最终只输出一份合并后的完整结果。\n\n[期望输出结构]\n- 执行计划\n- 主导职责\n- 协作职责\n- 风险点\n- 协同复核\n- 最终结论`
+    inputValue = t('engine.collabAutoTemplate', {
+      mode,
+      active,
+      preferredLead,
+      preferredPeer,
+      goal: goal || t('engine.collabAutoGoalPlaceholder'),
+      extra,
+      leadDuties: leadDuties.map(x => `- ${x}`).join('\n'),
+      peerDuties: peerDuties.map(x => `- ${x}`).join('\n'),
+      riskHints: riskHints.map(x => `- ${x}`).join('\n'),
+    })
     inputCaret = inputValue.length
     inputFocused = true
     showSlash = false
@@ -1744,7 +1804,7 @@ export function render() {
     try {
       window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'planning', message: t('engine.collabPlanningStatus') } }))
     } catch {}
-    const text = `# 真正双引擎协同执行中\n\n任务：\n${goal}\n\n状态：\n- 将优先解析用户填写的主导引擎 / 协作引擎 / 主导任务 / 协作任务\n- 已开始请求 OpenClaw 与 Hermes 进入协同链路\n- 完成后将自动生成互审与收敛结果` 
+    const text = t('engine.collabRunIntroMessage', { goal })
     await store.sendMessage(text)
     try {
       const result = await runDualEngineCollab(goal, {
@@ -1752,8 +1812,25 @@ export function render() {
         maxRounds: collabMaxRounds,
       })
       const summary = result.mode === 'pipeline'
-        ? `${result.mergedPrompt}\n\n[系统抓取的串行闭环结果]\n## 主导引擎首轮产出\n${result.leadFirst?.text || '-'}\n\n## 协作引擎首轮验证/测试\n${result.supportVerify?.text || '-'}\n\n## 主导引擎修正后产出\n${result.leadFix?.text || '-'}\n\n## 协作引擎最终复测\n${result.supportRetest?.text || '-'}`
-        : `${result.mergedPrompt}\n\n[系统抓取的协同原始结果]\n## OpenClaw 首轮\n${result.openclaw?.text || '-'}\n\n## Hermes 首轮\n${result.hermes?.text || '-'}\n\n## OpenClaw 复核 Hermes\n${result.openclawReview?.text || '-'}\n\n## Hermes 复核 OpenClaw\n${result.hermesReview?.text || '-'}${result.extraRounds?.length ? `\n\n## 额外自动迭代轮次\n${result.extraRounds.map(r => `### 第 ${r.round} 轮\n- OpenClaw:\n${r.openclaw?.text || '-'}\n- Hermes:\n${r.hermes?.text || '-'}`).join('\n\n')}` : ''}`
+        ? t('engine.collabPipelineResultTemplate', {
+          mergedPrompt: result.mergedPrompt,
+          leadFirst: result.leadFirst?.text || '-',
+          supportVerify: result.supportVerify?.text || '-',
+          leadFix: result.leadFix?.text || '-',
+          supportRetest: result.supportRetest?.text || '-',
+        })
+        : t('engine.collabRawResultTemplate', {
+          mergedPrompt: result.mergedPrompt,
+          openclaw: result.openclaw?.text || '-',
+          hermes: result.hermes?.text || '-',
+          openclawReview: result.openclawReview?.text || '-',
+          hermesReview: result.hermesReview?.text || '-',
+          extraRounds: result.extraRounds?.length ? `\n\n${t('engine.collabExtraRoundsTitle')}\n${result.extraRounds.map(r => t('engine.collabExtraRoundItem', {
+            round: r.round,
+            openclaw: r.openclaw?.text || '-',
+            hermes: r.hermes?.text || '-',
+          })).join('\n\n')}` : '',
+        })
       await store.sendMessage(summary)
       try {
         window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'verifying', message: t('engine.collabReviewDoneStatus') } }))
@@ -1789,7 +1866,7 @@ export function render() {
       }
     }
     try {
-      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: text ? `收到 Hermes 任务：${text.slice(0, 32)}` : '收到 Hermes 任务' } }))
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: text ? t('engine.chatHermesTaskReceivedStatusWithText', { text: text.slice(0, 32) }) : t('engine.chatHermesTaskReceivedStatus') } }))
     } catch {}
 
     // Local slash commands short-circuit before going to the agent.
