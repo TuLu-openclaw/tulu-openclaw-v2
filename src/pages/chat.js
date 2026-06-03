@@ -3664,16 +3664,17 @@ function renderReplyStatus(status = _replyStatusState) {
 function setReplyStatus(state, detail = '', options = {}) {
   const sessionKey = options.sessionKey || _sessionKey || _replyStatusState.sessionKey || 'default'
   const previous = _replyStatusState || {}
+  const keepToolContext = ['tool', 'streaming', 'finalizing'].includes(state)
   const next = normalizeReplyStatus({
     state,
     detail,
     ts: options.ts || (state === previous.state && previous.ts ? previous.ts : Date.now()),
     sessionKey,
     runId: options.runId || _currentRunId || previous.runId || '',
-    toolName: options.toolName || previous.toolName || '',
-    toolInput: options.toolInput || previous.toolInput || '',
-    toolCount: options.toolCount ?? previous.toolCount ?? 0,
-    lastToolAt: options.lastToolAt || previous.lastToolAt || 0,
+    toolName: options.toolName ?? (keepToolContext ? previous.toolName || '' : ''),
+    toolInput: options.toolInput ?? (keepToolContext ? previous.toolInput || '' : ''),
+    toolCount: options.toolCount ?? (keepToolContext ? previous.toolCount ?? 0 : 0),
+    lastToolAt: options.lastToolAt || (keepToolContext ? previous.lastToolAt || 0 : 0),
     activity: options.activity || '',
     model: options.model || getSessionDisplayModel(sessionKey) || getSessionRuntimeModel(sessionKey) || previous.model || '',
     agentId: options.agentId || parseSessionAgent(sessionKey) || previous.agentId || 'main',
