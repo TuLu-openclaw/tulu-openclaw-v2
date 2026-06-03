@@ -197,38 +197,38 @@ const COLLAB_TASK_PRESETS = [
   },
 ]
 const HERMES_COMMAND_OPTIONS = [
-  ['hermes', '进入交互终端'],
-  ['hermes help', '查看全部命令'],
-  ['hermes version', '查看版本号'],
-  ['hermes info', '查看系统信息'],
-  ['hermes clear', '清空上下文'],
-  ['hermes status', '检查服务状态'],
-  ['hermes start', '后台启动服务'],
-  ['hermes stop', '停止服务'],
-  ['hermes restart', '重启服务'],
-  ['hermes skill list', '列出技能'],
-  ['hermes skill show <skill_name>', '查看技能详情'],
-  ['hermes skill run <skill_name>', '运行技能'],
-  ['hermes skill edit <skill_name>', '编辑技能'],
-  ['hermes skill delete <skill_name>', '删除技能'],
-  ['hermes plugin list', '列出插件'],
-  ['hermes plugin install <plugin_name>', '安装插件'],
-  ['hermes plugin uninstall <plugin_name>', '卸载插件'],
-  ['hermes plugin enable <plugin_name>', '启用插件'],
-  ['hermes plugin disable <plugin_name>', '禁用插件'],
-  ['hermes plugin market', '浏览插件市场'],
-  ['hermes config edit', '编辑主配置'],
-  ['hermes config reset', '重置配置'],
-  ['hermes config show', '查看当前配置'],
-  ['hermes model switch <model_name>', '切换模型'],
-  ['hermes doctor', '运行系统诊断'],
-  ['hermes logs', '查看日志'],
-  ['hermes logs -f', '实时跟踪日志'],
-  ['hermes cache clean', '清理缓存'],
-  ['pkill -f hermes', '强制终止进程'],
-  ['hermes serve --host 0.0.0.0 --port 8080 &', '按指定端口启动服务'],
-  ['hermes local pull <model_name>', '拉取本地模型'],
-  ['hermes web', '启动 Web 界面'],
+  ['hermes', 'engine.chatQuickCommandInteractive'],
+  ['hermes help', 'engine.chatQuickCommandHelp'],
+  ['hermes version', 'engine.chatQuickCommandVersion'],
+  ['hermes info', 'engine.chatQuickCommandInfo'],
+  ['hermes clear', 'engine.chatQuickCommandClear'],
+  ['hermes status', 'engine.chatQuickCommandStatus'],
+  ['hermes start', 'engine.chatQuickCommandStart'],
+  ['hermes stop', 'engine.chatQuickCommandStop'],
+  ['hermes restart', 'engine.chatQuickCommandRestart'],
+  ['hermes skill list', 'engine.chatQuickCommandSkillList'],
+  ['hermes skill show <skill_name>', 'engine.chatQuickCommandSkillShow'],
+  ['hermes skill run <skill_name>', 'engine.chatQuickCommandSkillRun'],
+  ['hermes skill edit <skill_name>', 'engine.chatQuickCommandSkillEdit'],
+  ['hermes skill delete <skill_name>', 'engine.chatQuickCommandSkillDelete'],
+  ['hermes plugin list', 'engine.chatQuickCommandPluginList'],
+  ['hermes plugin install <plugin_name>', 'engine.chatQuickCommandPluginInstall'],
+  ['hermes plugin uninstall <plugin_name>', 'engine.chatQuickCommandPluginUninstall'],
+  ['hermes plugin enable <plugin_name>', 'engine.chatQuickCommandPluginEnable'],
+  ['hermes plugin disable <plugin_name>', 'engine.chatQuickCommandPluginDisable'],
+  ['hermes plugin market', 'engine.chatQuickCommandPluginMarket'],
+  ['hermes config edit', 'engine.chatQuickCommandConfigEdit'],
+  ['hermes config reset', 'engine.chatQuickCommandConfigReset'],
+  ['hermes config show', 'engine.chatQuickCommandConfigShow'],
+  ['hermes model switch <model_name>', 'engine.chatQuickCommandModelSwitch'],
+  ['hermes doctor', 'engine.chatQuickCommandDoctor'],
+  ['hermes logs', 'engine.chatQuickCommandLogs'],
+  ['hermes logs -f', 'engine.chatQuickCommandLogsFollow'],
+  ['hermes cache clean', 'engine.chatQuickCommandCacheClean'],
+  ['pkill -f hermes', 'engine.chatQuickCommandForceKill'],
+  ['hermes serve --host 0.0.0.0 --port 8080 &', 'engine.chatQuickCommandServe'],
+  ['hermes local pull <model_name>', 'engine.chatQuickCommandLocalPull'],
+  ['hermes web', 'engine.chatQuickCommandWeb'],
 ]
 
 // ----------------------------------------------------------- helpers
@@ -878,7 +878,7 @@ export function render() {
     const q = quickCommandQuery.trim().toLowerCase()
     const filtered = HERMES_COMMAND_OPTIONS.filter(([cmd, desc]) => {
       if (!q) return true
-      const hay = `${cmd} ${desc}`.toLowerCase()
+      const hay = `${cmd} ${t(desc)}`.toLowerCase()
       return hay.includes(q)
     })
     return `
@@ -896,7 +896,7 @@ export function render() {
             <button type="button" class="hm-chat-quick-command-item" data-quick-command="${escAttr(cmd)}">
               <span class="hm-chat-quick-command-item-main">
                 <span class="hm-chat-quick-command-item-cmd">${escHtml(cmd)}</span>
-                <span class="hm-chat-quick-command-item-desc">${escHtml(desc)}</span>
+                <span class="hm-chat-quick-command-item-desc">${escHtml(t(desc))}</span>
               </span>
               <span class="hm-chat-quick-command-item-send">${escHtml(t('engine.chatQuickCommandSend'))}</span>
             </button>
@@ -1807,8 +1807,8 @@ export function render() {
       try {
         const info = await api.checkHermes()
         const gw = info?.gatewayRunning
-          ? (gwOnline ? '✅ 已运行' : '🟡 运行中但未完全就绪')
-          : '❌ 未运行'
+          ? (gwOnline ? t('engine.chatSlashGatewayRunning') : t('engine.chatSlashGatewayStarting'))
+          : t('engine.chatSlashGatewayStopped')
         const port = info?.gatewayPort || 8642
         const model = info?.model || '—'
         store.pushLocalAssistant([
