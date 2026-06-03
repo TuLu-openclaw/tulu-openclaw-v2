@@ -171,15 +171,15 @@ export async function runDualEngineCollab(task, opts = {}) {
     const runLead = leadEngine === 'Hermes' ? runHermesTask : runOpenClawTask
     const runSupport = supportEngine === 'Hermes' ? runHermesTask : runOpenClawTask
 
-    const leadFirst = await runLead(`你是本轮双引擎协同的主导引擎。\n\n总任务：\n${task}\n\n你的主导任务：\n${leadTask}\n\n请直接完成主导产出，并输出可交给协作引擎继续执行的明确结果。\n\n禁止向用户追问 OpenClaw API、接口地址或手动同步方式。系统会自动把你的结果转交给另一引擎。`, opts)
+    const leadFirst = await runLead(t('engine.collabPipelineLeadFirstPrompt', { task, leadTask }), opts)
 
-    const supportVerify = await runSupport(`你是本轮双引擎协同的协作引擎。\n\n总任务：\n${task}\n\n主导引擎产出：\n${leadFirst.text}\n\n你的协作任务：\n${supportTask}\n\n请执行验证/测试/补位，并输出明确结果；如果失败，说明失败点和日志摘要。\n\n禁止向用户追问 OpenClaw API、接口地址或手动同步方式。系统会自动把你的结果转交给主导引擎。`, opts)
+    const supportVerify = await runSupport(t('engine.collabPipelineSupportVerifyPrompt', { task, leadOutput: leadFirst.text, supportTask }), opts)
 
-    const leadFix = await runLead(`你是本轮双引擎协同的主导引擎。\n\n总任务：\n${task}\n\n你上一轮的产出：\n${leadFirst.text}\n\n协作引擎返回的验证/测试结果：\n${supportVerify.text}\n\n请根据协作结果修正你的方案或产出，并给出新的交付内容。\n\n禁止向用户追问 OpenClaw API、接口地址或手动同步方式。系统会自动完成引擎间结果传递。`, opts)
+    const leadFix = await runLead(t('engine.collabPipelineLeadFixPrompt', { task, leadOutput: leadFirst.text, supportOutput: supportVerify.text }), opts)
 
-    const supportRetest = await runSupport(`你是本轮双引擎协同的协作引擎。\n\n总任务：\n${task}\n\n主导引擎修正后的产出：\n${leadFix.text}\n\n请再次执行你的协作任务：\n${supportTask}\n\n输出最终复测结果，并明确说明是否通过。\n\n禁止向用户追问 OpenClaw API、接口地址或手动同步方式。系统会自动完成引擎间结果传递。`, opts)
+    const supportRetest = await runSupport(t('engine.collabPipelineSupportRetestPrompt', { task, leadOutput: leadFix.text, supportTask }), opts)
 
-    const mergedPrompt = `# 双引擎串行协同闭环结果\n\n[原始任务]\n${task}\n\n[主导引擎]\n${leadEngine}\n\n[协作引擎]\n${supportEngine}\n\n[主导任务]\n${leadTask}\n\n[协作任务]\n${supportTask}\n\n[主导引擎首轮产出]\n${leadFirst.text}\n\n[协作引擎首轮验证/测试结果]\n${supportVerify.text}\n\n[主导引擎修正后产出]\n${leadFix.text}\n\n[协作引擎最终复测结果]\n${supportRetest.text}\n\n[汇总要求]\n1. 说明这次串行协同闭环是否完成\n2. 如果仍未通过，明确卡在哪一步\n3. 给出当前最可靠的最终结果\n4. 必须写出“下一步建议”`
+    const mergedPrompt = t('engine.collabPipelineMergedPrompt', { task, leadEngine, supportEngine, leadTask, supportTask, leadFirst: leadFirst.text, supportVerify: supportVerify.text, leadFix: leadFix.text, supportRetest: supportRetest.text })
 
     return {
       task,
