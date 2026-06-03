@@ -776,7 +776,8 @@ function applyStoredLobsterState(raw, { allowExpired = false } = {}) {
     const key = `${payload.state}|${payload.phase}|${payload.message}|${payload.ts}`
     if (key === _lastStateKey) return
     const age = Date.now() - payload.ts
-    if (!allowExpired && age > STATE_TTL_MS) {
+    const stateConfig = STATES[payload.state] || STATES.idle
+    if (!allowExpired && stateConfig.expires && age > STATE_TTL_MS) {
       if (currentState !== 'idle') setState('idle', '状态已过期，回到待命')
       return
     }
