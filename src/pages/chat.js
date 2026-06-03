@@ -13,7 +13,9 @@ import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 const RENDER_THROTTLE = 30
+const RESPONSE_WATCHDOG_MS = 15000
 const STREAM_IDLE_NOTICE_MS = 90000
+const STREAM_STALE_REFRESH_MS = 10 * 60 * 1000
 const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
 const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
@@ -2831,6 +2833,10 @@ async function doSend(text, attachments = []) {
     if (_messageQueue.length === 0) emitLobsterPhase('done', t('chat.lobsterTaskDone'))
     updateSendState()
     if (!sendFailed && !_isStreaming) {
+      _isStreaming = true
+      _streamStartTime = _streamStartTime || Date.now()
+      updateSendState()
+      scheduleStreamSafetyTimeout()
       setReplyStatus('thinking', replyStatusText('thinking'), { runId: _currentRunId || '', activity: t('chat.replyActivityWaitingGateway') })
       updateTask(currentTask.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
     }
@@ -2984,16 +2990,31 @@ function scheduleStreamSafetyTimeout() {
         runId,
         activity: t('chat.replyActivityAwaitingMoreEvents', { seconds: Math.max(1, Math.round(elapsed / 1000)) }),
       })
+      if (elapsed > STREAM_STALE_REFRESH_MS && _sessionKey && _messagesEl && _pageActive) {
+        const oldHash = _lastHistoryHash
+        _lastHistoryHash = ''
+        loadHistory().then(() => {
+          if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
+            setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
+            resetStreamState()
+            processMessageQueue()
+          }
+        }).catch(() => {})
+      }
       showTyping(true, detail)
       scheduleStreamSafetyTimeout()
       return
     }
 
     const timeoutText = t('chat.streamTimeout')
+    console.warn('[chat] 流式安全检查发现非活动状态长时间无事件，改为保守等待并刷新历史:', runId || '(no-run)', activeState)
     appendSystemMessage(timeoutText)
-    updateTaskByRunOrSession(runId, _sessionKey, { status: 'error', progress: 100, error: timeoutText })
-    setReplyStatus('error', timeoutText, { runId, activity: t('chat.checkErrorOrRetryTask') })
+    setReplyStatus('waiting', timeoutText, { runId, activity: t('chat.replyActivityRefreshHistory') })
     resetStreamState()
+    if (_sessionKey && _messagesEl && _pageActive) {
+      _lastHistoryHash = ''
+      loadHistory().catch(() => {})
+    }
     processMessageQueue()
   }, STREAM_IDLE_NOTICE_MS)
 }
@@ -3723,21 +3744,24 @@ function _startResponseWatchdog() {
   _cancelResponseWatchdog()
   _responseWatchdog = setTimeout(async () => {
     _responseWatchdog = null
-    // 如果还在等待（未开始流式），强制刷新历史
+    // 如果还在等待（未开始流式），只刷新历史/状态，不判定失败，避免后台任务仍运行时 UI 误报超时。
     if (!_isStreaming && _sessionKey && _messagesEl && _pageActive) {
-      console.debug('[chat] 响应看门狗触发：15s 无 delta，刷新历史')
+      console.debug('[chat] 响应看门狗触发：无事件返回，刷新历史并继续等待')
       const oldHash = _lastHistoryHash
       _lastHistoryHash = ''
       await loadHistory()
-      // 如果历史有更新，关闭 typing 指示器
       if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
         showTyping(false)
-      } else {
-        // 历史没更新，继续等待，再设一轮看门狗
-        _startResponseWatchdog()
+      } else if (!_currentAiBubble) {
+        _isStreaming = true
+        _streamStartTime = _streamStartTime || Date.now()
+        updateSendState()
+        showTyping(true, t('chat.streamStillRunning'))
+        setReplyStatus('thinking', t('chat.streamStillRunning'), { runId: _currentRunId || '', activity: t('chat.replyActivityWaitingGateway') })
+        scheduleStreamSafetyTimeout()
       }
     }
-  }, 15000)
+  }, RESPONSE_WATCHDOG_MS)
 }
 
 function _cancelResponseWatchdog() {
