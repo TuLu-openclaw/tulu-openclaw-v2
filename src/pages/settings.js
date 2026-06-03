@@ -266,7 +266,7 @@ async function handleSaveOpenclawDir(page) {
   } else {
     delete cfg.openclawDir
   }
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   await loadOpenclawDir(page)
   await loadCliBinding(page)
   const savedMsg = value ? t('settings.customPathSaved') : t('settings.defaultRestored')
@@ -281,7 +281,7 @@ async function handleSaveOpenclawDir(page) {
 async function handleResetOpenclawDir(page) {
   const cfg = await api.readPanelConfig()
   delete cfg.openclawDir
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   await loadOpenclawDir(page)
   await loadCliBinding(page)
   const refreshed = await maybeRefreshGatewayServiceBinding()
@@ -328,6 +328,15 @@ function parseOpenclawSearchPaths(raw) {
   return values
 }
 
+async function savePanelConfigAndRefreshPaths(config) {
+  await api.writePanelConfig(config)
+  try {
+    await api.invalidatePathCache?.()
+  } catch (e) {
+    console.warn('[settings] invalidate path cache failed:', e)
+  }
+}
+
 async function handleSaveOpenclawSearchPaths(page) {
   const input = page.querySelector('[data-name="openclaw-search-paths"]')
   const paths = parseOpenclawSearchPaths(input?.value || '')
@@ -337,7 +346,7 @@ async function handleSaveOpenclawSearchPaths(page) {
   } else {
     delete cfg.openclawSearchPaths
   }
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   await loadOpenclawSearchPaths(page)
   await loadCliBinding(page)
   toast(paths.length > 0 ? t('settings.searchPathsSaved') : t('settings.searchPathsCleared'), 'success')
@@ -383,7 +392,7 @@ async function handleSaveDockerDefaults(page) {
   else delete cfg.dockerEndpoint
   if (image) cfg.dockerDefaultImage = image
   else delete cfg.dockerDefaultImage
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   await loadDockerDefaults(page)
   toast(t('settings.dockerDefaultsSaved'), 'success')
 }
@@ -631,7 +640,7 @@ async function handleSaveGitPath(page) {
   } else {
     delete cfg.gitPath
   }
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   const gitInfo = await api.checkGit()
   if (value && gitInfo.isCustom && !gitInfo.installed) {
     toast(t('settings.gitPathInvalid'), 'error')
@@ -667,7 +676,7 @@ async function handleScanGitPaths(page) {
 async function handleResetGitPath(page) {
   const cfg = await api.readPanelConfig()
   delete cfg.gitPath
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   toast(t('settings.gitPathCleared'), 'success')
   await loadGitPath(page)
 }
@@ -736,7 +745,7 @@ async function handleBindCli(page, path) {
   if (!ok) return
   const cfg = await api.readPanelConfig()
   cfg.openclawCliPath = path
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   toast(t('common.saveSuccess'), 'success')
   await loadCliBinding(page)
   await maybeRefreshGatewayServiceBinding()
@@ -745,7 +754,7 @@ async function handleBindCli(page, path) {
 async function handleUnbindCli(page) {
   const cfg = await api.readPanelConfig()
   delete cfg.openclawCliPath
-  await api.writePanelConfig(cfg)
+  await savePanelConfigAndRefreshPaths(cfg)
   toast(t('common.saveSuccess'), 'success')
   await loadCliBinding(page)
   await maybeRefreshGatewayServiceBinding()
