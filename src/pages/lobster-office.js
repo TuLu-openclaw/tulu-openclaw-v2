@@ -22,12 +22,19 @@ const PREVIEW_PRESETS = {
   aborted: { emoji: '🟠', titleKey: 'lobsterOffice.stateAbortedTitle', descKey: 'lobsterOffice.stateAbortedDesc' },
 }
 
+let _livePreviewCleanup = null
+
 function readLiveLobsterState() {
   try {
     return JSON.parse(localStorage.getItem('lobsterState') || '{}') || {}
   } catch {
     return {}
   }
+}
+
+function getLobsterStateLabel(value) {
+  const preset = PREVIEW_PRESETS[value] || null
+  return preset ? t(preset.titleKey) : (value || t('lobsterOffice.stateIdleLabel'))
 }
 
 export default function render(el) {
@@ -165,11 +172,12 @@ export default function render(el) {
   const refreshLivePreview = () => {
     const state = readLiveLobsterState()
     const phase = state.phase || (state.state === 'idle' ? 'idle' : 'working')
+    const stateValue = state.state || (PREVIEW_PRESETS[phase]?.titleKey ? phase : 'working')
     const preset = PREVIEW_PRESETS[phase] || PREVIEW_PRESETS.working
     const emoji = state.emoji || preset.emoji
     const title = t(preset.titleKey)
     const desc = state.message || t(preset.descKey)
-    const meta = t('lobsterOffice.liveMeta', { phase, state: state.state || 'working' })
+    const meta = t('lobsterOffice.liveMeta', { phase: getLobsterStateLabel(phase), state: getLobsterStateLabel(stateValue) })
     const emojiEl = el.querySelector('#lobster-live-emoji')
     const titleEl = el.querySelector('#lobster-live-title')
     const descEl = el.querySelector('#lobster-live-desc')
@@ -182,6 +190,11 @@ export default function render(el) {
 
   refreshLivePreview()
   window.addEventListener('storage', refreshLivePreview)
+  let liveChannel = null
+  try {
+    liveChannel = new BroadcastChannel('lobster-office-state')
+    liveChannel.onmessage = refreshLivePreview
+  } catch {}
   const pollTimer = setInterval(refreshLivePreview, 1200)
 
   // 绑定按钮事件
@@ -212,8 +225,16 @@ export default function render(el) {
     }
   })
 
-  el.__lobsterCleanup = () => {
+  _livePreviewCleanup = () => {
     window.removeEventListener('storage', refreshLivePreview)
+    try { liveChannel?.close?.() } catch {}
     clearInterval(pollTimer)
+  }
+}
+
+export function cleanup() {
+  if (_livePreviewCleanup) {
+    _livePreviewCleanup()
+    _livePreviewCleanup = null
   }
 }
