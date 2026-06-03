@@ -1714,11 +1714,12 @@ function renderSessionCard(s) {
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
   const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key) ? ' selected' : ''
   const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" title="${t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
+  const deleteButton = _isSessionMultiSelectMode ? '' : `<button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>`
   return `<div class="chat-session-card${active}${selected}" data-key="${escapeAttr(key)}">
     <div class="chat-session-card-header">
       ${checkbox}
       <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
-      <button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>
+      ${deleteButton}
     </div>
     <div class="chat-session-card-meta">
       ${agentId && agentId !== 'main' ? `<span class="chat-session-agent">${escapeAttr(agentId)}</span>` : ''}
@@ -1972,7 +1973,8 @@ function updateSessionMultiToolbar() {
 async function deleteSelectedSessions() {
   if (_isDeletingSelectedSessions) return
   const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
-  const keys = Array.from(_selectedSessionKeys).filter(key => key && key !== mainKey)
+  const deletableKeys = new Set(getVisibleDeletableSessionKeys())
+  const keys = Array.from(_selectedSessionKeys).filter(key => key && key !== mainKey && deletableKeys.has(key))
   if (!keys.length) { toast(t('chat.selectSessionsToDelete'), 'warning'); return }
   const yes = await showConfirm(t('chat.confirmDeleteSelectedSessions', { count: keys.length }))
   if (!yes) return
