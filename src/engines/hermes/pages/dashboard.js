@@ -70,10 +70,10 @@ function replacePortInUrl(url, port) {
 
 function hermesStatusText(state) {
   const status = state?.status || 'unknown'
-  if (status === 'running') return '运行中（已就绪）'
-  if (status === 'degraded') return '运行中（未完全就绪）'
-  if (status === 'recovering') return '自动恢复中'
-  if (status === 'offline') return '已离线'
+  if (status === 'running') return t('engine.gatewayStatusReady')
+  if (status === 'degraded') return t('engine.gatewayStatusDegraded')
+  if (status === 'recovering') return t('engine.gatewayStatusRecovering')
+  if (status === 'offline') return t('engine.gatewayStatusOffline')
   return state?.running ? t('engine.dashRunning') : t('engine.dashStopped')
 }
 
@@ -219,8 +219,8 @@ export function render() {
 
   function maskKey(key) {
     const v = String(key || '')
-    if (!v) return '未设置 Key'
-    if (isPlaceholderApiKey(v)) return '疑似占位/无效 Key'
+    if (!v) return t('engine.configApiKeyNotSet')
+    if (isPlaceholderApiKey(v)) return t('engine.configApiKeyPlaceholder')
     return '****' + v.slice(-6)
   }
 
@@ -998,8 +998,8 @@ export function render() {
         models = p.models || []
         showDropdown = models.length > 0
         importChoices = []
-        const keyWarning = p.apiKey ? '' : '；原配置中的 API Key 为空或疑似占位值，请重新粘贴有效 Key'
-        cfgMsg = `<span style="color:var(--success)">✓ 已导入 ${esc(p.name)}，将按 ${esc(selectedHermesProvider)} 写入 Hermes；请选择模型并确认 API Key 后保存${keyWarning}</span>`
+        const keyWarning = p.apiKey ? '' : t('engine.importOpenClawKeyWarning')
+        cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.importOpenClawApplied', { name: esc(p.name), provider: esc(selectedHermesProvider), warning: keyWarning })}</span>`
         draw()
       })
     })
@@ -1081,7 +1081,7 @@ export function render() {
     if (provider && hermesProviders.some(p => p.id === provider)) selectedHermesProvider = provider
     const knownProviderIds = hermesProviders.map(p => p.id)
     if (provider !== 'custom' && !knownProviderIds.includes(provider)) {
-      cfgMsg = `<span style="color:var(--error)">✗ 未知提供商 '${provider}'，请从下拉列表选择支持的提供商</span>`
+      cfgMsg = `<span style="color:var(--error)">✗ ${t('engine.configUnknownProvider', { provider: esc(provider) })}</span>`
       draw(); return
     }
 
@@ -1116,7 +1116,7 @@ export function render() {
 
       try {
         const config = await api.readOpenclawConfig()
-        collectProvidersFromConfig(config, 'OpenClaw 全局配置', providers, seen)
+        collectProvidersFromConfig(config, t('engine.importOpenClawGlobalConfig'), providers, seen)
       } catch {}
 
       try {
@@ -1139,7 +1139,7 @@ export function render() {
 
           try {
             const raw = await api.assistantReadFile(home + '/.openclaw/openclaw.json')
-            collectProvidersFromConfig(JSON.parse(raw), 'OpenClaw 全局配置', providers, seen)
+            collectProvidersFromConfig(JSON.parse(raw), t('engine.importOpenClawGlobalConfig'), providers, seen)
           } catch {}
         }
       } catch {}
@@ -1212,7 +1212,7 @@ export function render() {
     updateInstalling = true
     updateProgressVisible = true
     updateProgress = 1
-    updateLog = target === 'recommended' ? '准备回退到推荐稳定版...' : '准备切换到最新上游...'
+    updateLog = target === 'recommended' ? t('engine.dashUpdateRollbackPreparing') : t('engine.dashUpdateSwitchPreparing')
     draw()
 
     // 监听安装事件
@@ -1233,7 +1233,7 @@ export function render() {
     try {
       await api.updateHermes(target)
       updateProgress = 100
-      updateLog = target === 'recommended' ? '已回退到推荐稳定版' : t('engine.dashInstallSuccess')
+      updateLog = target === 'recommended' ? t('engine.dashUpdateRollbackComplete') : t('engine.dashInstallSuccess')
       updateInstalling = false
       updateProgressVisible = true
       await refresh()

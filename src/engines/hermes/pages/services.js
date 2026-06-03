@@ -101,11 +101,11 @@ function renderInfoRow(label, value, mono = false) {
 
 function renderGatewayStatusText(state) {
   const status = state?.status || 'unknown'
-  if (status === 'running') return '运行中（已就绪）'
-  if (status === 'degraded') return '运行中（未完全就绪）'
-  if (status === 'recovering') return '自动恢复中'
-  if (status === 'offline') return '已离线'
-  return state?.running ? '运行中' : '已停止'
+  if (status === 'running') return t('engine.gatewayStatusReady')
+  if (status === 'degraded') return t('engine.gatewayStatusDegraded')
+  if (status === 'recovering') return t('engine.gatewayStatusRecovering')
+  if (status === 'offline') return t('engine.gatewayStatusOffline')
+  return state?.running ? t('engine.dashRunning') : t('engine.dashStopped')
 }
 
 function renderGatewayStatusTone(state) {
@@ -227,7 +227,7 @@ export function render() {
     const envExists = !!info?.envExists
     const customInputVisible = targetMode === 'custom' || targetMode === 'docker'
     const targetNote = targetMode === 'local'
-      ? `${t('engine.installModeLocal')} · 本机 Hermes Gateway（http://127.0.0.1:${port}）`
+      ? `${t('engine.installModeLocal')} · ${t('engine.servicesLocalGatewayNote', { url: `http://127.0.0.1:${port}` })}`
       : targetMode === 'wsl2'
         ? (envData?.wsl2?.gatewayUrl || t('engine.servicesWslHint'))
         : targetMode === 'docker'
