@@ -1249,32 +1249,32 @@ function setDebug(msg, detail) {
     const activeKey = getActiveTvboxKey()
     overlay.innerHTML = '<div style="background:#1a1a2e;border-radius:16px;padding:24px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;color:#fff;font-family:sans-serif">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-        '<div style="font-size:16px;font-weight:bold">⚙️ TVBox API 管理</div>' +
+        '<div style="font-size:16px;font-weight:bold">⚙️ ' + escHtml(mt('tvboxApiManageTitle')) + '</div>' +
         '<button id="t-api-close" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:4px">✕</button>' +
       '</div>' +
       '<div style="margin-bottom:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">内置 TVBox JSON 源（点击切换）</div>' +
+        '<div style="font-size:13px;color:#888;margin-bottom:8px">' + escHtml(mt('builtinTvboxJsonSources')) + '</div>' +
         TVBOX_BUILTIN.map(a => '<div class="tvbox-src-item' + (a.key === activeKey ? ' active' : '') + '" data-key="' + a.key + '" data-type="builtin" style="padding:10px 12px;background:' + (a.key === activeKey ? '#2a2a4a' : '#252540') + ';border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
           '<span>' + a.name + '</span><span style="font-size:12px;color:#888">' + (a.note || '') + '</span></div>').join('') +
       '</div>' +
       '<div style="margin-bottom:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">自定义 TVBox 接口 <span style="color:#e50914">(' + custom.length + ')</span></div>' +
+        '<div style="font-size:13px;color:#888;margin-bottom:8px">' + escHtml(mt('customTvboxApiCount', { count: custom.length })) + '</div>' +
         (custom.length ? custom.map(a => '<div style="padding:10px 12px;background:#252540;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
           '<div style="overflow:hidden"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.name) + '</div>' +
           '<div style="font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.url) + '</div></div>' +
-          '<button class="t-del-api" data-key="' + a.key + '" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">删除</button></div>').join('') : '<div style="color:#555;font-size:13px;text-align:center;padding:12px">暂无自定义接口</div>') +
+          '<button class="t-del-api" data-key="' + a.key + '" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">' + escHtml(mt('delete')) + '</button></div>').join('') : '<div style="color:#555;font-size:13px;text-align:center;padding:12px">' + escHtml(mt('noCustomApi')) + '</div>') +
       '</div>' +
       '<div style="border-top:1px solid #333;padding-top:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">添加自定义 TVBox JSON API</div>' +
-        '<input id="t-api-name" placeholder="名称（选填）" style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
-        '<input id="t-api-url" placeholder="输入 TVBox JSON API 地址..." style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
-        '<button id="t-api-add-btn" style="width:100%;background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">添加并使用</button>' +
+        '<div style="font-size:13px;color:#888;margin-bottom:8px">' + escHtml(mt('addCustomTvboxJsonApi')) + '</div>' +
+        '<input id="t-api-name" placeholder="' + escHtml(mt('apiNamePlaceholder')) + '" style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
+        '<input id="t-api-url" placeholder="' + escHtml(mt('apiUrlPlaceholder')) + '" style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
+        '<button id="t-api-add-btn" style="width:100%;background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">' + escHtml(mt('addAndUse')) + '</button>' +
       '</div>' +
     '</div>'
     document.body.appendChild(overlay)
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
-    el.querySelector('#t-api-close').addEventListener('click', () => overlay.remove())
-    el.querySelectorAll('.tvbox-src-item[data-key]').forEach(item => item.addEventListener('click', async () => {
+    overlay.querySelector('#t-api-close').addEventListener('click', () => overlay.remove())
+    overlay.querySelectorAll('.tvbox-src-item[data-key]').forEach(item => item.addEventListener('click', async () => {
       const key = item.dataset.key
       setActiveTvboxKey(key)
       _tvboxCache = {}
@@ -1282,7 +1282,7 @@ function setDebug(msg, detail) {
       await loadTvboxList()
       renderTvboxSrcTabs()
     }))
-    el.querySelectorAll('.tvbox-src-item[data-type="builtin"]').forEach(item => {
+    overlay.querySelectorAll('.tvbox-src-item[data-type="builtin"]').forEach(item => {
       item.addEventListener('contextmenu', e => {
         e.preventDefault()
         const key = item.dataset.key
@@ -1295,7 +1295,7 @@ function setDebug(msg, detail) {
         }
       })
     })
-    el.querySelectorAll('.t-del-api').forEach(btn => btn.addEventListener('click', e => {
+    overlay.querySelectorAll('.t-del-api').forEach(btn => btn.addEventListener('click', e => {
       e.stopPropagation()
       const key = btn.dataset.key
       const apis = getCustomTvbox().filter(a => a.key !== key)
@@ -1304,9 +1304,9 @@ function setDebug(msg, detail) {
       overlay.remove()
       showApiManage()
     }))
-    el.querySelector('#t-api-add-btn').addEventListener('click', async () => {
-      const name = el.querySelector('#t-api-name')?.value.trim() || ''
-      const url = el.querySelector('#t-api-url')?.value.trim()
+    overlay.querySelector('#t-api-add-btn').addEventListener('click', async () => {
+      const name = overlay.querySelector('#t-api-name')?.value.trim() || ''
+      const url = overlay.querySelector('#t-api-url')?.value.trim()
       if (!url) return
       const key = 'ctv_' + Date.now()
       const api = { key, name: name || mt('customSourceName', { number: _customTvbox.length + 1 }), url }
