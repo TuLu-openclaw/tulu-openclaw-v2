@@ -308,7 +308,7 @@ export function render() {
         <div class="hm-update-grid">
           <div><span>${t('engine.dashUpdateRecommended')}</span><strong>${esc(recommended)}</strong></div>
           <div><span>${t('engine.dashUpdateLatest')}</span><strong>${esc(latest)}</strong></div>
-          <div><span>${t('engine.dashUpdateReleasePage')}</span><a href="${esc(updateInfo?.releaseUrl || '#')}" target="_blank">release</a></div>
+          <div><span>${t('engine.dashUpdateReleasePage')}</span><a href="${esc(updateInfo?.releaseUrl || '#')}" target="_blank">${t('engine.dashUpdateReleaseLink')}</a></div>
         </div>
         ${updateProgressVisible ? `
           <div class="hm-update-progress-row">

@@ -29,6 +29,7 @@ export default {
   dashUpdateRecommended:         {"zh-CN": "推荐稳定版", "zh-TW": "推薦穩定版", "en": "Recommended stable"},
   dashUpdateLatest:              {"zh-CN": "最新上游", "zh-TW": "最新上游", "en": "Latest upstream"},
   dashUpdateReleasePage:         {"zh-CN": "发布页面", "zh-TW": "發布頁面", "en": "Release page"},
+  dashUpdateReleaseLink:         {"zh-CN": "打开发布页", "zh-TW": "開啟發布頁", "en": "Open release"},
   dashUpdatePreparing:           {"zh-CN": "正在准备...", "zh-TW": "正在準備...", "en": "Preparing..."},
   dashUpdateRollbackRecommended: {"zh-CN": "回退到推荐版", "zh-TW": "回退到推薦版", "en": "Rollback to recommended"},
   dashUpdateSwitchVersion:       {"zh-CN": "切换版本", "zh-TW": "切換版本", "en": "Switch version"},
