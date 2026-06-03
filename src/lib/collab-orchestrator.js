@@ -1,5 +1,6 @@
 import { api } from './tauri-api.js'
 import { wsClient } from './ws-client.js'
+import { t } from './i18n.js'
 
 function parseCollabSpec(rawTask) {
   const text = String(rawTask || '')
@@ -23,6 +24,12 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+const COLLAB_ACTIVE_GRACE_MS = 90000
+
+function collabError(key, params) {
+  return new Error(t(`engine.${key}`, params))
+}
+
 function makeTempSessionKey(prefix = 'collab') {
   const id = `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
   return `agent:main:${id}`
@@ -32,14 +39,17 @@ async function ensureCollabReady() {
   const issues = []
   const openclawInfo = wsClient.getConnectionInfo?.() || {}
   if (!wsClient.gatewayReady || !wsClient.connected) {
-    issues.push(`OpenClaw 未就绪（connected=${openclawInfo.connected ? 'yes' : 'no'}, gatewayReady=${openclawInfo.gatewayReady ? 'yes' : 'no'}）`)
+    issues.push(t('engine.collabOpenClawNotReadyIssue', {
+      connected: openclawInfo.connected ? 'yes' : 'no',
+      gatewayReady: openclawInfo.gatewayReady ? 'yes' : 'no',
+    }))
   }
   const hermesInfo = await api.checkHermes().catch(() => null)
   if (!hermesInfo?.gatewayRunning) {
-    issues.push('Hermes Gateway 未运行')
+    issues.push(t('engine.collabHermesNotRunningIssue'))
   }
   if (issues.length) {
-    throw new Error(`双引擎协同未就绪：${issues.join('；')}。请先确保 OpenClaw Gateway 与 Hermes Gateway 均已启动。`)
+    throw collabError('collabNotReadyError', { issues: issues.join(t('engine.collabIssueSeparator')) })
   }
   return { openclawInfo, hermesInfo }
 }
@@ -64,30 +74,58 @@ function extractChatText(message) {
 
 async function runOpenClawTask(task, { timeoutMs = 300000 } = {}) {
   if (!wsClient.gatewayReady || !wsClient.connected) {
-    throw new Error('OpenClaw Gateway 未就绪')
+    throw collabError('collabOpenClawGatewayNotReady')
   }
   const sessionKey = makeTempSessionKey('openclaw-collab')
   const startedAt = Date.now()
   let finalText = ''
+  let partialText = ''
   let finalRunId = ''
+  let finalSeen = false
+  let lastState = 'queued'
+  let lastActivityAt = startedAt
+  let terminalError = null
 
   const unsub = wsClient.onEvent((msg) => {
     const { event, payload } = msg || {}
     if (event !== 'chat' || !payload) return
     if (payload.sessionKey !== sessionKey) return
+    lastActivityAt = Date.now()
+    lastState = payload.state || lastState
+    finalRunId = payload.runId || finalRunId
+    if (payload.state === 'delta') {
+      const text = extractChatText(payload.message)
+      if (text) partialText += text
+      return
+    }
+    if (payload.state === 'error' || payload.state === 'aborted') {
+      terminalError = payload.error || payload.message || payload.reason || payload.state
+      return
+    }
     if (payload.state === 'final') {
-      finalRunId = payload.runId || finalRunId
-      finalText = extractChatText(payload.message) || finalText
+      finalSeen = true
+      finalText = extractChatText(payload.message) || partialText || finalText
     }
   })
 
   try {
     await wsClient.chatSend(sessionKey, task)
-    while (Date.now() - startedAt < timeoutMs) {
-      if (finalText) return { engine: 'OpenClaw', sessionKey, runId: finalRunId, text: finalText }
+    while ((Date.now() - startedAt < timeoutMs) || (Date.now() - lastActivityAt < COLLAB_ACTIVE_GRACE_MS)) {
+      if (terminalError) throw collabError('collabOpenClawRunFailed', { error: String(terminalError) })
+      if (finalSeen) {
+        return {
+          engine: 'OpenClaw',
+          sessionKey,
+          runId: finalRunId,
+          text: finalText || t('engine.collabOpenClawEmptyFinal'),
+        }
+      }
       await sleep(500)
     }
-    throw new Error('OpenClaw 协同执行超时')
+    throw collabError('collabOpenClawTimeout', {
+      seconds: Math.round((Date.now() - startedAt) / 1000),
+      state: lastState || 'unknown',
+    })
   } finally {
     try { unsub() } catch {}
   }
@@ -96,7 +134,7 @@ async function runOpenClawTask(task, { timeoutMs = 300000 } = {}) {
 async function runHermesTask(task, { timeoutMs = 300000, instructions = null } = {}) {
   const ready = await api.checkHermes().catch(() => null)
   if (!ready?.gatewayRunning) {
-    throw new Error('Hermes Gateway 未就绪')
+    throw collabError('collabHermesGatewayNotReady')
   }
   const sessionId = `collab-hermes-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
   const startedAt = Date.now()
@@ -119,7 +157,7 @@ async function runHermesTask(task, { timeoutMs = 300000, instructions = null } =
     } catch {}
     await sleep(800)
   }
-  throw new Error('Hermes 协同执行超时')
+  throw collabError('collabHermesTimeout', { seconds: Math.round((Date.now() - startedAt) / 1000) })
 }
 
 export async function runDualEngineCollab(task, opts = {}) {
