@@ -876,7 +876,7 @@ function initApp(el) {
 
   function showSearchHistory() {
     const h = getSearchHistory()
-    const wrap = el.querySelector('#t-history')
+    const wrap = el.querySelector('#t-history-panel')
     if (!h.length) { wrap.style.display = 'none'; return }
     wrap.style.display = 'block'
     renderSearchHistory()
@@ -1179,7 +1179,7 @@ function setDebug(msg, detail) {
     }
     const filtered = filterSearchResults((json.list || []).map(item => normalizeVodItem(item, source)), query)
     const total = filtered.length
-    setDebug(total > 0 ? '搜索到' + total + '条精确结果' : '未找到相关影片', 'list.len=' + (json.list?.length || 0) + ' filtered=' + total)
+    setDebug(total > 0 ? mt('exactResultCount', { count: total }) : mt('noSearchResult'), 'list.len=' + (json.list?.length || 0) + ' filtered=' + total)
     renderVodGrid(filtered, total)
   }
 
@@ -1372,7 +1372,7 @@ function setDebug(msg, detail) {
     }
     console.info('[renderVodGrid] 收到: list.len=', list?.length, 'total=', total)
     if (!list || !list.length) {
-      grid.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📭</div><div class="tvbox-empty-title">暂无数据</div><div class="tvbox-empty-sub">请尝试其他分类或关键词</div></div>'
+      grid.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">📭</div><div class="tvbox-empty-title">' + escHtml(mt('noData')) + '</div><div class="tvbox-empty-sub">' + escHtml(mt('tryOtherCategoryOrKeyword')) + '</div></div>'
       if (pagination) pagination.innerHTML = ''
       return
     }
@@ -1385,18 +1385,18 @@ function setDebug(msg, detail) {
       const itemApi = item._tvboxApi || item._api || ''
       const histItem = history.find(h => h.id == item.vod_id && h.source === itemSourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
-      const resumeLabel = pct > 95 ? '已看完' : pct > 2 ? '续 ' + pct + '%' : ''
+      const resumeLabel = pct > 95 ? mt('watched') : pct > 2 ? mt('resumePercent', { percent: pct }) : ''
       return '<div class="tvbox-card" data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(itemSourceName) + '" data-api="' + escHtml(itemApi) + '" data-name="' + escHtml(item.vod_name) + '" data-pic="' + escHtml(item.vod_pic) + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
             renderPosterImg(item.vod_pic, item.vod_name, item._srcKey, itemApi) +
-            '<span class="tvbox-card-tag">' + escHtml(item.type_name || '影视') + '</span>' +
+            '<span class="tvbox-card-tag">' + escHtml(item.type_name || mt('videoTypeFallback')) + '</span>' +
             (item.vod_score ? '<span class="tvbox-card-score">' + escHtml(item.vod_score) + '</span>' : '') +
-            (resumeLabel ? '<span class="tvbox-resume-badge">' + resumeLabel + '</span>' : '') +
+            (resumeLabel ? '<span class="tvbox-resume-badge">' + escHtml(resumeLabel) + '</span>' : '') +
           '</div>' +
           '<div class="tvbox-card-info">' +
             '<div class="tvbox-card-title">' + escHtml(item.vod_name) + '</div>' +
-            '<div class="tvbox-card-sub">' + escHtml(item.vod_actor || itemSourceName || '未知主演') + '</div>' +
+            '<div class="tvbox-card-sub">' + escHtml(item.vod_actor || itemSourceName || mt('unknownActor')) + '</div>' +
           '</div>' +
         '</div>' +
       '</div>'
