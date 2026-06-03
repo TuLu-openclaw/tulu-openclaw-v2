@@ -2163,7 +2163,6 @@ function emitLobsterPhase(phase, message, replyState = '') {
     window.dispatchEvent(new CustomEvent('lobster-work-start', {
       detail: { phase, state: lobsterState, message: message || phase }
     }))
-    if (phase === 'done') window.dispatchEvent(new CustomEvent('lobster-work-end'))
   } catch {}
 }
 
