@@ -739,8 +739,13 @@ export class WsClient {
       this._messageCache.delete(sessionKey)
     } else {
       this._messageCache.clear()
+      this._seenMessageIds.clear()
     }
     console.log('[ws] 消息缓存已清除:', sessionKey || '全部')
+  }
+
+  clearMessageCache(sessionKey = '') {
+    this._clearCache(sessionKey)
   }
 
   /**

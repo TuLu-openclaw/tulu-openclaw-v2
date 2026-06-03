@@ -6,7 +6,7 @@ import { api, invalidate, isTauriRuntime } from '../lib/tauri-api.js'
 import { navigate } from '../router.js'
 import { wsClient, uuid } from '../lib/ws-client.js'
 import { renderMarkdown } from '../lib/markdown.js'
-import { saveMessage, saveMessages, getLocalMessages, isStorageAvailable } from '../lib/message-db.js'
+import { saveMessage, saveMessages, getLocalMessages, clearSessionMessages, isStorageAvailable } from '../lib/message-db.js'
 import { toast } from '../components/toast.js'
 import { showModal, showConfirm, showContentModal } from '../components/modal.js'
 import { icon as svgIcon } from '../lib/icons.js'
@@ -59,8 +59,8 @@ const COMMANDS = [
     { cmd: '/help', desc: 'chat.cmdHelp', action: 'exec' },
     { cmd: '/status', desc: 'chat.cmdStatus', action: 'exec' },
     { cmd: '/context', desc: 'chat.cmdContext', action: 'exec' },
-    { cmd: '/miaogu', desc: '喵咚验证 - 快速访问喵咚验证', action: 'navigate' },
-    { cmd: '/weiyan', desc: '微验验证 - 快速访问微验验证', action: 'navigate' },
+    { cmd: '/miaogu', desc: 'chat.cmdMiaoguVerify', action: 'navigate' },
+    { cmd: '/weiyan', desc: 'chat.cmdWeiyanVerify', action: 'navigate' },
   ]},
 ]
 
@@ -270,7 +270,7 @@ export async function render() {
         <div class="chat-reply-status-head">
           <span class="chat-reply-status-dot"></span>
           <span class="chat-reply-status-phase" id="chat-reply-status-phase">${replyStatusPhase('waiting')}</span>
-          <span class="chat-reply-status-elapsed" id="chat-reply-status-elapsed">空闲</span>
+          <span class="chat-reply-status-elapsed" id="chat-reply-status-elapsed">${t('chat.idle')}</span>
         </div>
         <div class="chat-reply-status-body">
           <div class="chat-reply-status-text" id="chat-reply-status-text"></div>
@@ -1858,6 +1858,41 @@ async function showNewSessionDialog() {
   }
 }
 
+function clearSessionLocalState(key) {
+  if (!key) return
+  _sessionModels.delete(key)
+  _sessionContextTokens.delete(key)
+  _sessionTokenTotals.delete(key)
+  for (const ctxKey of Object.keys(_taskContexts)) {
+    if (ctxKey.startsWith(`${key}@@`)) delete _taskContexts[ctxKey]
+  }
+  _taskBoard = _taskBoard.filter(task => task.sessionKey !== key)
+  _pendingTaskByRunId.forEach((taskId, runId) => {
+    if (!_taskBoard.some(task => task.id === taskId)) _pendingTaskByRunId.delete(runId)
+  })
+  if (_lastSentTaskId && !_taskBoard.some(task => task.id === _lastSentTaskId)) _lastSentTaskId = ''
+  saveTaskContexts()
+  saveTaskBoard()
+  try { wsClient.clearMessageCache(key) } catch {}
+  clearSessionMessages(key).catch(() => {})
+  try { localStorage.removeItem(getReplyStatusKey(key)) } catch {}
+}
+
+function clearSessionResetLocalState(key, model, prompt) {
+  if (!key) return
+  _sessionTokenTotals.delete(key)
+  _taskBoard = _taskBoard.filter(task => task.sessionKey !== key)
+  _pendingTaskByRunId.forEach((taskId, runId) => {
+    if (!_taskBoard.some(task => task.id === taskId)) _pendingTaskByRunId.delete(runId)
+  })
+  if (_lastSentTaskId && !_taskBoard.some(task => task.id === _lastSentTaskId)) _lastSentTaskId = ''
+  saveTaskBoard()
+  try { wsClient.clearMessageCache(key) } catch {}
+  clearSessionMessages(key).catch(() => {})
+  try { localStorage.removeItem(getReplyStatusKey(key)) } catch {}
+  resetTaskContext(key, model, prompt)
+}
+
 async function deleteSession(key) {
   const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
   if (key === mainKey) { toast(t('chat.cannotDeleteMain'), 'warning'); return }
@@ -1866,6 +1901,7 @@ async function deleteSession(key) {
   if (!yes) return
   try {
     await wsClient.sessionsDelete(key)
+    clearSessionLocalState(key)
     _selectedSessionKeys.delete(key)
     toast(t('chat.sessionDeleted'), 'success')
     if (key === _sessionKey) void switchSession(mainKey, { forceWorkspace: true })
@@ -1932,7 +1968,10 @@ async function deleteSelectedSessions() {
     }
   }
   for (const key of keys) {
-    if (!failed.some(item => item.key === key)) _selectedSessionKeys.delete(key)
+    if (!failed.some(item => item.key === key)) {
+      clearSessionLocalState(key)
+      _selectedSessionKeys.delete(key)
+    }
   }
   const deletedCount = keys.length - failed.length
   if (deletedCount) toast(t('chat.selectedSessionsDeleted', { count: deletedCount }), 'success')
@@ -1955,7 +1994,7 @@ async function resetCurrentSession() {
       for (const member of members) {
         if (!member.sessionKey) continue
         await wsClient.sessionsReset(member.sessionKey)
-        resetTaskContext(member.sessionKey, getSessionDisplayModel(member.sessionKey), t('chat.groupResetTaskReason'))
+        clearSessionResetLocalState(member.sessionKey, getSessionDisplayModel(member.sessionKey), t('chat.groupResetTaskReason'))
       }
       clearMessages()
       _lastHistoryHash = ''
@@ -1964,9 +2003,9 @@ async function resetCurrentSession() {
       return
     }
     await wsClient.sessionsReset(_sessionKey)
+    clearSessionResetLocalState(_sessionKey, getSessionDisplayModel(_sessionKey), t('chat.resetTaskReason'))
     clearMessages()
     _lastHistoryHash = ''
-    resetTaskContext(_sessionKey, getSessionDisplayModel(_sessionKey), t('chat.resetTaskReason'))
     appendSystemMessage(t('chat.sessionResetDone'))
     toast(t('chat.sessionResetWithTaskContext'), 'success')
   } catch (e) {
@@ -2631,7 +2670,7 @@ function rerunTask(taskId) {
 function sendMessage() {
   const text = _textarea.value.trim()
   if (!text && !_attachments.length) return
-  emitLobsterPhase('ack', text ? `收到任务：${text.slice(0, 32)}` : '收到任务')
+  emitLobsterPhase('ack', text ? t('chat.lobsterTaskReceived', { task: text.slice(0, 32) }) : t('chat.lobsterTaskReceivedFallback'))
   if (!wsClient.gatewayReady || !_sessionKey) {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
@@ -2733,7 +2772,7 @@ async function doSend(text, attachments = []) {
     return
   }
   appendUserMessage(text, attachments)
-  emitLobsterPhase(text.includes('主导引擎') || text.includes('协作引擎') ? 'working' : 'thinking', text.includes('主导引擎') || text.includes('协作引擎') ? '执行双引擎协同任务' : 'AI 开始处理中')
+  emitLobsterPhase(text.includes('主导引擎') || text.includes('协作引擎') ? 'working' : 'thinking', text.includes('主导引擎') || text.includes('协作引擎') ? t('chat.lobsterCollaborativeTask') : t('chat.lobsterAiProcessing'))
   saveMessage({
     id: uuid(), sessionKey: _sessionKey, role: 'user', content: text, timestamp: Date.now(),
     attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
@@ -2757,7 +2796,7 @@ async function doSend(text, attachments = []) {
     updateTask(currentTask.id, { status: 'error', progress: 100, error: errText })
   } finally {
     _isSending = false
-    if (_messageQueue.length === 0) emitLobsterPhase('done', '任务处理完成')
+    if (_messageQueue.length === 0) emitLobsterPhase('done', t('chat.lobsterTaskDone'))
     updateSendState()
     if (!sendFailed && !_isStreaming) {
       setReplyStatus('thinking', replyStatusText('thinking'), { runId: _currentRunId || '', activity: t('chat.replyActivityWaitingGateway') })
@@ -2816,10 +2855,10 @@ function handleEvent(msg) {
       scheduleStreamSafetyTimeout()
       const toolLabel = formatToolDisplayName(toolName)
       const toolInput = summarizeToolInput(payload.data?.args || payload.data?.input || payload.data?.parameters || '')
-      emitLobsterPhase('tool', `调用工具：${toolLabel}`)
-      showTyping(true, `正在调用工具：${toolLabel}`)
+      emitLobsterPhase('tool', t('chat.lobsterToolCall', { tool: toolLabel }))
+      showTyping(true, t('chat.typingToolCall', { tool: toolLabel }))
       const count = payload.runId ? (_toolRunIndex.get(payload.runId) || []).length : 1
-      setReplyStatus('tool', `正在调用工具：${toolLabel}`, { runId: payload.runId, toolName, toolInput, toolCount: count, lastToolAt: Date.now(), activity: toolInput ? `工具参数：${toolInput}` : '等待工具返回结果' })
+      setReplyStatus('tool', t('chat.typingToolCall', { tool: toolLabel }), { runId: payload.runId, toolName, toolInput, toolCount: count, lastToolAt: Date.now(), activity: toolInput ? t('chat.toolParamsWithValue', { value: toolInput }) : t('chat.waitingToolResult') })
     }
   }
 
@@ -3187,10 +3226,10 @@ function translateGatewayError(message = '') {
   const raw = String(message || '')
   const req = raw.match(/requestId:\s*([^)\s]+)/i)?.[1]
   if (/pairing required|PAIRING_REQUIRED|device identity changed/i.test(raw)) {
-    return `设备配对已失效：检测到设备身份变化，需要重新批准本机连接${req ? `（请求ID：${req}` : ''}${req ? '）' : ''}。请点击“修复并重连”自动重新配对，或到网关设置中重新批准设备。`
+    return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request: req }) : '' })
   }
-  if (/origin not allowed/i.test(raw)) return '连接来源未被网关允许，请点击“修复并重连”自动写入本机来源并重连。'
-  if (/NOT_PAIRED/i.test(raw)) return '当前设备尚未与网关配对，请点击“修复并重连”完成自动配对。'
+  if (/origin not allowed/i.test(raw)) return t('chat.gatewayOriginNotAllowed')
+  if (/NOT_PAIRED/i.test(raw)) return t('chat.gatewayNotPaired')
   return raw
 }
 
@@ -3416,9 +3455,9 @@ function loadReplyStatus(sessionKey = _sessionKey) {
 }
 
 function formatStatusElapsed(status = _replyStatusState) {
-  if (!status?.ts) return '空闲'
+  if (!status?.ts) return t('chat.idle')
   const seconds = Math.max(0, Math.floor((Date.now() - status.ts) / 1000))
-  if (status.state === 'waiting') return '空闲'
+  if (status.state === 'waiting') return t('chat.idle')
   if (seconds < 60) return `${seconds}s`
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -4319,7 +4358,7 @@ function showTyping(show, hint) {
   if (_typingEl) {
     _typingEl.style.display = show ? 'flex' : 'none'
     const hintEl = _typingEl.querySelector('.typing-hint')
-    if (hintEl) hintEl.textContent = hint || (show ? 'Agent 正在处理，请稍候…' : '')
+    if (hintEl) hintEl.textContent = hint || (show ? t('chat.agentProcessingHint') : '')
   }
 }
 
