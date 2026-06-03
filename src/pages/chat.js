@@ -141,6 +141,8 @@ let _groupTranscripts = new Map()
 let _pendingTaskByRunId = new Map()
 let _lastSentTaskId = ''
 let _lastSessionList = []
+let _isSessionMultiSelectMode = false
+let _selectedSessionKeys = new Set()
 const TASK_PROGRESS = { queued: 5, sending: 10, thinking: 25, streaming: 45, tool: 65, finalizing: 90, done: 100, error: 100, aborted: 100 }
 
 const MODEL_CONFIG_CHANGED_EVENT = 'openclaw-config-changed'
@@ -205,6 +207,14 @@ export async function render() {
         <div class="chat-session-section">
           <div class="chat-session-section-title">
             <span>${t('chat.normalSessions')}</span>
+            <button class="chat-session-section-btn" id="btn-session-multi-select" title="${t('chat.multiSelectSessions')}">${t('chat.multiSelect')}</button>
+          </div>
+          <div class="chat-session-multi-toolbar" id="chat-session-multi-toolbar" hidden>
+            <span id="chat-session-selected-count">${t('chat.selectedSessionsCount', { count: 0 })}</span>
+            <button class="chat-session-mini" id="btn-session-select-all">${t('chat.selectAll')}</button>
+            <button class="chat-session-mini" id="btn-session-clear-selection">${t('chat.cancelSelectAll')}</button>
+            <button class="chat-session-mini chat-session-mini-danger" id="btn-session-delete-selected" disabled>${t('chat.deleteSelected')}</button>
+            <button class="chat-session-mini" id="btn-session-multi-cancel">${t('common.cancel')}</button>
           </div>
           <div class="chat-session-list-pane" id="chat-session-list-normal"></div>
         </div>
@@ -550,6 +560,11 @@ function bindEvents(page) {
   page.querySelector('#btn-toggle-sidebar-main')?.addEventListener('click', toggleSidebar)
   page.querySelector('#btn-refresh-chat')?.addEventListener('click', forceRefreshChat)
   page.querySelector('#btn-new-session').addEventListener('click', () => showNewSessionDialog())
+  page.querySelector('#btn-session-multi-select')?.addEventListener('click', () => setSessionMultiSelectMode(true))
+  page.querySelector('#btn-session-multi-cancel')?.addEventListener('click', () => setSessionMultiSelectMode(false))
+  page.querySelector('#btn-session-select-all')?.addEventListener('click', () => selectAllVisibleSessions())
+  page.querySelector('#btn-session-clear-selection')?.addEventListener('click', () => clearSessionSelection())
+  page.querySelector('#btn-session-delete-selected')?.addEventListener('click', () => deleteSelectedSessions())
   page.querySelector('#btn-task-board').addEventListener('click', () => toggleTaskBoard())
   page.querySelector('#btn-new-group')?.addEventListener('click', () => showGroupEditor())
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
@@ -1622,11 +1637,14 @@ function normalizeSessionList(rawSessions = []) {
 function updateSessionListActiveState() {
   if (!_sessionListEl) return
   _sessionListEl.querySelectorAll('.chat-session-card[data-key]').forEach(card => {
-    card.classList.toggle('active', !_currentGroupId && card.dataset.key === _sessionKey)
+    const key = card.dataset.key || ''
+    card.classList.toggle('active', !_currentGroupId && key === _sessionKey)
+    card.classList.toggle('selected', _isSessionMultiSelectMode && _selectedSessionKeys.has(key))
   })
   _sessionListEl.querySelectorAll('.chat-session-card[data-group-key]').forEach(card => {
     card.classList.toggle('active', !!_currentGroupId && card.dataset.groupKey === _currentGroupId)
   })
+  updateSessionMultiToolbar()
 }
 
 function refreshSessionListSoon() {
@@ -1638,6 +1656,10 @@ function renderSessionList(sessions) {
   if (!_sessionListEl) return
   sessions = normalizeSessionList(sessions)
   const visibleSessions = sessions.filter(s => !isGroupDedicatedSessionKey(s.sessionKey || s.key || ''))
+  const visibleKeys = new Set(visibleSessions.map(s => s.sessionKey || s.key || '').filter(Boolean))
+  for (const key of Array.from(_selectedSessionKeys)) {
+    if (!visibleKeys.has(key)) _selectedSessionKeys.delete(key)
+  }
   const normalHtml = visibleSessions.length ? visibleSessions.map(s => renderSessionCard(s)).join('') : `<div class="chat-session-empty">${t('chat.noSessions')}</div>`
   if (_sessionListNormalEl) _sessionListNormalEl.innerHTML = normalHtml
   else _sessionListEl.innerHTML = normalHtml
@@ -1645,6 +1667,8 @@ function renderSessionList(sessions) {
   updateSessionListActiveState()
 
   _sessionListEl.onclick = (e) => {
+    const checkbox = e.target.closest('[data-select-session]')
+    if (checkbox) { e.stopPropagation(); toggleSessionSelection(checkbox.dataset.selectSession); return }
     const delBtn = e.target.closest('[data-del]')
     if (delBtn) { e.stopPropagation(); deleteSession(delBtn.dataset.del); return }
     const groupEdit = e.target.closest('[data-group-edit]')
@@ -1654,13 +1678,17 @@ function renderSessionList(sessions) {
     const groupItem = e.target.closest('[data-group-key]')
     if (groupItem) { e.stopPropagation(); switchGroupSession(groupItem.dataset.groupKey); return }
     const item = e.target.closest('[data-key]')
-    if (item) void switchSession(item.dataset.key)
+    if (item) {
+      if (_isSessionMultiSelectMode) { e.stopPropagation(); toggleSessionSelection(item.dataset.key); return }
+      void switchSession(item.dataset.key)
+    }
   }
   _sessionListEl.ondblclick = (e) => {
     const labelEl = e.target.closest('.chat-session-label')
     if (!labelEl) return
     const card = labelEl.closest('[data-key]')
     if (!card) return
+    if (_isSessionMultiSelectMode) return
     e.stopPropagation()
     renameSession(card.dataset.key, labelEl)
   }
@@ -1680,8 +1708,11 @@ function renderSessionCard(s) {
   const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
   const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
-  return `<div class="chat-session-card${active}" data-key="${escapeAttr(key)}">
+  const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key) ? ' selected' : ''
+  const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" title="${t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
+  return `<div class="chat-session-card${active}${selected}" data-key="${escapeAttr(key)}">
     <div class="chat-session-card-header">
+      ${checkbox}
       <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
       <button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>
     </div>
@@ -1835,12 +1866,81 @@ async function deleteSession(key) {
   if (!yes) return
   try {
     await wsClient.sessionsDelete(key)
+    _selectedSessionKeys.delete(key)
     toast(t('chat.sessionDeleted'), 'success')
     if (key === _sessionKey) void switchSession(mainKey, { forceWorkspace: true })
     else refreshSessionList()
   } catch (e) {
     toast(`${t('common.operationFailed')}: ${e.message}`, 'error')
   }
+}
+
+function setSessionMultiSelectMode(enabled) {
+  _isSessionMultiSelectMode = !!enabled
+  if (!_isSessionMultiSelectMode) _selectedSessionKeys.clear()
+  _page?.querySelector('#btn-session-multi-select')?.toggleAttribute('hidden', _isSessionMultiSelectMode)
+  _page?.querySelector('#chat-session-multi-toolbar')?.toggleAttribute('hidden', !_isSessionMultiSelectMode)
+  renderSessionList(_lastSessionList || [])
+}
+
+function getVisibleDeletableSessionKeys() {
+  const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
+  return normalizeSessionList(_lastSessionList || [])
+    .map(s => s.sessionKey || s.key || '')
+    .filter(key => key && key !== mainKey && !isGroupDedicatedSessionKey(key))
+}
+
+function toggleSessionSelection(key) {
+  if (!key) return
+  const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
+  if (key === mainKey) { toast(t('chat.cannotDeleteMain'), 'warning'); return }
+  if (_selectedSessionKeys.has(key)) _selectedSessionKeys.delete(key)
+  else _selectedSessionKeys.add(key)
+  updateSessionListActiveState()
+}
+
+function selectAllVisibleSessions() {
+  for (const key of getVisibleDeletableSessionKeys()) _selectedSessionKeys.add(key)
+  updateSessionListActiveState()
+}
+
+function clearSessionSelection() {
+  _selectedSessionKeys.clear()
+  updateSessionListActiveState()
+}
+
+function updateSessionMultiToolbar() {
+  const countEl = _page?.querySelector('#chat-session-selected-count')
+  const delBtn = _page?.querySelector('#btn-session-delete-selected')
+  const count = _selectedSessionKeys.size
+  if (countEl) countEl.textContent = t('chat.selectedSessionsCount', { count })
+  if (delBtn) delBtn.disabled = count === 0
+}
+
+async function deleteSelectedSessions() {
+  const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
+  const keys = Array.from(_selectedSessionKeys).filter(key => key && key !== mainKey)
+  if (!keys.length) { toast(t('chat.selectSessionsToDelete'), 'warning'); return }
+  const yes = await showConfirm(t('chat.confirmDeleteSelectedSessions', { count: keys.length }))
+  if (!yes) return
+  const failed = []
+  for (const key of keys) {
+    try {
+      await wsClient.sessionsDelete(key)
+    } catch (e) {
+      failed.push({ key, message: e?.message || String(e) })
+    }
+  }
+  for (const key of keys) {
+    if (!failed.some(item => item.key === key)) _selectedSessionKeys.delete(key)
+  }
+  const deletedCount = keys.length - failed.length
+  if (deletedCount) toast(t('chat.selectedSessionsDeleted', { count: deletedCount }), 'success')
+  if (failed.length) toast(t('chat.selectedSessionsDeleteFailed', { count: failed.length, msg: failed[0].message }), 'error')
+  const currentDeleted = keys.includes(_sessionKey) && !failed.some(item => item.key === _sessionKey)
+  if (currentDeleted) await switchSession(mainKey, { forceWorkspace: true })
+  else refreshSessionList()
+  if (!_selectedSessionKeys.size) setSessionMultiSelectMode(false)
 }
 
 async function resetCurrentSession() {
