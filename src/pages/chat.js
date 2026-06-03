@@ -3148,6 +3148,13 @@ function handleChatEvent(payload) {
       appendFilesToEl(_currentAiBubble, _currentAiFiles)
       appendToolsToEl(_currentAiBubble, finalTools.length ? finalTools : _currentAiTools)
     }
+    const finalMetaSource = {
+      ...(payload.message || {}),
+      usage: payload.message?.usage || payload.usage,
+      cost: payload.message?.cost || payload.cost,
+      model: payload.message?.model || payload.model,
+      modelProvider: payload.message?.modelProvider || payload.modelProvider || payload.provider,
+    }
     // 添加时间戳 + 耗时 + token 消耗
     const wrapper = _currentAiBubble?.parentElement
     if (wrapper) {
@@ -3162,13 +3169,6 @@ function handleChatEvent(payload) {
         durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
       if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
-      const finalMetaSource = {
-        ...(payload.message || {}),
-        usage: payload.message?.usage || payload.usage,
-        cost: payload.message?.cost || payload.cost,
-        model: payload.message?.model || payload.model,
-        modelProvider: payload.message?.modelProvider || payload.modelProvider || payload.provider,
-      }
       const usage = extractMessageUsage(finalMetaSource)
       const cost = extractMessageCost(finalMetaSource)
       const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
