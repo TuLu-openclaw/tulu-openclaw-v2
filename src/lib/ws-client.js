@@ -227,12 +227,12 @@ export class WsClient {
       this._connecting = false
       this._clearChallengeTimer()
       if (e.code === 4001 || e.code === 4003 || e.code === 4004) {
-        const authReason = e.reason || '网关令牌校验失败'
+        const authReason = e.reason || t('chat.wsAuthTokenCheckFailed')
         if (this._authRefreshAttempts < 1) {
           if (this._tryRefreshTokenAndReconnect(authReason)) return
         }
-        this._status = '认证失败'
-        this._statusDetail = 'Gateway Token 不匹配，自动刷新失败；请点击“修复并重连”重新同步本地配置'
+        this._status = t('chat.wsStatusAuthFailed')
+        this._statusDetail = t('chat.wsDetailAuthRefreshFailed')
         this._setConnected(false, 'auth_failed', this._statusDetail)
         this._flushPending()
         this._intentionalClose = true
@@ -241,19 +241,19 @@ export class WsClient {
       if (e.code === 1008 && !this._intentionalClose) {
         if (this._autoPairAttempts < 1) {
           console.log('[ws] origin not allowed (1008)，尝试自动修复...')
-          this._status = '正在自动修复连接'
-          this._statusDetail = '检测到来源限制，正在重新配对并重连'
-          this._setConnected(false, 'reconnecting', '来源受限，正在自动修复连接...')
+          this._status = t('chat.wsStatusAutoFixing')
+          this._statusDetail = t('chat.wsDetailOriginRepairing')
+          this._setConnected(false, 'reconnecting', t('chat.wsOriginRepairing'))
           this._autoPairAndReconnect()
           return
         }
         console.warn('[ws] origin 1008 自动修复已尝试过，显示错误')
-        this._status = '连接失败'
-        this._statusDetail = e.reason || '来源受限，请点击修复并重连'
-        this._setConnected(false, 'error', e.reason || '来源受限，请点击“修复并重连”')
+        this._status = t('chat.connectFailed')
+        this._statusDetail = e.reason || t('chat.wsDetailOriginBlocked')
+        this._setConnected(false, 'error', e.reason || t('chat.wsOriginBlockedRetry'))
         return
       }
-      this._status = '连接已断开'
+      this._status = t('chat.wsStatusDisconnected')
       this._statusDetail = e.reason || ''
       this._setConnected(false)
       this._stopPing()
@@ -263,8 +263,8 @@ export class WsClient {
 
     ws.onerror = (err) => {
       console.error('[ws] WebSocket 错误:', err)
-      this._status = '网关连接异常'
-      this._statusDetail = 'WebSocket 发生异常，请稍后重试'
+      this._status = t('chat.wsStatusError')
+      this._statusDetail = t('chat.wsDetailErrorRetry')
     }
   }
 
@@ -276,8 +276,8 @@ export class WsClient {
     // 握手阶段：connect.challenge
     if (msg.type === 'event' && msg.event === 'connect.challenge') {
       console.log('[ws] 收到 connect.challenge')
-      this._status = '已收到握手指令'
-      this._statusDetail = '正在生成身份验证信息'
+      this._status = t('chat.wsStatusChallengeReceived')
+      this._statusDetail = t('chat.wsDetailGeneratingIdentity')
       this._clearChallengeTimer()
       const nonce = msg.payload?.nonce || ''
       this._sendConnectFrame(nonce)
@@ -289,7 +289,7 @@ export class WsClient {
       this._clearChallengeTimer()
       this._handshaking = false
       if (!msg.ok || msg.error) {
-        const errMsg = msg.error?.message || 'Gateway 握手失败'
+        const errMsg = msg.error?.message || t('chat.wsHandshakeFailed')
         const errCode = msg.error?.code
         console.error('[ws] connect 失败:', errMsg, errCode)
 
@@ -305,7 +305,7 @@ export class WsClient {
 
         if (this._isAuthTokenError(errMsg, errCode) && this._tryRefreshTokenAndReconnect(errMsg)) return
 
-        this._status = '握手失败'
+        this._status = t('chat.wsStatusHandshakeFailed')
         this._statusDetail = errMsg
         this._setConnected(false, 'error', errMsg)
         this._readyCallbacks.forEach(fn => {
@@ -365,13 +365,13 @@ export class WsClient {
   _tryRefreshTokenAndReconnect(reason = '') {
     if (this._authRefreshAttempts >= 1) return false
     this._authRefreshAttempts++
-    this._status = '正在刷新 Gateway Token'
-    this._statusDetail = '检测到认证失败，正在重新读取本地 Gateway 配置并重连'
-    this._setConnected(false, 'reconnecting', 'Gateway Token 不匹配，正在自动刷新并重连...')
+    this._status = t('chat.wsStatusRefreshingToken')
+    this._statusDetail = t('chat.wsDetailRefreshingToken')
+    this._setConnected(false, 'reconnecting', t('chat.wsTokenRefreshingReconnect'))
     this._refreshTokenAndReconnect(reason).catch((e) => {
       console.warn('[ws] 自动刷新 Gateway Token 失败:', e)
-      this._status = '认证失败'
-      this._statusDetail = 'Gateway Token 不匹配，自动刷新失败；请点击“修复并重连”重新同步本地配置'
+      this._status = t('chat.wsStatusAuthFailed')
+      this._statusDetail = t('chat.wsDetailAuthRefreshFailed')
       this._setConnected(false, 'auth_failed', this._statusDetail)
       this._intentionalClose = true
     })
@@ -384,19 +384,19 @@ export class WsClient {
     const rawFreshToken = gw.auth?.token ?? gw.authToken ?? ''
     const freshToken = typeof rawFreshToken === 'string' ? rawFreshToken : ''
     if (!freshToken || freshToken === this._token) {
-      throw new Error(reason || 'Gateway Token 未变化')
+      throw new Error(reason || t('chat.wsTokenUnchanged'))
     }
     const configuredHost = typeof location !== 'undefined' && location.host
       ? location.host
       : `127.0.0.1:${gw.port || 18789}`
     const hostMatch = (this._url || '').match(/^wss?:\/\/([^/]+)\//)
     const host = gw.port ? `127.0.0.1:${gw.port}` : (hostMatch?.[1] || configuredHost)
-    if (!host) throw new Error('无法从当前 WebSocket URL 解析 Gateway 地址')
+    if (!host) throw new Error(t('chat.wsParseGatewayAddressFailed'))
     const secure = (this._url || '').startsWith('wss://')
     this._token = freshToken
     this._url = `${secure ? 'wss' : 'ws'}://${host}/ws?token=${encodeURIComponent(this._token)}`
-    this._status = 'Gateway Token 已刷新'
-    this._statusDetail = '已读取最新本地 token，正在重连'
+    this._status = t('chat.wsStatusTokenRefreshed')
+    this._statusDetail = t('chat.wsDetailTokenRefreshed')
     this._intentionalClose = false
     this._reconnectAttempts = 0
     this._missedHeartbeats = 0
@@ -414,8 +414,8 @@ export class WsClient {
     this._autoPairAttempts++
     try {
       console.log('[ws] 执行自动配对（第', this._autoPairAttempts, '次）...')
-      this._status = '正在自动修复连接'
-      this._statusDetail = `正在执行自动配对（第 ${this._autoPairAttempts} 次）`
+      this._status = t('chat.wsStatusAutoFixing')
+      this._statusDetail = t('chat.wsDetailAutoPairingAttempt', { attempt: this._autoPairAttempts })
       const result = await invoke('auto_pair_device')
       console.log('[ws] 配对结果:', result)
 
@@ -439,16 +439,16 @@ export class WsClient {
       }, 1000)
     } catch (e) {
       console.error('[ws] 自动配对失败:', e)
-      this._status = '自动修复失败'
-      this._statusDetail = `配对失败: ${e}`
-      this._setConnected(false, 'error', `配对失败: ${e}`)
+      this._status = t('chat.wsStatusAutoFixFailed')
+      this._statusDetail = t('chat.wsPairingFailed', { error: String(e) })
+      this._setConnected(false, 'error', t('chat.wsPairingFailed', { error: String(e) }))
     }
   }
 
   async _sendConnectFrame(nonce) {
     this._handshaking = true
-    this._status = nonce ? '正在发送握手信息' : '未收到握手指令，主动发送连接信息'
-    this._statusDetail = nonce ? '正在发送带签名的 connect frame' : '网关未返回 challenge，客户端主动发起连接'
+    this._status = nonce ? t('chat.wsStatusSendingHandshake') : t('chat.wsStatusProactiveConnect')
+    this._statusDetail = nonce ? t('chat.wsDetailSendingSignedFrame') : t('chat.wsDetailProactiveConnect')
     try {
       const frame = await invoke('create_connect_frame', { nonce, gatewayToken: this._token })
       if (this._ws && this._ws.readyState === WebSocket.OPEN) {
@@ -456,13 +456,13 @@ export class WsClient {
         this._ws.send(JSON.stringify(frame))
       } else {
         this._handshaking = false
-        this._status = '连接已断开'
-        this._statusDetail = 'WebSocket 未处于可发送状态'
+        this._status = t('chat.wsStatusDisconnected')
+        this._statusDetail = t('chat.wsDetailNotSendable')
       }
     } catch (e) {
       console.error('[ws] 生成 connect frame 失败:', e)
       this._handshaking = false
-      this._status = '握手信息生成失败'
+      this._status = t('chat.wsStatusHandshakeFrameFailed')
       this._statusDetail = String(e)
     }
   }
@@ -482,12 +482,12 @@ export class WsClient {
     }
     this._gatewayReady = true
     this._lastHandshakeAt = Date.now()
-    this._status = '网关连接已就绪'
+    this._status = t('chat.wsStatusReady')
     this._statusDetail = this._sessionKey || ''
     this._reconnectState = 'idle'
     this._pendingReconnect = false
     console.log('[ws] Gateway 就绪, sessionKey:', this._sessionKey)
-    this._setConnected(true, 'ready', '网关连接已就绪')
+    this._setConnected(true, 'ready', t('chat.wsStatusReady'))
     this._readyCallbacks.forEach(fn => {
       try { fn(this._hello, this._sessionKey) } catch (e) {
         console.error('[ws] ready cb error:', e)
@@ -515,7 +515,7 @@ export class WsClient {
   _flushPending() {
     for (const [, cb] of this._pending) {
       clearTimeout(cb.timer)
-      cb.reject(new Error('连接已断开'))
+      cb.reject(new Error(t('chat.wsDisconnectedError')))
     }
     this._pending.clear()
   }
@@ -630,18 +630,18 @@ export class WsClient {
     return new Promise((resolve, reject) => {
       if (!this._ws || this._ws.readyState !== WebSocket.OPEN || !this._gatewayReady) {
         if (!this._intentionalClose && (this._reconnectAttempts > 0 || !this._gatewayReady)) {
-          const waitTimeout = setTimeout(() => { unsub(); reject(new Error('等待重连超时')) }, 15000)
+          const waitTimeout = setTimeout(() => { unsub(); reject(new Error(t('chat.wsReconnectWaitTimeout'))) }, 15000)
           const unsub = this.onReady((hello, sessionKey, err) => {
             clearTimeout(waitTimeout); unsub()
-            if (err?.error) { reject(new Error(err.message || 'Gateway 握手失败')); return }
+            if (err?.error) { reject(new Error(err.message || t('chat.wsHandshakeFailed'))); return }
             this.request(method, params).then(resolve, reject)
           })
           return
         }
-        return reject(new Error('WebSocket 未连接'))
+        return reject(new Error(t('chat.wsNotConnectedError')))
       }
       const id = uuid()
-      const timer = setTimeout(() => { this._pending.delete(id); reject(new Error('请求超时')) }, REQUEST_TIMEOUT)
+      const timer = setTimeout(() => { this._pending.delete(id); reject(new Error(t('chat.wsRequestTimeout'))) }, REQUEST_TIMEOUT)
       this._pending.set(id, { resolve, reject, timer })
       this._ws.send(JSON.stringify({ type: 'req', id, method, params }))
     })
