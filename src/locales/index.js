@@ -35,13 +35,14 @@ import music from './modules/music.js'
 import openclawSetup from './modules/openclaw-setup.js'
 import kami from './modules/kami.js'
 import verify from './modules/verify.js'
+import tvbox from './modules/tvbox.js'
 import xingshuChat from './modules/xingshuChat.js'
 
 const MODULES = {
   common, sidebar, instance, dashboard, services, settings,
   models, agents, agentDetail, gateway, security, communication, channels,
   memory, cron, usage, skills, chat, chatDebug, setup, about,
-  ext, logs, assistant, toast, modal, engagement, engine, music, openclawSetup, kami, verify, xingshuChat,
+  ext, logs, assistant, toast, modal, engagement, engine, music, openclawSetup, kami, verify, tvbox, xingshuChat,
 }
 
 /** 构建所有语言字典 { 'zh-CN': { common: {...}, sidebar: {...}, ... }, ... } */
