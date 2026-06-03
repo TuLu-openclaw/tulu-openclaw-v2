@@ -19,6 +19,22 @@ function escHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function normalizeHttpUrl(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return ''
+    return parsed.href
+  } catch {
+    return ''
+  }
+}
+
+function isDirectVideoUrl(url) {
+  return /\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(String(url || ''))
+}
+
 const VOD_SOURCES = [
   { key: 'lzzy',   name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',       type: 'tvbox' },
   { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
@@ -2236,17 +2252,20 @@ function pickDirectUrl(url) {
     const autoPlay = content.querySelector('#t-crawl-auto')
 
     async function doCrawl() {
-      const url = input.value.trim()
-      if (!url) return
-      if (!/^https?:/i.test(url)) {
+      const url = normalizeHttpUrl(input.value)
+      if (!url) {
         showCrawlStatus('❌ 请输入有效的 http/https URL', 'error')
         return
       }
+      input.value = url
       btn.disabled = true
       btn.textContent = autoPlay.checked ? '⏳ 边嗅边播...' : '⏳ 嗅探中...'
       showCrawlStatus(autoPlay.checked ? '🚀 正在边嗅边播...' : '🔍 正在深度嗅探页面...', 'loading')
       _crawlResults = []
+      let autoPlayed = false
       const results = await crawlSite(url, autoPlay.checked ? (name, u) => {
+        if (autoPlayed) return
+        autoPlayed = true
         // 第一个可用链接 → 直接播放（独立窗口）
         showCrawlStatus('✅ 找到可用链接，正在播放: ' + name, 'success')
         btn.disabled = false; btn.textContent = '🔬 深度嗅探'
@@ -2259,6 +2278,7 @@ function pickDirectUrl(url) {
     }
 
     btn.addEventListener('click', doCrawl)
+    content.querySelector('#t-crawl-urlbtn')?.addEventListener('click', showUrlInput)
     input.addEventListener('keydown', e => { if (e.key === 'Enter') doCrawl() })
     setTimeout(() => input.focus(), 100)
   }
@@ -2309,7 +2329,9 @@ function pickDirectUrl(url) {
   // crawlSite: 爬取URL的视频链接
   // onFirstMatch(url, name): 每条策略首次找到结果时的回调（用于自动播放模式）
   async function crawlSite(url, onFirstMatch) {
-    if (url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd')) {
+    url = normalizeHttpUrl(url)
+    if (!url) return []
+    if (isDirectVideoUrl(url)) {
       const name = url.split('/').pop().replace(/\.(m3u8|mp4|mpd)/i, '') || '直链视频'
       const results = [{ name, url, thumb: '', type: 'direct' }]
       onFirstMatch?.(name, url)
@@ -2781,31 +2803,49 @@ function pickDirectUrl(url) {
     function clearErr() { err.classList.remove('show') }
 
     async function doUrlParse(rawUrl) {
-      rawUrl = rawUrl.trim()
-      if (!rawUrl) { showErr('请输入链接'); return }
-      if (!/^https?:/i.test(rawUrl)) { showErr('仅支持 http/https 链接'); return }
+      const parsedUrl = normalizeHttpUrl(rawUrl)
+      if (!parsedUrl) { showErr('请输入有效的 http/https 链接'); return }
+      inp.value = parsedUrl
       clearErr()
+      const goBtn = overlay.querySelector('#_urlgo')
+      goBtn.disabled = true
+      goBtn.textContent = '解析中...'
 
-      // 直链直接播
-      if (rawUrl.includes('.m3u8') || rawUrl.includes('.mp4')) {
-        overlay.remove()
-        openFloatPlayer('直链播放', rawUrl, 'url_input', 'url_input', '直链播放', '', [], 0)
-        return
+      try {
+        // 直链直接播
+        if (isDirectVideoUrl(parsedUrl)) {
+          overlay.remove()
+          openFloatPlayer('直链播放', parsedUrl, parsedUrl, 'url_input', '直链播放', '', [parsedUrl], 0)
+          return
+        }
+
+        // 量子/暴风分享页 → 尝试 Rust vod_fetch 提取详情
+        const isLzShare = /\/share\//.test(parsedUrl) || parsedUrl.includes('v.lfthirtytwo.com') || parsedUrl.includes('vip.lz-')
+        if (isLzShare) {
+          overlay.remove()
+          openFloatPlayer('解析中', parsedUrl, parsedUrl, 'share_page', '解析中', '', [parsedUrl], 0)
+          // 先尝试用 vod_fetch 找详情接口
+          await tryExtractFromSharePage(parsedUrl)
+          return
+        }
+
+        // 其他页面 → 尝试复用爬虫解析，避免“无法解析”假播放旧状态
+        showErr('正在解析页面，请稍候...')
+        const results = await crawlSite(parsedUrl, null)
+        const playable = results.filter(r => r?.url && (isDirectVideoUrl(r.url) || r.type !== 'cloud'))
+        if (playable.length) {
+          const first = playable[0]
+          overlay.remove()
+          playCrawlVideo(first.name || '解析结果', first.url, 0, [], playable.map(r => r.url))
+          return
+        }
+        showErr('未提取到可播放链接，可切换到“网站爬虫”进行深度嗅探')
+      } finally {
+        if (document.body.contains(overlay)) {
+          goBtn.disabled = false
+          goBtn.textContent = '解析'
+        }
       }
-
-      // 量子/暴风分享页 → 尝试 Rust vod_fetch 提取详情
-      const isLzShare = /\/share\//.test(rawUrl) || rawUrl.includes('v.lfthirtytwo.com') || rawUrl.includes('vip.lz-')
-      if (isLzShare) {
-        overlay.remove()
-        openFloatPlayer('解析中', rawUrl, 'share_page', 'share_page', '解析中', '', [], 0)
-        // 先尝试用 vod_fetch 找详情接口
-        await tryExtractFromSharePage(rawUrl)
-        return
-      }
-
-      // 其他页面 → 显示不支持
-      overlay.remove()
-      openFloatPlayer('无法解析', rawUrl, 'url_input', 'url_input', '无法解析', '', [], 0)
     }
 
     overlay.querySelector('#_urlgo').addEventListener('click', () => doUrlParse(inp.value))
@@ -2831,7 +2871,7 @@ function pickDirectUrl(url) {
     }
     // 尝试 iframe 播放（可能失败）
     if (vidWrap && !vidWrap.innerHTML.includes('iframe')) {
-      const safeUrl = /^https?:\/[^\/]+/.test(shareUrl) ? shareUrl : ''
+      const safeUrl = normalizeHttpUrl(shareUrl)
       const iframe = document.createElement('iframe')
       iframe.src = safeUrl
       iframe.style.cssText = 'width:100%;height:100%;border:none;background:#000'
