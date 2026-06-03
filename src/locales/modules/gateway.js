@@ -49,9 +49,11 @@ export default {
   tailscalePlaceholder: _('例如 100.x.x.x:18789', 'e.g. 100.x.x.x:18789'),
   tailscaleHint: _('如果你用 Tailscale 虚拟局域网，填上地址后远程设备就能通过它访问 Gateway。不用可以留空', 'If using Tailscale VPN, fill in the address so remote devices can access Gateway through it. Leave empty if not used.', '如果你用 Tailscale 虛擬局域網，填上位址后遠程設備就能通過它訪問 Gateway。不用可以留空'),
   configSaved: _('配置已保存，正在重载 Gateway...', 'Config saved, reloading Gateway...', '設定已儲存，正在重載 Gateway...'),
+  reloading: _('正在重载 Gateway...', 'Reloading Gateway...', '正在重載 Gateway...'),
   reloaded: _('Gateway 已重载，新配置已生效', 'Gateway reloaded, new config is active', 'Gateway 已重載，新設定已生效'),
   savedButReloadFailed: _('配置已保存，但重载失败', 'Config saved, but reload failed', '設定已儲存，但重載失敗'),
   configNotReady: _('配置未加载完成，请稍候', 'Config not loaded yet, please wait', '設定未載入完成，請稍候'),
   retryLoad: _('重试加载', 'Retry Load', '重試載入'),
+  retryReload: _('重试重载', 'Retry Reload', '重試重載'),
   saveFailed: _('保存失败', 'Save failed', '儲存失敗', '保存失敗', '저장 실패', 'Lưu thất bại', 'Error al guardar', 'Falha ao salvar', 'Ошибка сохранения', 'Échec de la sauvegarde', 'Speichern fehlgeschlagen'),
 }

@@ -53,6 +53,7 @@ export async function render() {
   `
 
   const state = { config: null, _origToken: null }
+  page._gatewayState = state
   // 非阻塞：先返回 DOM，后台加载数据
   loadConfig(page, state)
   page.querySelector('#btn-save-gw').onclick = async () => {
@@ -340,6 +341,40 @@ async function reconnectGatewayWithSavedConfig(port, auth, seq) {
   }, 300)
 }
 
+async function retryGatewayReload(page, port, auth, seq, resolvedToken) {
+  const btn = page.querySelector('#btn-retry-gw-reload')
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = t('gateway.reloading')
+  }
+  try {
+    await api.reloadGateway()
+    await refreshGatewayStatus().catch(() => {})
+    await reconnectGatewayWithSavedConfig(port, auth, seq)
+    const state = page._gatewayState
+    if (state) state._origToken = resolvedToken
+    const hint = page.querySelector('.gw-save-hint')
+    if (hint) hint.textContent = t('gateway.saveHint')
+    toast(t('gateway.reloaded'), 'success')
+  } catch (e) {
+    await refreshGatewayStatus().catch(() => {})
+    renderReloadRetry(page, port, auth, seq, resolvedToken, e)
+    toast(t('gateway.savedButReloadFailed') + ': ' + e, 'warning')
+  }
+}
+
+function renderReloadRetry(page, port, auth, seq, resolvedToken, error) {
+  const hint = page.querySelector('.gw-save-hint')
+  if (!hint) return
+  hint.innerHTML = `
+    <span style="color:var(--warning)">${t('gateway.savedButReloadFailed')}: ${_escapeHtml(error)}</span>
+    <button class="btn btn-secondary btn-sm" id="btn-retry-gw-reload" style="margin-left:8px">${t('gateway.retryReload')}</button>
+  `
+  hint.querySelector('#btn-retry-gw-reload')?.addEventListener('click', () => {
+    retryGatewayReload(page, port, auth, seq, resolvedToken)
+  })
+}
+
 async function saveConfig(page, state) {
   const port = parseInt(page.querySelector('#gw-port')?.value) || 18789
   const bindRadio = page.querySelector('input[name="gw-bind"]:checked')
@@ -379,6 +414,8 @@ async function saveConfig(page, state) {
   const seq = ++_saveSeq
 
   try {
+    const hint = page.querySelector('.gw-save-hint')
+    if (hint) hint.textContent = t('gateway.saveHint')
     await api.writeOpenclawConfig(state.config, { reload: false })
     toast(t('gateway.configSaved'), 'info')
     try {
@@ -389,6 +426,7 @@ async function saveConfig(page, state) {
       toast(t('gateway.reloaded'), 'success')
     } catch (e) {
       await refreshGatewayStatus().catch(() => {})
+      renderReloadRetry(page, port, auth, seq, resolvedToken, e)
       toast(t('gateway.savedButReloadFailed') + ': ' + e, 'warning')
     }
   } catch (e) {
