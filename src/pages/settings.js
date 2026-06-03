@@ -809,8 +809,11 @@ async function loadAutostart(page) {
       </div>
     `
     bar.querySelector('#autostart-toggle')?.addEventListener('change', async (e) => {
+      const toggle = e.target
+      const nextChecked = toggle.checked
+      toggle.disabled = true
       try {
-        if (e.target.checked) {
+        if (nextChecked) {
           await enable()
           toast(t('settings.autostartEnabled'), 'success')
         } else {
@@ -818,8 +821,10 @@ async function loadAutostart(page) {
           toast(t('settings.autostartDisabled'), 'success')
         }
       } catch (err) {
-        e.target.checked = !e.target.checked
+        toggle.checked = !nextChecked
         toast(t('settings.autostartFailed') + ': ' + err, 'error')
+      } finally {
+        toggle.disabled = false
       }
     })
   } catch {
