@@ -1058,7 +1058,7 @@ function initApp(el) {
 
   async function loadData() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
+    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div>'
     try {
       if (mode === 'live') loadLive()
       else if (mode === 'tvboxjson') { if (query) await loadTvboxSearch(); else await loadTvboxList() }
@@ -1066,7 +1066,7 @@ function initApp(el) {
       else if (getPlayHistory().length > 0 && page === 1 && !query) { await showPlayHistory(); return }
       else await loadList()
     } catch (e) {
-      content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
+      content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">😵</div><div class="tvbox-empty-title">' + escHtml(mt('loadFailed')) + '</div><div class="tvbox-empty-sub">' + escHtml(e.message) + '</div></div>'
     }
   }
 
@@ -1121,7 +1121,7 @@ function setDebug(msg, detail) {
     let finished = 0
     let succeeded = 0
     let renderedAny = false
-    content.innerHTML = '<div id="t-main-grid"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在搜索，找到资源会立即显示...</span></div></div><div id="t-pagination"></div>'
+    content.innerHTML = '<div id="t-main-grid"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('searchingImmediate')) + '</span></div></div><div id="t-pagination"></div>'
     setDebug('全网搜索中', '0/' + VOD_SOURCES.length + '源返回')
 
     const tasks = VOD_SOURCES.map(async (source) => {
@@ -1186,16 +1186,16 @@ function setDebug(msg, detail) {
   // ── TVBox JSON 模式 ──────────────────────────────
   async function loadTvboxList() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">加载 TVBox JSON 数据...</div>'
+    content.innerHTML = '<div class="tvbox-loading">' + escHtml(mt('loadingTvboxJson')) + '</div>'
     const api = getActiveTvbox()
     if (!api) {
-      content.innerHTML = '<div class="tvbox-empty">请先选择一个 TVBox 数据源（内置源或自定义）</div><div style="text-align:center;margin-top:20px"><button id="t-add-tvbox-btn" style="background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">添加自定义 TVBox API</button></div>'
+      content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('selectTvboxSourceFirstDetailed')) + '</div><div style="text-align:center;margin-top:20px"><button id="t-add-tvbox-btn" style="background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">' + escHtml(mt('addCustomTvboxApi')) + '</button></div>'
       el.querySelector('#t-add-tvbox-btn')?.addEventListener('click', showApiManage)
       return
     }
     const config = await loadTvboxConfig(api)
     if (!config) {
-      content.innerHTML = '<div class="tvbox-empty">TVBox JSON 加载失败，请检查网络或换用其他源。<br><br><button id="t-switch-src-btn" style="background:#333;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer">切换数据源</button></div>'
+      content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('tvboxJsonLoadFailedDetailed')) + '<br><br><button id="t-switch-src-btn" style="background:#333;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer">' + escHtml(mt('switchSource')) + '</button></div>'
       el.querySelector('#t-switch-src-btn')?.addEventListener('click', renderTvboxSrcTabs)
       return
     }
@@ -1208,11 +1208,11 @@ function setDebug(msg, detail) {
 
   async function loadTvboxSearch() {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading">搜索中...</div>'
+    content.innerHTML = '<div class="tvbox-loading">' + escHtml(mt('searching')) + '</div>'
     const api = getActiveTvbox()
-    if (!api) { content.innerHTML = '<div class="tvbox-empty">请先选择一个 TVBox 数据源</div>'; return }
+    if (!api) { content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('selectTvboxSourceFirst')) + '</div>'; return }
     const config = await loadTvboxConfig(api)
-    if (!config) { content.innerHTML = '<div class="tvbox-empty">TVBox JSON 加载失败</div>'; return }
+    if (!config) { content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('tvboxJsonLoadFailed')) + '</div>'; return }
     const results = filterSearchResults((await searchTvboxList(config, query, api)).map(item => normalizeVodItem(item, { key: getActiveTvboxKey(), name: getActiveTvbox()?.name || 'TVBox', api: getActiveTvbox()?.url || '' })), query)
     renderVodGrid(results, results.length)
   }
@@ -1225,7 +1225,7 @@ function setDebug(msg, detail) {
     container.innerHTML = allSources.map((s, i) =>
       '<button class="tvbox-tab ' + (s.key === activeKey || (i === 0 && !activeKey) ? 'active' : '') + '" data-key="' + s.key + '">' + s.name + '</button>'
     ).join('') +
-    '<button class="tvbox-tab" id="t-add-custom-btn" style="color:#e50914;font-size:13px">＋ 自定义</button>'
+    '<button class="tvbox-tab" id="t-add-custom-btn" style="color:#e50914;font-size:13px">＋ ' + escHtml(mt('custom')) + '</button>'
     container.querySelectorAll('.tvbox-tab[data-key]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const key = btn.dataset.key
@@ -1309,7 +1309,7 @@ function setDebug(msg, detail) {
       const url = el.querySelector('#t-api-url')?.value.trim()
       if (!url) return
       const key = 'ctv_' + Date.now()
-      const api = { key, name: name || '自定义-' + (_customTvbox.length + 1), url }
+      const api = { key, name: name || mt('customSourceName', { number: _customTvbox.length + 1 }), url }
       const config = await loadTvboxConfig(api)
       if (config) {
         const apis = getCustomTvbox(); apis.push(api); saveCustomTvbox(apis); _customTvbox = apis
@@ -1318,7 +1318,7 @@ function setDebug(msg, detail) {
         await loadTvboxList()
         renderTvboxSrcTabs()
       } else {
-        alert('API 地址无效或加载失败，请检查后重试')
+        alert(mt('invalidTvboxApi'))
       }
     })
   }
@@ -1492,7 +1492,7 @@ function setDebug(msg, detail) {
   async function openDetail(id, name, sourceName, pic, sourceApi = '') {
     const source = sourceApi ? { name: sourceName || 'TVBox', api: sourceApi } : (VOD_SOURCES.find(s => s.name === sourceName) || VOD_SOURCES[src])
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">加载中...</span></div>'
+    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div>'
     const detailId = String(id || '').trim()
     if (!source?.api || !detailId) {
       content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('movieNotFound')) + '</div>'
@@ -1867,9 +1867,9 @@ function setDebug(msg, detail) {
     const prev = page > 1 ? page - 1 : 1
     const next = page < total ? page + 1 : total
     return '<div class="tvbox-pagination">' +
-      '<button class="tvbox-page-btn" data-page="' + prev + '">◀ 上一页</button>' +
-      '<span class="tvbox-page-info">第 ' + page + ' / ' + total + ' 页</span>' +
-      '<button class="tvbox-page-btn" data-page="' + next + '">下一页 ▶</button>' +
+      '<button class="tvbox-page-btn" data-page="' + prev + '">◀ ' + escHtml(mt('prevPage')) + '</button>' +
+      '<span class="tvbox-page-info">' + escHtml(mt('pageInfo', { page, total })) + '</span>' +
+      '<button class="tvbox-page-btn" data-page="' + next + '">' + escHtml(mt('nextPage')) + ' ▶</button>' +
     '</div>'
   }
 
@@ -1940,8 +1940,8 @@ function pickDirectUrl(url) {
   function renderFloatPlaybackError(url, message) {
     const safeUrl = normalizeHttpUrl(url) || url || '#'
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:#f87171;font-size:13px;text-align:center;padding:12px">' +
-      '<div>' + escHtml(message || '播放失败') + '</div>' +
-      (safeUrl && safeUrl !== '#' ? '<a href="' + escHtml(safeUrl) + '" target="_blank" rel="noopener" style="color:#a78bfa;text-decoration:none">↗ 在浏览器中打开</a>' : '') +
+      '<div>' + escHtml(message || mt('playbackFailed')) + '</div>' +
+      (safeUrl && safeUrl !== '#' ? '<a href="' + escHtml(safeUrl) + '" target="_blank" rel="noopener" style="color:#a78bfa;text-decoration:none">' + escHtml(mt('openInBrowser')) + '</a>' : '') +
     '</div>'
   }
 
@@ -1968,7 +1968,7 @@ function pickDirectUrl(url) {
     const vidWrap = document.getElementById('_fvid'); if (vidWrap) vidWrap.innerHTML = ''
     const isM3u8 = nextUrl.includes('.m3u8'); const isMp4 = nextUrl.includes('.mp4')
     if (isM3u8 || isMp4) { if (isM3u8) loadVideoIntoFloat(nextUrl, resumeProgress); else loadMp4IntoFloat(nextUrl, resumeProgress) }
-    else if (vidWrap) vidWrap.innerHTML = renderFloatPlaybackError(nextUrl, '当前地址不是可直接播放的视频链接')
+    else if (vidWrap) vidWrap.innerHTML = renderFloatPlaybackError(nextUrl, mt('notDirectVideoUrl'))
   }
 
   async function loadVideoIntoFloat(url, resumeProgress = 0) {
@@ -2000,7 +2000,7 @@ function pickDirectUrl(url) {
       const clearLoadTimer = () => { clearTimeout(timer) }
       const timer = setTimeout(() => {
         if (!timedOut) { timedOut = true; hls.destroy(); window._floatHls = null
-          vidWrap.innerHTML = renderFloatPlaybackError(url, 'm3u8 加载超时（15秒）')
+          vidWrap.innerHTML = renderFloatPlaybackError(url, mt('m3u8Timeout'))
         }
       }, 15000)
       hls.on(window.Hls.Events.ERROR, (evt, data) => {
@@ -2012,7 +2012,7 @@ function pickDirectUrl(url) {
           }
           clearLoadTimer()
           timedOut = true; hls.destroy(); window._floatHls = null
-          vidWrap.innerHTML = renderFloatPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）')
+          vidWrap.innerHTML = renderFloatPlaybackError(url, mt('playbackInterrupted', { reason: errCount >= MAX_ERR ? mt('multipleRetriesFailed') : data.details }))
         }
       })
       hls.on(window.Hls.Events.MANIFEST_PARSED, clearLoadTimer)
@@ -2025,16 +2025,16 @@ function pickDirectUrl(url) {
         }, { once: true })
       }
       const nativeTimer = setTimeout(() => {
-        vidWrap.innerHTML = renderFloatPlaybackError(url, 'm3u8 加载超时（15秒）')
+        vidWrap.innerHTML = renderFloatPlaybackError(url, mt('m3u8Timeout'))
       }, 15000)
       video.addEventListener('loadedmetadata', () => clearTimeout(nativeTimer), { once: true })
       video.addEventListener('error', () => {
         clearTimeout(nativeTimer)
-        vidWrap.innerHTML = renderFloatPlaybackError(url, '播放失败')
+        vidWrap.innerHTML = renderFloatPlaybackError(url, mt('playbackFailed'))
       })
       setupFloatControls(video, null)
     } else {
-      vidWrap.innerHTML = renderFloatPlaybackError(url, '浏览器不支持 HLS')
+      vidWrap.innerHTML = renderFloatPlaybackError(url, mt('browserUnsupportedHls'))
     }
   }
 
@@ -2051,12 +2051,12 @@ function pickDirectUrl(url) {
       }, { once: true })
     }
     const loadTimer = setTimeout(() => {
-      vidWrap.innerHTML = renderFloatPlaybackError(url, 'mp4 加载超时（15秒）')
+      vidWrap.innerHTML = renderFloatPlaybackError(url, mt('mp4Timeout'))
     }, 15000)
     video.addEventListener('loadedmetadata', () => clearTimeout(loadTimer), { once: true })
     video.addEventListener('error', () => {
       clearTimeout(loadTimer)
-      vidWrap.innerHTML = renderFloatPlaybackError(url, '播放失败')
+      vidWrap.innerHTML = renderFloatPlaybackError(url, mt('playbackFailed'))
     })
     setupFloatControls(video, null)
   }
