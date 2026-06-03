@@ -102,6 +102,18 @@
   --transition-normal: 250ms ease;
   --transition-slow: 350ms ease;
 
+  /* Layering scale: keep page popovers below global overlays, and never let FAB/toasts cover blocking modals. */
+  --z-dropdown: 100;
+  --z-popover: 1000;
+  --z-sidebar-overlay: 899;
+  --z-sidebar: 900;
+  --z-drawer: 7000;
+  --z-fab: 8000;
+  --z-toast: 8500;
+  --z-modal: 9000;
+  --z-lightbox: 9100;
+  --z-auth-overlay: 99998;
+
   --sidebar-width: 220px;
   --sidebar-collapsed: 60px;
   --header-height: 52px;
