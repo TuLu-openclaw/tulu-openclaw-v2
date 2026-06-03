@@ -616,7 +616,7 @@ window.addEventListener('lobster-work-end', () => {
         }
         // 通知龙虾办公室：Gateway 状态变化（实时联动）
         window.dispatchEvent(new CustomEvent(running ? 'lobster-work-start' : 'lobster-work-end', {
-          detail: { state: running ? 'syncing' : 'idle', message: running ? 'Gateway 已连接' : 'Gateway 已断开', phase: running ? 'syncing' : 'idle' }
+          detail: { state: running ? 'syncing' : 'idle', message: running ? t('common.gatewayConnected') : t('common.gatewayDisconnected'), phase: running ? 'syncing' : 'idle' }
         }))
       })
 

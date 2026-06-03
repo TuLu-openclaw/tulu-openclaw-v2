@@ -74,6 +74,8 @@ export default {
   processing: _('处理中...', 'Processing...', '處理中...', '処理中...', '처리 중...', 'Đang xử lý...', 'Procesando...', 'Processando...', 'Обработка...', 'Traitement...', 'Verarbeitung...'),
   connected: _('已连接', 'Connected', '已連線', '接続済み', '연결됨', 'Đã kết nối', 'Conectado', 'Conectado', 'Подключено', 'Connecté', 'Verbunden'),
   notConnected: _('未连接', 'Not connected', '未連線', '未接続', '연결 안 됨', 'Chưa kết nối', 'No conectado', 'Não conectado', 'Не подключено', 'Non connecté', 'Nicht verbunden'),
+  gatewayConnected: _('Gateway 已连接', 'Gateway connected', 'Gateway 已連線', 'Gateway 接続済み', 'Gateway 연결됨', 'Gateway đã kết nối', 'Gateway conectado', 'Gateway conectado', 'Gateway подключен', 'Gateway connecté', 'Gateway verbunden'),
+  gatewayDisconnected: _('Gateway 已断开', 'Gateway disconnected', 'Gateway 已中斷連線', 'Gateway 切断済み', 'Gateway 연결 끊김', 'Gateway đã ngắt kết nối', 'Gateway desconectado', 'Gateway desconectado', 'Gateway отключен', 'Gateway déconnecté', 'Gateway getrennt'),
   installed: _('已安装', 'Installed', '已安裝', 'インストール済み', '설치됨', 'Đã cài đặt', 'Instalado', 'Instalado', 'Установлено', 'Installé', 'Installiert'),
   notInstalled: _('未安装', 'Not installed', '未安裝', '未インストール', '설치 안 됨', 'Chưa cài đặt', 'No instalado', 'Não instalado', 'Не установлено', 'Non installé', 'Nicht installiert'),
   notRunning: _('未运行', 'Not running', '未執行', '未実行', '실행 안 됨', 'Chưa chạy', 'No en ejecución', 'Não está em execução', 'Не запущено', 'Non démarré', 'Läuft nicht'),
