@@ -3773,6 +3773,22 @@ function restoreReplyStatus(sessionKey = _sessionKey) {
   renderReplyStatus(_replyStatusState)
   if (saved && _replyStatusState.state !== 'waiting') {
     emitLobsterPhase(mapReplyStateToLobsterPhase(_replyStatusState.state), _replyStatusState.detail || replyStatusText(_replyStatusState.state), _replyStatusState.state)
+    resumeActiveReplyStatus(_replyStatusState)
+  }
+}
+
+function resumeActiveReplyStatus(status = _replyStatusState) {
+  if (!isLongRunningReplyState(status?.state)) return
+  if (status.sessionKey && _sessionKey && status.sessionKey !== _sessionKey) return
+  _currentRunId = status.runId || _currentRunId || ''
+  _isStreaming = true
+  _streamStartTime = status.ts || _streamStartTime || Date.now()
+  showTyping(true, status.detail || t('chat.streamStillRunning'))
+  updateSendState()
+  scheduleStreamSafetyTimeout()
+  if (_sessionKey && _messagesEl && _pageActive) {
+    _lastHistoryHash = ''
+    loadHistory().catch(() => {})
   }
 }
 
