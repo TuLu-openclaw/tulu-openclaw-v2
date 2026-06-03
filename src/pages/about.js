@@ -119,10 +119,10 @@ async function loadHermesData(page) {
         <div class="stat-card-meta" id="panel-update-meta" style="display:flex;align-items:center;gap:8px">${panelUpdateHtml}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-card-header"><span class="stat-card-label">Hermes Agent</span></div>
+        <div class="stat-card-header"><span class="stat-card-label">${t('about.hermesAgent')}</span></div>
         <div class="stat-card-value">${installed ? (version || t('about.installed')) : t('about.notInstalled')}</div>
         <div class="stat-card-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="color:${hermesStatusColor}">${hermesStatusDot} Gateway ${hermesStatusText}${hermesStatus === 'offline' ? '' : ` · :${port}`}</span>
+          <span style="color:${hermesStatusColor}">${hermesStatusDot} ${t('about.hermesGateway')} ${hermesStatusText}${hermesStatus === 'offline' ? '' : ` · :${port}`}</span>
           ${model ? `<span style="color:var(--text-secondary)">${t('engine.dashModel')}: ${esc(model)}</span>` : ''}
           ${!installed ? `<a class="btn btn-primary btn-sm" href="#/h/setup" style="${btnSm}">${t('about.hermesSetup')}</a>` : ''}
           ${installed ? `
@@ -146,13 +146,13 @@ async function loadHermesData(page) {
           const cfg = await api.hermesReadConfig()
           const maskedKey = cfg.api_key ? cfg.api_key.slice(0, 6) + '••••' + cfg.api_key.slice(-4) : t('about.notSet')
           const overlay = showContentModal({
-            title: `Hermes Agent ${t('about.hermesConfig')}`,
+            title: t('about.hermesConfigTitle'),
             width: 480,
             content: `
               <div style="display:grid;gap:12px;font-size:13px;line-height:1.6">
                 <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">${t('engine.configProvider')}:</span><span style="word-break:break-all">${esc(cfg.provider || '-')}</span></div>
-                <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">Base URL:</span><span style="word-break:break-all">${esc(cfg.base_url || '-')}</span></div>
-                <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">API Key:</span><span style="font-family:monospace">${esc(maskedKey)}</span></div>
+                <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">${t('about.hermesBaseUrl')}:</span><span style="word-break:break-all">${esc(cfg.base_url || '-')}</span></div>
+                <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">${t('about.hermesApiKey')}:</span><span style="font-family:monospace">${esc(maskedKey)}</span></div>
                 <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">${t('engine.configModel')}:</span><span style="word-break:break-all">${esc(cfg.model_raw || cfg.model || '-')}</span></div>
                 <div style="display:flex;gap:8px"><span style="color:var(--text-tertiary);min-width:90px">${t('about.hermesConfigFile')}:</span><span style="color:${cfg.config_exists ? 'var(--success)' : 'var(--warning)'}">${cfg.config_exists ? '✓' : '✗'}</span></div>
               </div>
@@ -174,7 +174,7 @@ async function loadHermesData(page) {
         const confirmed = await showConfirm(t('about.hermesUpgradeConfirm'))
         if (!confirmed) return
 
-        const modal = showUpgradeModal(t('about.hermesUpgrade') + ' Hermes Agent')
+        const modal = showUpgradeModal(t('about.hermesUpgradeTitle'))
         modal.setProgressLabels({
           preparing: t('about.upgrading'),
           downloading: t('about.upgrading'),
@@ -211,7 +211,7 @@ async function loadHermesData(page) {
         if (!confirmed) return
         const cleanConfig = await showConfirm(t('about.hermesUninstallCleanConfig'))
 
-        const modal = showUpgradeModal(t('about.hermesUninstall') + ' Hermes Agent')
+        const modal = showUpgradeModal(t('about.hermesUninstallTitle'))
         modal.setProgressLabels({
           preparing: t('about.uninstalling'),
           downloading: t('about.uninstalling'),
