@@ -16,6 +16,18 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+async function chooseDirectoryPath() {
+  if (!isTauri) return ''
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const selected = await open({ directory: true, multiple: false })
+    return typeof selected === 'string' ? selected : ''
+  } catch (e) {
+    console.warn('[settings] choose directory failed:', e)
+    return ''
+  }
+}
+
 function platformDefaultDockerEndpoint() {
   const isWin = navigator.platform?.startsWith('Win') || navigator.userAgent?.includes('Windows')
   return isWin ? '//./pipe/docker_engine' : '/var/run/docker.sock'
@@ -308,6 +320,7 @@ async function loadStandaloneInstallDir(page) {
         <input class="form-input" data-name="standalone-install-dir" placeholder="${t('settings.standaloneInstallDirPlaceholder')}" value="${escapeHtml(value)}" style="max-width:680px;font-family:var(--font-mono)">
         <div style="display:flex;align-items:center;gap:var(--space-sm);flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" data-action="save-standalone-install-dir">${t('common.save')}</button>
+          ${isTauri ? `<button class="btn btn-secondary btn-sm" data-action="browse-standalone-install-dir">${t('common.browse')}</button>` : ''}
           ${value ? `<button class="btn btn-secondary btn-sm" data-action="reset-standalone-install-dir">${t('common.reset')}</button>` : ''}
         </div>
       </div>
@@ -333,6 +346,12 @@ async function handleSaveStandaloneInstallDir(page) {
   await loadStandaloneInstallDir(page)
   await loadCliBinding(page)
   toast(value ? t('settings.standaloneInstallDirSaved') : t('settings.standaloneInstallDirCleared'), 'success')
+}
+
+async function handleBrowseStandaloneInstallDir(page) {
+  const input = page.querySelector('[data-name="standalone-install-dir"]')
+  const selected = await chooseDirectoryPath()
+  if (selected && input) input.value = selected
 }
 
 async function handleResetStandaloneInstallDir(page) {
@@ -527,6 +546,9 @@ function bindEvents(page) {
           break
         case 'save-standalone-install-dir':
           await handleSaveStandaloneInstallDir(page)
+          break
+        case 'browse-standalone-install-dir':
+          await handleBrowseStandaloneInstallDir(page)
           break
         case 'reset-standalone-install-dir':
           await handleResetStandaloneInstallDir(page)

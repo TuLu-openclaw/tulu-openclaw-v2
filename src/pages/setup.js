@@ -19,6 +19,18 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
 }
 
+async function chooseDirectoryPath() {
+  if (!window.__TAURI_INTERNALS__) return ''
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const selected = await open({ directory: true, multiple: false })
+    return typeof selected === 'string' ? selected : ''
+  } catch (e) {
+    console.warn('[setup] choose directory failed:', e)
+    return ''
+  }
+}
+
 function openclawSourceLabel(src) {
   return ({
     standalone: t('dashboard.cliSourceStandalone'),
@@ -445,7 +457,10 @@ function renderInstallSection() {
       </div>
       <div style="margin-bottom:var(--space-sm)" id="install-path-section">
         <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.installPathLabel')}</label>
-        <input id="install-path" type="text" placeholder="${t('setup.installPathPlaceholder')}" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);font-family:monospace">
+        <div class="setup-input-row">
+          <input id="install-path" type="text" placeholder="${t('setup.installPathPlaceholder')}" style="flex:1;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);font-family:monospace">
+          ${window.__TAURI_INTERNALS__ ? `<button class="btn btn-secondary btn-sm" id="btn-browse-install-path" type="button" style="font-size:11px;padding:4px 10px">${t('common.browse')}</button>` : ''}
+        </div>
         <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:4px;line-height:1.5">${t('setup.installPathHint')}</div>
       </div>
       <button class="btn btn-primary btn-sm" id="btn-install">${t('setup.installBtn')}</button>
@@ -873,6 +888,10 @@ function bindEvents(page, nodeOk, detectState) {
   const methodSection = page.querySelector('#install-method-section')
   const registrySection = page.querySelector('#registry-section')
   const installPathInput = page.querySelector('#install-path')
+  page.querySelector('#btn-browse-install-path')?.addEventListener('click', async () => {
+    const selected = await chooseDirectoryPath()
+    if (selected && installPathInput) installPathInput.value = selected
+  })
   const methodSelect = page.querySelector('#install-method')
   const methodHint = page.querySelector('#method-hint')
   const sourceRadios = page.querySelectorAll('input[name="install-source"]')
