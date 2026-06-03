@@ -3668,6 +3668,9 @@ function restoreReplyStatus(sessionKey = _sessionKey) {
     persistReplyStatus(_replyStatusState)
   }
   renderReplyStatus(_replyStatusState)
+  if (saved && _replyStatusState.state !== 'waiting') {
+    emitLobsterPhase(mapReplyStateToLobsterPhase(_replyStatusState.state), _replyStatusState.detail || replyStatusText(_replyStatusState.state), _replyStatusState.state)
+  }
 }
 
 function updateStreamingStatus(state, detail = '', options = {}) {
