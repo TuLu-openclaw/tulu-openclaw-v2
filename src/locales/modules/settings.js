@@ -25,6 +25,8 @@ export default {
   cliActive: _('活跃', 'Active', '活躍', 'アクティブ', '활성'),
   cliVersion: _('版本', 'Version', '', 'バージョン', '버전'),
   cliSwitchConfirm: _('确定切换到此 CLI 吗？切换后面板将使用该安装进行所有操作。', 'Switch to this CLI? The panel will use this installation for all operations.', '確定切換到此 CLI 吗？切換后面板將使用該安裝進行所有操作。', 'この CLI に切り替えますか？パネルはすべての操作にこのインストールを使用します。'),
+  useAsStandaloneDir: _('设为安装目录', 'Use as install dir', '設為安裝目錄', 'インストール先に使用', '설치 디렉터리로 사용'),
+  useAsStandaloneDirConfirm: _('将 standalone 安装目录设置为：\n{path}\n\n后续一键安装/升级和自动扫描都会优先使用此路径。', 'Set the standalone install directory to:\n{path}\n\nOne-click install/upgrade and auto-scan will prefer this path afterwards.', '將 standalone 安裝目錄設定為：\n{path}\n\n後續一鍵安裝/升級和自動掃描都會優先使用此路徑。', 'Standalone インストール先を次に設定します：\n{path}\n\n以後のワンクリックインストール/アップグレードと自動スキャンはこのパスを優先します。', 'standalone 설치 디렉터리를 다음으로 설정합니다:\n{path}\n\n이후 원클릭 설치/업그레이드와 자동 스캔에서 이 경로를 우선 사용합니다.'),
   language: _('界面语言', 'Language', '界面語言', '表示言語', '표시 언어', 'Ngôn ngữ hiển thị', 'Idioma de visualización', 'Idioma de exibição', 'Язык интерфейса', 'Langue d\'affichage', 'Anzeigesprache'),
   languageHint: _('切换界面显示语言，部分内容可能仍为中文', 'Switch the interface language. Some content may remain in the original language.', '切換界面顯示語言，部分內容可能仍為中文', 'インターフェース言語を切り替えます。一部コンテンツは元の言語のまま表示される場合があります。', '인터페이스 언어를 전환합니다. 일부 콘텐츠는 원래 언어로 표시될 수 있습니다.', 'Chuyển đổi ngôn ngữ giao diện.', 'Cambiar el idioma de la interfaz.', 'Alterar o idioma da interface.', 'Переключить язык интерфейса.', 'Changer la langue de l\'interface.', 'Sprache der Benutzeroberfläche wechseln.'),
   testProxy: _('测试连通', 'Test Connection', '測試連通', '接続テスト', '연결 테스트', 'Kiểm tra kết nối', 'Probar conexión', 'Testar conexão', 'Проверить подключение', 'Tester la connexion', 'Verbindung testen'),

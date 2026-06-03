@@ -66,6 +66,15 @@ function dedupeOpenclawInstallations(list = []) {
   return [...map.values()]
 }
 
+function inferOpenclawInstallDir(cliPath) {
+  const raw = String(cliPath || '').trim()
+  if (!raw) return ''
+  const normalized = raw.replace(/\\/g, '/')
+  const withoutExe = normalized.replace(/\/openclaw(?:\.cmd|\.exe|\.ps1)?$/i, '')
+  const withoutBin = withoutExe.replace(/\/bin$/i, '')
+  return withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
+}
+
 const REGISTRIES = [
   { label: () => t('settings.registryTaobao'), value: 'https://registry.npmmirror.com' },
   { label: () => t('settings.registryNpm'), value: 'https://registry.npmjs.org' },
@@ -575,6 +584,9 @@ function bindEvents(page) {
         case 'bind-cli':
           await handleBindCli(page, btn.dataset.path)
           break
+        case 'use-cli-install-dir':
+          await handleUseCliInstallDir(page, btn.dataset.path)
+          break
         case 'unbind-cli':
           await handleUnbindCli(page)
           break
@@ -806,6 +818,7 @@ async function loadCliBinding(page) {
             <div style="font-size:11px;color:var(--text-tertiary)">${sourceLabel(inst.source)}${inst.version ? ' · v' + inst.version : ''}</div>
           </div>
           ${isBound ? '<span style="color:var(--success);font-size:var(--font-size-xs)">✓ ' + t('settings.cliBound') + '</span>' : `<button class="btn btn-secondary btn-xs" data-action="bind-cli" data-path="${escapeHtml(inst.path)}">${t('common.confirm')}</button>`}
+          <button class="btn btn-secondary btn-xs" data-action="use-cli-install-dir" data-path="${escapeHtml(inst.path)}">${t('settings.useAsStandaloneDir')}</button>
         </div>`
       }
       html += '</div>'
@@ -829,6 +842,19 @@ async function handleBindCli(page, path) {
   toast(t('common.saveSuccess'), 'success')
   await loadCliBinding(page)
   await maybeRefreshGatewayServiceBinding()
+}
+
+async function handleUseCliInstallDir(page, path) {
+  const dir = inferOpenclawInstallDir(path)
+  if (!dir) return
+  const ok = await showConfirm(t('settings.useAsStandaloneDirConfirm', { path: dir }))
+  if (!ok) return
+  const cfg = await api.readPanelConfig()
+  cfg.openclawStandaloneInstallDir = dir
+  await savePanelConfigAndRefreshPaths(cfg)
+  await loadStandaloneInstallDir(page)
+  await loadCliBinding(page)
+  toast(t('settings.standaloneInstallDirSaved'), 'success')
 }
 
 async function handleUnbindCli(page) {
