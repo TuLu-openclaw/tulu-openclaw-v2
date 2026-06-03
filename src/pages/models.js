@@ -796,6 +796,8 @@ function ensureValidPrimary(state) {
 }
 
 function applyDefaultModel(state) {
+  if (!state.config.agents) state.config.agents = {}
+  if (!state.config.agents.defaults) state.config.agents.defaults = {}
   ensureValidPrimary(state)
   const primary = getCurrentPrimary(state.config)
 
