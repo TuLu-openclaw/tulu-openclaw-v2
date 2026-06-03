@@ -134,7 +134,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
           <div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc">静音</span></div>
           <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc">倍速菜单</span></div>
           <div class="shortcut-row"><span class="shortcut-key">I</span><span class="shortcut-desc">画中画</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc">上一线路 / 下一线路</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc" data-shortcut="pn">上一线路 / 下一线路</span></div>
           <div class="shortcut-row"><span class="shortcut-key">X</span><span class="shortcut-desc">截图</span></div>
           <div class="shortcut-row"><span class="shortcut-key">Shift + /</span><span class="shortcut-desc">显示/隐藏此面板</span></div>
           <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">退出 / 关闭</span></div>
@@ -213,6 +213,22 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     }
     return null
   }
+  function isEpisodeUrlList(){
+    if(!allUrls.length||!allEps.length)return false
+    for(var i=0;i<allUrls.length;i++){if(!getEpisodeByUrl(allUrls[i]))return false}
+    return true
+  }
+  var urlsAreEpisodes=isEpisodeUrlList()
+  function navPrevText(){return urlsAreEpisodes?'上一集':'上一线路'}
+  function navNextText(){return urlsAreEpisodes?'下一集':'下一线路'}
+  function switchTargetText(){return urlsAreEpisodes?'剧集':'线路'}
+  function switchActionText(){return '尝试切换'+switchTargetText()+'...'}
+  function syncNavCopy(){
+    prevBtn.title=navPrevText()+' (P)'
+    nextBtn.title=navNextText()+' (N)'
+    var pn=shortcuts&&shortcuts.querySelector('[data-shortcut=pn]')
+    if(pn)pn.textContent=navPrevText()+' / '+navNextText()
+  }
   function syncEpisodeContext(epUrl,fallbackTitle){
     var ep=getEpisodeByUrl(epUrl)
     var nextTitle=(ep&&ep.epName)||fallbackTitle||title
@@ -234,6 +250,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     topSub.appendChild(label)
   }
   setTopSub(title)
+  syncNavCopy()
   if(allEps.length>1){
     epGroup.style.display='flex'
     epSelect.textContent=''
@@ -251,13 +268,16 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       playUrl(ep.url,syncEpisodeContext(ep.url,ep.epName),ep.pic||pic)
     })
   }
-  if(allUrls.length>1){
+  if(allUrls.length>1&&!urlsAreEpisodes){
     urlGroup.style.display='flex'
+    var urlLabel=urlGroup.querySelector('.sel-label')
+    if(urlLabel)urlLabel.textContent=switchTargetText()
     urlSelect.textContent=''
     allUrls.forEach(function(u,i){
       var opt=document.createElement('option')
       opt.value=String(i)
-      opt.textContent='线路 '+(i+1)
+      var ep=getEpisodeByUrl(u)
+      opt.textContent=urlsAreEpisodes?(ep&&ep.epName?ep.epName:'第 '+(i+1)+' 集'):('线路 '+(i+1))
       if(i===curUrlIdx)opt.selected=true
       urlSelect.appendChild(opt)
     })
@@ -278,7 +298,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   function scheduleLoadTimeout(curIdx){
     clearLoadTimer()
     loadTimer=setTimeout(function(){
-      showOverlay('加载超时，尝试切换线路...',true)
+      showOverlay('加载超时，'+switchActionText(),true)
       tryNextUrl(curIdx)
     },20000)
   }
@@ -329,7 +349,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       try{
         await ensureHlsJs()
       }catch(e){
-        showOverlay('HLS 播放组件加载失败，尝试切换线路...',true)
+        showOverlay('HLS 播放组件加载失败，'+switchActionText(),true)
         tryNextUrl(uidx)
         return
       }
@@ -346,12 +366,12 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         hls.on(window.Hls.Events.ERROR,function(evt,data){
           if(data.fatal){
             if(data.type===window.Hls.ErrorTypes.NETWORK_ERROR){
-              showOverlay('网络错误，尝试切换线路...',true)
+              showOverlay('网络错误，'+switchActionText(),true)
               tryNextUrl(uidx)
             }else if(data.type===window.Hls.ErrorTypes.MEDIA_ERROR){
               hls.recoverMediaError()
             }else{
-              showOverlay('播放失败，尝试切换线路...',true)
+              showOverlay('播放失败，'+switchActionText(),true)
               tryNextUrl(uidx)
             }
           }
@@ -365,11 +385,11 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
           vid.play().catch(function(){})
         },{once:true})
         vid.addEventListener('error',function(){
-          showOverlay('原生 HLS 加载失败，尝试切换线路...',true)
+          showOverlay('原生 HLS 加载失败，'+switchActionText(),true)
           tryNextUrl(uidx)
         },{once:true})
       }else{
-        showOverlay('浏览器不支持 HLS 播放，尝试切换线路...',true)
+        showOverlay('浏览器不支持 HLS 播放，'+switchActionText(),true)
         tryNextUrl(uidx)
       }
     }else{
@@ -382,14 +402,14 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         vid.play().catch(function(){})
       },{once:true})
       vid.addEventListener('error',function(){
-        showOverlay('视频加载失败，尝试切换线路...',true)
+        showOverlay('视频加载失败，'+switchActionText(),true)
         tryNextUrl(uidx)
       },{once:true})
     }
   }
   function tryNextUrl(curIdx){
     clearLoadTimer()
-    if(!allUrls.length){showFinalError('播放失败：没有可用线路');return}
+    if(!allUrls.length){showFinalError('播放失败：没有可用'+switchTargetText());return}
     if(curIdx>=0&&allUrls[curIdx])failedUrls[allUrls[curIdx]]=true
     var start=curIdx>=0?curIdx:0
     for(var step=1;step<=allUrls.length;step++){
@@ -399,7 +419,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         return
       }
     }
-    showFinalError('全部线路均播放失败，请稍后重试或更换片源')
+    showFinalError('全部'+switchTargetText()+'均播放失败，请稍后重试或更换片源')
   }
   async function ensureHlsJs(){
     if(window.Hls)return
