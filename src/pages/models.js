@@ -829,12 +829,38 @@ function applyDefaultModel(state) {
   // 强制覆盖会导致 #142：重开 星枢OpenClaw 后子 Agent 模型配置被重置
 }
 
-function exportModelConfig(state) {
+function hasModelSecrets(models) {
+  const providers = models?.providers || {}
+  return Object.values(providers).some(provider => !!String(provider?.apiKey || '').trim())
+}
+
+function validateImportedModels(models) {
+  const providers = models?.providers
+  if (!providers || typeof providers !== 'object' || Array.isArray(providers)) {
+    throw new Error(t('models.importInvalid'))
+  }
+  for (const [key, provider] of Object.entries(providers)) {
+    if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+      throw new Error(t('models.importInvalidProvider', { name: key }))
+    }
+    if (provider.models === undefined) provider.models = []
+    if (!Array.isArray(provider.models)) {
+      throw new Error(t('models.importInvalidProvider', { name: key }))
+    }
+  }
+}
+
+async function exportModelConfig(state) {
   if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
+  const models = state.config.models || { providers: {} }
+  if (hasModelSecrets(models)) {
+    const ok = await showConfirm(t('models.exportSecretConfirm'))
+    if (!ok) return
+  }
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    models: state.config.models || { providers: {} },
+    models,
     defaults: {
       model: state.config.agents?.defaults?.model || {},
     },
@@ -860,9 +886,7 @@ function parseImportedModelConfig(payload) {
     : source.providers
       ? { providers: source.providers }
       : null
-  if (!models?.providers || typeof models.providers !== 'object' || Array.isArray(models.providers)) {
-    throw new Error(t('models.importInvalid'))
-  }
+  validateImportedModels(models)
   return {
     models,
     defaultModel: source.defaults?.model || source.agents?.defaults?.model || null,
@@ -903,7 +927,7 @@ function bindTopActions(page, state) {
     addProvider(page, state)
   }
   page.querySelector('#btn-undo').onclick = () => undo(page, state)
-  page.querySelector('#btn-export-models').onclick = () => exportModelConfig(state)
+  page.querySelector('#btn-export-models').onclick = () => { exportModelConfig(state).catch(e => toast(String(e), 'error')) }
   page.querySelector('#btn-import-models').onclick = () => page.querySelector('#model-import-file')?.click()
   page.querySelector('#model-import-file').onchange = async (e) => {
     const file = e.target.files?.[0]
