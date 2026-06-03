@@ -706,15 +706,16 @@ window.addEventListener('message', e => {
 // ── 本地存储轮询（跨窗口状态同步）─────────────────────────
 // 主窗口调用 updateLobsterState(state, message) 写入 localStorage
 // 这里轮询读取，实现跨窗口状态同步
-let _lastState = null
+let _lastStateSig = null
 setInterval(() => {
   try {
     const stored = localStorage.getItem('lobsterState')
     if (stored) {
       const { state, message, ts } = JSON.parse(stored)
-      // 忽略过期超过 10 秒的旧状态
-      if (Date.now() - ts < 10000 && state !== _lastState) {
-        _lastState = state
+      const sig = `${state || ''}|${message || ''}|${ts || ''}`
+      // 忽略过期超过 10 秒的旧状态；同一状态的新消息/新时间戳也要同步
+      if (Date.now() - ts < 10000 && sig !== _lastStateSig) {
+        _lastStateSig = sig
         setState(state, message)
       }
     }
@@ -727,8 +728,11 @@ window.addEventListener('load', () => {
   try {
     const stored = localStorage.getItem('lobsterState')
     if (stored) {
-      const { state, message } = JSON.parse(stored)
-      if (state) { setState(state, message); _lastState = state }
+      const { state, message, ts } = JSON.parse(stored)
+      if (state) {
+        setState(state, message)
+        _lastStateSig = `${state || ''}|${message || ''}|${ts || ''}`
+      }
     } else {
       setState('idle')
     }
