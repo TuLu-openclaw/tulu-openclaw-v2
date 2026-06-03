@@ -1623,7 +1623,7 @@ function setDebug(msg, detail) {
       playbackCtx: { id, source, epName },
       pic,
     })
-    if (!opened) showEmbeddedPlayerFallback(name, url, resume, fallbackUrls || [url])
+    if (!opened) showEmbeddedPlayerFallback(name, url, resume, fallbackUrls || [url], allEps || [])
   }
 
   async function openStandalonePlayer({ url, title, resume, allEps, allUrls, playbackCtx, pic }) {
@@ -1644,7 +1644,7 @@ function setDebug(msg, detail) {
     }
   }
 
-  function showEmbeddedPlayerFallback(name, url, resume, fallbackUrls) {
+  function showEmbeddedPlayerFallback(name, url, resume, fallbackUrls, allEps) {
     const overlay = el.querySelector('#t-player-overlay')
     const title = el.querySelector('#t-player-title')
     const body = el.querySelector('#t-player-body')
@@ -1655,15 +1655,41 @@ function setDebug(msg, detail) {
     if (title) title.textContent = name || '播放'
     overlay.style.display = 'flex'
     body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#f6c177;margin-bottom:14px">独立播放器打开失败，已切换为内嵌播放。</p></div>'
-    loadVideoPlayer(url, isDirectVideoUrl(url), resume || 0, fallbackUrls || [url])
+    loadVideoPlayer(url, isDirectVideoUrl(url), resume || 0, fallbackUrls || [url], allEps || [])
   }
 
-  async function loadVideoPlayer(videoUrl, isM3u8, startProgress, fallbackUrls) {
+  async function loadVideoPlayer(videoUrl, isM3u8, startProgress, fallbackUrls, allEps) {
     const body = el.querySelector('#t-player-body')
     const fallbackArr = (fallbackUrls && fallbackUrls.length) ? fallbackUrls : []
-    let lineIdx = 0  // 当前尝试的线路索引（0=主URL）
+    const episodeArr = Array.isArray(allEps) ? allEps : []
+    const fallbackUrlsAreEpisodes = fallbackArr.length > 0 && episodeArr.length > 0 && fallbackArr.every(u => getFallbackEpisodeByUrl(u, episodeArr))
+    let lineIdx = 0  // 当前尝试的地址索引（0=主URL；可能是线路或剧集）
     let errCount = 0
     const MAX_ERR = 3
+
+    function getFallbackEpisodeByUrl(epUrl, eps = episodeArr) {
+      if (!epUrl || !eps || !eps.length) return null
+      return eps.find(ep => ep && ep.url === epUrl) || null
+    }
+
+    function syncEmbeddedEpisodeContext(nextUrl) {
+      if (!fallbackUrlsAreEpisodes || !playingEp) return
+      const ep = getFallbackEpisodeByUrl(nextUrl)
+      if (!ep) return
+      const nextEpName = ep.epName || ep.name || playingEp.epName
+      playingEp = { ...playingEp, epName: nextEpName, epUrl: nextUrl }
+      const titleEl = el.querySelector('#t-player-title')
+      if (titleEl && nextEpName) titleEl.textContent = nextEpName
+      upsertPlayHistory({
+        id: playingEp.id, name: titleEl?.textContent || nextEpName || '播放中', pic: playingEp.pic || '',
+        source: playingEp.source, epName: playingEp.epName, epUrl: nextUrl, progress: 0, duration: 0,
+        allUrls: playingEp.allUrls || fallbackArr || [], allEps: playingEp.allEps || episodeArr || [],
+        updated: Date.now()
+      })
+      el.querySelector('#t-ext-link')?.setAttribute('href', nextUrl)
+    }
+
+    function fallbackTargetText() { return fallbackUrlsAreEpisodes ? '剧集' : '线路' }
 
     function showOtip(vid, msg) {
       let tip = document.getElementById('_ttip')
@@ -1713,6 +1739,7 @@ function setDebug(msg, detail) {
     }
 
     async function tryPlay(url, isM3u8, sp) {
+      syncEmbeddedEpisodeContext(url)
       if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">暂无播放地址</p></div>'; return }
 
       if (isM3u8) {
@@ -1729,11 +1756,12 @@ function setDebug(msg, detail) {
           let hlsTimedOut = false
           const hlsTimer = setTimeout(async () => {
             if (!hlsTimedOut) { hlsTimedOut = true; hls.destroy(); window._movieHls = null
-              renderPlaybackError(url, 'm3u8 加载超时（15秒）')
-              await tryNextLine(url)
+              renderPlaybackError(url, 'm3u8 加载超时（15秒），正在尝试切换' + fallbackTargetText())
+              const switched = await tryNextLine(url)
+              if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
             }
           }, 15000)
-          hls.on(window.Hls.Events.ERROR, (evt, data) => {
+          hls.on(window.Hls.Events.ERROR, async (evt, data) => {
             clearTimeout(hlsTimer)
             if (data.fatal) {
               errCount++
@@ -1742,8 +1770,9 @@ function setDebug(msg, detail) {
                 hls.startLoad(); return
               }
               hlsTimedOut = true; hls.destroy(); window._movieHls = null
-              renderPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '）')
-              tryNextLine(url)
+              renderPlaybackError(url, '播放中断（' + (errCount >= MAX_ERR ? '多次重试失败' : data.details) + '），正在尝试切换' + fallbackTargetText())
+              const switched = await tryNextLine(url)
+              if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
             }
           })
           hls.on(window.Hls.Events.MANIFEST_PARSED, () => { clearTimeout(hlsTimer); hls.currentLevel = -1 })
@@ -1761,7 +1790,7 @@ function setDebug(msg, detail) {
           addTouchGesture(video)
           video.addEventListener('error', async () => {
             const switched = await tryNextLine(url)
-            if (!switched) renderPlaybackError(url, '播放失败')
+            if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
           })
           wrap.appendChild(video)
           body.innerHTML = ''; body.appendChild(wrap)
@@ -1779,7 +1808,7 @@ function setDebug(msg, detail) {
         video.addEventListener('ended', () => markFinished())
         video.addEventListener('error', async () => {
           const switched = await tryNextLine(url)
-          if (!switched) renderPlaybackError(url, '播放失败')
+          if (!switched) renderPlaybackError(url, '播放失败，全部' + fallbackTargetText() + '均不可用')
         })
         video.src = url
         if (sp > 0) video.currentTime = sp
@@ -1875,7 +1904,7 @@ function setDebug(msg, detail) {
       playbackCtx: { id, source, epName },
       pic,
     })
-    if (!opened) showEmbeddedPlayerFallback(name, useUrl, resume, allUrls || [useUrl])
+    if (!opened) showEmbeddedPlayerFallback(name, useUrl, resume, allUrls || [useUrl], allEps || [])
   }
 
 function pickDirectUrl(url) {
