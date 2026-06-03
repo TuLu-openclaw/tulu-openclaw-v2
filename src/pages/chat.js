@@ -2142,12 +2142,28 @@ function mapReplyStateToLobsterPhase(state) {
   })[state] || 'working'
 }
 
-function emitLobsterPhase(phase, message) {
+function mapReplyStateToLobsterState(state) {
+  return ({
+    queued: 'executing',
+    sending: 'executing',
+    thinking: 'researching',
+    tool: 'executing',
+    streaming: 'writing',
+    finalizing: 'syncing',
+    done: 'idle',
+    waiting: 'idle',
+    error: 'error',
+    aborted: 'error',
+  })[state] || 'executing'
+}
+
+function emitLobsterPhase(phase, message, replyState = '') {
   try {
+    const lobsterState = mapReplyStateToLobsterState(replyState) || (phase === 'done' ? 'idle' : 'executing')
     window.dispatchEvent(new CustomEvent('lobster-work-start', {
       detail: {
         phase,
-        state: phase === 'done' ? 'idle' : (phase === 'tool' ? 'tool' : 'writing'),
+        state: lobsterState,
         message: message || phase,
       }
     }))
@@ -3640,7 +3656,7 @@ function setReplyStatus(state, detail = '', options = {}) {
   _replyStatusState = next
   persistReplyStatus(next)
   renderReplyStatus(next)
-  emitLobsterPhase(mapReplyStateToLobsterPhase(next.state), next.detail || replyStatusText(next.state))
+  emitLobsterPhase(mapReplyStateToLobsterPhase(next.state), next.detail || replyStatusText(next.state), next.state)
   return next
 }
 

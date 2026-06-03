@@ -618,8 +618,14 @@ let currentState = 'idle'
 let startTime = Date.now()
 let msgCount = 0
 
+function normalizeOfficeState(state) {
+  const aliases = { working: 'executing', tool: 'executing', aborted: 'error' }
+  return STATES[state] ? state : (aliases[state] || 'idle')
+}
+
 // ── 状态切换 ──────────────────────────────────────────────
 function setState(state, message) {
+  state = normalizeOfficeState(state)
   const s = STATES[state] || STATES.idle
   currentState = state
 
