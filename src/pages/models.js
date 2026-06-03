@@ -692,6 +692,12 @@ function bindProviderButtons(listEl, page, state) {
   })
 }
 
+function renderModelInventory(page, state) {
+  if (getCurrentPrimary(state.config)) ensureValidPrimary(state)
+  renderProviders(page, state)
+  renderDefaultBar(page, state)
+}
+
 // 统一处理按钮动作
 async function handleAction(action, btn, card, section, providerKey, provider, page, state) {
   switch (action) {
@@ -709,8 +715,7 @@ async function handleAction(action, btn, card, section, providerKey, provider, p
       if (!yes) return
       pushUndo(state)
       delete state.config.models.providers[providerKey]
-      renderProviders(page, state)
-      renderDefaultBar(page, state)
+      renderModelInventory(page, state)
       updateUndoBtn(page, state)
       autoSave(state)
       toast(t('models.providerDeleted', { name: providerKey }), 'info')
@@ -733,8 +738,7 @@ async function handleAction(action, btn, card, section, providerKey, provider, p
       pushUndo(state)
       const idx = findModelIdx(provider, modelId)
       if (idx >= 0) provider.models.splice(idx, 1)
-      renderProviders(page, state)
-      renderDefaultBar(page, state)
+      renderModelInventory(page, state)
       updateUndoBtn(page, state)
       autoSave(state)
       toast(t('models.modelDeleted', { name: modelId }), 'info')
@@ -1270,8 +1274,7 @@ async function handleBatchDelete(section, page, state, providerKey) {
     const mid = getModelId(m)
     return !ids.includes(mid)
   })
-  renderProviders(page, state)
-  renderDefaultBar(page, state)
+  renderModelInventory(page, state)
   updateUndoBtn(page, state)
   autoSave(state)
   toast(t('models.batchDeleted', { count: ids.length }), 'info')
