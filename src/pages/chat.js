@@ -2993,10 +2993,15 @@ function scheduleStreamSafetyTimeout() {
       if (elapsed > STREAM_STALE_REFRESH_MS && _sessionKey && _messagesEl && _pageActive) {
         const oldHash = _lastHistoryHash
         _lastHistoryHash = ''
-        loadHistory().then(() => {
+        loadHistory().then(async () => {
           if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
             setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
             resetStreamState()
+            // loadHistory deliberately avoids repainting while a stream is active.
+            // When a silent/long-running run only completes in history (no final WS event),
+            // render once more after clearing stream state so the completed answer is visible.
+            _lastHistoryHash = ''
+            await loadHistory()
             processMessageQueue()
           }
         }).catch(() => {})
@@ -3751,7 +3756,14 @@ function _startResponseWatchdog() {
       _lastHistoryHash = ''
       await loadHistory()
       if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
+        const doneRunId = _currentRunId || ''
         showTyping(false)
+        resetStreamState()
+        // The first refresh only persists history while waiting/streaming; repaint now that
+        // the watchdog has confirmed the answer arrived without a live final event.
+        _lastHistoryHash = ''
+        await loadHistory()
+        setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: t('chat.replyActivityDone') })
       } else if (!_currentAiBubble) {
         _isStreaming = true
         _streamStartTime = _streamStartTime || Date.now()
