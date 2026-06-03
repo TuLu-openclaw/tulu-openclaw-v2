@@ -10,6 +10,7 @@
  * 6. 开始正常通信
  */
 import { invoke } from './tauri-api.js'
+import { t } from './i18n.js'
 
 export function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID()
@@ -181,10 +182,10 @@ export class WsClient {
     this._closeWs()
     this._gatewayReady = false
     this._handshaking = false
-    this._status = '正在连接网关'
+    this._status = t('chat.wsStatusConnecting')
     this._statusDetail = (this._url || '').replace(/([?&]token=)[^&]+/, '$1***')
     this._reconnectState = 'attempting'
-    this._setConnected(false, 'connecting', '正在连接网关...')
+    this._setConnected(false, 'connecting', t('chat.wsStatusConnectingDots'))
     const wsId = ++this._wsId
     let ws
     try { ws = new WebSocket(this._url) } catch { this._scheduleReconnect(); return }
@@ -198,16 +199,16 @@ export class WsClient {
       this._lastConnectedAt = Date.now()
       this._lastMessageAt = Date.now()
       this._startHeartbeat()
-      this._setConnected(true, 'connected', '网关连接已建立，正在等待握手')
+      this._setConnected(true, 'connected', t('chat.wsConnectedWaitingHandshake'))
       this._startPing()
       // 优先等待 Gateway 发 connect.challenge；若超时则主动降级发起 connect
-      this._status = '等待握手指令'
-      this._statusDetail = '等待网关下发 connect.challenge'
+      this._status = t('chat.wsStatusWaitingChallenge')
+      this._statusDetail = t('chat.wsDetailWaitingChallenge')
       this._challengeTimer = setTimeout(() => {
         if (!this._handshaking && !this._gatewayReady) {
           console.warn('[ws] 等待 challenge 超时，主动发起 connect')
-          this._status = '握手超时，正在主动补发连接'
-          this._statusDetail = '网关未及时返回握手指令，客户端正在主动发起连接'
+          this._status = t('chat.wsStatusChallengeTimeout')
+          this._statusDetail = t('chat.wsDetailChallengeTimeout')
           this._sendConnectFrame('')
         }
       }, CHALLENGE_TIMEOUT)
@@ -539,9 +540,9 @@ export class WsClient {
       console.warn('[ws] 已达到最大重连次数 (', MAX_RECONNECT_ATTEMPTS, ')，停止自动重连')
       this._reconnectState = 'idle'
       this._pendingReconnect = false
-      this._status = '重连次数过多'
-      this._statusDetail = '已停止自动重连，请手动刷新页面重试'
-      this._setConnected(false, 'error', `连接失败，已停止重连。请手动刷新页面重试。`)
+      this._status = t('chat.wsStatusReconnectLimit')
+      this._statusDetail = t('chat.wsDetailReconnectLimit')
+      this._setConnected(false, 'error', t('chat.wsReconnectStopped'))
       return
     }
 
@@ -558,9 +559,9 @@ export class WsClient {
     this._reconnectAttempts++
     this._reconnectState = 'scheduled'
     this._pendingReconnect = true
-    this._status = '等待重新连接'
-    this._statusDetail = `第 ${this._reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} 次重连，${Math.round(delay/1000)} 秒后重试`
-    this._setConnected(false, 'reconnecting', `重连中 (${this._reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})，${Math.round(delay/1000)}秒后...`)
+    this._status = t('chat.wsStatusWaitingReconnect')
+    this._statusDetail = t('chat.wsDetailReconnectAttempt', { current: this._reconnectAttempts, max: MAX_RECONNECT_ATTEMPTS, seconds: Math.round(delay/1000) })
+    this._setConnected(false, 'reconnecting', t('chat.wsReconnectingIn', { current: this._reconnectAttempts, max: MAX_RECONNECT_ATTEMPTS, seconds: Math.round(delay/1000) }))
     console.log(`[ws] 计划重连 (${this._reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})，延迟 ${Math.round(delay/1000)}秒`)
     this._reconnectTimer = setTimeout(() => {
       if (!this._intentionalClose) {
