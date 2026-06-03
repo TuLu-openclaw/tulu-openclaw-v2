@@ -27,11 +27,11 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 function getDefaultSources() {
   return [
-    { key: 'lziapi',   name: '量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',          type: 'tvbox' },
-    { key: 'bfzyapi',  name: '暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',            type: 'tvbox' },
-    { key: 'tyyszy',   name: '天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',             type: 'tvbox' },
+    { key: 'lziapi',   name: tvText('defaultSourceLziapi'),   api: 'https://cj.lziapi.com/api.php/provide/vod',          type: 'tvbox' },
+    { key: 'bfzyapi',  name: tvText('defaultSourceBfzyapi'),  api: 'https://bfzyapi.com/api.php/provide/vod',            type: 'tvbox' },
+    { key: 'tyyszy',   name: tvText('defaultSourceTyyszy'),   api: 'https://tyyszy.com/api.php/provide/vod',             type: 'tvbox' },
     { key: 'ffm3u8',   name: 'FFm3u8',  api: 'https://cj.ffzyapi.com/api.php/provide/vod',         type: 'tvbox' },
-    { key: '1080zyku', name: '1080资源', api: 'https://api.1080zyku.com/inc/api_mac10.php',         type: '1080'  },
+    { key: '1080zyku', name: tvText('defaultSource1080zyku'), api: 'https://api.1080zyku.com/inc/api_mac10.php',         type: '1080'  },
   ];
 }
 
@@ -325,10 +325,10 @@ function renderLibrary() {
   var content = '';
   if (libTab === 'favs') {
     content = !favs.length
-      ? '<div class="tvbox-empty"><div class="tvbox-empty-icon">&#9829;</div><div class="tvbox-empty-text">暂无收藏内容</div></div>'
+      ? '<div class="tvbox-empty"><div class="tvbox-empty-icon">&#9829;</div><div class="tvbox-empty-text">'+esc(tvText('emptyFavorites'))+'</div></div>'
       : '<div class="tvbox-grid">'+favs.map(function(v){return renderVodCard(v);}).join('')+'</div>';
   } else {
-    if (!hist.length) content = '<div class="tvbox-empty"><div class="tvbox-empty-icon">&#9201;</div><div class="tvbox-empty-text">暂无观看记录</div></div>';
+    if (!hist.length) content = '<div class="tvbox-empty"><div class="tvbox-empty-icon">&#9201;</div><div class="tvbox-empty-text">'+esc(tvText('emptyHistory'))+'</div></div>';
     else {
       content = hist.map(function(h){
         return '<div class="tvbox-history-item" onclick="window.__tvbox.histPlay(\''+escInlineJsArg(String(h.vod_id))+'\');">'+
@@ -338,10 +338,10 @@ function renderLibrary() {
       }).join('');
     }
   }
-  var clearBtn = (libTab==='hist'&&hist.length) ? '<button style="margin-left:auto;padding:8px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;color:var(--text-muted);font-size:12px;cursor:pointer;font-family:inherit;" onclick="event.stopPropagation();window.__tvbox.histClear();">清空</button>' : '';
+  var clearBtn = (libTab==='hist'&&hist.length) ? '<button style="margin-left:auto;padding:8px 16px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:8px;color:var(--text-muted);font-size:12px;cursor:pointer;font-family:inherit;" onclick="event.stopPropagation();window.__tvbox.histClear();">'+esc(tvText('clearHistory'))+'</button>' : '';
   return '<div class="tvbox-library-tabs">'+
-    '<button class="tvbox-library-tab '+(libTab==='favs'?'active':'')+'" onclick="window.__tvbox.libTab(\'favs\');">&#9829; 收藏</button>'+
-    '<button class="tvbox-library-tab '+(libTab==='hist'?'active':'')+'" onclick="window.__tvbox.libTab(\'hist\');">&#9201; 历史</button>'+
+    '<button class="tvbox-library-tab '+(libTab==='favs'?'active':'')+'" onclick="window.__tvbox.libTab(\'favs\');">&#9829; '+esc(tvText('favoritesTab'))+'</button>'+
+    '<button class="tvbox-library-tab '+(libTab==='hist'?'active':'')+'" onclick="window.__tvbox.libTab(\'hist\');">&#9201; '+esc(tvText('historyTab'))+'</button>'+
     clearBtn+'</div>'+content;
 }
 
@@ -351,11 +351,11 @@ function renderSourceManager() {
     return '<div class="tvbox-source-item">'+
       '<div><div class="tvbox-source-item-name">'+esc(src.name)+'</div><div class="tvbox-source-item-api">'+esc(src.api)+'</div></div>'+
       '<div class="tvbox-source-item-actions">'+
-        '<button class="tvbox-source-edit-btn" onclick="window.__tvbox.editSrc(\''+escInlineJsArg(src.key)+'\');">编辑</button>'+
-        '<button class="tvbox-source-del-btn" onclick="window.__tvbox.delSrc(\''+escInlineJsArg(src.key)+'\');">删除</button>'+
+        '<button class="tvbox-source-edit-btn" onclick="window.__tvbox.editSrc(\''+escInlineJsArg(src.key)+'\');">'+esc(tvText('editSource'))+'</button>'+
+        '<button class="tvbox-source-del-btn" onclick="window.__tvbox.delSrc(\''+escInlineJsArg(src.key)+'\');">'+esc(tvText('deleteSource'))+'</button>'+
       '</div></div>';
   }).join('');
-  return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ 添加新源</button></div>'+renderSourceEditModal(S('editingSrc', false));
+  return '<div class="tvbox-source-manager">'+items+'<button class="tvbox-add-source-btn" onclick="window.__tvbox.addSrc();">+ '+esc(tvText('addSource'))+'</button></div>'+renderSourceEditModal(S('editingSrc', false));
 }
 
 function renderSourceEditModal(srcToEdit) {
@@ -364,23 +364,23 @@ function renderSourceEditModal(srcToEdit) {
   var isNew = !ed.key;
   return '<div class="tvbox-edit-modal" id="tvbox-edit-modal" onclick="if(event.target===this)window.__tvbox.closeEdit();">'+
     '<div class="tvbox-edit-box" onclick="event.stopPropagation()">'+
-      '<h4>'+(isNew?'添加新源':'编辑源')+'</h4>'+
-      '<div class="tvbox-edit-field"><label>源名称</label><input id="tvbox-edit-name" type="text" placeholder="例如：量子资源" value="'+esc(ed.name||'')+'"/></div>'+
-      '<div class="tvbox-edit-field"><label>API 地址</label><input id="tvbox-edit-api" type="text" placeholder="https://..." value="'+esc(ed.api||'')+'"/></div>'+
-      '<div class="tvbox-edit-field"><label>源类型</label><select id="tvbox-edit-type">'+
-        '<option value="tvbox" '+(ed.type==='tvbox'?'selected':'')+'>TVBox 标准</option>'+
-        '<option value="1080" '+(ed.type==='1080'?'selected':'')+'>1080 API</option>'+
+      '<h4>'+esc(tvText(isNew ? 'addSourceTitle' : 'editSourceTitle'))+'</h4>'+
+      '<div class="tvbox-edit-field"><label>'+esc(tvText('sourceNameLabel'))+'</label><input id="tvbox-edit-name" type="text" placeholder="'+esc(tvText('sourceNamePlaceholder'))+'" value="'+esc(ed.name||'')+'"/></div>'+
+      '<div class="tvbox-edit-field"><label>'+esc(tvText('sourceApiLabel'))+'</label><input id="tvbox-edit-api" type="text" placeholder="https://..." value="'+esc(ed.api||'')+'"/></div>'+
+      '<div class="tvbox-edit-field"><label>'+esc(tvText('sourceTypeLabel'))+'</label><select id="tvbox-edit-type">'+
+        '<option value="tvbox" '+(ed.type==='tvbox'?'selected':'')+'>'+esc(tvText('sourceTypeTvbox'))+'</option>'+
+        '<option value="1080" '+(ed.type==='1080'?'selected':'')+'>'+esc(tvText('sourceType1080'))+'</option>'+
       '</select></div>'+
       '<div class="tvbox-edit-actions">'+
-        '<button class="tvbox-edit-save" onclick="window.__tvbox.saveSrc('+(isNew?'null':'\''+escInlineJsArg(ed.key)+'\'')+');">保存</button>'+
-        '<button class="tvbox-edit-cancel" onclick="window.__tvbox.closeEdit();">取消</button>'+
+        '<button class="tvbox-edit-save" onclick="window.__tvbox.saveSrc('+(isNew?'null':'\''+escInlineJsArg(ed.key)+'\'')+');">'+esc(tvText('saveSource'))+'</button>'+
+        '<button class="tvbox-edit-cancel" onclick="window.__tvbox.closeEdit();">'+esc(tvText('cancelEdit'))+'</button>'+
       '</div>'+
     '</div></div>';
 }
 
 function renderEpisodes() {
   var v = S('detailVod',null);
-  if (!v||!v._playSources||!v._playSources.length) return '<div class="tvbox-no-play">暂无播放数据</div>';
+  if (!v||!v._playSources||!v._playSources.length) return '<div class="tvbox-no-play">'+esc(tvText('noPlaybackData'))+'</div>';
   var html = '';
   v._playSources.forEach(function(src,si){
     html += '<div class="tvbox-play-source"><div class="tvbox-source-name">'+esc(src.from)+'</div><div class="tvbox-episodes">';
@@ -395,13 +395,13 @@ function renderDetail() {
   if (!v) return '';
   var faved = isFaved(v.vod_id);
   var scoreHtml = v.vod_score ? '<span class="tvbox-meta-item tvbox-score-badge">'+esc(v.vod_score)+'</span>' : '';
-  var actorHtml = v.vod_actor&&v.vod_actor!=='未知演员' ? '<span class="tvbox-meta-item">'+esc(v.vod_actor)+'</span>' : '';
-  var directorHtml = v.vod_director&&v.vod_director!=='未知导演' ? '<span class="tvbox-meta-item">导演: '+esc(v.vod_director)+'</span>' : '';
+  var actorHtml = v.vod_actor&&v.vod_actor!==tvText('unknownActor') ? '<span class="tvbox-meta-item">'+esc(v.vod_actor)+'</span>' : '';
+  var directorHtml = v.vod_director&&v.vod_director!==tvText('unknownDirector') ? '<span class="tvbox-meta-item">'+esc(tvText('directorWithName', { name: v.vod_director }))+'</span>' : '';
   var areaHtml = v.vod_area ? '<span class="tvbox-meta-item">'+esc(v.vod_area)+'</span>' : '';
   var yearHtml = v.vod_year ? '<span class="tvbox-meta-item">'+esc(v.vod_year)+'</span>' : '';
   var favIcon = faved ? '♥' : '♡';
   var favClass = faved ? 'faved' : '';
-  var desc = v.vod_content ? v.vod_content.replace(/<[^>]+>/g,'') : '暂无简介';
+  var desc = v.vod_content ? v.vod_content.replace(/<[^>]+>/g,'') : tvText('noDescription');
   return '<div class="tvbox-modal" onclick="if(event.target===this)window.__tvbox.closeDetail();">'+
     '<div class="tvbox-detail" onclick="event.stopPropagation()">'+
     '<button class="tvbox-close" onclick="window.__tvbox.closeDetail();">&#10005;</button>'+
@@ -409,7 +409,7 @@ function renderDetail() {
     '<div class="tvbox-detail-body">'+
     '<div class="tvbox-detail-info"><h3>'+esc(v.vod_name)+'</h3>'+
     '<div class="tvbox-meta">'+actorHtml+directorHtml+areaHtml+yearHtml+scoreHtml+'</div>'+
-    '<button class="tvbox-fav-detail-btn '+favClass+'" onclick="window.__tvbox.favDetail();">'+favIcon+' '+(faved?'已收藏':'收藏')+'</button>'+
+    '<button class="tvbox-fav-detail-btn '+favClass+'" onclick="window.__tvbox.favDetail();">'+favIcon+' '+esc(tvText(faved ? 'favorited' : 'favorite'))+'</button>'+
     '</div><div class="tvbox-divider"></div>'+
     '<div class="tvbox-detail-desc">'+esc(desc)+'</div>'+
     renderEpisodes()+'</div></div></div>';
@@ -418,13 +418,13 @@ function renderDetail() {
 function renderPlayer() {
   if (!S('showPlayer',false)) return '';
   var err = S('playerError','');
-  var errHtml = err ? '<div class="tvbox-player-error"><div class="tvbox-player-error-icon">&#9888;</div><p>'+esc(err)+'</p><button onclick="window.__tvbox.openBrowser();">在浏览器打开</button></div>' : '';
+  var errHtml = err ? '<div class="tvbox-player-error"><div class="tvbox-player-error-icon">&#9888;</div><p>'+esc(err)+'</p><button onclick="window.__tvbox.openBrowser();">'+esc(tvText('openInBrowser'))+'</button></div>' : '';
   return '<div class="tvbox-player-overlay">'+
     '<div class="tvbox-player-box">'+
     '<div class="tvbox-player-header">'+
     '<div class="tvbox-player-title">'+esc(S('playingTitle',''))+'</div>'+
     '<div class="tvbox-player-actions">'+
-      '<button class="tvbox-player-btn" onclick="window.__tvbox.openBrowser();">&#128279; 外链</button>'+
+      '<button class="tvbox-player-btn" onclick="window.__tvbox.openBrowser();">&#128279; '+esc(tvText('externalLink'))+'</button>'+
       '<button class="tvbox-close-player" onclick="window.__tvbox.closePlayer();">&#10005;</button>'+
     '</div></div>'+
     errHtml+
@@ -435,7 +435,7 @@ function renderPlayer() {
 function renderSourceBar() {
   var sources = S('sources',loadSources());
   var key = S('activeSource',getActiveSourceKey());
-  var html = '<span class="tvbox-source-label">线路</span>';
+  var html = '<span class="tvbox-source-label">'+esc(tvText('lineLabel'))+'</span>';
   sources.forEach(function(src){ html += '<button class="tvbox-source-btn '+(src.key===key?'active':'')+'" onclick="window.__tvbox.switchSrc(\''+escInlineJsArg(src.key)+'\');">'+esc(src.name)+'</button>'; });
   return html;
 }
@@ -443,14 +443,14 @@ function renderSourceBar() {
 function renderNav() {
   var tab = S('currentTab','home');
   var tabs = [
-    { key: 'home',    label: '首页',    icon: '&#8962;' },
-    { key: 'category', label: '分类',    icon: '&#9776;' },
-    { key: 'search',  label: '搜索',    icon: '&#128269;' },
-    { key: 'library', label: '收藏',    icon: '&#9829;' },
-    { key: 'sources', label: '源管理',  icon: '&#9881;' },
+    { key: 'home',    labelKey: 'navHome',    icon: '&#8962;' },
+    { key: 'category', labelKey: 'navCategory',    icon: '&#9776;' },
+    { key: 'search',  labelKey: 'navSearch',    icon: '&#128269;' },
+    { key: 'library', labelKey: 'navLibrary',    icon: '&#9829;' },
+    { key: 'sources', labelKey: 'navSources',  icon: '&#9881;' },
   ];
   var html = '';
-  tabs.forEach(function(t){ html += '<button class="tvbox-nav-btn'+(tab===t.key?' active':'')+'" onclick="window.__tvbox.tab(\''+t.key+'\');">'+t.icon+' '+t.label+'</button>'; });
+  tabs.forEach(function(t){ html += '<button class="tvbox-nav-btn'+(tab===t.key?' active':'')+'" onclick="window.__tvbox.tab(\''+t.key+'\');">'+t.icon+' '+esc(tvText(t.labelKey))+'</button>'; });
   return html;
 }
 
@@ -461,12 +461,12 @@ function render() {
   var catExtra = '';
   if (tab==='category') {
     var cat = S('currentCategory',CATEGORIES[0]);
-    var catsHtml = CATEGORIES.map(function(c){ return '<button class="'+(c.type_id===cat.type_id?'active':'')+'" onclick="window.__tvbox.setCat(\''+c.type_id+'\');">'+esc(c.type_name)+'</button>'; }).join('');
+    var catsHtml = CATEGORIES.map(function(c){ return '<button class="'+(c.type_id===cat.type_id?'active':'')+'" onclick="window.__tvbox.setCat(\''+c.type_id+'\');">'+esc(categoryName(c))+'</button>'; }).join('');
     catExtra = '<div class="tvbox-controls"><div class="tvbox-cat-tabs">'+catsHtml+'</div></div>';
   } else if (tab==='search') {
     catExtra = '<div class="tvbox-controls"><div class="tvbox-search-wrap">'+
-      '<input type="text" placeholder="输入影片名称搜索，多源并行..." value="'+esc(S('searchQuery',''))+'" onkeyup="if(event.key===\'Enter\')window.__tvbox.search();" oninput="window.__tvbox.setQuery(this.value);"/>'+
-      '<button class="tvbox-search-btn" onclick="window.__tvbox.search();">搜索</button>'+
+      '<input type="text" placeholder="'+esc(tvText('searchPlaceholder'))+'" value="'+esc(S('searchQuery',''))+'" onkeyup="if(event.key===\'Enter\')window.__tvbox.search();" oninput="window.__tvbox.setQuery(this.value);"/>'+
+      '<button class="tvbox-search-btn" onclick="window.__tvbox.search();">'+esc(tvText('searchButton'))+'</button>'+
     '</div></div>';
   }
   var tabContent = '';
@@ -477,7 +477,7 @@ function render() {
   else if (tab==='sources') tabContent = renderSourceManager();
   el.innerHTML =
     '<div class="tvbox-header"><div class="tvbox-header-inner">'+
-    '<div class="tvbox-logo"><div class="tvbox-logo-icon">&#127916;</div>星枢影视</div>'+
+    '<div class="tvbox-logo"><div class="tvbox-logo-icon">&#127916;</div>'+esc(tvText('appTitle'))+'</div>'+
     '<div class="tvbox-nav">'+renderNav()+'</div>'+
     '</div></div>'+
     '<div class="tvbox-source-bar"><div class="tvbox-source-inner">'+renderSourceBar()+'</div></div>'+
@@ -590,7 +590,7 @@ window.__tvbox = {
     var name = document.getElementById('tvbox-edit-name').value.trim();
     var api = document.getElementById('tvbox-edit-api').value.trim();
     var type = document.getElementById('tvbox-edit-type').value;
-    if (!name||!api) { alert('请填写名称和API地址'); return; }
+    if (!name||!api) { alert(tvText('sourceRequiredFields')); return; }
     var sources = S('sources',loadSources());
     if (oldKey) {
       var idx = sources.findIndex(function(s){return s.key===oldKey;});
