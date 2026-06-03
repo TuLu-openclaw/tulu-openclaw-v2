@@ -38,6 +38,7 @@ function getLobsterStateLabel(value) {
 }
 
 export default function render(el) {
+  cleanup()
   el.innerHTML = `
     <div class="page-header">
       <div class="page-title">🦞 ${t('lobsterOffice.title')}</div>
@@ -151,12 +152,12 @@ export default function render(el) {
       .state-demo { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); padding: 20px 24px; }
       .demo-title { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1px; }
       .demo-grid { display: flex; flex-direction: column; gap: 10px; }
-      .live-preview { display:flex; align-items:center; gap:14px; padding:14px 16px; margin-bottom:14px; background:linear-gradient(135deg,var(--bg-tertiary),rgba(233,69,96,0.08)); border:1px solid var(--border-primary); border-radius: var(--radius-md); }
-      .live-preview-emoji { font-size:32px; line-height:1; }
+      .live-preview { display:flex; align-items:flex-start; gap:14px; padding:14px 16px; margin-bottom:14px; background:linear-gradient(135deg,var(--bg-tertiary),rgba(233,69,96,0.08)); border:1px solid var(--border-primary); border-radius: var(--radius-md); }
+      .live-preview-emoji { font-size:32px; line-height:1; flex-shrink:0; }
+      .live-preview-body { min-width:0; }
       .live-preview-title { font-size: var(--font-size-md); font-weight:700; color:var(--text-primary); }
-      .live-preview-desc { font-size: var(--font-size-sm); color:var(--text-secondary); margin-top:2px; }
-      .live-preview-meta { font-size: var(--font-size-xs); color: var(--text-tertiary); margin-top:6px; }
-      .demo-grid { display: flex; flex-direction: column; gap: 10px; }
+      .live-preview-desc { font-size: var(--font-size-sm); color:var(--text-secondary); margin-top:2px; overflow-wrap:anywhere; }
+      .live-preview-meta { font-size: var(--font-size-xs); color: var(--text-tertiary); margin-top:6px; overflow-wrap:anywhere; }
       .demo-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); }
       .demo-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
       .demo-name { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-primary); }
@@ -165,6 +166,13 @@ export default function render(el) {
       .btn-xl { padding: 14px 40px; font-size: var(--font-size-lg); font-weight: 700; border-radius: var(--radius-md); background: linear-gradient(135deg, #e94560, #c1122f); color: #fff; border: none; cursor: pointer; transition: all .2s; }
       .btn-xl:hover { opacity: 0.9; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(233,69,96,0.4); }
       .open-hint { font-size: var(--font-size-xs); color: var(--text-tertiary); margin-top: 10px; }
+      @media (max-width: 640px) {
+        .lobster-intro { padding: 16px; gap: 16px; }
+        .intro-card { flex-direction: column; padding: 20px; }
+        .intro-features { grid-template-columns: 1fr; }
+        .live-preview { flex-direction: column; }
+        .btn-xl { width: 100%; padding-left: 16px; padding-right: 16px; }
+      }
     `
     document.head.appendChild(style)
   }
