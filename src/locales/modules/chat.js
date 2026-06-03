@@ -296,6 +296,7 @@ export default {
   toolStatusRunning: _('执行中', 'Running', '執行中'),
   toolStatusPending: _('等待中', 'Pending', '等待中'),
   toolStatusApprovalPending: _('等待确认', 'Awaiting approval', '等待確認'),
+  toolStatusDenied: _('已拒绝', 'Denied', '已拒絕'),
   toolStatusTimeout: _('已超时', 'Timed out', '已逾時'),
   toolStatusSkipped: _('已跳过', 'Skipped', '已略過'),
   toolStatusAborted: _('已中止', 'Aborted', '已中止'),

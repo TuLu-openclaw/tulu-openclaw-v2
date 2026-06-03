@@ -3613,7 +3613,7 @@ function formatToolDisplayName(name = '') {
   const map = {
     exec: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), process: t('chat.toolNameProcess'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
     memory_search: t('chat.toolNameMemorySearch'), memory_get: t('chat.toolNameMemoryGet'), session_status: t('chat.toolNameSessionStatus'),
-    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), image_generate: t('chat.toolNameImageGenerate'), video_generate: t('chat.toolNameVideoGenerate'), pdf: t('chat.toolNamePdf'), tts: t('chat.toolNameTts'),
+    web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'), image: t('chat.toolNameImage'), imagegen: t('chat.toolNameImageGenerate'), image_gen: t('chat.toolNameImageGenerate'), image_generate: t('chat.toolNameImageGenerate'), video_generate: t('chat.toolNameVideoGenerate'), pdf: t('chat.toolNamePdf'), tts: t('chat.toolNameTts'),
     message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), nodes: t('chat.toolNameNodes'), canvas: t('chat.toolNameCanvas'), gateway: t('chat.toolNameGateway'),
     sessions_spawn: t('chat.toolNameSessionsSpawn'), sessions_send: t('chat.toolNameSessionsSend'), sessions_yield: t('chat.toolNameSessionsYield'), sessions_list: t('chat.toolNameSessionsList'), sessions_history: t('chat.toolNameSessionsHistory'), subagents: t('chat.toolNameSubagents'), agents_list: t('chat.toolNameAgentsList'),
     multi_tool_use_parallel: t('chat.toolNameParallelTools'), parallel: t('chat.toolNameParallelTools'),
@@ -3639,6 +3639,7 @@ function formatToolStatus(status = '') {
   if (['running', 'in_progress', 'progress', 'started'].includes(normalized)) return t('chat.toolStatusRunning')
   if (['pending', 'queued', 'waiting'].includes(normalized)) return t('chat.toolStatusPending')
   if (['approval_pending', 'awaiting_approval', 'needs_approval'].includes(normalized)) return t('chat.toolStatusApprovalPending')
+  if (['denied', 'rejected', 'blocked', 'unauthorized', 'forbidden'].includes(normalized)) return t('chat.toolStatusDenied')
   if (['timeout', 'timed_out', 'expired'].includes(normalized)) return t('chat.toolStatusTimeout')
   if (['skipped', 'ignored', 'noop', 'no_op'].includes(normalized)) return t('chat.toolStatusSkipped')
   if (['cancelled', 'canceled', 'aborted', 'stopped'].includes(normalized)) return t('chat.toolStatusAborted')
