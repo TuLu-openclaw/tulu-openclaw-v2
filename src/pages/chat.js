@@ -3283,6 +3283,8 @@ function handleChatEvent(payload) {
     }
 
     // 如果流式输出中收到错误，保留已收到的内容，但必须结束当前流，避免发送按钮和队列卡死。
+    if (keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey)) return
+
     if (_isStreaming || _currentAiBubble) {
       console.warn('[chat] 流式中收到错误，保留部分输出并结束当前流:', errMsg)
       showTyping(false)
@@ -3305,6 +3307,33 @@ function handleChatEvent(payload) {
     processMessageQueue()
     return
   }
+}
+
+function isRecoverableStreamTimeoutError(message = '') {
+  const raw = String(message || '')
+  const lower = raw.toLowerCase()
+  return raw.includes('\u8f93\u51fa\u8d85\u65f6') || raw.includes('\u8f38\u51fa\u8d85\u6642')
+    || /output\s+timeout|output[^\n]{0,60}timed?\s*out|no new output|stream[^\n]{0,60}timeout|stream[^\n]{0,60}timed?\s*out|response watchdog/i.test(lower)
+}
+
+function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
+  if (!isRecoverableStreamTimeoutError(errMsg)) return false
+  if (!_isStreaming && !_currentAiBubble && !isLongRunningReplyState(_replyStatusState?.state)) return false
+  const activeState = isLongRunningReplyState(_replyStatusState?.state) ? _replyStatusState.state : (_currentAiText ? 'streaming' : 'thinking')
+  const detail = activeState === 'tool' ? t('chat.streamToolStillRunning') : t('chat.streamStillRunning')
+  console.warn('[chat] recoverable stream timeout error, keep run waiting:', runId || _currentRunId || '(no-run)', errMsg)
+  _isStreaming = true
+  _streamStartTime = _streamStartTime || Date.now()
+  if (_currentAiBubble && _currentAiText) flushStreamRender()
+  showTyping(true, detail)
+  updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: activeState, progress: TASK_PROGRESS[activeState] || TASK_PROGRESS.thinking, error: '' })
+  setReplyStatus(activeState, detail, { runId: runId || _currentRunId, activity: t('chat.replyActivityAwaitingMoreEvents', { seconds: _streamStartTime ? Math.max(1, Math.round((Date.now() - _streamStartTime) / 1000)) : 1 }) })
+  scheduleStreamSafetyTimeout()
+  if (_sessionKey && _messagesEl && _pageActive) {
+    _lastHistoryHash = ''
+    loadHistory().catch(() => {})
+  }
+  return true
 }
 
 function translateGatewayError(message = '') {
