@@ -52,5 +52,6 @@ export default {
   reloaded: _('Gateway 已重载，新配置已生效', 'Gateway reloaded, new config is active', 'Gateway 已重載，新設定已生效'),
   savedButReloadFailed: _('配置已保存，但重载失败', 'Config saved, but reload failed', '設定已儲存，但重載失敗'),
   configNotReady: _('配置未加载完成，请稍候', 'Config not loaded yet, please wait', '設定未載入完成，請稍候'),
+  retryLoad: _('重试加载', 'Retry Load', '重試載入'),
   saveFailed: _('保存失败', 'Save failed', '儲存失敗', '保存失敗', '저장 실패', 'Lưu thất bại', 'Error al guardar', 'Falha ao salvar', 'Ошибка сохранения', 'Échec de la sauvegarde', 'Speichern fehlgeschlagen'),
 }

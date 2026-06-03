@@ -91,7 +91,20 @@ async function loadConfig(page, state) {
     renderConfig(page, state)
     page.querySelector('#btn-save-gw').disabled = false
   } catch (e) {
-    el.innerHTML = '<div style="color:var(--error);padding:20px">' + t('gateway.loadFailed') + ': ' + _escapeHtml(e) + '</div>'
+    el.innerHTML = `
+      <div class="stat-card" style="padding:20px;color:var(--error)">
+        <div style="margin-bottom:12px">${t('gateway.loadFailed')}: ${_escapeHtml(e)}</div>
+        <button class="btn btn-secondary btn-sm" id="btn-retry-load-gw">${t('gateway.retryLoad')}</button>
+      </div>
+    `
+    el.querySelector('#btn-retry-load-gw')?.addEventListener('click', () => {
+      el.innerHTML = `
+        <div class="config-section"><div class="stat-card loading-placeholder" style="height:80px"></div></div>
+        <div class="config-section"><div class="stat-card loading-placeholder" style="height:80px"></div></div>
+        <div class="config-section"><div class="stat-card loading-placeholder" style="height:80px"></div></div>
+      `
+      loadConfig(page, state)
+    })
     toast(t('gateway.loadFailed') + ': ' + e, 'error')
   }
 }
