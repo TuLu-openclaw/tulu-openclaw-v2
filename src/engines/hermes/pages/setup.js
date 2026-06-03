@@ -50,7 +50,7 @@ export function render() {
   function draw() {
     el.innerHTML = `
       <div class="page-header">
-        <h1>Hermes Agent</h1>
+        <h1>${t('engine.hermesSetupTitle')}</h1>
         <p style="color:var(--text-secondary);margin-top:4px">${t('engine.hermesSetupDesc')}</p>
       </div>
       <div style="max-width:720px">

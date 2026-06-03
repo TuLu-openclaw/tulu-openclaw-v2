@@ -110,6 +110,7 @@ export default {
   cliUninstallDesc:              {"zh-CN": "从系统中移除 hermes-agent", "en": "Remove hermes-agent from the system"},
   cliConfig:                     {"zh-CN": "打开配置目录", "en": "Open Config Directory"},
   cliConfigDesc:                 {"zh-CN": "在文件管理器中打开配置目录", "en": "Open the config directory in your file explorer"},
+  hermesSetupTitle:              {"zh-CN": "Hermes 安装向导", "zh-TW": "Hermes 安裝精靈", "en": "Hermes Setup Wizard"},
   hermesSetupDesc:               {"zh-CN": "通过配置向导快速启动 Hermes Agent", "en": "Quickly start Hermes Agent via the setup wizard"},
   hermesSetupDocLink:            {"zh-CN": "查看文档", "en": "View documentation"},
   hermesPhaseClickHint:          {"zh-CN": "点击下方选项开始", "en": "Click an option below to begin"},
