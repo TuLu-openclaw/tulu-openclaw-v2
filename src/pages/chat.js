@@ -2275,7 +2275,7 @@ function getBusyGroupMemberLabels(group, excludeSessionKeys = []) {
 function maybeNotifyBusyGroupMembers(group, excludeSessionKeys = []) {
   const labels = getBusyGroupMemberLabels(group, excludeSessionKeys)
   if (!labels.length) return
-  appendSystemMessage(`${labels.join('、')} 正在执行任务中，稍后会回到群聊继续回复。`)
+  appendSystemMessage(t('chat.groupMembersRunningNotice', { members: labels.join(t('chat.groupMemberListSeparator')) }))
 }
 
 function completeTaskRound(task) {
@@ -2983,7 +2983,7 @@ function handleChatEvent(payload) {
     const renderIntoCurrentGroup = activeGroup?.id === eventGroup.id
     if (state === 'queued' && renderIntoCurrentGroup && eventSessionKey !== _sessionKey) {
       const member = getGroupMemberBySession(eventGroup, eventSessionKey)
-      if (member) appendSystemMessage(`${getGroupMemberLabel(member, eventSessionKey)} 正在执行任务中，稍后会回到群聊继续回复。`)
+      if (member) appendSystemMessage(t('chat.groupMemberRunningNotice', { member: getGroupMemberLabel(member, eventSessionKey) }))
       return
     }
     if (state === 'delta') return
@@ -2995,7 +2995,7 @@ function handleChatEvent(payload) {
     } else if (state === 'error') {
       const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
-      if (renderIntoCurrentGroup) appendSystemMessage(`${getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey)} 回复失败：${errMsg}`)
+      if (renderIntoCurrentGroup) appendSystemMessage(t('chat.groupMemberReplyFailedNotice', { member: getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey), msg: errMsg }))
       setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
