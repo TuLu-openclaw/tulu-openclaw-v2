@@ -3533,6 +3533,9 @@ function formatToolStatus(status = '') {
   if (['error', 'failed', 'fail', 'failure'].includes(normalized)) return t('chat.toolStatusFailed')
   if (['running', 'in_progress', 'progress', 'started'].includes(normalized)) return t('chat.toolStatusRunning')
   if (['pending', 'queued', 'waiting'].includes(normalized)) return t('chat.toolStatusPending')
+  if (['approval_pending', 'awaiting_approval', 'needs_approval'].includes(normalized)) return t('chat.toolStatusApprovalPending')
+  if (['timeout', 'timed_out', 'expired'].includes(normalized)) return t('chat.toolStatusTimeout')
+  if (['skipped', 'ignored', 'noop', 'no_op'].includes(normalized)) return t('chat.toolStatusSkipped')
   if (['cancelled', 'canceled', 'aborted', 'stopped'].includes(normalized)) return t('chat.toolStatusAborted')
   return normalized ? t('chat.toolStatusValue', { status }) : t('chat.toolStatusSuccess')
 }
