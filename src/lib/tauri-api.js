@@ -445,6 +445,13 @@ export const api = {
   syncOpenclawToOffice: () => invoke('sync_openclaw_to_office'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
   setNpmRegistry: (registry) => { invalidate('get_npm_registry'); return invoke('set_npm_registry', { registry }) },
+  saveStandaloneInstallDir: async (installDir) => {
+    const cfg = await api.readPanelConfig()
+    const value = String(installDir || '').trim()
+    if (value) cfg.openclawStandaloneInstallDir = value
+    else delete cfg.openclawStandaloneInstallDir
+    return api.writePanelConfig(cfg)
+  },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
   assistantApiRequest: (baseUrl, apiKey, apiType, path, body) => invoke('assistant_api_request', { baseUrl, apiKey, apiType: apiType || null, path, body }, 130000),
   assistantChatOnce: (baseUrl, apiKey, modelId, apiType, messages, temperature = 0.7) => invoke('assistant_chat_once', { baseUrl, apiKey, modelId, apiType: apiType || null, messages, temperature }, 130000),

@@ -443,6 +443,11 @@ function renderInstallSection() {
           <option value="https://repo.huaweicloud.com/repository/npm/">${t('setup.registryHuawei')}</option>
         </select>
       </div>
+      <div style="margin-bottom:var(--space-sm)" id="install-path-section">
+        <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.installPathLabel')}</label>
+        <input id="install-path" type="text" placeholder="${t('setup.installPathPlaceholder')}" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);font-family:monospace">
+        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:4px;line-height:1.5">${t('setup.installPathHint')}</div>
+      </div>
       <button class="btn btn-primary btn-sm" id="btn-install">${t('setup.installBtn')}</button>
     </div>
   `
@@ -867,6 +872,7 @@ function bindEvents(page, nodeOk, detectState) {
   // 安装方式联动：源切换时更新方式选项可见性
   const methodSection = page.querySelector('#install-method-section')
   const registrySection = page.querySelector('#registry-section')
+  const installPathInput = page.querySelector('#install-path')
   const methodSelect = page.querySelector('#install-method')
   const methodHint = page.querySelector('#method-hint')
   const sourceRadios = page.querySelectorAll('input[name="install-source"]')
@@ -880,6 +886,7 @@ function bindEvents(page, nodeOk, detectState) {
 
   function updateMethodVisibility() {
     const source = page.querySelector('input[name="install-source"]:checked')?.value || 'chinese'
+    if (installPathInput) installPathInput.disabled = source === 'official'
     if (source === 'official') {
       if (methodSection) methodSection.style.display = 'none'
       if (registrySection) registrySection.style.display = ''
@@ -893,6 +900,11 @@ function bindEvents(page, nodeOk, detectState) {
 
   sourceRadios.forEach(r => r.addEventListener('change', updateMethodVisibility))
   if (methodSelect) methodSelect.addEventListener('change', updateMethodVisibility)
+  api.readPanelConfig().then(cfg => {
+    if (installPathInput && cfg?.openclawStandaloneInstallDir) {
+      installPathInput.value = cfg.openclawStandaloneInstallDir
+    }
+  }).catch(() => {})
   updateMethodVisibility()
 
   // 一键安装
@@ -903,6 +915,7 @@ function bindEvents(page, nodeOk, detectState) {
     const source = page.querySelector('input[name="install-source"]:checked')?.value || 'chinese'
     const method = (source === 'official') ? 'npm' : (page.querySelector('#install-method')?.value || 'auto')
     const registry = page.querySelector('#registry-select')?.value
+    const installPath = (page.querySelector('#install-path')?.value || '').trim()
     const modal = showUpgradeModal(t('setup.installOpenclaw'))
     let unlistenLog, unlistenProgress
 
@@ -990,6 +1003,8 @@ function bindEvents(page, nodeOk, detectState) {
           try { await api.setNpmRegistry(registry) } catch {}
         }
 
+        if (source !== 'official') await api.saveStandaloneInstallDir(installPath)
+
         // 发起后台任务（立即返回）
         await api.upgradeOpenclaw(source, null, method)
         modal.appendLog(t('setup.bgTaskStarted'))
@@ -1000,6 +1015,7 @@ function bindEvents(page, nodeOk, detectState) {
           modal.appendLog(t('setup.setRegistry', { url: registry }))
           try { await api.setNpmRegistry(registry) } catch {}
         }
+        if (source !== 'official') await api.saveStandaloneInstallDir(installPath)
         const msg = await api.upgradeOpenclaw(source, null, method)
         modal.setDone(msg)
         toast(t('setup.installSuccess'), 'success')

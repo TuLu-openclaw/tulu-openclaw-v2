@@ -97,6 +97,19 @@ struct VersionPolicy {
     panels: HashMap<String, VersionPolicyEntry>,
 }
 
+fn expand_home_path(raw: &str) -> PathBuf {
+    let trimmed = raw.trim();
+    if trimmed == "~" {
+        return dirs::home_dir().unwrap_or_else(|| PathBuf::from(trimmed));
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/").or_else(|| trimmed.strip_prefix("~\\")) {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
 fn panel_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
@@ -226,6 +239,14 @@ fn standalone_archive_ext() -> &'static str {
 
 /// standalone 安装目录
 pub(crate) fn standalone_install_dir() -> Option<PathBuf> {
+    if let Some(custom) = super::read_panel_config_value()
+        .and_then(|v| v.get("openclawStandaloneInstallDir")?.as_str().map(String::from))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        return Some(expand_home_path(&custom));
+    }
+
     #[cfg(target_os = "windows")]
     {
         // Inno Setup PrivilegesRequired=lowest 默认安装到 %LOCALAPPDATA%\Programs
@@ -242,6 +263,9 @@ pub(crate) fn standalone_install_dir() -> Option<PathBuf> {
 /// 所有可能的 standalone 安装位置（用于检测和卸载）
 pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
+    if let Some(custom) = standalone_install_dir() {
+        dirs.push(custom);
+    }
     #[cfg(target_os = "windows")]
     {
         if let Ok(la) = std::env::var("LOCALAPPDATA") {
@@ -5828,11 +5852,25 @@ pub fn read_panel_config() -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn write_panel_config(config: Value) -> Result<(), String> {
+pub fn write_panel_config(mut config: Value) -> Result<(), String> {
     let path = super::panel_config_path();
     if let Some(dir) = path.parent() {
         if !dir.exists() {
             fs::create_dir_all(dir).map_err(|e| format!("创建目录失败: {e}"))?;
+        }
+    }
+    if let Some(obj) = config.as_object_mut() {
+        if let Some(value) = obj.get_mut("openclawStandaloneInstallDir") {
+            if let Some(raw) = value.as_str() {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    obj.remove("openclawStandaloneInstallDir");
+                } else if trimmed != raw {
+                    *value = Value::String(trimmed.to_string());
+                }
+            } else if value.is_null() {
+                obj.remove("openclawStandaloneInstallDir");
+            }
         }
     }
     let json = serde_json::to_string_pretty(&config).map_err(|e| format!("序列化失败: {e}"))?;

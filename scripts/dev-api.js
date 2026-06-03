@@ -600,6 +600,8 @@ function standalonePlatformKey() {
 }
 
 function standaloneInstallDir() {
+  const customDir = normalizeCustomOpenclawDir(readPanelConfig()?.openclawStandaloneInstallDir)
+  if (customDir) return customDir
   if (isWindows) return path.join(process.env.LOCALAPPDATA || '', 'Programs', 'OpenClaw')
   return path.join(os.homedir(), '.openclaw-bin')
 }
@@ -5853,6 +5855,13 @@ const handlers = {
       else delete nextConfig.openclawDir
     } else if (nextConfig.openclawDir == null) {
       delete nextConfig.openclawDir
+    }
+    if (typeof nextConfig.openclawStandaloneInstallDir === 'string') {
+      const trimmed = nextConfig.openclawStandaloneInstallDir.trim()
+      if (trimmed) nextConfig.openclawStandaloneInstallDir = trimmed
+      else delete nextConfig.openclawStandaloneInstallDir
+    } else if (nextConfig.openclawStandaloneInstallDir == null) {
+      delete nextConfig.openclawStandaloneInstallDir
     }
     for (const key of ['dockerEndpoint', 'dockerDefaultImage']) {
       if (typeof nextConfig[key] === 'string') {
