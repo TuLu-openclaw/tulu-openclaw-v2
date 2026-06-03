@@ -103,6 +103,8 @@ export default {
   gatewayNotConnectedTranslate: _('网关未连接，暂时无法翻译', 'Gateway is not connected; translation is unavailable for now', '閘道未連線，暫時無法翻譯'),
   sendFailedBeforeModel: _('发送失败，未进入模型处理', 'Send failed before model processing', '發送失敗，未進入模型處理'),
   groupMemberReplyFailed: _('群聊成员回复失败', 'Group member reply failed', '群組成員回覆失敗'),
+  groupMemberFailedOthersRunning: _('有成员回复失败，其他成员仍在执行中', 'One member reply failed; other members are still running', '有成員回覆失敗，其他成員仍在執行中'),
+  groupMembersStillRunning: _('保留群聊执行状态，继续等待其他成员输出', 'Keeping the group run active and waiting for other members', '保留群組執行狀態，繼續等待其他成員輸出'),
   deviceReconnectApprovalNeeded: _('设备连接需要重新批准', 'Device connection needs re-approval', '設備連線需要重新批准'),
   checkErrorOrRetryTask: _('请查看错误信息或重试任务', 'Check the error details or retry the task', '請查看錯誤資訊或重試任務'),
   none: _('无', 'None', '無', 'なし', '없음', 'Không', 'Ninguno', 'Nenhum', 'Нет', 'Aucun', 'Keine'),

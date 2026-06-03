@@ -2344,6 +2344,10 @@ function getBusyGroupMemberLabels(group, excludeSessionKeys = []) {
   return labels
 }
 
+function hasBusyGroupMembers(group, excludeSessionKeys = []) {
+  return getBusyGroupMemberLabels(group, excludeSessionKeys).length > 0
+}
+
 function maybeNotifyBusyGroupMembers(group, excludeSessionKeys = []) {
   const labels = getBusyGroupMemberLabels(group, excludeSessionKeys)
   if (!labels.length) return
@@ -3105,7 +3109,11 @@ function handleChatEvent(payload) {
       const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
       if (renderIntoCurrentGroup) appendSystemMessage(t('chat.groupMemberReplyFailedNotice', { member: getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey), msg: errMsg }))
-      setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
+      if (renderIntoCurrentGroup && hasBusyGroupMembers(eventGroup, [eventSessionKey])) {
+        setReplyStatus('tool', t('chat.groupMemberFailedOthersRunning'), { runId, sessionKey: eventSessionKey, activity: t('chat.groupMembersStillRunning') })
+      } else {
+        setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
+      }
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
     }
