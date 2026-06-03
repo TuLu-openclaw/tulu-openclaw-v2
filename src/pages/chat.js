@@ -3801,7 +3801,7 @@ async function loadHistory() {
     if (local.length) {
       clearMessages()
       local.forEach(msg => {
-        if (!msg.content && !msg.attachments?.length) return
+        if (!msg.content && !msg.attachments?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length && !msg.tools?.length) return
         const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
         if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
         else if (msg.role === 'assistant') {
@@ -3821,7 +3821,7 @@ async function loadHistory() {
       return
     }
     const deduped = dedupeHistory(result.messages)
-    const hash = deduped.map(m => `${m.role}:${(m.text || '').length}`).join('|')
+    const hash = deduped.map(m => `${m.role}:${(m.text || '').length}:${m.images?.length || 0}:${m.videos?.length || 0}:${m.audios?.length || 0}:${m.files?.length || 0}:${m.tools?.length || 0}`).join('|')
     if (hash === _lastHistoryHash && hasExisting) return
     _lastHistoryHash = hash
 
