@@ -1063,9 +1063,9 @@ async function checkGlobalUpdate() {
         ${isWeb
           ? `<button class="btn btn-sm" id="btn-update-show-cmd">${t('about.updateMethod')}</button>
              <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
-          : `${hasFrontendUpdate ? `<button class="btn btn-sm" id="btn-update-hot">前端热更新</button>` : ''}
-             ${hasFullUpdate ? `<button class="btn btn-sm" id="btn-update-full">全量更新</button>` : ''}
-             <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">Release</a>`
+          : `${hasFrontendUpdate ? `<button class="btn btn-sm" id="btn-update-hot">${t('about.hotUpdate')}</button>` : ''}
+             ${hasFullUpdate ? `<button class="btn btn-sm" id="btn-update-full">${t('about.fullInstaller')}</button>` : ''}
+             <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
         }
         <button class="update-banner-close" id="btn-update-dismiss" title="${t('about.dismissVersion')}">✕</button>
       </div>
