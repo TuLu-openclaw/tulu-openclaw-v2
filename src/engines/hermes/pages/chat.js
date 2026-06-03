@@ -1604,7 +1604,7 @@ export function render() {
   async function sendPresetText(text) {
     if (!text) return
     try {
-      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: '收到 Hermes 预设任务' } }))
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'ack', message: t('engine.chatPresetTaskReceivedStatus') } }))
     } catch {}
     forceScrollBottom = true
     resetInput()
@@ -1618,6 +1618,21 @@ export function render() {
     draw()
   }
 
+  function renderCollabTemplate({ goal = t('engine.collabDefaultGoal'), lead, peer, compact = false } = {}) {
+    const leadTask = collabLeadTask || t('engine.collabLeadTaskExample')
+    const supportTask = collabSupportTask || t('engine.collabSupportTaskExample')
+    const key = compact ? 'engine.collabManualTemplateCompact' : 'engine.collabManualTemplate'
+    return t(key, {
+      goal,
+      lead,
+      peer,
+      leadTask,
+      supportTask,
+      autoIterate: collabAutoIterate ? t('engine.collabEnabled') : t('engine.collabDisabled'),
+      maxRounds: collabMaxRounds,
+    })
+  }
+
   function injectCollabTemplate() {
     try {
       window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'thinking', message: t('engine.collabTemplatePreparingStatus') } }))
@@ -1625,7 +1640,7 @@ export function render() {
     const active = getActiveEngineId()
     const lead = collabLeadEngine || (active === 'hermes' ? 'Hermes' : 'OpenClaw')
     const peer = collabSupportEngine || (active === 'hermes' ? 'OpenClaw' : 'Hermes')
-    inputValue = `# 双引擎协同任务\n\n[任务目标]\n- [在这里填写目标]\n\n[建议分配]\n- 主导引擎: ${lead}\n- 协作引擎: ${peer}\n\n[主导任务]\n- ${collabLeadTask || '[例如：由 Hermes 完成代码编写 / 方案设计 / 文档起草]'}\n\n[协作任务]\n- ${collabSupportTask || '[例如：由 OpenClaw 执行测试 / 跑构建 / 验证结果 / 补充修复]'}\n\n[执行策略]\n- 自动迭代: ${collabAutoIterate ? '开启' : '关闭'}\n- 最大轮数: ${collabMaxRounds}\n\n[主导引擎职责]\n- 拆解任务\n- 汇总结论\n- 输出最终结果\n\n[协作引擎职责]\n- 补充分析\n- 交叉验证\n- 处理分支子任务\n\n[执行规则]\n- 用户填写的主导引擎 / 协作引擎 / 主导任务 / 协作任务优先级最高\n- 必须明确谁主导、谁协作\n- 先给出执行计划，再开始执行\n- 最终只输出一份合并后的结果\n\n[最终输出要求]\n- 结果必须包含“执行计划 / 协同分工 / 最终结论”三个部分`
+    inputValue = renderCollabTemplate({ lead, peer })
     inputCaret = inputValue.length
     inputFocused = true
     showSlash = false
@@ -1634,7 +1649,7 @@ export function render() {
 
   function injectAutoCollabTemplate() {
     try {
-      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'thinking', message: '生成自动协同编排方案' } }))
+      window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: { phase: 'thinking', message: t('engine.collabAutoTemplatePreparingStatus') } }))
     } catch {}
     const goal = (inputValue || '').trim()
     const active = getActiveEngineId()
@@ -1698,7 +1713,7 @@ export function render() {
       const active = getActiveEngineId()
       const lead = collabLeadEngine || (active === 'hermes' ? 'Hermes' : 'OpenClaw')
       const peer = collabSupportEngine || (active === 'hermes' ? 'OpenClaw' : 'Hermes')
-      inputValue = `# 双引擎协同任务\n\n[任务目标]\n${rawGoal}\n\n[建议分配]\n- 主导引擎: ${lead}\n- 协作引擎: ${peer}\n\n[主导任务]\n- ${collabLeadTask || '[例如：由 Hermes 完成代码编写 / 方案设计 / 文档起草]'}\n\n[协作任务]\n- ${collabSupportTask || '[例如：由 OpenClaw 执行测试 / 跑构建 / 验证结果 / 补充修复]'}\n\n[执行策略]\n- 自动迭代: ${collabAutoIterate ? '开启' : '关闭'}\n- 最大轮数: ${collabMaxRounds}`
+      inputValue = renderCollabTemplate({ goal: rawGoal, lead, peer, compact: true })
       inputCaret = inputValue.length
     }
     collabPickerOpen = true
