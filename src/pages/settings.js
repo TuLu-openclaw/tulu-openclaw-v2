@@ -155,6 +155,11 @@ async function loadProxyConfig(page) {
         ${t('settings.proxyHint')}
       </div>
     `
+    const input = bar.querySelector('[data-name="proxy-url"]')
+    const testBtn = bar.querySelector('[data-action="test-proxy"]')
+    input?.addEventListener('input', () => {
+      if (testBtn) testBtn.disabled = !input.value.trim()
+    })
   } catch (e) {
     bar.innerHTML = `<div style="color:var(--error)">${t('common.loadFailed')}: ${escapeHtml(String(e))}</div>`
   }
@@ -505,9 +510,23 @@ function normalizeProxyUrl(value) {
 
 async function handleTestProxy(page) {
   const resultEl = page.querySelector('#proxy-test-result')
+  const input = page.querySelector('[data-name="proxy-url"]')
+  let proxyUrl = ''
+  try {
+    proxyUrl = normalizeProxyUrl(input?.value || '')
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = `<span style="color:var(--error)">✗ ${escapeHtml(String(e?.message || e))}</span>`
+    toast(String(e?.message || e), 'error')
+    return
+  }
+  if (!proxyUrl) {
+    if (resultEl) resultEl.innerHTML = `<span style="color:var(--error)">✗ ${t('settings.proxyUrlEmpty')}</span>`
+    toast(t('settings.proxyUrlEmpty'), 'error')
+    return
+  }
   if (resultEl) resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('settings.testingProxy')}</span>`
   try {
-    const r = await api.testProxy()
+    const r = await api.testProxy(proxyUrl)
     if (resultEl) {
       resultEl.innerHTML = r.ok
         ? `<span style="color:var(--success)">✓ ${t('settings.proxyOk', { status: r.status, ms: r.elapsed_ms, target: escapeHtml(r.target) })}</span>`
