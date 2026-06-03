@@ -142,7 +142,7 @@ async function loadDashboardData(page, fullRefresh = false) {
   // 轻量调用（读文件）每次都做；重量调用（spawn CLI/网络请求）只在首次或手动刷新时做
   const withTimeout = (promise, ms) => Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`超时(${ms/1000}s)`)), ms))
+    new Promise((_, reject) => setTimeout(() => reject(new Error(t('dashboard.requestTimeout', { seconds: Math.round(ms / 1000) }))), ms))
   ])
   const coreP = withTimeout(Promise.allSettled([
     api.getServicesStatus(),

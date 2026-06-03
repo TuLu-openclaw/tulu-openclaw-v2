@@ -108,6 +108,7 @@ export default {
   gwRestarted: _('Gateway 已重启 (PID: {pid})', 'Gateway restarted (PID: {pid})', 'Gateway 已重啟 (PID: {pid})', 'Gateway 再起動済み (PID: {pid})', 'Gateway 재시작됨 (PID: {pid})'),
   startTimeout: _('启动超时，Gateway 可能仍在启动中', 'Start timed out, Gateway may still be starting', '啟動逾時，Gateway 可能仍在啟動中', '起動タイムアウト、Gateway はまだ起動中の可能性があります', '시작 타임아웃, Gateway가 아직 시작 중일 수 있습니다', 'Khởi động quá thời gian, Gateway có thể vẫn đang khởi chạy'),
   restartTimeout: _('重启超时，Gateway 可能仍在启动中', 'Restart timed out, Gateway may still be starting', '重啟逾時，Gateway 可能仍在啟動中', '再起動タイムアウト、Gateway はまだ起動中の可能性があります', '재시작 타임아웃, Gateway가 아직 시작 중일 수 있습니다'),
+  requestTimeout: _('请求超时（{seconds}s）', 'Request timed out ({seconds}s)', '請求逾時（{seconds}s）', 'リクエストがタイムアウトしました（{seconds}s）', '요청 시간 초과({seconds}s)'),
   checking: _('检查中...', 'Checking...', '檢查中...', '確認中...', '확인 중...', 'Đang kiểm tra...', 'Verificando...', 'Verificando...', 'Проверка...', 'Vérification...', 'Wird geprüft...'),
   versionAheadWarn: _('当前本地版本 {current} 高于推荐稳定版 {recommended}，可能存在兼容风险', 'Local version {current} is ahead of recommended stable {recommended}, may have compatibility risks', '目前本地版本 {current} 高於推薦穩定版 {recommended}，可能存在相容風險', 'ローカルバージョン {current} は推奨安定版 {recommended} より新しく、互換性リスクがある可能性があります', '로컬 버전 {current}이 권장 안정 버전 {recommended}보다 높아 호환성 위험이 있을 수 있습니다'),
   updateAvailable: _('发现推荐稳定版: {version}', 'Recommended stable version available: {version}', '發現推薦穩定版: {version}', '推奨安定版が利用可能: {version}', '권장 안정 버전 사용 가능: {version}'),
