@@ -155,11 +155,11 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   var resume = parseFloat(params.get('resume') || '0')
   var picRaw = params.get('pic') || ''
   var playbackCtx = null
-  try{playbackCtx=JSON.parse(decodeURIComponent(params.get('playbackCtx')||'null'))}catch(e){}
+  try{playbackCtx=JSON.parse(params.get('playbackCtx')||'null')}catch(e){try{playbackCtx=JSON.parse(decodeURIComponent(params.get('playbackCtx')||'null'))}catch(e){}}
   var allEps=[]
-  try{var r=params.get('allEps');if(r)allEps=JSON.parse(decodeURIComponent(r))}catch(e){}
+  try{var r=params.get('allEps')||params.get('all_eps');if(r)allEps=JSON.parse(r)}catch(e){try{allEps=JSON.parse(decodeURIComponent(r))}catch(e){}}
   var allUrls=[]
-  try{var r=params.get('allUrls');if(r)allUrls=JSON.parse(decodeURIComponent(r))}catch(e){}
+  try{var r=params.get('allUrls')||params.get('all_urls');if(r)allUrls=JSON.parse(r)}catch(e){try{allUrls=JSON.parse(decodeURIComponent(r))}catch(e){}}
   if(!allUrls.length&&url)allUrls=[url]
   var pic=picRaw?decodeURIComponent(picRaw):''
   var curUrlIdx=url?allUrls.indexOf(url):0
@@ -248,6 +248,12 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   var hls=null
   var wantResume=resume
   var retryCount=0
+  var activeUrl=''
+  var lastEndedSent=false
+  var cleanupDone=false
+  var failedUrls={}
+  function getReportUrl(){return activeUrl||vid.currentSrc||vid.src||vid._lastUrl||url}
+  function markPlaybackStarted(){lastEndedSent=false;cleanupDone=false}
   function showOverlay(msg,isErr){
     spinEl.style.display=isErr?'none':'block'
     errIcon.style.display=isErr?'block':'none'
@@ -258,8 +264,13 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     retryBtn.style.display=(isErr&&retryCount<2)?'block':'none'
     overlay.classList.add('show')
   }
+  function showFinalError(msg){
+    retryBtn.style.display='block'
+    showOverlay(msg,true)
+    retryBtn.style.display='block'
+  }
   function hideOverlay(){overlay.classList.remove('show')}
-  retryBtn.addEventListener('click',function(){retryCount++;playUrl(vid._lastUrl||url,title,pic)})
+  retryBtn.addEventListener('click',function(){retryCount++;playUrl(vid._lastUrl||url,title,pic,true)})
   function fmtTime(s){
     if(!s||isNaN(s))return'0:00'
     var h=Math.floor(s/3600)
@@ -267,10 +278,13 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     var sec=Math.floor(s%60)
     return h>0?h+':'+(m<10?'0':'')+m+':'+(sec<10?'0':'')+sec:m+':'+(sec<10?'0':'')+sec
   }
-  async function playUrl(newUrl,newTitle,newPic){
+  async function playUrl(newUrl,newTitle,newPic,isRetry,keepFailures){
     if(!newUrl)return
+    activeUrl=newUrl
     vid._lastUrl=newUrl
-    retryCount=0
+    if(!isRetry)retryCount=0
+    if(!keepFailures)failedUrls={}
+    markPlaybackStarted()
     showOverlay('正在加载...')
     if(hls){hls.destroy();hls=null}
     vid.src=''
@@ -324,10 +338,17 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     }
   }
   function tryNextUrl(curIdx){
-    var next=(curIdx+1)%allUrls.length
-    if(next!==curIdx&&allUrls[next]){
-      setTimeout(function(){playUrl(allUrls[next],title,pic)},1800)
+    if(!allUrls.length){showFinalError('播放失败：没有可用线路');return}
+    if(curIdx>=0&&allUrls[curIdx])failedUrls[allUrls[curIdx]]=true
+    var start=curIdx>=0?curIdx:0
+    for(var step=1;step<=allUrls.length;step++){
+      var next=(start+step)%allUrls.length
+      if(allUrls[next]&&!failedUrls[allUrls[next]]){
+        setTimeout(function(nextUrl){playUrl(nextUrl,title,pic,false,true)},1800,allUrls[next])
+        return
+      }
     }
+    showFinalError('全部线路均播放失败，请稍后重试或更换片源')
   }
   async function ensureHlsJs(){
     if(window.Hls)return
@@ -410,8 +431,8 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   vid.addEventListener('play',function(){playBtn.innerHTML='&#9208;';playBtn.classList.add('active')})
   vid.addEventListener('pause',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active')})
   vid.addEventListener('ended',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active');reportEnded()})
-  function reportProgress(ct,dur){if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')}}
-  function reportEnded(){if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')}}
+  function reportProgress(ct,dur){var reportUrl=getReportUrl();if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')}}
+  function reportEnded(){if(lastEndedSent)return;lastEndedSent=true;var reportUrl=getReportUrl();if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:reportUrl,title:titleEl.textContent,duration:vid.duration||0,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerEnded',url:reportUrl,title:titleEl.textContent,duration:vid.duration||0,playbackCtx:playbackCtx},'*')}}
   shortcutsBtn.addEventListener('click',function(e){e.stopPropagation();shortcuts.classList.toggle('open')})
   shortcuts.addEventListener('click',function(e){e.stopPropagation()})
   pipBtn.addEventListener('click',function(){try{if(document.pictureInPictureElement)document.exitPictureInPicture();else if(vid.requestPictureInPicture)vid.requestPictureInPicture()}catch(e){}})
@@ -435,16 +456,16 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   closeBtn.addEventListener('click',function(){try{cleanupAndClose()}catch(e){window.close()}})
   // ── 清理函数（统一入口）──
   function doCleanup() {
+    if(cleanupDone)return
+    cleanupDone=true
     try { vid.pause() } catch(e) {}
     try { if(hls){ hls.destroy(); hls=null } } catch(e) {}
     try {
-      var ct = vid.currentTime || 0, dur = vid.duration || 0
+      var ct = vid.currentTime || 0, dur = vid.duration || 0, reportUrl=getReportUrl()
       if (window.__TAURI__&&window.__TAURI__.event) {
-        if (dur > 0) window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})
-        window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx}).catch(function(){})
+        if (dur > 0) window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})
       } else if (window.opener && !window.opener.closed) {
-        if (dur > 0) window.opener.postMessage({type:'playerProgress',url:vid.src,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
-        window.opener.postMessage({type:'playerEnded',url:vid.src,title:titleEl.textContent,playbackCtx:playbackCtx},'*')
+        if (dur > 0) window.opener.postMessage({type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
       }
     } catch(e) {}
   }
