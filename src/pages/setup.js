@@ -232,7 +232,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
           <a class="btn btn-secondary btn-sm" href="https://git-scm.com/downloads" target="_blank" rel="noopener">${t('setup.manualDownload')}</a>
-          <a class="btn btn-secondary btn-sm" href="http://221.0.81.162:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">备用下载</a>
+          <a class="btn btn-secondary btn-sm" href="http://221.0.81.162:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">${t('setup.backupDownload')}</a>
         </div>
         <div id="git-install-result" style="margin-top:var(--space-sm);display:none"></div>
         <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5">
@@ -846,7 +846,7 @@ function bindEvents(page, nodeOk, detectState) {
         <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
           <span style="color:var(--success)">✓</span>
           <div style="flex:1;min-width:0">
-            <code style="display:block;background:var(--bg-secondary);padding:2px 6px;border-radius:3px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(item.path)}">${escapeHtml(item.path)}</code>
+            <code class="setup-scan-path-code" title="${escapeHtml(item.path)}">${escapeHtml(item.path)}</code>
             <span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(openclawSourceLabel(item.source))}${item.version ? ` · v${escapeHtml(item.version)}` : ''}</span>
           </div>
           <button class="btn btn-primary btn-sm btn-use-openclaw-path" data-index="${index}" style="font-size:10px;padding:2px 8px">${t('setup.scanUseBtn')}</button>

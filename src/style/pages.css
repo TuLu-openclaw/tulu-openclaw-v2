@@ -1388,6 +1388,19 @@
   word-break: break-all;
 }
 
+.setup-scan-path-code {
+  display: block;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
 .setup-help-details {
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);

@@ -24,6 +24,7 @@ export default {
   stepGitHint: _('部分依赖需要 Git 下载源码。可直接使用这里的自动安装按钮；如果失败，再手动安装即可。', 'Some dependencies require Git to download source code. You can use the install button here, and install manually only if it fails.', '部分依賴需要 Git 下載源碼。可直接使用這裡的自動安裝按鈕；如果失敗，再手動安裝即可。', '一部の依存関係には Git が必要です。ここにあるインストールボタンを使い、失敗した場合のみ手動でインストールしてください。'),
   autoInstallGitBtn: _('一键安装 Git', 'Auto Install Git', '一鍵安裝 Git', 'Git をワンクリックインストール', 'Git 원클릭 설치'),
   manualDownload: _('手动下载', 'Manual Download', '手動下載', '手動ダウンロード', '수동 다운로드'),
+  backupDownload: _('备用下载', 'Backup Download', '備用下載', '代替ダウンロード', '대체 다운로드'),
   gitOptionalHint: _('<strong>没有 Git 也能安装？</strong> 大部分情况下可以，但个别依赖可能需要 Git。建议安装以避免问题。', '<strong>Can I install without Git?</strong> Usually yes, but some dependencies may require Git. Recommended to install to avoid issues.', '<strong>沒有 Git 也能安裝？</strong> 大部分情況下可以，但個別依赖可能需要 Git。建議安裝以避免問題。'),
   statusReady: _('已就绪', 'Ready', '已就緒', '準備完了'),
   statusActionNeeded: _('需要处理', 'Action needed', '需要處理', '対応が必要'),
