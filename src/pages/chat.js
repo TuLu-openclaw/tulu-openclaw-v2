@@ -1006,7 +1006,7 @@ function getCurrentWorkspaceAgentId() {
 
 function getWorkspaceAgentTitle() {
   const group = getActiveGroup()
-  if (group) return `群聊：${group.name}`
+  if (group) return t('chat.groupChatTitle', { name: group.name })
   if (_sessionKey) return getDisplayLabel(_sessionKey)
   if (_workspaceCurrentAgentId === 'main') return t('chat.mainSession')
   return _workspaceCurrentAgentId || t('chat.workspace')
