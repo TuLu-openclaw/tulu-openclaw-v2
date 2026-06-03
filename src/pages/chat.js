@@ -1000,7 +1000,7 @@ function discardWorkspaceChanges() {
 
 function getCurrentWorkspaceAgentId() {
   const group = getActiveGroup()
-  if (group) return 'group'
+  if (group) return parseSessionAgent(getGroupFallbackSessionKey(group)) || 'main'
   return parseSessionAgent(_sessionKey) || wsClient.snapshot?.sessionDefaults?.defaultAgentId || 'main'
 }
 
