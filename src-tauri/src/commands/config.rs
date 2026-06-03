@@ -5852,17 +5852,23 @@ pub async fn relaunch_app(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 测试代理连通性：通过配置的代理访问指定 URL，返回状态码和耗时
+/// 测试代理连通性：通过指定或已保存的代理访问 npm ping，返回状态码和耗时
 #[tauri::command]
-pub async fn test_proxy(url: Option<String>) -> Result<Value, String> {
-    let proxy_url = crate::commands::configured_proxy_url()
+pub async fn test_proxy(proxy_url: Option<String>) -> Result<Value, String> {
+    let proxy_url = proxy_url
+        .and_then(|s| {
+            let trimmed = s.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        })
+        .or_else(crate::commands::configured_proxy_url)
         .ok_or("未配置代理地址，请先在面板设置中保存代理地址")?;
 
-    let target = url.unwrap_or_else(|| "https://registry.npmjs.org/-/ping".to_string());
+    let target = "https://registry.npmjs.org/-/ping".to_string();
 
-    let client = crate::commands::build_http_client(
+    let client = crate::commands::build_http_client_with_proxy_url(
         std::time::Duration::from_secs(10),
         Some("星枢OpenClaw"),
+        proxy_url.clone(),
     )
     .map_err(|e| format!("创建代理客户端失败: {e}"))?;
 

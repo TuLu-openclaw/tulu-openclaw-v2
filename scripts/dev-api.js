@@ -5871,11 +5871,11 @@ const handlers = {
     return true
   },
 
-  test_proxy({ url }) {
+  test_proxy({ proxyUrl }) {
     const cfg = readPanelConfig()
-    const proxyUrl = cfg?.networkProxy?.url
-    if (!proxyUrl) throw new Error('未配置代理地址')
-    return { ok: true, status: 200, elapsed_ms: 0, proxy: proxyUrl, target: url || 'N/A (Web模式不支持代理测试)' }
+    const proxy = String(proxyUrl || cfg?.networkProxy?.url || '').trim()
+    if (!proxy) throw new Error('未配置代理地址')
+    return { ok: true, status: 200, elapsed_ms: 0, proxy, target: 'N/A (Web模式不支持代理测试)' }
   },
 
   // === Agent 管理（Web 模式） ===

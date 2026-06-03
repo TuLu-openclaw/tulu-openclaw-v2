@@ -246,6 +246,28 @@ fn build_http_client_opt(
     builder.build().map_err(|e| e.to_string())
 }
 
+/// 构建指定代理的 HTTP 客户端，用于测试尚未保存的代理地址
+pub fn build_http_client_with_proxy_url(
+    timeout: Duration,
+    user_agent: Option<&str>,
+    proxy_url: String,
+) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder().timeout(timeout).gzip(true);
+    if let Some(ua) = user_agent {
+        builder = builder.user_agent(ua);
+    }
+    let proxy_value = proxy_url;
+    builder = builder.proxy(reqwest::Proxy::custom(move |url| {
+        let host = url.host_str().unwrap_or("");
+        if should_bypass_proxy_host(host) {
+            None
+        } else {
+            Some(proxy_value.clone())
+        }
+    }));
+    builder.build().map_err(|e| e.to_string())
+}
+
 pub fn apply_proxy_env(cmd: &mut std::process::Command) {
     if let Some(proxy_url) = configured_proxy_url() {
         cmd.env("HTTP_PROXY", &proxy_url)

@@ -514,7 +514,7 @@ export const api = {
   relaunchApp: () => invoke('relaunch_app'),
   readPanelConfig: () => invoke('read_panel_config'),
   writePanelConfig: (config) => { invalidate(); return invoke('write_panel_config', { config }).then(r => { invoke('invalidate_path_cache').catch(() => {}); return r }) },
-  testProxy: (url) => invoke('test_proxy', { url: url || null }),
+  testProxy: (proxyUrl) => invoke('test_proxy', { proxyUrl: proxyUrl || null }),
 
   // 安装/部署
   checkInstallation: () => cachedInvoke('check_installation', {}, 60000),
