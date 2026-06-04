@@ -3787,9 +3787,17 @@ function renderReplyStatus(status = _replyStatusState) {
     _replyStatusMetaEl.textContent = hint
   }
   if (_replyStatusToolsEl) {
-    _replyStatusToolsEl.textContent = status.toolName
-      ? `${t('chat.tool')}：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · ${t('chat.toolEventCount', { count: status.toolCount })}` : ''}${status.toolInput ? ` · ${t('chat.toolParams')}：${status.toolInput}` : ''}`
-      : (status.state === 'tool' ? t('chat.toolWaitingName') : '')
+    if (status.toolName) {
+      const toolLabel = formatToolDisplayName(status.toolName)
+      const details = [
+        toolLabel,
+        status.toolCount ? t('chat.toolEventCount', { count: status.toolCount }) : '',
+        status.toolInput ? t('chat.toolParamsWithValue', { value: status.toolInput }) : '',
+      ].filter(Boolean).join(t('chat.toolSummarySeparator'))
+      _replyStatusToolsEl.textContent = t('chat.replyToolSummary', { details })
+    } else {
+      _replyStatusToolsEl.textContent = status.state === 'tool' ? t('chat.toolWaitingName') : ''
+    }
   }
   markStatusMarquee()
   scheduleReplyStatusTimer(status)

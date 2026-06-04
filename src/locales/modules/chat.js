@@ -358,6 +358,8 @@ export default {
   replyMetaWaiting: _('等待新的任务。', 'Waiting for a new task.', '等待新的任務。'),
   toolEventCount: _('第 {count} 次工具事件', 'Tool event #{count}', '第 {count} 次工具事件'),
   toolWaitingName: _('工具：等待工具名称回传', 'Tool: waiting for tool name', '工具：等待工具名稱回傳'),
+  toolSummarySeparator: _(' · ', ' · ', ' · '),
+  replyToolSummary: _('工具：{details}', 'Tool: {details}', '工具：{details}'),
   toolStatusSuccess: _('成功', 'Success', '成功'),
   toolStatusFailed: _('失败', 'Failed', '失敗'),
   toolStatusRunning: _('执行中', 'Running', '執行中'),
