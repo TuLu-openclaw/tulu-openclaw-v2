@@ -2200,7 +2200,9 @@ function mapReplyStateToLobsterState(state) {
 
 function emitLobsterPhase(phase, message, replyState = '') {
   try {
-    const lobsterState = mapReplyStateToLobsterState(replyState) || (phase === 'done' ? 'idle' : 'executing')
+    const lobsterState = replyState
+      ? mapReplyStateToLobsterState(replyState)
+      : (phase === 'done' || phase === 'idle' ? 'idle' : phase === 'error' || phase === 'aborted' ? 'error' : 'executing')
     window.dispatchEvent(new CustomEvent('lobster-work-start', {
       detail: { phase, state: lobsterState, message: message || phase }
     }))
@@ -2870,7 +2872,6 @@ async function doSend(text, attachments = []) {
     updateTask(currentTask.id, { status: 'error', progress: 100, error: errText })
   } finally {
     _isSending = false
-    if (_messageQueue.length === 0) emitLobsterPhase('done', t('chat.lobsterTaskDone'))
     updateSendState()
     if (!sendFailed && !_isStreaming) {
       _isStreaming = true
