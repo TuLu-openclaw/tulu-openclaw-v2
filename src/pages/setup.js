@@ -54,6 +54,15 @@ function parseOpenclawSearchPaths(raw) {
   return values
 }
 
+function inferStandaloneInstallDir(cliPath) {
+  const raw = String(cliPath || '').trim()
+  if (!raw) return ''
+  const normalized = raw.replace(/\\/g, '/')
+  const withoutCli = normalized.replace(/\/openclaw(?:\.cmd|\.exe|\.ps1)?$/i, '')
+  const withoutBin = withoutCli.replace(/\/bin$/i, '')
+  return withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
+}
+
 function buildStatusMeta(...parts) {
   return parts
     .map(part => String(part || '').trim())
@@ -817,6 +826,40 @@ function bindEvents(page, nodeOk, detectState) {
     }
   }
 
+  const saveStandaloneInstallDirFromCli = async (cliPath, btnEl, resultEl) => {
+    const installDir = inferStandaloneInstallDir(cliPath)
+    if (!installDir) return false
+    const originalText = btnEl?.textContent
+    if (btnEl) {
+      btnEl.disabled = true
+      btnEl.textContent = t('setup.saving')
+    }
+    try {
+      await api.saveStandaloneInstallDir(installDir)
+      await api.invalidatePathCache().catch(() => {})
+      const msg = t('setup.standaloneInstallDirSavedFromScan', { path: installDir })
+      if (resultEl) {
+        resultEl.style.display = 'block'
+        resultEl.innerHTML += `<div style="margin-top:6px;color:var(--success)">✓ ${escapeHtml(msg)}</div>`
+      }
+      toast(msg, 'success')
+      setTimeout(() => runDetect(page), 300)
+      return true
+    } catch (e) {
+      if (resultEl) {
+        resultEl.style.display = 'block'
+        resultEl.innerHTML += `<div style="margin-top:6px;color:var(--danger)">${t('setup.saveFailed', { err: e?.message || e })}</div>`
+      }
+      toast(t('setup.saveFailed', { err: e?.message || e }), 'error')
+      return false
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false
+        btnEl.textContent = originalText || t('setup.useAsStandaloneDir')
+      }
+    }
+  }
+
   page.querySelector('#btn-check-openclaw-path')?.addEventListener('click', async () => {
     const input = page.querySelector('#input-openclaw-cli-path')
     const resultEl = page.querySelector('#scan-openclaw-result')
@@ -865,6 +908,7 @@ function bindEvents(page, nodeOk, detectState) {
             <span style="font-size:11px;color:var(--text-tertiary)">${escapeHtml(openclawSourceLabel(item.source))}${item.version ? ` · v${escapeHtml(item.version)}` : ''}</span>
           </div>
           <button class="btn btn-primary btn-sm btn-use-openclaw-path" data-index="${index}" style="font-size:10px;padding:2px 8px">${t('setup.scanUseBtn')}</button>
+          <button class="btn btn-secondary btn-sm btn-use-standalone-dir" data-index="${index}" style="font-size:10px;padding:2px 8px">${t('setup.useAsStandaloneDir')}</button>
         </div>
       `).join('')}
       <div style="margin-top:6px;font-size:11px;color:var(--text-tertiary);line-height:1.6">${t('setup.searchOpenclawHint')}</div>`
@@ -874,6 +918,13 @@ function bindEvents(page, nodeOk, detectState) {
           const item = results[Number(btnEl.dataset.index)]
           if (!item?.path) return
           await bindOpenclawCliPath(item.path, btnEl, resultEl)
+        })
+      })
+      resultEl.querySelectorAll('.btn-use-standalone-dir').forEach(btnEl => {
+        btnEl.addEventListener('click', async () => {
+          const item = results[Number(btnEl.dataset.index)]
+          if (!item?.path) return
+          await saveStandaloneInstallDirFromCli(item.path, btnEl, resultEl)
         })
       })
     } catch (e) {
