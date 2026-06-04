@@ -452,6 +452,48 @@ const LOBSTER_PHASE_PRESETS = {
   idle: { state: 'idle', emoji: '🟢', messageKey: 'chat.lobsterPresetIdle' },
 }
 let _lobsterPhaseOverrides = {}
+let _lobsterOfficeSyncTimer = null
+let _lobsterOfficeLastPayload = null
+
+function mapLobsterStateToOfficeState(state = '', phase = '') {
+  const value = String(state || phase || '').toLowerCase()
+  return ({
+    ack: 'executing',
+    queued: 'executing',
+    working: 'executing',
+    tool: 'executing',
+    executing: 'executing',
+    thinking: 'researching',
+    planning: 'researching',
+    researching: 'researching',
+    streaming: 'writing',
+    writing: 'writing',
+    finalizing: 'syncing',
+    verifying: 'syncing',
+    syncing: 'syncing',
+    receiving: 'receiving',
+    replying: 'replying',
+    done: 'idle',
+    idle: 'idle',
+    aborted: 'error',
+    error: 'error',
+  })[value] || 'executing'
+}
+
+function queueOfficeStateSync(payload) {
+  if (!isTauriRuntime || !payload) return
+  _lobsterOfficeLastPayload = payload
+  clearTimeout(_lobsterOfficeSyncTimer)
+  _lobsterOfficeSyncTimer = setTimeout(() => {
+    const latest = _lobsterOfficeLastPayload
+    _lobsterOfficeSyncTimer = null
+    _lobsterOfficeLastPayload = null
+    if (!latest) return
+    const officeState = mapLobsterStateToOfficeState(latest.state, latest.phase)
+    const detail = latest.message || latest.phase || latest.state || ''
+    api.updateOfficeState(officeState, detail).catch(() => {})
+  }, 250)
+}
 
 async function loadLobsterPhaseOverrides() {
   try {
@@ -500,6 +542,7 @@ window.updateLobsterState = function(state, message, extra = {}) {
       ts: Date.now()
     }
     localStorage.setItem('lobsterState', JSON.stringify(payload))
+    queueOfficeStateSync(payload)
     try {
       window.__lobsterBroadcast ||= new BroadcastChannel('lobster-office-state')
       window.__lobsterBroadcast.postMessage(payload)
