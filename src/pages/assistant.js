@@ -48,7 +48,7 @@ const MODES = {
   plan:     { label: t('assistant.modePlan'), desc: t('assistant.modePlanDesc'), tools: true, readOnly: true, confirmDanger: true, accent: 'var(--info)' },
   execute:  { label: t('assistant.modeExecute'), desc: t('assistant.modeExecuteDesc'), tools: true, readOnly: false, confirmDanger: true, accent: 'var(--accent)' },
   unlimited:{ label: t('assistant.modeUnlimited'), desc: t('assistant.modeUnlimitedDesc'), tools: true, readOnly: false, confirmDanger: false, accent: 'var(--warning)' },
-  ctf:      { label: '授权CTF', desc: '授权 CTF / 安全研究上下文，仅用于明确授权的沙箱、靶场、比赛与本地安全审计任务', tools: true, readOnly: false, confirmDanger: true, accent: 'var(--success)' },
+  ctf:      { label: t('assistant.modeCtf'), desc: t('assistant.modeCtfDesc'), tools: true, readOnly: false, confirmDanger: true, accent: 'var(--success)' },
 }
 const DEFAULT_MODE = 'execute'
 
@@ -74,7 +74,7 @@ function apiHintText(apiType) {
     'openai-completions': t('assistant.apiHintOpenai'),
     'anthropic-messages': t('assistant.apiHintAnthropic'),
     'google-generative-ai': t('assistant.apiHintGemini'),
-    'ollama': 'Ollama 原生 API，baseUrl 填 http://127.0.0.1:11434（不需要 /v1）',
+    'ollama': t('assistant.apiHintOllama'),
   }[normalizeApiType(apiType)] || t('assistant.apiHintOpenai')
 }
 
