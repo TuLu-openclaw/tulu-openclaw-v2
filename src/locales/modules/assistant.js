@@ -21,6 +21,8 @@ export default {
   defaultPersonality: _('专业、友好、乐于助人', 'Professional, friendly, and helpful', '專業、友好、樂於助人', 'プロフェッショナル、フレンドリー、親切'),
   contextSavedToast: _('已保存诊断上下文，可从侧边栏进入「{assistant}」继续处理', 'Diagnostic context saved. Open "{assistant}" from the sidebar to continue.', '已儲存診斷上下文，可從側邊欄進入「{assistant}」繼續處理', '診断コンテキストを保存しました。サイドバーの「{assistant}」から続けて処理できます。', '진단 컨텍스트를 저장했습니다. 사이드바의 "{assistant}"에서 이어서 처리하세요.', 'Đã lưu ngữ cảnh chẩn đoán. Hãy mở "{assistant}" từ thanh bên để tiếp tục.'),
   dragHint: _('长按可拖动', 'Hold to drag', '長按可拖動', '長押しでドラッグできます', '길게 눌러 드래그', 'Nhấn giữ để kéo'),
+  truncatedSuffix: _('...（已截断）', '...(truncated)', '...（已截斷）', '...（切り捨て済み）', '...(잘림)', '...(đã cắt)'),
+  pageContextPrompt: _('以下是当前页面的上下文信息，请根据情况提供帮助：\n\n{detail}', 'Here is the current page context. Please help as appropriate:\n\n{detail}', '以下是目前頁面的上下文資訊，請根據情況提供協助：\n\n{detail}', '現在のページコンテキストです。状況に応じて支援してください：\n\n{detail}', '다음은 현재 페이지 컨텍스트입니다. 상황에 맞게 도와주세요:\n\n{detail}', 'Đây là ngữ cảnh trang hiện tại. Hãy hỗ trợ phù hợp:\n\n{detail}'),
   skillCheckConfig: _('检查配置', 'Check Config', '檢查設定'),
   skillCheckConfigDesc: _('检查 OpenClaw 配置文件是否正确', 'Check if OpenClaw config files are correct', '檢查 OpenClaw 設定檔案是否正確'),
   skillDiagnoseGateway: _('诊断 Gateway', 'Diagnose Gateway', '诊斷 Gateway'),

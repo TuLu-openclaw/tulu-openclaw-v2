@@ -68,7 +68,7 @@ export function openAIDrawerWithError(errorCtx) {
 
 function truncate(str, max) {
   if (!str || str.length <= max) return str
-  return str.slice(0, max) + '\n... (截断)'
+  return str.slice(0, max) + '\n' + t('assistant.truncatedSuffix')
 }
 
 // ── 创建 FAB ──
@@ -176,11 +176,11 @@ function createFab() {
         try {
           const ctx = await provider()
           if (ctx?.detail) {
-            const prompt = `以下是当前页面的上下文信息，请根据情况提供帮助：\n\n${ctx.detail}`
+            const prompt = t('assistant.pageContextPrompt', { detail: ctx.detail })
             sessionStorage.setItem('assistant-auto-prompt', prompt)
           }
         } catch (e) {
-          console.warn('[ai-fab] 上下文收集失败:', e)
+          console.warn('[ai-fab] context collection failed:', e)
         }
       }
     }
