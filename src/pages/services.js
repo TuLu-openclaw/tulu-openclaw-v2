@@ -1068,8 +1068,8 @@ async function doUpgradeWithModal(source, page, version = null, method = 'auto')
 
 async function handleUpgrade(btn, page) {
   const sourceLabel = detectedSource === 'official' ? t('services.officialEdition') : t('services.chineseEdition')
-  const recommended = lastVersionInfo?.recommended
-  const yes = await showConfirm(t('services.upgradeConfirm', { source: sourceLabel, version: recommended ? `（${recommended}）` : '' }))
+  const recommendedVersion = recommended ? t('services.recommendedVersionSuffix', { version: recommended }) : ''
+  const yes = await showConfirm(t('services.upgradeConfirm', { source: sourceLabel, version: recommendedVersion }))
   if (!yes) return
   await doUpgradeWithModal(detectedSource, page, recommended || null)
 }
@@ -1079,7 +1079,8 @@ async function handleSwitchSource(target, page) {
   const recommended = target === 'official'
     ? (lastVersionInfo?.source === 'official' ? lastVersionInfo?.recommended : null)
     : (lastVersionInfo?.source === 'chinese' ? lastVersionInfo?.recommended : null)
-  const yes = await showConfirm(t('services.switchSourceConfirm', { target: targetLabel, version: recommended ? `（${recommended}）` : '' }))
+  const recommendedVersion = recommended ? t('services.recommendedVersionSuffix', { version: recommended }) : ''
+  const yes = await showConfirm(t('services.switchSourceConfirm', { target: targetLabel, version: recommendedVersion }))
   if (!yes) return
   await doUpgradeWithModal(target, page, null)
 }

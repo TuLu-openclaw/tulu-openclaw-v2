@@ -174,6 +174,7 @@ export default {
   backupDeleted: _('备份已删除', 'Backup deleted', '備份已刪除'),
   backupLoadFailed: _('加载备份列表失败', 'Failed to load backup list', '載入備份列表失敗'),
   upgradeTitle: _('升级 / 切换版本', 'Upgrade / Switch Version', '升級 / 切換版本'),
+  recommendedVersionSuffix: _('（{version}）', ' ({version})', '（{version}）'),
   upgradeConfirm: _('确定要将 OpenClaw 切换到当前面板推荐的稳定{source}{version}吗？\n切换过程中 Gateway 会短暂中断。\n如果你想尝试最新版，请到「关于」页手动切换版本并自测兼容性。', 'Switch OpenClaw to the panel-recommended stable {source}{version}?\nGateway will be briefly interrupted.\nTo try the latest version, manually switch in the About page.', '確定要將 OpenClaw 切換到目前面板推薦的穩定{source}{version}吗？\n切換過程中 Gateway 會短暂中斷。\n如果你想尝試最新版，請到「關於」頁手動切換版本並自測相容性。'),
   switchSourceConfirm: _('确定要切换到{target}{version}吗？\n这会安装对应的 npm 包，配置数据不受影响。\n如需尝试最新版，请到「关于」页手动切换版本。', 'Switch to {target}{version}?\nThis installs the corresponding npm package. Config data is not affected.\nTo try the latest, manually switch in the About page.', '確定要切換到{target}{version}吗？\n这會安裝对應的 npm 包，設定資料不受影響。\n如需尝試最新版，請到「關於」頁手動切換版本。'),
   taskStarted: _('后台任务已启动，请等待完成...', 'Background task started, please wait...', '後台任務已啟動，請等待完成...'),
