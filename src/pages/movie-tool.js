@@ -1087,26 +1087,26 @@ function setDebug(msg, detail) {
       const typeMap = VOD_TYPE_MAP[source.key] || { movie: 1, tv: 2, variety: 3, anime: 4, short: 6 }
       typeId = typeMap[cat] ?? 1
     }
-    setDebug('加载中...', source.name + ' cat=' + cat + ' typeId=' + typeId)
+    setDebug(mt('debugLoading'), source.name + ' cat=' + cat + ' typeId=' + typeId)
     let json = { list: [], total: 0 }
     const t0 = Date.now()
     try {
       try {
         json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
         _sourceHealth[source.api] = Date.now() - t0
-        setDebug('API返回', 'total=' + json.total + ' list.len=' + (json.list?.length || 0) + ' (' + _sourceHealth[source.api] + 'ms)')
-      } catch (e) { setDebug('第1次异常', e.message) }
+        setDebug(mt('debugApiReturned'), 'total=' + json.total + ' list.len=' + (json.list?.length || 0) + ' (' + _sourceHealth[source.api] + 'ms)')
+      } catch (e) { setDebug(mt('debugFirstError'), e.message) }
       if (!json.total && !json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
       if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
-    } catch (e) { setDebug('所有方式异常', e.message) }
+    } catch (e) { setDebug(mt('debugAllMethodsError'), e.message) }
     if (!json.list || !json.list.length) {
-      setDebug('typeId返回空，尝试无typeId', '')
+      setDebug(mt('debugTypeIdEmpty'), '')
       try { json = await fetchJSONFast(source.api + '?ac=list&pg=' + page) } catch {}
     }
     const count = json.list?.length || 0
     // 标记超时源（>5s）
     if (_sourceHealth[source.api] > 5000) renderSrcBar()
-    setDebug('结果: ' + (json.total || count) + '条', 'list.len=' + count)
+    setDebug(mt('debugResultCount', { count: json.total || count }), 'list.len=' + count)
     const normalized = (json.list || []).map(item => normalizeVodItem(item, source))
     renderVodGrid(normalized, json.total || count)
   }
@@ -1122,7 +1122,7 @@ function setDebug(msg, detail) {
     let succeeded = 0
     let renderedAny = false
     content.innerHTML = '<div id="t-main-grid"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('searchingImmediate')) + '</span></div></div><div id="t-pagination"></div>'
-    setDebug('全网搜索中', '0/' + VOD_SOURCES.length + '源返回')
+    setDebug(mt('debugGlobalSearchRunning'), mt('debugSourceProgress', { done: 0, total: VOD_SOURCES.length }))
 
     const tasks = VOD_SOURCES.map(async (source) => {
       const ctrl = new AbortController()
@@ -1153,13 +1153,13 @@ function setDebug(msg, detail) {
       } finally {
         clearTimeout(tid)
         finished++
-        setDebug('全网搜索中', finished + '/' + VOD_SOURCES.length + '源返回，已显示' + merged.length + '条')
+        setDebug(mt('debugGlobalSearchRunning'), mt('debugSourceDisplayed', { done: finished, total: VOD_SOURCES.length, count: merged.length }))
       }
     })
 
     await Promise.allSettled(tasks)
     if (!renderedAny) renderVodGrid([], 0)
-    setDebug('全网搜索完成', succeeded + '/' + VOD_SOURCES.length + '源命中，精确匹配' + merged.length + '条')
+    setDebug(mt('debugGlobalSearchDone'), mt('debugSourceMatched', { done: succeeded, total: VOD_SOURCES.length, count: merged.length }))
   }
 
   async function loadSearch() {
@@ -1527,7 +1527,7 @@ function setDebug(msg, detail) {
       const r = await fetch('https://api.douban.com/v2/movie/search?q=' + encodeURIComponent(item.vod_name), controller ? { signal: controller } : undefined)
       const d = await r.json().catch(() => null)
       const score = d?.subjects?.[0]?.rating?.average
-      if (score && score > 0) doubanRating = '⭐ 豆瓣 ' + score
+      if (score && score > 0) doubanRating = mt('doubanRating', { score })
     } catch {}
 
     // 优先选择包含直接 m3u8 的源
@@ -2249,9 +2249,9 @@ function pickDirectUrl(url) {
         menu.appendChild(btn)
       })
       const autoBtn = document.createElement('button')
-      autoBtn.textContent = (hls.currentLevel === -1 ? '✅ ' : '') + '🔀 自动'
+      autoBtn.textContent = (hls.currentLevel === -1 ? '✅ ' : '') + '🔀 ' + mt('autoQuality')
       autoBtn.style.cssText = 'display:block;width:100%;text-align:left;padding:5px 10px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer'
-      autoBtn.addEventListener('click', () => { hls.currentLevel = -1; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); autoBtn.textContent = '✅ 🔀 自动'; closeMenu() })
+      autoBtn.addEventListener('click', () => { hls.currentLevel = -1; menu?.querySelectorAll('button').forEach(b => b.textContent = b.textContent.replace(/^✅ /, '')); autoBtn.textContent = '✅ 🔀 ' + mt('autoQuality'); closeMenu() })
       menu.appendChild(autoBtn)
       qBtn.parentElement?.appendChild(menu)
       document.addEventListener('click', closeMenu, { once: true })
@@ -2596,9 +2596,9 @@ function pickDirectUrl(url) {
 
     const allResults = []
     const settled = await Promise.allSettled(strategies.map(async (s, i) => {
-      showCrawlStatus('[' + (i + 1) + '/' + strategies.length + '] ' + s.name + '中...', 'loading')
+      showCrawlStatus(mt('crawlStrategyRunning', { current: i + 1, total: strategies.length, name: s.name }), 'loading')
       const r = await s.fn()
-      showCrawlStatus('[' + (i + 1) + '/' + strategies.length + '] ' + s.name + '完成，找到 ' + (Array.isArray(r) ? r.length : 0) + ' 个', 'loading')
+      showCrawlStatus(mt('crawlStrategyDone', { current: i + 1, total: strategies.length, name: s.name, count: Array.isArray(r) ? r.length : 0 }), 'loading')
       // 自动播放：每条策略首次找到结果立即通知
       if (onFirstMatch && Array.isArray(r) && r.length > 0) notifyMatch(r[0])
       return r
@@ -2661,10 +2661,10 @@ function pickDirectUrl(url) {
         return html
       } catch (e) {
         lastErr = e
-        if (e.name === 'AbortError') lastErr = new Error('请求超时（' + CRAWL_TIMEOUT / 1000 + 's）')
+        if (e.name === 'AbortError') lastErr = new Error(mt('requestTimeoutSeconds', { seconds: CRAWL_TIMEOUT / 1000 }))
       }
     }
-    throw lastErr || new Error('fetch 失败')
+    throw lastErr || new Error(mt('fetchFailed'))
   }
 
   function extractM3u8(html, base, baseThumb) {
@@ -2676,7 +2676,7 @@ function pickDirectUrl(url) {
       const raw = m[1].replace(/['"]/g, '').split('?')[0]
       const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
       if (resolved.includes('.m3u8')) {
-        const name = raw.split('/').pop().replace('.m3u8', '') || 'M3U8 视频'
+        const name = raw.split('/').pop().replace('.m3u8', '') || mt('m3u8Video')
         results.push({ name, url: resolved, thumb: baseThumb || '', type: 'm3u8' })
       }
     }
@@ -2685,7 +2685,7 @@ function pickDirectUrl(url) {
     while ((m = jsonRe.exec(html)) !== null) {
       const resolved = m[1].split('?')[0]
       if (resolved.includes('.m3u8')) {
-        const name = resolved.split('/').pop().replace('.m3u8', '').split(/[,&?]/)[0] || 'M3U8 视频'
+        const name = resolved.split('/').pop().replace('.m3u8', '').split(/[,&?]/)[0] || mt('m3u8Video')
         results.push({ name, url: resolved, thumb: baseThumb || '', type: 'm3u8' })
       }
     }
@@ -2702,7 +2702,7 @@ function pickDirectUrl(url) {
           curRes = res ? res.replace('x', 'p ') : ''
         } else if (l && !l.startsWith('#')) {
           curUrl = l.startsWith('http') ? l : new URL(l, base).href
-          const label = (curRes + ' ' + curBw).trim() || '流'
+          const label = (curRes + ' ' + curBw).trim() || mt('streamLabel')
           results.push({ name: '[' + label + '] ' + (curUrl.split('/').pop().replace('.m3u8', '') || 'M3U8'), url: curUrl, thumb: baseThumb || '', type: 'm3u8' })
           curUrl = ''
         }
