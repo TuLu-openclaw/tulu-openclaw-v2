@@ -625,7 +625,7 @@ export class WsClient {
     }
   }
 
-  request(method, params = {}) {
+  request(method, params = {}, opts = {}) {
     return new Promise((resolve, reject) => {
       if (!this._ws || this._ws.readyState !== WebSocket.OPEN || !this._gatewayReady) {
         if (!this._intentionalClose && (this._reconnectAttempts > 0 || !this._gatewayReady)) {
@@ -640,7 +640,8 @@ export class WsClient {
         return reject(new Error('WebSocket 未连接'))
       }
       const id = uuid()
-      const timer = setTimeout(() => { this._pending.delete(id); reject(new Error('请求超时')) }, REQUEST_TIMEOUT)
+      const timeoutMs = Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? opts.timeoutMs : REQUEST_TIMEOUT
+      const timer = setTimeout(() => { this._pending.delete(id); reject(new Error('请求超时')) }, timeoutMs)
       this._pending.set(id, { resolve, reject, timer })
       this._ws.send(JSON.stringify({ type: 'req', id, method, params }))
     })

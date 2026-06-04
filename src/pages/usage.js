@@ -74,14 +74,18 @@ async function loadUsage(page) {
     const now = new Date()
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
-    const data = await wsClient.request('sessions.usage', { startDate: start, endDate: end, limit: 200 })
+    const data = await wsClient.request('sessions.usage', { startDate: start, endDate: end, limit: 120 }, { timeoutMs: 90000 })
     if (page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
     if (page !== _page || !page.isConnected || !el.isConnected) return
+    const message = String(e?.message || e || '')
+    const isTimeout = /超时|timeout/i.test(message)
+    const isUnsupported = /not found|unknown method|unsupported|method/i.test(message)
+    const hint = isTimeout ? t('usage.loadTimeoutHint') : (isUnsupported ? t('usage.loadUnsupportedHint') : t('usage.loadFailedHint'))
     el.innerHTML = `<div class="usage-empty">
-      <div style="color:var(--error);margin-bottom:8px">${t('usage.loadFailed')}: ${esc(e?.message || e)}</div>
-      <div class="form-hint">${t('usage.loadFailedHint')}</div>
+      <div style="color:var(--error);margin-bottom:8px">${isTimeout ? t('usage.loadTimeout') : t('usage.loadFailed')}: ${esc(message || t('common.unknown'))}</div>
+      <div class="form-hint">${hint}</div>
       <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-usage-retry">${t('usage.retry')}</button>
     </div>`
     el.querySelector('#btn-usage-retry')?.addEventListener('click', () => page.querySelector('#btn-usage-refresh')?.click())

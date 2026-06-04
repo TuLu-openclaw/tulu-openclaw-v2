@@ -11,6 +11,7 @@ export default {
   loading: _('加载中...', 'Loading...', '載入中...', '読み込み中...', '로딩 중...', 'Đang tải...', 'Cargando...', 'Carregando...', 'Загрузка...', 'Chargement...', 'Laden...'),
   retry: _('重试', 'Retry', '重試', '再試行', '재시도', 'Thử lại', 'Reintentar', 'Tentar novamente', 'Повторить', 'Réessayer', 'Wiederholen'),
   copy: _('复制', 'Copy', '複製', 'コピー', '복사', 'Sao chép', 'Copiar', 'Copiar', 'Копировать', 'Copier', 'Kopieren'),
+  browse: _('浏览', 'Browse', '瀏覽', '参照', '찾아보기', 'Duyệt', 'Examinar', 'Procurar', 'Обзор', 'Parcourir', 'Durchsuchen'),
   copied: _('已复制', 'Copied', '已複製', 'コピーしました', '복사됨', 'Đã sao chép', 'Copiado', 'Copiado', 'Скопировано', 'Copié', 'Kopiert'),
   search: _('搜索', 'Search', '搜尋', '検索', '검색', 'Tìm kiếm', 'Buscar', 'Pesquisar', 'Поиск', 'Rechercher', 'Suchen'),
   refresh: _('刷新', 'Refresh', '重新整理', '更新', '새로고침', 'Làm mới', 'Actualizar', 'Atualizar', 'Обновить', 'Actualiser', 'Aktualisieren'),

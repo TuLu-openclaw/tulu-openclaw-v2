@@ -56,7 +56,8 @@
           "TradChinese",
           "English"
         ],
-        "displayLanguageSelector": true
+        "displayLanguageSelector": true,
+        "installerHooks": "./windows/nsis-installer-hooks.nsh"
       }
     }
   }
