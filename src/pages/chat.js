@@ -114,7 +114,7 @@ let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
 let _lastStreamDeltaFingerprint = ''
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
-let _lastRenderTime = 0, _renderPending = false, _renderTimer = null, _lastHistoryHash = ''
+let _lastRenderTime = 0, _renderPending = false, _renderTimer = null, _lastHistoryHash = '', _lastAssistantContentHash = ''
 let _autoScrollEnabled = true, _lastScrollTop = 0, _touchStartY = 0
 let _isLoadingHistory = false
 let _streamSafetyTimer = null, _unsubEvent = null, _unsubReady = null, _unsubStatus = null
@@ -3069,10 +3069,10 @@ function scheduleStreamSafetyTimeout() {
         activity: t('chat.replyActivityAwaitingMoreEvents', { seconds: Math.max(1, Math.round(elapsed / 1000)) }),
       })
       if (elapsed > STREAM_STALE_REFRESH_MS && _sessionKey && _messagesEl && _pageActive) {
-        const oldHash = _lastHistoryHash
+        const oldAssistantHash = _lastAssistantContentHash
         _lastHistoryHash = ''
         loadHistory().then(async () => {
-          if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
+          if (_lastAssistantContentHash && _lastAssistantContentHash !== oldAssistantHash) {
             const doneRunId = runId || _currentRunId || ''
             setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId: doneRunId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
             showTyping(false)
@@ -3911,10 +3911,10 @@ function _startResponseWatchdog() {
     // 如果还在等待（未开始流式），只刷新历史/状态，不判定失败，避免后台任务仍运行时 UI 误报超时。
     if (!_isStreaming && _sessionKey && _messagesEl && _pageActive) {
       console.debug('[chat] 响应看门狗触发：无事件返回，刷新历史并继续等待')
-      const oldHash = _lastHistoryHash
+      const oldAssistantHash = _lastAssistantContentHash
       _lastHistoryHash = ''
       await loadHistory()
-      if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
+      if (_lastAssistantContentHash && _lastAssistantContentHash !== oldAssistantHash) {
         const doneRunId = _currentRunId || ''
         showTyping(false)
         resetStreamState()
@@ -4020,8 +4020,10 @@ async function loadHistory() {
     }
     const deduped = dedupeHistory(result.messages)
     const hash = deduped.map(historyMessageSignature).join('|')
+    const assistantContentHash = historyAssistantContentSignature(deduped)
     if (hash === _lastHistoryHash && hasExisting) return
     _lastHistoryHash = hash
+    _lastAssistantContentHash = assistantContentHash
 
     // 正在发送/流式输出时不全量重绘，避免覆盖本地乐观渲染
     if (hasExisting && (_isSending || _isStreaming || _messageQueue.length > 0)) {
@@ -4141,6 +4143,21 @@ function historyToolSignature(tool = {}) {
     stableHistoryString(tool.input),
     stableHistoryString(tool.output || tool.result),
   ].join('\u001f'))
+}
+
+function historyAssistantContentSignature(messages = []) {
+  return messages
+    .filter(message => message.role === 'assistant' && (message.text || message.images?.length || message.videos?.length || message.audios?.length || message.files?.length))
+    .map(message => [
+      message.role || '',
+      message.timestamp || '',
+      hashSessionPart(message.text || ''),
+      hashSessionPart((message.images || []).map(i => i.url || i.data || i.mediaType || '').join('\u001f')),
+      hashSessionPart((message.videos || []).map(v => v.url || v.data || v.mediaType || '').join('\u001f')),
+      hashSessionPart((message.audios || []).map(a => a.url || a.data || a.mediaType || '').join('\u001f')),
+      hashSessionPart((message.files || []).map(f => f.url || f.name || f.data || '').join('\u001f')),
+    ].join(':'))
+    .join('|')
 }
 
 function historyMessageSignature(message = {}) {
