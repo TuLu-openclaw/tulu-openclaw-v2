@@ -101,7 +101,7 @@ export default {
   starting: _('启动中...', 'Starting...', '啟動中...', '起動中...', '시작 중...', 'Đang khởi động...', 'Iniciando...', 'Iniciando...', 'Запуск...', 'Démarrage...', 'Wird gestartet...'),
   gwStartSent: _('Gateway 启动指令已发送', 'Gateway start command sent', 'Gateway 啟動指令已發送', 'Gateway 起動コマンド送信済み', 'Gateway 시작 명령 전송됨'),
   startFail: _('启动失败', 'Start failed', '啟動失敗', '起動失敗', '시작 실패'),
-  stopping: _('停止中...', 'Stopping...', '', '停止中...', '중지 중...', 'Đang dừng...', 'Deteniendo...', 'Parando...', 'Остановка...', 'Arrêt...', 'Wird gestoppt...'),
+  stopping: _('停止中...', 'Stopping...', '停止中...', '停止中...', '중지 중...', 'Đang dừng...', 'Deteniendo...', 'Parando...', 'Остановка...', 'Arrêt...', 'Wird gestoppt...'),
   gwStopped: _('Gateway 已停止', 'Gateway stopped', 'Gateway 已停止', 'Gateway 停止済み', 'Gateway 중지됨'),
   stopFail: _('停止失败', 'Stop failed', '停止失敗', '停止失敗', '중지 실패'),
   restarting: _('重启中...', 'Restarting...', '重啟中...', '再起動中...', '재시작 중...', 'Đang khởi động lại...', 'Reiniciando...', 'Reiniciando...', 'Перезапуск...', 'Redémarrage...', 'Wird neugestartet...'),
