@@ -389,7 +389,7 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'skills_list',
-        description: '列出所有 OpenClaw Skills 及其状态（可用/缺依赖/已禁用）。返回每个 Skill 的名称、描述、来源、依赖状态、缺少的依赖项、可用的安装选项等信息。',
+        description: t('assistant.toolDescSkillsList'),
         parameters: { type: 'object', properties: {}, required: [] },
       },
     },
@@ -397,11 +397,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'skills_info',
-        description: '查看指定 Skill 的详细信息，包括描述、来源、依赖要求、缺少的依赖、安装选项等。',
+        description: t('assistant.toolDescSkillsInfo'),
         parameters: {
           type: 'object',
           properties: {
-            name: { type: 'string', description: 'Skill 名称，如 github、weather、coding-agent' },
+            name: { type: 'string', description: t('assistant.toolParamSkillName') },
           },
           required: ['name'],
         },
@@ -411,7 +411,7 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'skills_check',
-        description: '检查所有 Skills 的依赖状态，返回哪些可用、哪些缺少依赖、哪些已禁用的汇总信息。',
+        description: t('assistant.toolDescSkillsCheck'),
         parameters: { type: 'object', properties: {}, required: [] },
       },
     },
@@ -419,18 +419,18 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'skills_install_dep',
-        description: '安装 Skill 缺少的依赖。根据 Skill 的 install spec 执行对应的包管理器命令（brew/npm/go/uv）。安装完成后会自动生效。',
+        description: t('assistant.toolDescSkillsInstallDep'),
         parameters: {
           type: 'object',
           properties: {
-            kind: { type: 'string', enum: ['brew', 'node', 'go', 'uv'], description: '安装类型' },
+            kind: { type: 'string', enum: ['brew', 'node', 'go', 'uv'], description: t('assistant.toolParamInstallKind') },
             spec: {
               type: 'object',
-              description: '安装参数。brew 需要 formula，node 需要 package，go 需要 module，uv 需要 package。',
+              description: t('assistant.toolParamInstallSpec'),
               properties: {
-                formula: { type: 'string', description: 'Homebrew formula 名称' },
-                package: { type: 'string', description: 'npm 或 uv 包名' },
-                module: { type: 'string', description: 'Go module 路径' },
+                formula: { type: 'string', description: t('assistant.toolParamBrewFormula') },
+                package: { type: 'string', description: t('assistant.toolParamPackageName') },
+                module: { type: 'string', description: t('assistant.toolParamGoModule') },
               },
             },
           },
@@ -442,11 +442,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'skillhub_search',
-        description: '在 SkillHub 技能商店中搜索 Skills。返回匹配的 Skill 列表（slug 和描述）。',
+        description: t('assistant.toolDescSkillhubSearch'),
         parameters: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: '搜索关键词' },
+            query: { type: 'string', description: t('assistant.toolParamSearchQuery') },
           },
           required: ['query'],
         },
@@ -456,11 +456,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'skillhub_install',
-        description: '从 SkillHub 技能商店安装一个 Skill 到本地自定义 Skills 目录（通常为 ~/.openclaw/skills/ 或 ~/.claude/skills/）。',
+        description: t('assistant.toolDescSkillhubInstall'),
         parameters: {
           type: 'object',
           properties: {
-            slug: { type: 'string', description: 'SkillHub 上的 Skill slug（名称标识）' },
+            slug: { type: 'string', description: t('assistant.toolParamSkillhubSlug') },
           },
           required: ['slug'],
         },
