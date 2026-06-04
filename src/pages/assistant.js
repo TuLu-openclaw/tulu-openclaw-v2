@@ -22,9 +22,18 @@ const SESSIONS_KEY = 'clawpanel-assistant-sessions'
 const MAX_SESSIONS = 50
 const MAX_CONTEXT_TOKENS = 30 // 最近 N 条消息作为上下文
 
+// ── Console helpers ──
+function warnLog(message, err) {
+  console.warn(t(message), err)
+}
+
+function errorLog(message, err) {
+  console.error(t(message), err)
+}
+
 // ── 图片文件存储（通过 Tauri 后端持久化到 ~/.openclaw/clawpanel/images/）──
 async function saveImageToFile(id, dataUrl) {
-  try { await api.saveImage(id, dataUrl) } catch (e) { console.warn('图片保存失败:', e) }
+  try { await api.saveImage(id, dataUrl) } catch (e) { warnLog('assistant.imageSaveFailedLog', e) }
 }
 
 async function loadImageFromFile(id) {
@@ -1157,7 +1166,7 @@ async function scanOpenClawAgents() {
     } catch {}
     return agents
   } catch (err) {
-    console.error('[soul] 扫描 Agent 失败:', err)
+    errorLog('assistant.soulScanFailedLog', err)
     return []
   }
 }
@@ -1207,7 +1216,7 @@ async function loadOpenClawSoul(agentId = 'default') {
     _soulCache = soul
     return soul
   } catch (err) {
-    console.error('[soul] 加载失败:', err)
+    errorLog('assistant.soulLoadFailedLog', err)
     _soulCache = null
     return null
   }
@@ -4659,7 +4668,7 @@ export async function render() {
   loadSessions()
 
   // 确保数据目录存在（~/.openclaw/clawpanel/images/ 等）
-  api.ensureDataDir().catch(e => console.warn('数据目录初始化失败:', e))
+  api.ensureDataDir().catch(e => warnLog('assistant.dataDirInitFailedLog', e))
 
   // 如果没有会话，不自动创建（显示欢迎页）
   if (_sessions.length > 0 && !_currentSessionId) {
