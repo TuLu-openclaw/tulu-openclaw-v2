@@ -1496,7 +1496,7 @@ mod platform {
                     }
                 }
             }
-            return (true, None);
+            (true, None)
         }
 
         #[cfg(target_os = "macos")]
@@ -1520,7 +1520,7 @@ mod platform {
             not(target_os = "macos")
         ))]
         {
-            return (result, None);
+            (result, None)
         }
     }
 
