@@ -3193,11 +3193,6 @@ function showSettings() {
               <textarea class="form-input" id="ast-personality" rows="3" placeholder="${DEFAULT_PERSONALITY}" style="resize:vertical">${escHtml(c.assistantPersonality || DEFAULT_PERSONALITY)}</textarea>
               <div class="form-hint">${t('assistant.personaPersonalityHint')}</div>
             </div>
-            <div class="form-group">
-              <label class="form-label">${t('assistant.customSystemPrompt')}</label>
-              <textarea class="form-input" id="ast-custom-system-prompt" rows="4" placeholder="${t('assistant.customSystemPromptPlaceholder')}" style="resize:vertical;font-family:var(--font-mono);font-size:12px">${escHtml(c.customSystemPrompt || '')}</textarea>
-              <div class="form-hint">${t('assistant.customSystemPromptHint')}</div>
-            </div>
           </div>
           <div id="ast-soul-openclaw" style="${!isHermes && c.soulSource?.startsWith('openclaw:') ? '' : 'display:none'}">
             <div class="form-group" style="margin-top:4px">
@@ -3221,6 +3216,11 @@ function showSettings() {
               </div>
             </div>
             <div class="form-hint" style="margin-top:8px">${t('assistant.personaSoulInherit')}</div>
+          </div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">${t('assistant.customSystemPrompt')}</label>
+            <textarea class="form-input" id="ast-custom-system-prompt" rows="4" placeholder="${t('assistant.customSystemPromptPlaceholder')}" style="resize:vertical;font-family:var(--font-mono);font-size:12px">${escHtml(c.customSystemPrompt || '')}</textarea>
+            <div class="form-hint">${t('assistant.customSystemPromptHint')}</div>
           </div>
         </div>
         <div class="ast-tab-panel" data-panel="knowledge">
