@@ -1036,6 +1036,10 @@ function buildSystemPrompt() {
     prompt += getSystemPromptBase()
   }
 
+  if (_config?.customSystemPrompt?.trim()) {
+    prompt += '\n\n## 用户自定义系统补充\n' + _config.customSystemPrompt.trim()
+  }
+
   const modeKey = currentMode()
   const mode = MODES[modeKey]
 
@@ -1661,10 +1665,11 @@ function loadConfig() {
     }
   } catch { _config = null }
   if (!_config) {
-    _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false, webSearch: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY }
+    _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false, webSearch: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY, customSystemPrompt: '' }
   }
   if (!_config.assistantName) _config.assistantName = DEFAULT_NAME
   if (!_config.assistantPersonality) _config.assistantPersonality = DEFAULT_PERSONALITY
+  if (typeof _config.customSystemPrompt !== 'string') _config.customSystemPrompt = ''
   if (!_config.tools) _config.tools = { terminal: false, fileOps: false, webSearch: false }
   if (!_config.mode) _config.mode = DEFAULT_MODE
   _config.apiType = normalizeApiType(_config.apiType)
@@ -3188,6 +3193,11 @@ function showSettings() {
               <textarea class="form-input" id="ast-personality" rows="3" placeholder="${DEFAULT_PERSONALITY}" style="resize:vertical">${escHtml(c.assistantPersonality || DEFAULT_PERSONALITY)}</textarea>
               <div class="form-hint">${t('assistant.personaPersonalityHint')}</div>
             </div>
+            <div class="form-group">
+              <label class="form-label">${t('assistant.customSystemPrompt')}</label>
+              <textarea class="form-input" id="ast-custom-system-prompt" rows="4" placeholder="${t('assistant.customSystemPromptPlaceholder')}" style="resize:vertical;font-family:var(--font-mono);font-size:12px">${escHtml(c.customSystemPrompt || '')}</textarea>
+              <div class="form-hint">${t('assistant.customSystemPromptHint')}</div>
+            </div>
           </div>
           <div id="ast-soul-openclaw" style="${!isHermes && c.soulSource?.startsWith('openclaw:') ? '' : 'display:none'}">
             <div class="form-group" style="margin-top:4px">
@@ -4113,6 +4123,7 @@ function showSettings() {
   overlay.querySelector('[data-action="confirm"]').onclick = () => {
     _config.assistantName = overlay.querySelector('#ast-name').value.trim() || DEFAULT_NAME
     _config.assistantPersonality = overlay.querySelector('#ast-personality').value.trim() || DEFAULT_PERSONALITY
+    _config.customSystemPrompt = overlay.querySelector('#ast-custom-system-prompt')?.value.trim() || ''
     _config.baseUrl = overlay.querySelector('#ast-baseurl').value.trim()
     _config.apiKey = overlay.querySelector('#ast-apikey').value.trim()
     _config.model = overlay.querySelector('#ast-model').value.trim()
