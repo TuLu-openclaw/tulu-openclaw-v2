@@ -122,6 +122,7 @@ export default {
   recommendedStable: _('推荐稳定版: {version}', 'Recommended stable: {version}', '推薦穩定版: {version}'),
   noRecommended: _('未获取到推荐稳定版', 'Recommended stable version unavailable', '未取得到推薦穩定版'),
   latestUpstream: _('最新上游: {version}', 'Latest upstream: {version}'),
+  latestUpstreamWithAction: _('最新上游: {version}（{action}）', 'Latest upstream: {version} ({action})', '最新上游: {version}（{action}）'),
   pullNewImage: _('请拉取新镜像更新', 'Pull new image to update', '請拉取新鏡像更新'),
   currentImageVer: _('已是当前镜像版本', 'Already on current image version', '已是目前鏡像版本'),
   rollbackToRecommended: _('回退到推荐版', 'Rollback to recommended', '回退到推薦版'),

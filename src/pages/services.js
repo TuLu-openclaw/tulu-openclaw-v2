@@ -176,7 +176,7 @@ async function loadVersion(page) {
               <span class="stat-card-label">${t('services.currentVersion')} · <span style="color:var(--accent)">${t('services.dockerDeploy')}</span></span>
             </div>
             <div class="stat-card-value">${ver}</div>
-            <div class="stat-card-meta">${info.latest_update_available ? t('services.latestUpstream', { version: info.latest }) + '（' + t('services.pullNewImage') + '）' : t('services.currentImageVer')}</div>
+            <div class="stat-card-meta">${info.latest_update_available ? t('services.latestUpstreamWithAction', { version: info.latest, action: t('services.pullNewImage') }) : t('services.currentImageVer')}</div>
             ${info.latest_update_available ? `<div style="margin-top:var(--space-sm)">
               <code style="font-size:var(--font-size-xs);background:var(--bg-tertiary);padding:4px 8px;border-radius:4px;user-select:all">${escapeHtml(`docker pull ${dockerImage}:latest`)}</code>
             </div>` : ''}
