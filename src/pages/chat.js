@@ -3363,7 +3363,7 @@ function handleChatEvent(payload) {
     }
 
     // 如果流式输出中收到错误，保留已收到的内容，但必须结束当前流，避免发送按钮和队列卡死。
-    if (keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey)) return
+    if (keepRunWaitingAfterRecoverableError(rawErrMsg, errMsg, runId, eventSessionKey)) return
 
     if (_isStreaming || _currentAiBubble) {
       console.warn('[chat] 流式中收到错误，保留部分输出并结束当前流:', errMsg)
@@ -3396,14 +3396,14 @@ function isRecoverableStreamTimeoutError(message = '') {
     || /output\s+timeout|output[^\n]{0,60}timed?\s*out|no new output|stream[^\n]{0,60}timeout|stream[^\n]{0,60}timed?\s*out|response watchdog/i.test(lower)
 }
 
-function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
-  if (!isRecoverableStreamTimeoutError(errMsg)) return false
+function keepRunWaitingAfterRecoverableError(rawErrMsg, errMsg, runId, eventSessionKey) {
+  if (!isRecoverableStreamTimeoutError(rawErrMsg) && !isRecoverableStreamTimeoutError(errMsg)) return false
   if (!_isStreaming && !_currentAiBubble && !isLongRunningReplyState(_replyStatusState?.state)) return false
   if (runId && !_currentRunId) _currentRunId = runId
   const rawActiveState = isLongRunningReplyState(_replyStatusState?.state) ? _replyStatusState.state : (_currentAiText ? 'streaming' : 'thinking')
   const activeState = rawActiveState === 'waiting' ? (_currentAiText ? 'streaming' : 'thinking') : rawActiveState
   const detail = activeState === 'tool' ? t('chat.streamToolStillRunning') : t('chat.streamStillRunning')
-  console.warn('[chat] recoverable stream timeout error, keep run waiting:', runId || _currentRunId || '(no-run)', errMsg)
+  console.warn('[chat] recoverable stream timeout error, keep run waiting:', runId || _currentRunId || '(no-run)', rawErrMsg || errMsg)
   _isStreaming = true
   _streamStartTime = _streamStartTime || Date.now()
   if (_currentAiBubble && _currentAiText) flushStreamRender()
