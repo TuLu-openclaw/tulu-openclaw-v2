@@ -2824,11 +2824,11 @@ function renderErrorBanner() {
   // "让 AI 分析" → 组装 prompt 并发送
   banner.querySelector('.btn-analyze').addEventListener('click', () => {
     const prompt = [
-      ctx.scene ? `**场景**: ${ctx.scene}` : '',
-      ctx.title ? `**错误**: ${ctx.title}` : '',
-      ctx.hint ? `**提示**: ${ctx.hint}` : '',
+      ctx.scene ? t('assistant.errorPromptScene', { scene: ctx.scene }) : '',
+      ctx.title ? t('assistant.errorPromptError', { title: ctx.title }) : '',
+      ctx.hint ? t('assistant.errorPromptHint', { hint: ctx.hint }) : '',
       ctx.error ? `\n\`\`\`\n${ctx.error}\n\`\`\`` : '',
-      '\n请分析以上错误信息，给出原因和修复方案。',
+      '\n' + t('assistant.errorPromptInstruction'),
     ].filter(Boolean).join('\n')
 
     // 自动切换到执行模式
