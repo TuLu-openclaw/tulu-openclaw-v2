@@ -391,6 +391,7 @@ async function loadOpenclawSearchPaths(page) {
         <textarea class="form-input" data-name="openclaw-search-paths" rows="4" placeholder="${t('settings.searchPathsPlaceholder')}" style="max-width:680px;min-height:108px;resize:vertical">${escapeHtml(value)}</textarea>
         <div style="display:flex;align-items:center;gap:var(--space-sm);flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" data-action="save-openclaw-search-paths">${t('common.save')}</button>
+          <button class="btn btn-secondary btn-sm" data-action="scan-openclaw-install-paths">${t('settings.scanOpenclawInstallPaths')}</button>
         </div>
       </div>
       <div class="form-hint" style="margin-top:var(--space-xs)">
@@ -449,6 +450,38 @@ async function handleSaveOpenclawSearchPaths(page) {
   await loadOpenclawSearchPaths(page)
   await loadCliBinding(page)
   toast(paths.length > 0 ? t('settings.searchPathsSaved') : t('settings.searchPathsCleared'), 'success')
+}
+
+function collectInstallDirsFromVersionInfo(version, cfg) {
+  const values = []
+  const add = (value) => {
+    const dir = inferOpenclawInstallDir(value)
+    if (dir) values.push(dir)
+  }
+  add(version?.cli_path)
+  for (const inst of Array.isArray(version?.all_installations) ? version.all_installations : []) {
+    add(inst?.path)
+  }
+  if (cfg?.openclawStandaloneInstallDir) values.push(cfg.openclawStandaloneInstallDir)
+  return parseOpenclawSearchPaths(values.join('\n'))
+}
+
+async function handleScanOpenclawInstallPaths(page) {
+  const input = page.querySelector('[data-name="openclaw-search-paths"]')
+  const cfg = await api.readPanelConfig()
+  const version = await api.getVersionInfo().catch(() => null)
+  const existing = parseOpenclawSearchPaths(input?.value || cfg?.openclawSearchPaths?.join?.('\n') || '')
+  const scanned = collectInstallDirsFromVersionInfo(version, cfg)
+  const merged = parseOpenclawSearchPaths([...existing, ...scanned].join('\n'))
+  if (merged.length === existing.length) {
+    toast(t('settings.scanOpenclawInstallPathsEmpty'), 'info')
+    return
+  }
+  cfg.openclawSearchPaths = merged
+  await savePanelConfigAndRefreshPaths(cfg)
+  await loadOpenclawSearchPaths(page)
+  await loadCliBinding(page)
+  toast(t('settings.scanOpenclawInstallPathsSaved', { count: merged.length - existing.length }), 'success')
 }
 
 async function loadDockerDefaults(page) {
@@ -583,6 +616,9 @@ function bindEvents(page) {
           break
         case 'save-openclaw-search-paths':
           await handleSaveOpenclawSearchPaths(page)
+          break
+        case 'scan-openclaw-install-paths':
+          await handleScanOpenclawInstallPaths(page)
           break
         case 'save-docker-defaults':
           await handleSaveDockerDefaults(page)
