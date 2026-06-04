@@ -501,10 +501,10 @@ function testWebSocket(page) {
           if (msg.type === 'res' && msg.id?.startsWith('connect-')) {
             if (msg.ok) {
               addLog(`${statusIcon('ok', 14)} ${t('chatDebug.wsHandshakeOk')}`)
-              addLog(`${icon('bar-chart', 14)} Snapshot: ${escapeHtml(JSON.stringify(msg.payload, null, 2))}`)
+              addLog(`${icon('bar-chart', 14)} ${t('chatDebug.wsSnapshot')}: ${escapeHtml(JSON.stringify(msg.payload, null, 2))}`)
               const sessionKey = msg.payload?.snapshot?.sessionDefaults?.mainSessionKey
               if (sessionKey) {
-                addLog(`${icon('key', 14)} Session Key: ${sessionKey}`)
+                addLog(`${icon('key', 14)} ${t('chatDebug.wsSessionKey', { sessionKey })}`)
               }
             } else {
               addLog(`${statusIcon('err', 14)} ${t('chatDebug.wsHandshakeFailed')}: ${msg.error?.message || msg.error?.code || t('common.unknown')}`)
@@ -521,7 +521,7 @@ function testWebSocket(page) {
       }
 
       testWs.onclose = (e) => {
-        addLog(`${icon('plug', 14)} ${t('chatDebug.wsClosed')} - Code: ${e.code}, Reason: ${escapeHtml(String(e.reason || t('chatDebug.empty')).replace(/token=[^\s&]+/gi, 'token=***'))}`)
+        addLog(`${icon('plug', 14)} ${t('chatDebug.wsClosedWithDetails', { code: e.code, reason: escapeHtml(String(e.reason || t('chatDebug.empty')).replace(/token=[^\s&]+/gi, 'token=***')) })}`)
         if (e.code === 1008) {
           addLog(`${statusIcon('err', 14)} ${t('chatDebug.wsOriginRejected')}`)
           addLog(`${icon('lightbulb', 14)} ${t('chatDebug.wsOriginFix')}`)
@@ -735,7 +735,7 @@ async function fixPairing(page) {
             ws.close(1000)
             // 触发主应用的 wsClient 使用最新配置重连，避免继续复用旧 URL/旧 token
             const reconnected = await reconnectMainWsFromLatestConfig()
-            if (!reconnected) addLog(`${statusIcon('warn', 14)} Gateway token 不是明文字符串，已刷新状态但不主动重连`)
+            if (!reconnected) addLog(`${statusIcon('warn', 14)} ${t('chatDebug.fixTokenSecretRefNoReconnect')}`)
             scheduleDebugReload(page, 2000)
           } else {
             const errMsg = msg.error?.message || msg.error?.code || t('common.unknown')
@@ -761,7 +761,7 @@ async function fixPairing(page) {
         addLog(`${statusIcon('warn', 14)} ${t('chatDebug.fixOriginRejected1008')}`)
         addLog(`${icon('lightbulb', 14)} ${t('chatDebug.fixRetryHint')}`)
       } else if (e.code !== 1000) {
-        addLog(`${statusIcon('warn', 14)} ${t('chatDebug.wsClosed')} - Code: ${e.code}`)
+        addLog(`${statusIcon('warn', 14)} ${t('chatDebug.wsClosedWithCode', { code: e.code })}`)
       }
     }
 
