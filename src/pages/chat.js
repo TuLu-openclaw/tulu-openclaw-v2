@@ -16,6 +16,7 @@ const RENDER_THROTTLE = 30
 const RESPONSE_WATCHDOG_MS = 15000
 const STREAM_IDLE_NOTICE_MS = 90000
 const STREAM_STALE_REFRESH_MS = 10 * 60 * 1000
+const LOBSTER_OFFICE_SYNC_THROTTLE_MS = 800
 const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
 const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
@@ -2201,12 +2202,36 @@ function mapReplyStateToLobsterState(state) {
   })[state] || 'executing'
 }
 
+let _lobsterOfficeChannel = null
+let _lastLobsterOfficeSyncKey = ''
+let _lastLobsterOfficeSyncAt = 0
+
+function getLobsterOfficeChannel() {
+  if (_lobsterOfficeChannel === false) return null
+  if (_lobsterOfficeChannel) return _lobsterOfficeChannel
+  try {
+    _lobsterOfficeChannel = new BroadcastChannel('lobster-office-state')
+    return _lobsterOfficeChannel
+  } catch {
+    _lobsterOfficeChannel = false
+    return null
+  }
+}
+
 function emitLobsterPhase(phase, message, replyState = '') {
   try {
     const lobsterState = mapReplyStateToLobsterState(replyState) || (phase === 'done' ? 'idle' : 'executing')
-    window.dispatchEvent(new CustomEvent('lobster-work-start', {
-      detail: { phase, state: lobsterState, message: message || phase }
-    }))
+    const payload = { phase, state: lobsterState, message: message || phase, ts: Date.now() }
+    const syncKey = `${payload.phase}|${payload.state}|${payload.message}`
+    const now = Date.now()
+    window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: payload }))
+    try { localStorage.setItem('lobsterState', JSON.stringify(payload)) } catch {}
+    try { getLobsterOfficeChannel()?.postMessage(payload) } catch {}
+    if (isTauriRuntime() && (syncKey !== _lastLobsterOfficeSyncKey || now - _lastLobsterOfficeSyncAt > LOBSTER_OFFICE_SYNC_THROTTLE_MS)) {
+      _lastLobsterOfficeSyncKey = syncKey
+      _lastLobsterOfficeSyncAt = now
+      api.updateOfficeState(lobsterState, payload.message).catch(() => {})
+    }
   } catch {}
 }
 
