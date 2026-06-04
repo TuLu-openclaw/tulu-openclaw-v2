@@ -877,6 +877,7 @@ pub async fn open_player_window(
     url: String,
     title: String,
     resume: f64,
+    lang: String,
     all_eps: String,
     all_urls: String,
     playback_ctx: String,
@@ -912,16 +913,18 @@ pub async fn open_player_window(
     let encoded_title = urlencoding_encode(&title);
     let encoded_alleps = urlencoding_encode(&all_eps);
     let encoded_allurls = urlencoding_encode(&all_urls);
+    let encoded_lang = urlencoding_encode(&lang);
     let encoded_ctx = urlencoding_encode(&playback_ctx);
     let encoded_pic = urlencoding_encode(&pic);
 
     let player_url = if html_path.exists() {
         format!(
-            "file:///{}?url={}&title={}&resume={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
+            "file:///{}?url={}&title={}&resume={}&lang={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
             html_path.to_string_lossy().replace('\\', "/"),
             encoded_url,
             encoded_title,
             resume,
+            encoded_lang,
             encoded_alleps,
             encoded_allurls,
             encoded_ctx,

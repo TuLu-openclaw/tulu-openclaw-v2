@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>播放器</title>
+<title data-i18n="playerTitle">Player</title>
 <style>
 :root{--bg:#0d0d0d;--surface:rgba(20,20,28,0.82);--accent:#e50914;--text:#e8e8f0;--text-dim:#8888a0}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -79,12 +79,12 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
 <div class="top-bar">
   <img id="poster" alt="poster">
   <div class="top-info">
-    <div class="top-title" id="titleEl">视频</div>
+    <div class="top-title" id="titleEl" data-i18n="videoTitleFallback">Video</div>
     <div class="top-sub" id="topSub"></div>
   </div>
   <div class="ctrl-top-right">
-    <div class="sel-group" id="epGroup" style="display:none"><span class="sel-label">选集</span><select id="epSelect"><option>加载中...</option></select></div>
-    <div class="sel-group" id="urlGroup" style="display:none"><span class="sel-label">线路</span><select id="urlSelect"><option>加载中...</option></select></div>
+    <div class="sel-group" id="epGroup" style="display:none"><span class="sel-label" data-i18n="episodeLabel">Episode</span><select id="epSelect"><option data-i18n="loading">Loading...</option></select></div>
+    <div class="sel-group" id="urlGroup" style="display:none"><span class="sel-label" data-i18n="lineLabel">Line</span><select id="urlSelect"><option data-i18n="loading">Loading...</option></select></div>
   </div>
 </div>
 <div class="video-wrap" id="wrap">
@@ -92,9 +92,9 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   <div class="overlay-msg" id="overlay">
     <div class="spinner" id="spinEl"></div>
     <div class="err-icon" id="errIcon" style="display:none">!</div>
-    <div class="msg-text" id="msgEl">正在加载...</div>
+    <div class="msg-text" id="msgEl" data-i18n="loadingActive">Loading...</div>
     <div class="err-text" id="errEl" style="display:none"></div>
-    <button class="retry-btn" id="retryBtn" style="display:none">重试</button>
+    <button class="retry-btn" id="retryBtn" style="display:none" data-i18n="retry">Retry</button>
   </div>
 </div>
 <div class="ctrl-bar" id="ctrlBar">
@@ -108,42 +108,42 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   </div>
   <div class="btn-row">
     <div class="btn-group">
-      <button class="ctrl-btn" id="prevBtn" title="上一线路 (P)">&lt;</button>
-      <button class="ctrl-btn" id="playBtn" title="播放/暂停 (Space)">&#9654;</button>
-      <button class="ctrl-btn" id="nextBtn" title="下一线路 (N)">&gt;</button>
+      <button class="ctrl-btn" id="prevBtn" title="Previous line (P)">&lt;</button>
+      <button class="ctrl-btn" id="playBtn" title="Play/Pause (Space)" data-i18n-title="playPauseTitle">&#9654;</button>
+      <button class="ctrl-btn" id="nextBtn" title="Next line (N)">&gt;</button>
       <div class="divider"></div>
       <div class="vol-group">
-        <button class="ctrl-btn" id="muteBtn" title="静音 (M)">&#128266;</button>
+        <button class="ctrl-btn" id="muteBtn" title="Mute (M)" data-i18n-title="muteTitle">&#128266;</button>
         <div class="vol-slider-wrap"><div class="vol-slider" id="volSlider"><div class="vol-fill" id="volFill"></div></div></div>
       </div>
       <div class="divider"></div>
-      <button class="ctrl-btn" id="speedBtn" title="倍速 (S)">1x</button>
+      <button class="ctrl-btn" id="speedBtn" title="Speed (S)" data-i18n-title="speedTitle">1x</button>
       <div class="popup-panel" id="speedMenu"></div>
     </div>
     <div class="btn-group">
-      <button class="ctrl-btn" id="qualityBtn" title="画质">&#9881;</button>
+      <button class="ctrl-btn" id="qualityBtn" title="Quality" data-i18n-title="qualityTitle">&#9881;</button>
       <div class="popup-panel" id="qualityMenu"></div>
       <div style="position:relative">
-        <button class="ctrl-btn" id="shortcutsBtn" title="快捷键 (Shift+/)">?</button>
+        <button class="ctrl-btn" id="shortcutsBtn" title="Shortcuts (Shift+/)" data-i18n-title="shortcutsTitle">?</button>
         <div id="shortcuts">
-          <h4>快捷键</h4>
-          <div class="shortcut-row"><span class="shortcut-key">Space</span><span class="shortcut-desc">播放 / 暂停</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">← →</span><span class="shortcut-desc">快退 / 快进 10s</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">↑ ↓</span><span class="shortcut-desc">音量调节</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc">全屏</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc">静音</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc">倍速菜单</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">I</span><span class="shortcut-desc">画中画</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc" data-shortcut="pn">上一线路 / 下一线路</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">X</span><span class="shortcut-desc">截图</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">Shift + /</span><span class="shortcut-desc">显示/隐藏此面板</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">退出 / 关闭</span></div>
+          <h4 data-i18n="shortcutsHeading">Shortcuts</h4>
+          <div class="shortcut-row"><span class="shortcut-key">Space</span><span class="shortcut-desc" data-i18n="shortcutPlayPause">Play / Pause</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">← →</span><span class="shortcut-desc" data-i18n="shortcutSeek">Rewind / Forward 10s</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">↑ ↓</span><span class="shortcut-desc" data-i18n="shortcutVolume">Adjust volume</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc" data-i18n="shortcutFullscreen">Fullscreen</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc" data-i18n="shortcutMute">Mute</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc" data-i18n="shortcutSpeed">Speed menu</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">I</span><span class="shortcut-desc" data-i18n="shortcutPip">Picture in picture</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc" data-shortcut="pn">Previous line / Next line</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">X</span><span class="shortcut-desc" data-i18n="shortcutScreenshot">Screenshot</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Shift + /</span><span class="shortcut-desc" data-i18n="shortcutTogglePanel">Show/hide this panel</span></div>
+          <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc" data-i18n="shortcutExitClose">Exit / Close</span></div>
         </div>
       </div>
-      <button class="ctrl-btn" id="pipBtn" title="画中画 (I)">PiP</button>
-      <button class="ctrl-btn" id="pipWinBtn" title="窗口置顶">&#9103;</button>
-      <button class="ctrl-btn" id="ssBtn" title="截图 (X)">&#128247;</button>
-      <button class="ctrl-btn danger" id="closeBtn" title="关闭">&#10005;</button>
+      <button class="ctrl-btn" id="pipBtn" title="Picture in picture (I)" data-i18n-title="pipTitle">PiP</button>
+      <button class="ctrl-btn" id="pipWinBtn" title="Pin window on top" data-i18n-title="pinWindowTitle">&#9103;</button>
+      <button class="ctrl-btn" id="ssBtn" title="Screenshot (X)" data-i18n-title="screenshotTitle">&#128247;</button>
+      <button class="ctrl-btn danger" id="closeBtn" title="Close" data-i18n-title="close">&#10005;</button>
     </div>
   </div>
 </div>
@@ -151,7 +151,22 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
 (function(){
   var params = new URLSearchParams(location.search)
   var url = params.get('url') || ''
-  var title = decodeURIComponent(params.get('title') || '视频')
+  var lang = params.get('lang') || 'zh-CN'
+  var I18N = {
+    'zh-CN': {playerTitle:'播放器',videoTitleFallback:'视频',loading:'加载中...',loadingActive:'正在加载...',retry:'重试',close:'关闭',standaloneWindowBadge:'独立窗口',episodeLabel:'选集',lineLabel:'线路',previousEpisode:'上一集',nextEpisode:'下一集',previousLine:'上一线路',nextLine:'下一线路',episodeTarget:'剧集',lineTarget:'线路',switchingTarget:'尝试切换{target}...',episodeOption:'第 {number} 集',lineOption:'线路 {number}',loadingTimeoutSwitching:'加载超时，{action}',noAvailableTarget:'播放失败：没有可用{target}',allTargetsFailed:'全部{target}均播放失败，请稍后重试或更换片源',hlsLoaderFailedSwitching:'HLS 播放组件加载失败，{action}',networkErrorSwitching:'网络错误，{action}',playbackFailedSwitching:'播放失败，{action}',nativeHlsFailedSwitching:'原生 HLS 加载失败，{action}',browserUnsupportedHlsSwitching:'浏览器不支持 HLS 播放，{action}',videoLoadFailedSwitching:'视频加载失败，{action}',autoQuality:'自动',qualityLevel:'等级 {number}',normalSpeed:'正常',playPauseTitle:'播放/暂停 (Space)',muteTitle:'静音 (M)',speedTitle:'倍速 (S)',qualityTitle:'画质',shortcutsTitle:'快捷键 (Shift+/)',shortcutsHeading:'快捷键',shortcutPlayPause:'播放 / 暂停',shortcutSeek:'快退 / 快进 10s',shortcutVolume:'音量调节',shortcutFullscreen:'全屏',shortcutMute:'静音',shortcutSpeed:'倍速菜单',shortcutPip:'画中画',shortcutScreenshot:'截图',shortcutTogglePanel:'显示/隐藏此面板',shortcutExitClose:'退出 / 关闭',pipTitle:'画中画 (I)',pinWindowTitle:'窗口置顶',screenshotTitle:'截图 (X)'},
+    'zh-TW': {playerTitle:'播放器',videoTitleFallback:'影片',loading:'載入中...',loadingActive:'正在載入...',retry:'重試',close:'關閉',standaloneWindowBadge:'獨立視窗',episodeLabel:'選集',lineLabel:'線路',previousEpisode:'上一集',nextEpisode:'下一集',previousLine:'上一線路',nextLine:'下一線路',episodeTarget:'劇集',lineTarget:'線路',switchingTarget:'嘗試切換{target}...',episodeOption:'第 {number} 集',lineOption:'線路 {number}',loadingTimeoutSwitching:'載入逾時，{action}',noAvailableTarget:'播放失敗：沒有可用{target}',allTargetsFailed:'全部{target}均播放失敗，請稍後重試或更換片源',hlsLoaderFailedSwitching:'HLS 播放元件載入失敗，{action}',networkErrorSwitching:'網路錯誤，{action}',playbackFailedSwitching:'播放失敗，{action}',nativeHlsFailedSwitching:'原生 HLS 載入失敗，{action}',browserUnsupportedHlsSwitching:'瀏覽器不支援 HLS 播放，{action}',videoLoadFailedSwitching:'影片載入失敗，{action}',autoQuality:'自動',qualityLevel:'等級 {number}',normalSpeed:'正常',playPauseTitle:'播放/暫停 (Space)',muteTitle:'靜音 (M)',speedTitle:'倍速 (S)',qualityTitle:'畫質',shortcutsTitle:'快捷鍵 (Shift+/)',shortcutsHeading:'快捷鍵',shortcutPlayPause:'播放 / 暫停',shortcutSeek:'快退 / 快進 10s',shortcutVolume:'音量調節',shortcutFullscreen:'全螢幕',shortcutMute:'靜音',shortcutSpeed:'倍速選單',shortcutPip:'子母畫面',shortcutScreenshot:'截圖',shortcutTogglePanel:'顯示/隱藏此面板',shortcutExitClose:'退出 / 關閉',pipTitle:'子母畫面 (I)',pinWindowTitle:'視窗置頂',screenshotTitle:'截圖 (X)'},
+    en: {playerTitle:'Player',videoTitleFallback:'Video',loading:'Loading...',loadingActive:'Loading...',retry:'Retry',close:'Close',standaloneWindowBadge:'Standalone window',episodeLabel:'Episode',lineLabel:'Line',previousEpisode:'Previous episode',nextEpisode:'Next episode',previousLine:'Previous line',nextLine:'Next line',episodeTarget:'episodes',lineTarget:'lines',switchingTarget:'Trying another {target}...',episodeOption:'Episode {number}',lineOption:'Line {number}',loadingTimeoutSwitching:'Loading timed out, {action}',noAvailableTarget:'Playback failed: no available {target}',allTargetsFailed:'All {target} failed to play. Try again later or switch sources.',hlsLoaderFailedSwitching:'Failed to load HLS player, {action}',networkErrorSwitching:'Network error, {action}',playbackFailedSwitching:'Playback failed, {action}',nativeHlsFailedSwitching:'Native HLS loading failed, {action}',browserUnsupportedHlsSwitching:'This browser does not support HLS playback, {action}',videoLoadFailedSwitching:'Video loading failed, {action}',autoQuality:'Auto',qualityLevel:'Level {number}',normalSpeed:'Normal',playPauseTitle:'Play/Pause (Space)',muteTitle:'Mute (M)',speedTitle:'Speed (S)',qualityTitle:'Quality',shortcutsTitle:'Shortcuts (Shift+/)',shortcutsHeading:'Shortcuts',shortcutPlayPause:'Play / Pause',shortcutSeek:'Rewind / Forward 10s',shortcutVolume:'Adjust volume',shortcutFullscreen:'Fullscreen',shortcutMute:'Mute',shortcutSpeed:'Speed menu',shortcutPip:'Picture in picture',shortcutScreenshot:'Screenshot',shortcutTogglePanel:'Show/hide this panel',shortcutExitClose:'Exit / Close',pipTitle:'Picture in picture (I)',pinWindowTitle:'Pin window on top',screenshotTitle:'Screenshot (X)'}
+  }
+  var COPY = I18N[lang] || I18N['zh-CN']
+  document.documentElement.lang = lang
+  function tr(key, params) {
+    var text = COPY[key] || I18N['zh-CN'][key] || key
+    if (params) for (var name in params) text = text.replace(new RegExp('\\{' + name + '\\}', 'g'), String(params[name]))
+    return text
+  }
+  document.querySelectorAll('[data-i18n]').forEach(function(el){el.textContent=tr(el.getAttribute('data-i18n'))})
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el){el.title=tr(el.getAttribute('data-i18n-title'))})
+  var title = decodeURIComponent(params.get('title') || tr('videoTitleFallback'))
   var resume = parseFloat(params.get('resume') || '0')
   var picRaw = params.get('pic') || ''
   var playbackCtx = null
@@ -219,10 +234,10 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     return true
   }
   var urlsAreEpisodes=isEpisodeUrlList()
-  function navPrevText(){return urlsAreEpisodes?'上一集':'上一线路'}
-  function navNextText(){return urlsAreEpisodes?'下一集':'下一线路'}
-  function switchTargetText(){return urlsAreEpisodes?'剧集':'线路'}
-  function switchActionText(){return '尝试切换'+switchTargetText()+'...'}
+  function navPrevText(){return urlsAreEpisodes?tr('previousEpisode'):tr('previousLine')}
+  function navNextText(){return urlsAreEpisodes?tr('nextEpisode'):tr('nextLine')}
+  function switchTargetText(){return urlsAreEpisodes?tr('episodeTarget'):tr('lineTarget')}
+  function switchActionText(){return tr('switchingTarget',{target:switchTargetText()})}
   function syncNavCopy(){
     prevBtn.title=navPrevText()+' (P)'
     nextBtn.title=navNextText()+' (N)'
@@ -243,9 +258,9 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     topSub.textContent=''
     var badge=document.createElement('span')
     badge.className='top-badge'
-    badge.textContent='独立窗口'
+    badge.textContent=tr('standaloneWindowBadge')
     var label=document.createElement('span')
-    label.textContent=text||'视频'
+    label.textContent=text||tr('videoTitleFallback')
     topSub.appendChild(badge)
     topSub.appendChild(label)
   }
@@ -257,7 +272,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     allEps.forEach(function(e,i){
       var opt=document.createElement('option')
       opt.value=String(i)
-      opt.textContent=e&&e.epName?e.epName:'第 '+(i+1)+' 集'
+      opt.textContent=e&&e.epName?e.epName:tr('episodeOption',{number:i+1})
       if(e&&e.url===url)opt.selected=true
       epSelect.appendChild(opt)
     })
@@ -277,7 +292,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       var opt=document.createElement('option')
       opt.value=String(i)
       var ep=getEpisodeByUrl(u)
-      opt.textContent=urlsAreEpisodes?(ep&&ep.epName?ep.epName:'第 '+(i+1)+' 集'):('线路 '+(i+1))
+      opt.textContent=urlsAreEpisodes?(ep&&ep.epName?ep.epName:tr('episodeOption',{number:i+1})):tr('lineOption',{number:i+1})
       if(i===curUrlIdx)opt.selected=true
       urlSelect.appendChild(opt)
     })
@@ -298,7 +313,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   function scheduleLoadTimeout(curIdx){
     clearLoadTimer()
     loadTimer=setTimeout(function(){
-      showOverlay('加载超时，'+switchActionText(),true)
+      showOverlay(tr('loadingTimeoutSwitching',{action:switchActionText()}),true)
       tryNextUrl(curIdx)
     },20000)
   }
@@ -337,7 +352,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     if(!isRetry)retryCount=0
     if(!keepFailures)failedUrls={}
     markPlaybackStarted()
-    showOverlay('正在加载...')
+    showOverlay(tr('loadingActive'))
     if(hls){hls.destroy();hls=null}
     vid.src=''
     if(effectiveTitle){titleEl.textContent=effectiveTitle;document.title=effectiveTitle}
@@ -349,7 +364,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       try{
         await ensureHlsJs()
       }catch(e){
-        showOverlay('HLS 播放组件加载失败，'+switchActionText(),true)
+        showOverlay(tr('hlsLoaderFailedSwitching',{action:switchActionText()}),true)
         tryNextUrl(uidx)
         return
       }
@@ -366,12 +381,12 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         hls.on(window.Hls.Events.ERROR,function(evt,data){
           if(data.fatal){
             if(data.type===window.Hls.ErrorTypes.NETWORK_ERROR){
-              showOverlay('网络错误，'+switchActionText(),true)
+              showOverlay(tr('networkErrorSwitching',{action:switchActionText()}),true)
               tryNextUrl(uidx)
             }else if(data.type===window.Hls.ErrorTypes.MEDIA_ERROR){
               hls.recoverMediaError()
             }else{
-              showOverlay('播放失败，'+switchActionText(),true)
+              showOverlay(tr('playbackFailedSwitching',{action:switchActionText()}),true)
               tryNextUrl(uidx)
             }
           }
@@ -385,11 +400,11 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
           vid.play().catch(function(){})
         },{once:true})
         vid.addEventListener('error',function(){
-          showOverlay('原生 HLS 加载失败，'+switchActionText(),true)
+          showOverlay(tr('nativeHlsFailedSwitching',{action:switchActionText()}),true)
           tryNextUrl(uidx)
         },{once:true})
       }else{
-        showOverlay('浏览器不支持 HLS 播放，'+switchActionText(),true)
+        showOverlay(tr('browserUnsupportedHlsSwitching',{action:switchActionText()}),true)
         tryNextUrl(uidx)
       }
     }else{
@@ -402,14 +417,14 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         vid.play().catch(function(){})
       },{once:true})
       vid.addEventListener('error',function(){
-        showOverlay('视频加载失败，'+switchActionText(),true)
+        showOverlay(tr('videoLoadFailedSwitching',{action:switchActionText()}),true)
         tryNextUrl(uidx)
       },{once:true})
     }
   }
   function tryNextUrl(curIdx){
     clearLoadTimer()
-    if(!allUrls.length){showFinalError('播放失败：没有可用'+switchTargetText());return}
+    if(!allUrls.length){showFinalError(tr('noAvailableTarget',{target:switchTargetText()}));return}
     if(curIdx>=0&&allUrls[curIdx])failedUrls[allUrls[curIdx]]=true
     var start=curIdx>=0?curIdx:0
     for(var step=1;step<=allUrls.length;step++){
@@ -419,7 +434,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         return
       }
     }
-    showFinalError('全部'+switchTargetText()+'均播放失败，请稍后重试或更换片源')
+    showFinalError(tr('allTargetsFailed',{target:switchTargetText()}))
   }
   async function ensureHlsJs(){
     if(window.Hls)return
@@ -436,13 +451,13 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     if(levels.length<=1){qualityBtn.style.display='';return}
     qualityBtn.style.display=''
     var autoItem=document.createElement('button')
-    autoItem.textContent='自动'
+    autoItem.textContent=tr('autoQuality')
     autoItem.className='active'
     autoItem.addEventListener('click',function(){hlsInstance.currentLevel=-1;setActive(qualityMenu,autoItem);qualityMenu.classList.remove('open')})
     qualityMenu.appendChild(autoItem)
     levels.forEach(function(lv,i){
       var btn=document.createElement('button')
-      btn.textContent=lv.height?(lv.height+'p'):('等级 '+(i+1))
+      btn.textContent=lv.height?(lv.height+'p'):tr('qualityLevel',{number:i+1})
       if(i===hlsInstance.currentLevel)btn.classList.add('active')
       btn.addEventListener('click',function(){hlsInstance.currentLevel=i;setActive(qualityMenu,btn);qualityMenu.classList.remove('open')})
       qualityMenu.appendChild(btn)
@@ -459,7 +474,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   var speedIdx=2
   speeds.forEach(function(s,i){
     var b=document.createElement('button')
-    b.textContent=s===1?'正常':s+'x'
+    b.textContent=s===1?tr('normalSpeed'):s+'x'
     if(i===speedIdx)b.classList.add('active')
     b.addEventListener('click',function(){
       speedIdx=i;vid.playbackRate=s

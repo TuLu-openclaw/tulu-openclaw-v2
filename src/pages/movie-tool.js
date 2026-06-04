@@ -7,7 +7,7 @@
  */
 
 import '../style/movie-tool.css'
-import { t } from '../lib/i18n.js'
+import { t, getLang } from '../lib/i18n.js'
 
 function mt(key, params) {
   return t('movieTool.' + key, params)
@@ -1641,6 +1641,7 @@ function setDebug(msg, detail) {
       if (!invoke) throw new Error(mt('standaloneApiUnavailable'))
       await invoke('open_player_window', {
         url, title, resume,
+        lang: getLang(),
         allEps: JSON.stringify(allEps || []),
         allUrls: JSON.stringify(allUrls || [url]),
         playbackCtx: JSON.stringify(playbackCtx || {}),
@@ -2874,6 +2875,7 @@ function pickDirectUrl(url) {
       try {
         await invoke('open_player_window', {
           url, title: name, resume,
+          lang: getLang(),
           allEps: JSON.stringify(allEps || []),
           allUrls: JSON.stringify(allUrls || [url]),
           playbackCtx: JSON.stringify(ctx),
