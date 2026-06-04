@@ -114,6 +114,7 @@ function aggregateSessions(sessions) {
     cacheHitRate: totalInputTokens > 0 ? (totalCacheTokens / totalInputTokens) * 100 : null,
     estimatedCost,
     modelUsage,
+    projectUsage: [],
     dailyUsage,
     avgSessionsPerDay: rows.length / days,
   }
@@ -147,6 +148,18 @@ function analyticsToUsage(data) {
     sessions: toNumber(day.sessions),
     cost: toNumber(day.actual_cost || day.estimated_cost),
   })).filter(day => day.date)
+  const projectUsage = (Array.isArray(data?.by_project) ? data.by_project : []).map(project => {
+    const inputTokens = toNumber(project.input_tokens)
+    const outputTokens = toNumber(project.output_tokens)
+    return {
+      name: projectNameFrom(project.project || project.name || project.workspace || project.cwd || project.path || project.root),
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      sessions: toNumber(project.sessions),
+      estimatedCost: toNumber(project.actual_cost || project.estimated_cost),
+    }
+  }).filter(project => project.name).sort((a, b) => b.totalTokens - a.totalTokens)
   return {
     sessions: [],
     totalInputTokens,
@@ -157,6 +170,7 @@ function analyticsToUsage(data) {
     cacheHitRate: totalInputTokens > 0 ? (totalCacheTokens / totalInputTokens) * 100 : null,
     estimatedCost,
     modelUsage,
+    projectUsage,
     dailyUsage,
     avgSessionsPerDay: totalSessions / periodDays,
   }
@@ -217,6 +231,14 @@ function renderTrendSvg(dailyUsage) {
   `
 }
 
+function projectNameFrom(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const normalized = text.replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || text
+}
+
 function renderStatCard(label, value, sub, tone = '') {
   return `
     <article class="hm-usage-stat-card ${tone}">
@@ -229,6 +251,7 @@ function renderStatCard(label, value, sub, tone = '') {
 
 function renderContent(usage) {
   const strongestModel = usage.modelUsage[0]?.totalTokens || 1
+  const strongestProject = usage.projectUsage?.[0]?.totalTokens || 1
   const modelRows = usage.modelUsage.length
     ? usage.modelUsage.slice(0, 10).map(model => `
         <div class="hm-usage-model-row">
@@ -237,6 +260,18 @@ function renderContent(usage) {
             <div class="hm-usage-model-bar" style="width:${Math.max(2, (model.totalTokens / strongestModel) * 100).toFixed(2)}%"></div>
           </div>
           <div class="hm-usage-model-meta">${escHtml(formatTokens(model.totalTokens))}</div>
+        </div>
+      `).join('')
+    : `<div class="hm-usage-empty-inline">${escHtml(t('usage.noData'))}</div>`
+
+  const projectRows = usage.projectUsage?.length
+    ? usage.projectUsage.slice(0, 10).map(project => `
+        <div class="hm-usage-model-row">
+          <div class="hm-usage-model-name" title="${escHtml(project.name)}">${escHtml(project.name)}</div>
+          <div class="hm-usage-model-track">
+            <div class="hm-usage-model-bar" style="width:${Math.max(2, (project.totalTokens / strongestProject) * 100).toFixed(2)}%"></div>
+          </div>
+          <div class="hm-usage-model-meta">${escHtml(formatTokens(project.totalTokens))}</div>
         </div>
       `).join('')
     : `<div class="hm-usage-empty-inline">${escHtml(t('usage.noData'))}</div>`
@@ -285,6 +320,13 @@ function renderContent(usage) {
         <h2 class="hm-usage-card-title">${escHtml(t('usage.modelBreakdown'))}</h2>
       </div>
       <div class="hm-usage-model-list">${modelRows}</div>
+    </section>
+
+    <section class="hm-usage-card">
+      <div class="hm-usage-card-head">
+        <h2 class="hm-usage-card-title">${escHtml(t('usage.topProjects'))}</h2>
+      </div>
+      <div class="hm-usage-model-list">${projectRows}</div>
     </section>
 
     <section class="hm-usage-card hm-usage-card--trend">

@@ -3845,6 +3845,16 @@ pub async fn hermes_sessions_list(
                 "cache_write_tokens": obj.get("cache_write_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
                 "estimated_cost_usd": obj.get("estimated_cost_usd").and_then(|v| v.as_f64()),
                 "actual_cost_usd": obj.get("actual_cost_usd").and_then(|v| v.as_f64()),
+                "project": obj.get("project")
+                    .or(obj.get("project_name"))
+                    .or(obj.get("workspace"))
+                    .or(obj.get("cwd"))
+                    .or(obj.get("repo_path"))
+                    .or(obj.get("repo"))
+                    .or(obj.get("root"))
+                    .or(obj.get("path"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
             }));
         }
     }
@@ -3972,6 +3982,8 @@ pub async fn hermes_usage_analytics(
         std::collections::BTreeMap::new();
     let mut by_model: std::collections::BTreeMap<String, serde_json::Map<String, Value>> =
         std::collections::BTreeMap::new();
+    let mut by_project: std::collections::BTreeMap<String, serde_json::Map<String, Value>> =
+        std::collections::BTreeMap::new();
     if let Some(arr) = sessions.as_array() {
         for s in arr {
             let started = s.get("started_at").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -4057,6 +4069,35 @@ pub async fn hermes_usage_analytics(
                 *m.get_mut("sessions").unwrap() =
                     Value::from(m["sessions"].as_u64().unwrap_or(0) + 1);
             }
+            let project = s
+                .get("project")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !project.is_empty() {
+                let project_key = project.clone();
+                let p = by_project.entry(project_key.clone()).or_insert_with(|| {
+                    let mut row = serde_json::Map::new();
+                    row.insert("project".into(), Value::String(project_key));
+                    row.insert("input_tokens".into(), Value::from(0_u64));
+                    row.insert("output_tokens".into(), Value::from(0_u64));
+                    row.insert("estimated_cost".into(), Value::from(0.0));
+                    row.insert("actual_cost".into(), Value::from(0.0));
+                    row.insert("sessions".into(), Value::from(0_u64));
+                    row
+                });
+                *p.get_mut("input_tokens").unwrap() =
+                    Value::from(p["input_tokens"].as_u64().unwrap_or(0) + input);
+                *p.get_mut("output_tokens").unwrap() =
+                    Value::from(p["output_tokens"].as_u64().unwrap_or(0) + output);
+                *p.get_mut("estimated_cost").unwrap() =
+                    Value::from(p["estimated_cost"].as_f64().unwrap_or(0.0) + estimated);
+                *p.get_mut("actual_cost").unwrap() =
+                    Value::from(p["actual_cost"].as_f64().unwrap_or(0.0) + actual);
+                *p.get_mut("sessions").unwrap() =
+                    Value::from(p["sessions"].as_u64().unwrap_or(0) + 1);
+            }
         }
     }
     let mut models: Vec<Value> = by_model.into_values().map(Value::Object).collect();
@@ -4065,9 +4106,16 @@ pub async fn hermes_usage_analytics(
         let bt = b["input_tokens"].as_u64().unwrap_or(0) + b["output_tokens"].as_u64().unwrap_or(0);
         bt.cmp(&at)
     });
+    let mut projects: Vec<Value> = by_project.into_values().map(Value::Object).collect();
+    projects.sort_by(|a, b| {
+        let at = a["input_tokens"].as_u64().unwrap_or(0) + a["output_tokens"].as_u64().unwrap_or(0);
+        let bt = b["input_tokens"].as_u64().unwrap_or(0) + b["output_tokens"].as_u64().unwrap_or(0);
+        bt.cmp(&at)
+    });
     Ok(serde_json::json!({
         "daily": daily.into_values().map(Value::Object).collect::<Vec<_>>(),
         "by_model": models,
+        "by_project": projects,
         "totals": {
             "total_input": total_input,
             "total_output": total_output,
