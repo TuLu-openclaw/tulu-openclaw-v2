@@ -5896,7 +5896,11 @@ pub async fn test_proxy(proxy_url: Option<String>) -> Result<Value, String> {
     let proxy_url = proxy_url
         .and_then(|s| {
             let trimmed = s.trim().to_string();
-            if trimmed.is_empty() { None } else { Some(trimmed) }
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
         })
         .or_else(crate::commands::configured_proxy_url)
         .ok_or("未配置代理地址，请先在面板设置中保存代理地址")?;
