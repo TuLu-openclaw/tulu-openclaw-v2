@@ -5,6 +5,7 @@
  * 真实地址仅保留在 Rust 侧，前端不展示、不复制、不暴露。
  */
 import { toast } from '../components/toast.js'
+import { t } from '../lib/i18n.js'
 import { api } from '../lib/tauri-api.js'
 
 async function openInIndependentWindow() {
@@ -40,22 +41,22 @@ export default async function render(container) {
   openBtn?.addEventListener('click', async () => {
     try {
       await api.openGlobalBuiltinWindow()
-      toast('已打开全球内置独立窗口', 'success')
+      toast(t('sidebar.globalBuiltinOpenOk'), 'success')
     } catch (err) {
       const errDetail = String(err?.message || err || 'unknown')
       console.error('[global-builtin] open failed:', errDetail)
-      toast('打开失败: ' + errDetail, 'error')
+      toast(`${t('sidebar.globalBuiltinOpenFailed')}: ${errDetail}`, 'error')
     }
   })
 
   setTimeout(async () => {
     try {
       await api.openGlobalBuiltinWindow()
-      toast('已自动打开全球内置独立窗口', 'success')
+      toast(t('sidebar.globalBuiltinOpenOk'), 'success')
     } catch (err) {
       const errDetail = String(err?.message || err || 'unknown')
       console.error('[global-builtin] auto-open failed:', errDetail)
-      toast('自动打开失败: ' + errDetail, 'error')
+      toast(`${t('sidebar.globalBuiltinOpenFailed')}: ${errDetail}`, 'error')
     }
   }, 50)
 
