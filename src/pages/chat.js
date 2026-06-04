@@ -3338,21 +3338,15 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'error') {
-    const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
+    const rawErrMsg = payload.errorMessage || payload.error?.message || t('common.error')
+    const errMsg = translateGatewayError(rawErrMsg)
 
-    // 连接级错误（origin/pairing/auth）拦截，不作为聊天消息显示
-    if (/origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity changed|auth.*fail/i.test(errMsg)) {
-      console.warn('[chat] 拦截连接级错误，不显示为聊天消息:', errMsg)
-      setReplyStatus('error', errMsg, { runId: _currentRunId, activity: t('chat.deviceReconnectApprovalNeeded') })
-      const overlay = document.getElementById('chat-connect-overlay')
-      if (overlay) {
-        overlay.style.display = 'flex'
-        const desc = document.getElementById('chat-connect-desc')
-        if (desc) desc.textContent = errMsg
-      }
+    // Connection-level Gateway auth/pairing/origin errors should not render as chat messages.
+    // Match against the raw Gateway error because translated text removes PAIRING_REQUIRED/NOT_PAIRED tokens.
+    if (isConnectionGatewayError(rawErrMsg)) {
+      showConnectionRepairOverlay(errMsg, runId, eventSessionKey)
       return
     }
-
     // 防抖：如果是相同错误且在 2 秒内，忽略（避免重复显示）
     const now = Date.now()
     if (_lastErrorMsg === errMsg && _errorTimer && (now - _errorTimer < 2000)) {
@@ -3424,11 +3418,31 @@ function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
   return true
 }
 
+function isConnectionGatewayError(message = '') {
+  return /origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity changed|auth.*fail/i.test(String(message || ''))
+}
+
+function showConnectionRepairOverlay(errMsg, runId, eventSessionKey) {
+  console.warn('[chat] connection-level error intercepted; not rendering as chat message:', errMsg)
+  showTyping(false)
+  if (_currentAiBubble && _currentAiText) flushStreamRender()
+  updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
+  setReplyStatus('error', errMsg, { runId: runId || _currentRunId, activity: t('chat.deviceReconnectApprovalNeeded') })
+  const overlay = document.getElementById('chat-connect-overlay')
+  if (overlay) {
+    overlay.style.display = 'flex'
+    const desc = document.getElementById('chat-connect-desc')
+    if (desc) desc.textContent = errMsg
+  }
+  resetStreamState()
+  processMessageQueue()
+}
+
 function translateGatewayError(message = '') {
   const raw = String(message || '')
   const req = raw.match(/requestId:\s*([^)\s]+)/i)?.[1]
   if (/pairing required|PAIRING_REQUIRED|device identity changed/i.test(raw)) {
-    return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request: req }) : '' })
+    return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request }) : '' })
   }
   if (/origin not allowed/i.test(raw)) return t('chat.gatewayOriginNotAllowed')
   if (/NOT_PAIRED/i.test(raw)) return t('chat.gatewayNotPaired')
