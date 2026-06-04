@@ -3015,7 +3015,7 @@ function beginStreamBubble(runId = '') {
 }
 
 function isLongRunningReplyState(state = _replyStatusState?.state) {
-  return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing'].includes(state)
+  return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing', 'waiting'].includes(state)
 }
 
 function scheduleStreamSafetyTimeout() {
@@ -3067,16 +3067,16 @@ function scheduleStreamSafetyTimeout() {
       return
     }
 
-    const timeoutText = t('chat.streamTimeout')
-    console.warn('[chat] 流式安全检查发现非活动状态长时间无事件，改为保守等待并刷新历史:', runId || '(no-run)', activeState)
-    appendSystemMessage(timeoutText)
-    setReplyStatus('waiting', timeoutText, { runId, activity: t('chat.replyActivityRefreshHistory') })
-    resetStreamState()
+    const waitText = t('chat.streamStillRunning')
+    console.warn('[chat] stream idle without final event; refresh history and keep waiting to avoid false timeout:', runId || '(no-run)', activeState)
+    setReplyStatus('thinking', waitText, { runId, activity: t('chat.replyActivityRefreshHistory') })
+    showTyping(true, waitText)
     if (_sessionKey && _messagesEl && _pageActive) {
       _lastHistoryHash = ''
       loadHistory().catch(() => {})
     }
-    processMessageQueue()
+    scheduleStreamSafetyTimeout()
+    return
   }, STREAM_IDLE_NOTICE_MS)
 }
 
