@@ -177,7 +177,7 @@
   flex-shrink: 0;
   opacity: 1;
   max-height: 120px;
-  transition: opacity .2s ease, max-height .2s ease, margin .2s ease, padding .2s ease;
+  transition: none;
 }
 
 .chat-reply-status-row[hidden] {
@@ -205,8 +205,8 @@
   flex: 0 0 8px;
   border-radius: 999px;
   background: #2563eb;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
-  animation: status-dot-pulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+  animation: none;
 }
 
 .chat-reply-status-phase {
@@ -708,7 +708,7 @@
 
 .status-dot.connecting {
   background: #f59e0b;
-  animation: pulse-dot 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, .10);
 }
 
 .status-dot.offline {
@@ -735,7 +735,7 @@
   display: flex;
   flex-direction: column;
   max-width: 85%;
-  animation: msg-in 0.2s ease-out;
+  animation: none;
 }
 
 .msg-user {
@@ -749,7 +749,8 @@
 .msg.msg-system.compaction-hint {
   color: var(--warning);
   font-style: italic;
-  animation: pulse-opacity 1.5s ease-in-out infinite;
+  opacity: .85;
+  animation: none;
 }
 
 .msg.msg-system {
@@ -934,9 +935,9 @@
 
 /* 流式光标 */
 .stream-cursor::after {
-  content: '▊';
-  animation: blink-cursor 0.8s step-end infinite;
+  content: '▌';
   color: var(--accent);
+  opacity: .65;
 }
 
 @keyframes blink-cursor {
@@ -958,11 +959,11 @@
   height: 6px;
   border-radius: 50%;
   background: var(--text-muted, #888);
-  animation: typing-bounce 1.4s ease-in-out infinite;
+  opacity: .45;
 }
 
-.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+.typing-indicator span:nth-child(2) { opacity: .65; }
+.typing-indicator span:nth-child(3) { opacity: .85; }
 
 .typing-hint {
   width: auto !important;
@@ -1097,7 +1098,6 @@
   border-radius: 50%;
   background: var(--text-tertiary);
   opacity: 0.65;
-  animation: chat-disconnect-pulse 1.4s ease-in-out infinite;
 }
 @keyframes chat-disconnect-pulse {
   0%, 100% { opacity: 0.35; transform: scale(0.92); }
