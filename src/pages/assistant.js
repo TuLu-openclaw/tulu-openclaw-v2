@@ -2293,15 +2293,15 @@ async function executeTool(name, args) {
       const eligible = skills.filter(s => s.eligible && !s.disabled)
       const missing = skills.filter(s => !s.eligible && !s.disabled)
       const disabled = skills.filter(s => s.disabled)
-      let summary = `共 ${skills.length} 个 Skills: ${eligible.length} 可用, ${missing.length} 缺依赖, ${disabled.length} 已禁用\n\n`
-      if (eligible.length) summary += `## 可用 (${eligible.length})\n` + eligible.map(s => `- ${s.emoji || '📦'} **${s.name}**: ${s.description || ''}${s.bundled ? ' [捆绑]' : ''}`).join('\n') + '\n\n'
-      if (missing.length) summary += `## 缺依赖 (${missing.length})\n` + missing.map(s => {
+      let summary = t('assistant.toolSkillsSummary', { total: skills.length, eligible: eligible.length, missing: missing.length, disabled: disabled.length }) + '\n\n'
+      if (eligible.length) summary += `## ${t('assistant.toolSkillsAvailable')} (${eligible.length})\n` + eligible.map(s => `- ${s.emoji || '📦'} **${s.name}**: ${s.description || ''}${s.bundled ? ' [' + t('assistant.toolSkillsBundled') + ']' : ''}`).join('\n') + '\n\n'
+      if (missing.length) summary += `## ${t('assistant.toolSkillsMissing')} (${missing.length})\n` + missing.map(s => {
         const m = s.missing || {}
         const deps = [...(m.bins||[]), ...(m.env||[]).map(e=>'$'+e), ...(m.config||[])].join(', ')
         const installs = (s.install||[]).map(i => i.label).join(' / ')
-        return `- ${s.emoji || '📦'} **${s.name}**: 缺少 ${deps}${installs ? ' → 可通过: ' + installs : ''}`
+        return `- ${s.emoji || '📦'} **${s.name}**: ${t('assistant.toolSkillsMissingDeps', { deps })}${installs ? ' → ' + t('assistant.toolSkillsInstallVia', { installs }) : ''}`
       }).join('\n') + '\n\n'
-      if (disabled.length) summary += `## 已禁用 (${disabled.length})\n` + disabled.map(s => `- ${s.emoji || '📦'} **${s.name}**: ${s.description || ''}`).join('\n') + '\n'
+      if (disabled.length) summary += `## ${t('assistant.toolSkillsDisabled')} (${disabled.length})\n` + disabled.map(s => `- ${s.emoji || '📦'} **${s.name}**: ${s.description || ''}`).join('\n') + '\n'
       return summary
     }
     case 'skills_info':
@@ -2714,8 +2714,8 @@ function renderToolBlocks(toolHistory) {
     // ask_user 工具不显示在工具块中（它有自己的交互卡片）
     if (tc.name === 'ask_user') return ''
 
-    const tcIcon = { run_command: icon('terminal', 14), write_file: icon('edit', 14), read_file: icon('file', 14), list_directory: icon('folder', 14), get_system_info: icon('monitor', 14), list_processes: icon('list', 14), check_port: icon('plug', 14), skills_list: icon('box', 14), skills_info: icon('box', 14), skills_check: icon('box', 14), skills_install_dep: icon('download', 14), skillhub_search: icon('search', 14), skillhub_install: icon('download', 14) }[tc.name] || icon('wrench', 14)
-    const label = { run_command: t('assistant.toolRunCmd'), read_file: t('assistant.toolReadFile'), write_file: t('assistant.toolWriteFile'), list_directory: t('assistant.toolListDir'), get_system_info: t('assistant.toolSysInfo'), list_processes: t('assistant.toolProcessList'), check_port: t('assistant.toolCheckPort'), skills_list: t('assistant.toolSkillsList'), skills_info: t('assistant.toolSkillInfo'), skills_check: t('assistant.toolSkillsCheck'), skills_install_dep: t('assistant.toolInstallDep'), skillhub_search: t('assistant.toolSkillHubSearch'), skillhub_install: t('assistant.toolSkillHubInstall') }[tc.name] || tc.name
+    const tcIcon = { run_command: icon('terminal', 14), write_file: icon('edit', 14), read_file: icon('file', 14), list_directory: icon('folder', 14), get_system_info: icon('monitor', 14), list_processes: icon('list', 14), check_port: icon('plug', 14), web_search: icon('search', 14), fetch_url: icon('globe', 14), skills_list: icon('box', 14), skills_info: icon('box', 14), skills_check: icon('box', 14), skills_install_dep: icon('download', 14), skillhub_search: icon('search', 14), skillhub_install: icon('download', 14) }[tc.name] || icon('wrench', 14)
+    const label = { run_command: t('assistant.toolRunCmd'), read_file: t('assistant.toolReadFile'), write_file: t('assistant.toolWriteFile'), list_directory: t('assistant.toolListDir'), get_system_info: t('assistant.toolSysInfo'), list_processes: t('assistant.toolProcessList'), check_port: t('assistant.toolCheckPort'), web_search: t('assistant.toolWebSearch'), fetch_url: t('assistant.toolFetchUrl'), skills_list: t('assistant.toolSkillsList'), skills_info: t('assistant.toolSkillInfo'), skills_check: t('assistant.toolSkillsCheck'), skills_install_dep: t('assistant.toolInstallDep'), skillhub_search: t('assistant.toolSkillHubSearch'), skillhub_install: t('assistant.toolSkillHubInstall') }[tc.name] || tc.name
     const argsStr = tc.name === 'run_command' ? escHtml(tc.args.command || '')
       : tc.name === 'read_file' ? escHtml(tc.args.path || '')
       : tc.name === 'write_file' ? escHtml(tc.args.path || '')
