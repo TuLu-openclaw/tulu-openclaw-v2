@@ -1642,8 +1642,14 @@ function updateSessionListActiveState() {
   if (!_sessionListEl) return
   _sessionListEl.querySelectorAll('.chat-session-card[data-key]').forEach(card => {
     const key = card.dataset.key || ''
+    const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key)
     card.classList.toggle('active', !_currentGroupId && key === _sessionKey)
-    card.classList.toggle('selected', _isSessionMultiSelectMode && _selectedSessionKeys.has(key))
+    card.classList.toggle('selected', selected)
+    const checkbox = card.querySelector('[data-select-session]')
+    if (checkbox) {
+      checkbox.setAttribute('aria-pressed', selected ? 'true' : 'false')
+      checkbox.textContent = selected ? '✓' : ''
+    }
   })
   _sessionListEl.querySelectorAll('.chat-session-card[data-group-key]').forEach(card => {
     card.classList.toggle('active', !!_currentGroupId && card.dataset.groupKey === _currentGroupId)
