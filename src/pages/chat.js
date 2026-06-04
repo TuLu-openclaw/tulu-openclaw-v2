@@ -16,7 +16,6 @@ const RENDER_THROTTLE = 30
 const RESPONSE_WATCHDOG_MS = 15000
 const STREAM_IDLE_NOTICE_MS = 90000
 const STREAM_STALE_REFRESH_MS = 10 * 60 * 1000
-const LOBSTER_OFFICE_SYNC_THROTTLE_MS = 800
 const STORAGE_SESSION_KEY = '星枢OpenClaw-last-session'
 const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
@@ -1684,7 +1683,7 @@ function renderSessionList(sessions) {
     if (groupItem) { e.stopPropagation(); switchGroupSession(groupItem.dataset.groupKey); return }
     const item = e.target.closest('[data-key]')
     if (item) {
-      if (_isSessionMultiSelectMode) { e.stopPropagation(); if (_isDeletingSelectedSessions) return; toggleSessionSelection(item.dataset.key); return }
+      if (_isSessionMultiSelectMode) { e.stopPropagation(); toggleSessionSelection(item.dataset.key); return }
       void switchSession(item.dataset.key)
     }
   }
@@ -1713,13 +1712,10 @@ function renderSessionCard(s) {
   const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
   const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
-  const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
-  const isMain = key === mainKey
   const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key) ? ' selected' : ''
-  const disabled = _isSessionMultiSelectMode && isMain ? ' disabled' : ''
-  const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" ${isMain ? 'disabled aria-disabled="true"' : ''} title="${isMain ? t('chat.cannotDeleteMain') : t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
+  const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" title="${t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
   const deleteButton = _isSessionMultiSelectMode ? '' : `<button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>`
-  return `<div class="chat-session-card${active}${selected}${disabled}" data-key="${escapeAttr(key)}">
+  return `<div class="chat-session-card${active}${selected}" data-key="${escapeAttr(key)}">
     <div class="chat-session-card-header">
       ${checkbox}
       <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
@@ -2202,36 +2198,12 @@ function mapReplyStateToLobsterState(state) {
   })[state] || 'executing'
 }
 
-let _lobsterOfficeChannel = null
-let _lastLobsterOfficeSyncKey = ''
-let _lastLobsterOfficeSyncAt = 0
-
-function getLobsterOfficeChannel() {
-  if (_lobsterOfficeChannel === false) return null
-  if (_lobsterOfficeChannel) return _lobsterOfficeChannel
-  try {
-    _lobsterOfficeChannel = new BroadcastChannel('lobster-office-state')
-    return _lobsterOfficeChannel
-  } catch {
-    _lobsterOfficeChannel = false
-    return null
-  }
-}
-
 function emitLobsterPhase(phase, message, replyState = '') {
   try {
     const lobsterState = mapReplyStateToLobsterState(replyState) || (phase === 'done' ? 'idle' : 'executing')
-    const payload = { phase, state: lobsterState, message: message || phase, ts: Date.now() }
-    const syncKey = `${payload.phase}|${payload.state}|${payload.message}`
-    const now = Date.now()
-    window.dispatchEvent(new CustomEvent('lobster-work-start', { detail: payload }))
-    try { localStorage.setItem('lobsterState', JSON.stringify(payload)) } catch {}
-    try { getLobsterOfficeChannel()?.postMessage(payload) } catch {}
-    if (isTauriRuntime() && (syncKey !== _lastLobsterOfficeSyncKey || now - _lastLobsterOfficeSyncAt > LOBSTER_OFFICE_SYNC_THROTTLE_MS)) {
-      _lastLobsterOfficeSyncKey = syncKey
-      _lastLobsterOfficeSyncAt = now
-      api.updateOfficeState(lobsterState, payload.message).catch(() => {})
-    }
+    window.dispatchEvent(new CustomEvent('lobster-work-start', {
+      detail: { phase, state: lobsterState, message: message || phase }
+    }))
   } catch {}
 }
 
@@ -2370,10 +2342,6 @@ function getBusyGroupMemberLabels(group, excludeSessionKeys = []) {
     if (busy) labels.push(getGroupMemberLabel(member, sessionKey))
   }
   return labels
-}
-
-function hasBusyGroupMembers(group, excludeSessionKeys = []) {
-  return getBusyGroupMemberLabels(group, excludeSessionKeys).length > 0
 }
 
 function maybeNotifyBusyGroupMembers(group, excludeSessionKeys = []) {
@@ -3073,19 +3041,13 @@ function scheduleStreamSafetyTimeout() {
         _lastHistoryHash = ''
         loadHistory().then(async () => {
           if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
-            const doneRunId = runId || _currentRunId || ''
-            setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId: doneRunId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
-            showTyping(false)
+            setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
             resetStreamState()
             // loadHistory deliberately avoids repainting while a stream is active.
             // When a silent/long-running run only completes in history (no final WS event),
             // render once more after clearing stream state so the completed answer is visible.
             _lastHistoryHash = ''
             await loadHistory()
-            const doneTask = updateTaskByRunOrSession(doneRunId, _sessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
-            completeTaskRound(doneTask)
-            setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: t('chat.replyActivityDone') })
-            refreshSessionList()
             processMessageQueue()
           }
         }).catch(() => {})
@@ -3095,16 +3057,16 @@ function scheduleStreamSafetyTimeout() {
       return
     }
 
-    const waitText = t('chat.streamStillRunning')
-    console.warn('[chat] stream idle without final event; refresh history and keep waiting to avoid false timeout:', runId || '(no-run)', activeState)
-    setReplyStatus('thinking', waitText, { runId, activity: t('chat.replyActivityRefreshHistory') })
-    showTyping(true, waitText)
+    const timeoutText = t('chat.streamTimeout')
+    console.warn('[chat] 流式安全检查发现非活动状态长时间无事件，改为保守等待并刷新历史:', runId || '(no-run)', activeState)
+    appendSystemMessage(timeoutText)
+    setReplyStatus('waiting', timeoutText, { runId, activity: t('chat.replyActivityRefreshHistory') })
+    resetStreamState()
     if (_sessionKey && _messagesEl && _pageActive) {
       _lastHistoryHash = ''
       loadHistory().catch(() => {})
     }
-    scheduleStreamSafetyTimeout()
-    return
+    processMessageQueue()
   }, STREAM_IDLE_NOTICE_MS)
 }
 
@@ -3137,11 +3099,7 @@ function handleChatEvent(payload) {
       const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
       if (renderIntoCurrentGroup) appendSystemMessage(t('chat.groupMemberReplyFailedNotice', { member: getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey), msg: errMsg }))
-      if (renderIntoCurrentGroup && hasBusyGroupMembers(eventGroup, [eventSessionKey])) {
-        setReplyStatus('tool', t('chat.groupMemberFailedOthersRunning'), { runId, sessionKey: eventSessionKey, activity: t('chat.groupMembersStillRunning') })
-      } else {
-        setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
-      }
+      setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
     }
@@ -3302,7 +3260,7 @@ function handleChatEvent(payload) {
         videos: _currentAiVideos,
         audios: _currentAiAudios,
         files: _currentAiFiles,
-        tools: finalTools.length ? finalTools : _currentAiTools,
+        tools: _currentAiTools,
       })
     }
     // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
@@ -3338,15 +3296,21 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'error') {
-    const rawErrMsg = payload.errorMessage || payload.error?.message || t('common.error')
-    const errMsg = translateGatewayError(rawErrMsg)
+    const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
 
-    // Connection-level Gateway auth/pairing/origin errors should not render as chat messages.
-    // Match against the raw Gateway error because translated text removes PAIRING_REQUIRED/NOT_PAIRED tokens.
-    if (isConnectionGatewayError(rawErrMsg)) {
-      showConnectionRepairOverlay(errMsg, runId, eventSessionKey)
+    // 连接级错误（origin/pairing/auth）拦截，不作为聊天消息显示
+    if (/origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity changed|auth.*fail/i.test(errMsg)) {
+      console.warn('[chat] 拦截连接级错误，不显示为聊天消息:', errMsg)
+      setReplyStatus('error', errMsg, { runId: _currentRunId, activity: t('chat.deviceReconnectApprovalNeeded') })
+      const overlay = document.getElementById('chat-connect-overlay')
+      if (overlay) {
+        overlay.style.display = 'flex'
+        const desc = document.getElementById('chat-connect-desc')
+        if (desc) desc.textContent = errMsg
+      }
       return
     }
+
     // 防抖：如果是相同错误且在 2 秒内，忽略（避免重复显示）
     const now = Date.now()
     if (_lastErrorMsg === errMsg && _errorTimer && (now - _errorTimer < 2000)) {
@@ -3363,7 +3327,7 @@ function handleChatEvent(payload) {
     }
 
     // 如果流式输出中收到错误，保留已收到的内容，但必须结束当前流，避免发送按钮和队列卡死。
-    if (keepRunWaitingAfterRecoverableError(rawErrMsg, errMsg, runId, eventSessionKey)) return
+    if (keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey)) return
 
     if (_isStreaming || _currentAiBubble) {
       console.warn('[chat] 流式中收到错误，保留部分输出并结束当前流:', errMsg)
@@ -3396,14 +3360,12 @@ function isRecoverableStreamTimeoutError(message = '') {
     || /output\s+timeout|output[^\n]{0,60}timed?\s*out|no new output|stream[^\n]{0,60}timeout|stream[^\n]{0,60}timed?\s*out|response watchdog/i.test(lower)
 }
 
-function keepRunWaitingAfterRecoverableError(rawErrMsg, errMsg, runId, eventSessionKey) {
-  if (!isRecoverableStreamTimeoutError(rawErrMsg) && !isRecoverableStreamTimeoutError(errMsg)) return false
+function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
+  if (!isRecoverableStreamTimeoutError(errMsg)) return false
   if (!_isStreaming && !_currentAiBubble && !isLongRunningReplyState(_replyStatusState?.state)) return false
-  if (runId && !_currentRunId) _currentRunId = runId
-  const rawActiveState = isLongRunningReplyState(_replyStatusState?.state) ? _replyStatusState.state : (_currentAiText ? 'streaming' : 'thinking')
-  const activeState = rawActiveState === 'waiting' ? (_currentAiText ? 'streaming' : 'thinking') : rawActiveState
+  const activeState = isLongRunningReplyState(_replyStatusState?.state) ? _replyStatusState.state : (_currentAiText ? 'streaming' : 'thinking')
   const detail = activeState === 'tool' ? t('chat.streamToolStillRunning') : t('chat.streamStillRunning')
-  console.warn('[chat] recoverable stream timeout error, keep run waiting:', runId || _currentRunId || '(no-run)', rawErrMsg || errMsg)
+  console.warn('[chat] recoverable stream timeout error, keep run waiting:', runId || _currentRunId || '(no-run)', errMsg)
   _isStreaming = true
   _streamStartTime = _streamStartTime || Date.now()
   if (_currentAiBubble && _currentAiText) flushStreamRender()
@@ -3418,31 +3380,11 @@ function keepRunWaitingAfterRecoverableError(rawErrMsg, errMsg, runId, eventSess
   return true
 }
 
-function isConnectionGatewayError(message = '') {
-  return /origin not allowed|NOT_PAIRED|PAIRING_REQUIRED|pairing required|device identity changed|auth.*fail/i.test(String(message || ''))
-}
-
-function showConnectionRepairOverlay(errMsg, runId, eventSessionKey) {
-  console.warn('[chat] connection-level error intercepted; not rendering as chat message:', errMsg)
-  showTyping(false)
-  if (_currentAiBubble && _currentAiText) flushStreamRender()
-  updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
-  setReplyStatus('error', errMsg, { runId: runId || _currentRunId, activity: t('chat.deviceReconnectApprovalNeeded') })
-  const overlay = document.getElementById('chat-connect-overlay')
-  if (overlay) {
-    overlay.style.display = 'flex'
-    const desc = document.getElementById('chat-connect-desc')
-    if (desc) desc.textContent = errMsg
-  }
-  resetStreamState()
-  processMessageQueue()
-}
-
 function translateGatewayError(message = '') {
   const raw = String(message || '')
   const req = raw.match(/requestId:\s*([^)\s]+)/i)?.[1]
   if (/pairing required|PAIRING_REQUIRED|device identity changed/i.test(raw)) {
-    return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request }) : '' })
+    return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request: req }) : '' })
   }
   if (/origin not allowed/i.test(raw)) return t('chat.gatewayOriginNotAllowed')
   if (/NOT_PAIRED/i.test(raw)) return t('chat.gatewayNotPaired')
@@ -3725,7 +3667,7 @@ function formatToolDisplayName(name = '') {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-  return readable ? t('chat.toolNameFallbackWithName', { name: readable }) : t('chat.tool')
+  return readable ? t('chat.toolNameUnknown') : t('chat.tool')
 }
 
 function formatToolStatus(status = '') {
@@ -3739,7 +3681,7 @@ function formatToolStatus(status = '') {
   if (['timeout', 'timed_out', 'expired'].includes(normalized)) return t('chat.toolStatusTimeout')
   if (['skipped', 'ignored', 'noop', 'no_op'].includes(normalized)) return t('chat.toolStatusSkipped')
   if (['cancelled', 'canceled', 'aborted', 'stopped'].includes(normalized)) return t('chat.toolStatusAborted')
-  return normalized ? t('chat.toolStatusOther') : t('chat.toolStatusSuccess')
+  return normalized ? t('chat.toolStatusValue', { status }) : t('chat.toolStatusSuccess')
 }
 
 function summarizeToolInput(input) {
@@ -3787,17 +3729,9 @@ function renderReplyStatus(status = _replyStatusState) {
     _replyStatusMetaEl.textContent = hint
   }
   if (_replyStatusToolsEl) {
-    if (status.toolName) {
-      const toolLabel = formatToolDisplayName(status.toolName)
-      const details = [
-        toolLabel,
-        status.toolCount ? t('chat.toolEventCount', { count: status.toolCount }) : '',
-        status.toolInput ? t('chat.toolParamsWithValue', { value: status.toolInput }) : '',
-      ].filter(Boolean).join(t('chat.toolSummarySeparator'))
-      _replyStatusToolsEl.textContent = t('chat.replyToolSummary', { details })
-    } else {
-      _replyStatusToolsEl.textContent = status.state === 'tool' ? t('chat.toolWaitingName') : ''
-    }
+    _replyStatusToolsEl.textContent = status.toolName
+      ? `${t('chat.tool')}：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · ${t('chat.toolEventCount', { count: status.toolCount })}` : ''}${status.toolInput ? ` · ${t('chat.toolParams')}：${status.toolInput}` : ''}`
+      : (status.state === 'tool' ? t('chat.toolWaitingName') : '')
   }
   markStatusMarquee()
   scheduleReplyStatusTimer(status)
@@ -3839,22 +3773,6 @@ function restoreReplyStatus(sessionKey = _sessionKey) {
   renderReplyStatus(_replyStatusState)
   if (saved && _replyStatusState.state !== 'waiting') {
     emitLobsterPhase(mapReplyStateToLobsterPhase(_replyStatusState.state), _replyStatusState.detail || replyStatusText(_replyStatusState.state), _replyStatusState.state)
-    resumeActiveReplyStatus(_replyStatusState)
-  }
-}
-
-function resumeActiveReplyStatus(status = _replyStatusState) {
-  if (!isLongRunningReplyState(status?.state)) return
-  if (status.sessionKey && _sessionKey && status.sessionKey !== _sessionKey) return
-  _currentRunId = status.runId || _currentRunId || ''
-  _isStreaming = true
-  _streamStartTime = status.ts || _streamStartTime || Date.now()
-  showTyping(true, status.detail || t('chat.streamStillRunning'))
-  updateSendState()
-  scheduleStreamSafetyTimeout()
-  if (_sessionKey && _messagesEl && _pageActive) {
-    _lastHistoryHash = ''
-    loadHistory().catch(() => {})
   }
 }
 
