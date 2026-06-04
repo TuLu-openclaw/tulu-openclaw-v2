@@ -1665,11 +1665,12 @@ function loadConfig() {
     }
   } catch { _config = null }
   if (!_config) {
-    _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false, webSearch: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY, customSystemPrompt: '' }
+    _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false, webSearch: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY, customSystemPrompt: '', customSkillPrompt: '' }
   }
   if (!_config.assistantName) _config.assistantName = DEFAULT_NAME
   if (!_config.assistantPersonality) _config.assistantPersonality = DEFAULT_PERSONALITY
   if (typeof _config.customSystemPrompt !== 'string') _config.customSystemPrompt = ''
+  if (typeof _config.customSkillPrompt !== 'string') _config.customSkillPrompt = ''
   if (!_config.tools) _config.tools = { terminal: false, fileOps: false, webSearch: false }
   if (!_config.mode) _config.mode = DEFAULT_MODE
   _config.apiType = normalizeApiType(_config.apiType)
@@ -1684,6 +1685,13 @@ function saveConfig() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(_config))
   // Fix #226: 配置变更后重置熔断状态，让用户改了 API/模型/key 后能立刻重试
   resetCircuit()
+}
+
+function buildSkillPrompt(skill) {
+  const basePrompt = skill?.prompt || ''
+  const addendum = _config?.customSkillPrompt?.trim() || ''
+  if (!addendum) return basePrompt
+  return `${basePrompt.trim()}\n\n## ${t('assistant.customSkillPromptSectionTitle')}\n${addendum}`
 }
 
 // ── 会话管理 ──
@@ -3222,6 +3230,11 @@ function showSettings() {
             <textarea class="form-input" id="ast-custom-system-prompt" rows="4" placeholder="${t('assistant.customSystemPromptPlaceholder')}" style="resize:vertical;font-family:var(--font-mono);font-size:12px">${escHtml(c.customSystemPrompt || '')}</textarea>
             <div class="form-hint">${t('assistant.customSystemPromptHint')}</div>
           </div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">${t('assistant.customSkillPrompt')}</label>
+            <textarea class="form-input" id="ast-custom-skill-prompt" rows="3" placeholder="${t('assistant.customSkillPromptPlaceholder')}" style="resize:vertical;font-family:var(--font-mono);font-size:12px">${escHtml(c.customSkillPrompt || '')}</textarea>
+            <div class="form-hint">${t('assistant.customSkillPromptHint')}</div>
+          </div>
         </div>
         <div class="ast-tab-panel" data-panel="knowledge">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -4124,6 +4137,7 @@ function showSettings() {
     _config.assistantName = overlay.querySelector('#ast-name').value.trim() || DEFAULT_NAME
     _config.assistantPersonality = overlay.querySelector('#ast-personality').value.trim() || DEFAULT_PERSONALITY
     _config.customSystemPrompt = overlay.querySelector('#ast-custom-system-prompt')?.value.trim() || ''
+    _config.customSkillPrompt = overlay.querySelector('#ast-custom-skill-prompt')?.value.trim() || ''
     _config.baseUrl = overlay.querySelector('#ast-baseurl').value.trim()
     _config.apiKey = overlay.querySelector('#ast-apikey').value.trim()
     _config.model = overlay.querySelector('#ast-model').value.trim()
@@ -4985,7 +4999,7 @@ export async function render() {
         toast(t('assistant.autoSwitchExecute'), 'info')
       }
 
-      sendMessage(skill.prompt)
+      sendMessage(buildSkillPrompt(skill))
       return
     }
 
