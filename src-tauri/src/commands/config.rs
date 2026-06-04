@@ -102,7 +102,10 @@ fn expand_home_path(raw: &str) -> PathBuf {
     if trimmed == "~" {
         return dirs::home_dir().unwrap_or_else(|| PathBuf::from(trimmed));
     }
-    if let Some(rest) = trimmed.strip_prefix("~/").or_else(|| trimmed.strip_prefix("~\\")) {
+    if let Some(rest) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
         if let Some(home) = dirs::home_dir() {
             return home.join(rest);
         }
@@ -240,7 +243,11 @@ fn standalone_archive_ext() -> &'static str {
 /// standalone 安装目录
 pub(crate) fn standalone_install_dir() -> Option<PathBuf> {
     if let Some(custom) = super::read_panel_config_value()
-        .and_then(|v| v.get("openclawStandaloneInstallDir")?.as_str().map(String::from))
+        .and_then(|v| {
+            v.get("openclawStandaloneInstallDir")?
+                .as_str()
+                .map(String::from)
+        })
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
     {
