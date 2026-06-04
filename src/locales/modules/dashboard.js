@@ -11,6 +11,8 @@ export default {
   gatewayDegradedMeta: _('Gateway 可达，但部分探测失败', 'Gateway reachable, but some probes failed', 'Gateway 可達，但部分探測失敗', 'Gateway は到達可能ですが、一部のプローブに失敗しました', 'Gateway 접근 가능하지만 일부 점검 실패'),
   gatewayRecovering: _('启动中（恢复中）', 'Starting (Recovering)', '啟動中（恢復中）', '起動中（復旧中）', '시작 중(복구 중)'),
   gatewayRecoveringMeta: _('Guardian 正在拉起 Gateway，请稍候', 'Guardian is recovering the Gateway, please wait', 'Guardian 正在拉起 Gateway，請稍候', 'Guardian が Gateway を再起動中です。しばらくお待ちください', 'Guardian이 Gateway를 복구 중입니다. 잠시만 기다려주세요'),
+  gatewayStarting: _('启动中', 'Starting', '啟動中', '起動中', '시작 중'),
+  gatewayStartingMeta: _('Gateway 正在初始化', 'Gateway is initializing', 'Gateway 正在初始化', 'Gateway を初期化中', 'Gateway 초기화 중'),
   notStarted: _('未启动', 'Not started', '未啟動', '未起動', '미시작', 'Chưa khởi động', 'No iniciado', 'Não iniciado', 'Не запущен', 'Non démarré', 'Nicht gestartet'),
   versionLabel: _('版本', 'Version', '', 'バージョン', '버전', 'Phiên bản', 'Versión', 'Versão', 'Версия'),
   versionOfficial: _('官方', 'Official', '', '公式', '공식'),

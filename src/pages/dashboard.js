@@ -72,7 +72,7 @@ export async function render() {
 
   // 异步加载数据
   loadDashboardData(page).catch(e => {
-    console.error('[dashboard] loadDashboardData 异常:', e)
+    console.error('[dashboard] loadDashboardData failed:', e)
     const cardsEl = page.querySelector('#stat-cards')
     if (cardsEl && cardsEl.querySelector('.loading-placeholder')) {
       cardsEl.innerHTML = `<div class="stat-card" style="grid-column:1/-1;text-align:center;color:var(--text-secondary)"><div>${t('common.loadFailed')}: ${escapeHtml(String(e?.message || e))}</div><button class="btn btn-sm btn-secondary" style="margin-top:8px" onclick="this.closest('.page')&&this.closest('.page').__retryLoad?.()">${t('dashboard.retry')}</button></div>`
@@ -302,7 +302,7 @@ function gatewayDashboardStatus() {
   }
   if (state.health === 'starting') {
     return {
-      text: t('dashboard.gatewayRecovering'),
+      text: t('dashboard.gatewayStarting'),
       meta: t('dashboard.gatewayStartingDetail', {
         phase,
         ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
