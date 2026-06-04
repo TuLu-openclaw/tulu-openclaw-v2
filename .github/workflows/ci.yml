@@ -52,9 +52,7 @@ jobs:
 
       - name: Rust Clippy check
         working-directory: src-tauri
-        run: |
-          set -o pipefail
-          cargo clippy --all-targets -- -D warnings 2>&1 | head -50
+        run: cargo clippy --all-targets -- -D warnings
 
   # ─────────────────────────────────────────────────────────────
   # Job 2: Rust Compile Check
