@@ -187,6 +187,9 @@ export default {
   requestTimeoutSeconds: _('请求超时（{seconds}s）', 'Request timed out ({seconds}s)', '請求逾時（{seconds}s）'),
   fetchFailed: _('fetch 失败', 'fetch failed', 'fetch 失敗'),
   streamLabel: _('流', 'Stream', '流'),
+  jsonpRequestFailed: _('JSONP 请求失败', 'JSONP request failed', 'JSONP 請求失敗'),
+  jsonpTimeout: _('JSONP 超时', 'JSONP timed out', 'JSONP 逾時'),
+  episodeUnknown: _('未知', 'Unknown', '未知'),
   m3u8Video: _('M3U8 视频', 'M3U8 video', 'M3U8 影片'),
   multipleRetriesFailed: _('多次重试失败', 'multiple retries failed', '多次重試失敗'),
 }

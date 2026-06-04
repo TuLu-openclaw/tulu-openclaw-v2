@@ -1341,12 +1341,12 @@ function setDebug(msg, detail) {
             try { delete window[cbName]; } catch(e) {}
             if (script.parentNode) script.parentNode.removeChild(script);
           }
-          script.onerror = () => { cleanup(); tryNext('JSONP 请求失败').then(resolve).catch(reject); };
+          script.onerror = () => { cleanup(); tryNext(mt('jsonpRequestFailed')).then(resolve).catch(reject); };
           window[cbName] = (data) => { cleanup(); resolve(data); };
           document.head.appendChild(script);
-          setTimeout(() => { cleanup(); if (!settled) tryNext('JSONP 超时').then(resolve).catch(reject); }, 15000);
+          setTimeout(() => { cleanup(); if (!settled) tryNext(mt('jsonpTimeout')).then(resolve).catch(reject); }, 15000);
         });
-      } else reject(new Error(errMsg || 'JSONP 请求失败'));
+      } else reject(new Error(errMsg || mt('jsonpRequestFailed')));
     }
     return tryNext();
   }
@@ -3004,14 +3004,14 @@ function pickDirectUrl(url) {
     if (!url) return []
     const sources = []
     url.split('$$$').forEach((part, i) => {
-      const name = (from || '').split('$$$')[i] || ('源' + (i + 1))
+      const name = (from || '').split('$$$')[i] || mt('lineOption', { number: i + 1 })
       sources.push({
         name,
         urls: part.split('#').map(p => {
           const idx = p.indexOf('$')
           return idx >= 0
-            ? { name: p.slice(0, idx) || '未知', url: p.slice(idx + 1) }
-            : { name: '未知', url: p }
+            ? { name: p.slice(0, idx) || mt('episodeUnknown'), url: p.slice(idx + 1) }
+            : { name: mt('episodeUnknown'), url: p }
         }).filter(ep => ep.url)
       })
     })
