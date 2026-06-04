@@ -829,7 +829,8 @@ async function handleServiceAction(action, label, page) {
       const svc = services?.find?.(s => s.label === label) || services?.[0]
       if (svc && isGatewayActionSettled(action, svc)) {
         const gatewayUi = getGatewayUiSnapshot(svc)
-        toast(t('services.actionDone', { label, action: actionLabel }) + ` · ${gatewayUi.statusText}` + (svc.pid ? ' (PID: ' + svc.pid + ')' : ''), 'success')
+        const pid = svc.pid ? ` · PID: ${svc.pid}` : ''
+        toast(t('services.actionDoneWithStatus', { label, action: actionLabel, status: gatewayUi.statusText, pid }), 'success')
         if (!page.isConnected) return
         await loadServices(page)
         return

@@ -75,6 +75,7 @@ export default {
   actionTimeout: _('{action}超时，Gateway 可能仍在启动中', '{action} timed out, Gateway may still be starting', '{action}逾時，Gateway 可能仍在啟動中'),
   actionCmdFailed: _('{action}命令失败: {error}', '{action} command failed: {error}', '{action}命令失敗: {error}'),
   actionDone: _('{label} 已{action}', '{label} {action} complete'),
+  actionDoneWithStatus: _('{label} 已{action} · {status}{pid}', '{label} {action} complete · {status}{pid}', '{label} 已{action} · {status}{pid}'),
   cancelWait: _('取消等待', 'Cancel wait'),
   cancelled: _('已取消等待，可稍后刷新查看状态', 'Cancelled waiting. Refresh later to check status.', '已取消等待，可稍后重新整理查看狀態'),
   currentVersion: _('当前版本', 'Current Version', '目前版本'),
