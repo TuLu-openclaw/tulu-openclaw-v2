@@ -38,12 +38,13 @@ export function render() {
 
       <div class="hm-panel">
         <div class="hm-panel-header">
-          <div class="hm-panel-title">config.yaml</div>
+          <div class="hm-panel-title">${t('engine.configEditorFileTitle')}</div>
           <div class="hm-panel-actions">
             <span class="hm-muted">${saving ? t('engine.memorySaving') : loading ? t('engine.memoryLoading') : t('engine.configEditorRawYaml')}</span>
           </div>
         </div>
         <div class="hm-panel-body" style="padding:0">
+          <div class="hm-services-note" style="margin:16px 18px 0">${esc(t('engine.configEditorRestartHint'))}</div>
           ${error ? `<div style="margin:16px 18px;padding:10px 14px;border-radius:var(--hm-radius-sm);background:var(--hm-error-soft);color:var(--hm-error);font-family:var(--hm-font-mono);font-size:12px">${esc(error)}</div>` : ''}
           <textarea id="hm-config-yaml" class="hm-input" spellcheck="false" ${loading || saving ? 'disabled' : ''} style="width:100%;min-height:560px;border:0;border-radius:0;background:var(--hm-surface-0);font-family:var(--hm-font-mono);font-size:12px;line-height:1.7;padding:18px 20px;resize:vertical">${esc(yaml)}</textarea>
         </div>
