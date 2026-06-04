@@ -633,6 +633,7 @@ export default {
   dashNativePanelInstallWebFailed: {"zh-CN": "Web 面板安装失败", "en": "Failed to install web panel"},
   dashNativePanelInstallWebTitle: {"zh-CN": "安装 Web 面板", "en": "Install web panel"},
   dashNativePanelOpen: {"zh-CN": "打开面板", "en": "Open panel"},
+  dashNativePanelOpenedAt: {"zh-CN": "已打开面板：{url}", "zh-TW": "已開啟面板：{url}", "en": "Opened dashboard at {url}"},
   dashNativePanelOpenFail: {"zh-CN": "打开面板失败", "en": "Failed to open panel"},
   dashNativePanelStartFirstHint: {"zh-CN": "请先启动 Gateway", "en": "Please start Gateway first"},
   dashNativePanelStartGeneric: {"zh-CN": "启动失败", "en": "Failed to start"},

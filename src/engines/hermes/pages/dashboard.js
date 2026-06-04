@@ -934,7 +934,7 @@ export function render() {
               log_tail: String(err?.message || err),
             }))
             if (startRes?.started) {
-              um.appendLog('✓ Dashboard @ ' + replacePortInUrl(href, startRes.port || port))
+              um.appendLog(t('engine.dashNativePanelOpenedAt', { url: replacePortInUrl(href, startRes.port || port) }))
               try {
                 await tryOpen(startRes.port || port)
               } catch (err) {
