@@ -6331,3 +6331,51 @@ pub fn invalidate_path_cache() -> Result<(), String> {
     crate::commands::service::invalidate_cli_detection_cache();
     Ok(())
 }
+
+/// 清理 Usage 费用缓存文件。Windows 上该缓存偶尔会被短暂占用，导致 Gateway
+/// 聚合 usage 时 rename 临时文件失败（EPERM）。前端遇到该错误时会调用这里清理
+/// `.usage-cost-cache.json` 与残留临时文件后自动重试一次。
+#[tauri::command]
+pub fn clear_usage_cost_cache() -> Result<String, String> {
+    let sessions_dir = super::openclaw_dir()
+        .join("agents")
+        .join("main")
+        .join("sessions");
+    let targets = [
+        ".usage-cost-cache.json".to_string(),
+        ".usage-cost-cache.json.tmp".to_string(),
+    ];
+    let mut removed = 0usize;
+    let mut failures: Vec<String> = Vec::new();
+
+    for name in targets {
+        let path = sessions_dir.join(name);
+        if path.exists() {
+            match fs::remove_file(&path) {
+                Ok(_) => removed += 1,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => failures.push(format!("{}: {e}", path.display())),
+            }
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(&sessions_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|v| v.to_str()) else { continue };
+            if name.starts_with(".usage-cost-cache.json.") && name.ends_with(".tmp") {
+                match fs::remove_file(&path) {
+                    Ok(_) => removed += 1,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => failures.push(format!("{}: {e}", path.display())),
+                }
+            }
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(format!("已清理 Usage 缓存文件 {removed} 个"))
+    } else {
+        Err(format!("Usage 缓存清理不完整：{}", failures.join("; ")))
+    }
+}

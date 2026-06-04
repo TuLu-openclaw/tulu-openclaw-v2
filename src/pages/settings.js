@@ -333,10 +333,16 @@ async function loadStandaloneInstallDir(page) {
           ${value ? `<button class="btn btn-secondary btn-sm" data-action="reset-standalone-install-dir">${t('common.reset')}</button>` : ''}
         </div>
       </div>
-      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.6">
-        ${t('settings.standaloneInstallDirHint')}
+      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.8">
+        <strong>${t('settings.standaloneInstallDirWhatTitle')}</strong><br>
+        ${t('settings.standaloneInstallDirWhat')}
       </div>
-      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.6;color:var(--warning)">
+      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.8">
+        <strong>${t('settings.standaloneInstallDirHowTitle')}</strong><br>
+        ${t('settings.standaloneInstallDirHow')}
+      </div>
+      <div class="form-hint" style="margin-top:var(--space-xs);line-height:1.8;color:var(--warning)">
+        <strong>${t('settings.standaloneInstallDirMigrationTitle')}</strong><br>
         ${t('settings.standaloneMigrationHint')}
       </div>
     `

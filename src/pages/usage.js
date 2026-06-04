@@ -3,6 +3,7 @@
  * 展示 Token 用量、费用、Top Models/Providers/Tools/Agents 等分析数据
  */
 import { wsClient } from '../lib/ws-client.js'
+import { api } from '../lib/tauri-api.js'
 import { icon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
@@ -74,21 +75,41 @@ async function loadUsage(page) {
     const now = new Date()
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
-    const data = await wsClient.request('sessions.usage', { startDate: start, endDate: end, limit: 120 }, { timeoutMs: 90000 })
+    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 120 })
     if (page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
     if (page !== _page || !page.isConnected || !el.isConnected) return
     const message = String(e?.message || e || '')
     const isTimeout = /超时|timeout/i.test(message)
+    const isCacheBusy = /usage-cost-cache\.json|EPERM|operation not permitted|rename/i.test(message)
     const isUnsupported = /not found|unknown method|unsupported|method/i.test(message)
-    const hint = isTimeout ? t('usage.loadTimeoutHint') : (isUnsupported ? t('usage.loadUnsupportedHint') : t('usage.loadFailedHint'))
+    const hint = isCacheBusy ? t('usage.cacheBusyHint') : (isTimeout ? t('usage.loadTimeoutHint') : (isUnsupported ? t('usage.loadUnsupportedHint') : t('usage.loadFailedHint')))
+    const title = isCacheBusy ? t('usage.cacheBusy') : (isTimeout ? t('usage.loadTimeout') : t('usage.loadFailed'))
+    const detail = isCacheBusy ? t('usage.cacheBusyDetail') : esc(message || t('common.unknown'))
     el.innerHTML = `<div class="usage-empty">
-      <div style="color:var(--error);margin-bottom:8px">${isTimeout ? t('usage.loadTimeout') : t('usage.loadFailed')}: ${esc(message || t('common.unknown'))}</div>
+      <div style="color:var(--error);margin-bottom:8px">${title}: ${detail}</div>
       <div class="form-hint">${hint}</div>
       <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-usage-retry">${t('usage.retry')}</button>
     </div>`
     el.querySelector('#btn-usage-retry')?.addEventListener('click', () => page.querySelector('#btn-usage-refresh')?.click())
+  }
+}
+
+async function requestUsageWithCacheRecovery(params) {
+  try {
+    return await wsClient.request('sessions.usage', params, { timeoutMs: 90000 })
+  } catch (e) {
+    const message = String(e?.message || e || '')
+    const isCacheEperm = /usage-cost-cache\.json|EPERM|operation not permitted|rename/i.test(message)
+    if (!isCacheEperm || !api?.clearUsageCostCache) throw e
+    await api.clearUsageCostCache().catch(() => null)
+    try {
+      return await wsClient.request('sessions.usage', params, { timeoutMs: 90000 })
+    } catch (retryError) {
+      retryError.usageCacheRecovered = true
+      throw retryError
+    }
   }
 }
 

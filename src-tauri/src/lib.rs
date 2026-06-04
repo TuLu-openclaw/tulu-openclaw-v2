@@ -164,6 +164,7 @@ pub fn run() {
             config::auto_install_git,
             config::configure_git_https,
             config::invalidate_path_cache,
+            config::clear_usage_cost_cache,
             config::get_status_summary,
             config::doctor_fix,
             config::doctor_check,
