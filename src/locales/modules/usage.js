@@ -7,6 +7,8 @@ export default {
   days7: _('7天', '7 Days'),
   days30: _('30天', '30 Days'),
   refresh: _('刷新', 'Refresh', '重新整理'),
+  loading: _('正在加载使用数据...', 'Loading usage data...', '正在載入使用資料...'),
+  refreshing: _('正在刷新使用数据...', 'Refreshing usage data...', '正在重新整理使用資料...'),
   gwConnecting: _('Gateway 连接中...', 'Connecting to Gateway...', 'Gateway 連線中...'),
   gwWait: _('等待 Gateway 连接就绪后自动加载', 'Will auto-load once Gateway is connected', '等待 Gateway 連線就緒后自動載入'),
   loadFailed: _('加载失败', 'Load failed', '載入失敗', '使用データの読み込みに失敗', '사용 데이터 로드 실패', 'Tải thất bại', 'Error al cargar', 'Falha ao carregar', 'Ошибка загрузки', 'Échec du chargement', 'Laden fehlgeschlagen'),

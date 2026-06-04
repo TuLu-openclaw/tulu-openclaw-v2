@@ -8,6 +8,7 @@ import { icon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 let _page = null, _unsubReady = null
+let _loadSeq = 0
 
 export async function render() {
   const page = document.createElement('div')
@@ -54,10 +55,14 @@ let _days = 7
 async function loadUsage(page, options = {}) {
   const el = page.querySelector('#usage-content')
   if (!el) return
+  const seq = ++_loadSeq
+  setUsageControlsBusy(page, true)
   el.innerHTML = `<div class="stat-card loading-placeholder" style="height:120px"></div>
-    <div class="stat-card loading-placeholder" style="height:200px;margin-top:var(--space-md)"></div>`
+    <div class="stat-card loading-placeholder" style="height:200px;margin-top:var(--space-md)"></div>
+    <div class="form-hint" style="margin-top:var(--space-sm)">${options.requestRefresh ? t('usage.refreshing') : t('usage.loading')}</div>`
 
   if (!wsClient.connected) {
+    setUsageControlsBusy(page, false)
     el.innerHTML = `<div class="usage-empty">
       <div style="color:var(--text-tertiary);margin-bottom:8px">${t('usage.gwConnecting')}</div>
       <div class="form-hint">${t('usage.gwWait')}</div>
@@ -76,10 +81,10 @@ async function loadUsage(page, options = {}) {
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
     const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 60, includeArchived: false, requestRefresh: !!options.requestRefresh })
-    if (page !== _page || !page.isConnected || !el.isConnected) return
+    if (seq !== _loadSeq || page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
-    if (page !== _page || !page.isConnected || !el.isConnected) return
+    if (seq !== _loadSeq || page !== _page || !page.isConnected || !el.isConnected) return
     const message = String(e?.message || e || '')
     const isTimeout = /超时|timeout/i.test(message)
     const isCacheBusy = /usage-cost-cache\.json|EPERM|operation not permitted|rename/i.test(message)
@@ -93,7 +98,16 @@ async function loadUsage(page, options = {}) {
       <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-usage-retry">${t('usage.retry')}</button>
     </div>`
     el.querySelector('#btn-usage-retry')?.addEventListener('click', () => loadUsage(page, { requestRefresh: true }))
+  } finally {
+    if (seq === _loadSeq && page === _page && page.isConnected) setUsageControlsBusy(page, false)
   }
+}
+
+function setUsageControlsBusy(page, busy) {
+  page.querySelectorAll('.usage-toolbar button').forEach(button => {
+    button.disabled = busy
+    button.setAttribute('aria-busy', busy ? 'true' : 'false')
+  })
 }
 
 async function requestUsageWithCacheRecovery(params) {
