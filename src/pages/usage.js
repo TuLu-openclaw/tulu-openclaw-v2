@@ -3,7 +3,6 @@
  * 展示 Token 用量、费用、Top Models/Providers/Tools/Agents 等分析数据
  */
 import { wsClient } from '../lib/ws-client.js'
-import { toast } from '../components/toast.js'
 import { icon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 

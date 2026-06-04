@@ -163,14 +163,19 @@
   border-radius: var(--radius-lg);
   padding: var(--space-md);
   min-width: 0;
+  max-height: 360px;
+  overflow: auto;
 }
 .usage-top-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
   gap: var(--space-sm);
   padding: 6px 0;
   border-bottom: 1px solid var(--border-primary);
+}
+.usage-top-row:last-child {
+  border-bottom: 0;
 }
 .usage-top-row-name,
 .usage-top-row-value {
@@ -185,8 +190,6 @@
   font-weight: 500;
 }
 .usage-top-row-value {
-  flex-shrink: 0;
-  max-width: 45%;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   font-family: var(--font-mono);
