@@ -1057,7 +1057,7 @@ function bindEvents(page, nodeOk, detectState) {
           modal.appendLog(errStr)
           await new Promise(r => setTimeout(r, 150))
           const fullLog = modal.getLogText() + '\n' + errStr
-          const diagnosis = diagnoseInstallError(fullLog)
+          const diagnosis = diagnoseInstallError(fullLog, t)
           modal.setError(diagnosis.title)
           if (diagnosis.hint) modal.appendLog('')
           if (diagnosis.hint) modal.appendHtmlLog(`${statusIcon('info', 14)} ${escapeHtml(diagnosis.hint)}`)
@@ -1097,7 +1097,7 @@ function bindEvents(page, nodeOk, detectState) {
       const errStr = String(e)
       modal.appendLog(errStr)
       const fullLog = modal.getLogText() + '\n' + errStr
-      const diagnosis = diagnoseInstallError(fullLog)
+      const diagnosis = diagnoseInstallError(fullLog, t)
       modal.setError(diagnosis.title)
     }
   })
