@@ -3018,7 +3018,7 @@ function beginStreamBubble(runId = '') {
 }
 
 function isLongRunningReplyState(state = _replyStatusState?.state) {
-  return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing', 'waiting'].includes(state)
+  return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing'].includes(state)
 }
 
 function scheduleStreamSafetyTimeout() {
