@@ -2914,7 +2914,7 @@ const ALWAYS_LOCAL = new Set([
   'docker_list_images', 'docker_list_nodes', 'docker_add_node', 'docker_remove_node',
   'docker_cluster_overview',
   'auth_check', 'auth_login', 'auth_logout',
-  'read_panel_config', 'write_panel_config',
+  'read_panel_config', 'write_panel_config', 'clear_usage_cost_cache',
   'get_deploy_mode',
   'assistant_exec', 'assistant_read_file', 'assistant_write_file',
   'assistant_list_dir', 'assistant_system_info', 'assistant_list_processes',
@@ -5832,6 +5832,40 @@ const handlers = {
   },
 
   // === 面板配置（Web 模式） ===
+
+  clear_usage_cost_cache() {
+    const sessionsDir = path.join(OPENCLAW_DIR, 'agents', 'main', 'sessions')
+    const targets = [
+      '.usage-cost-cache.json',
+      '.usage-cost-cache.json.tmp',
+    ]
+    let removed = 0
+    const failures = []
+
+    const removeIfExists = (filePath) => {
+      if (!fs.existsSync(filePath)) return
+      try {
+        fs.rmSync(filePath, { force: true })
+        removed += 1
+      } catch (e) {
+        if (e?.code !== 'ENOENT') failures.push(`${filePath}: ${e?.message || e}`)
+      }
+    }
+
+    for (const name of targets) removeIfExists(path.join(sessionsDir, name))
+    try {
+      for (const name of fs.readdirSync(sessionsDir)) {
+        if (name.startsWith('.usage-cost-cache.json.') && name.endsWith('.tmp')) {
+          removeIfExists(path.join(sessionsDir, name))
+        }
+      }
+    } catch (e) {
+      if (e?.code !== 'ENOENT') failures.push(`${sessionsDir}: ${e?.message || e}`)
+    }
+
+    if (failures.length) throw new Error(`Usage cache cleanup incomplete: ${failures.join('; ')}`)
+    return `Usage cache files removed: ${removed}`
+  },
 
   get_openclaw_dir() {
     const panelConfig = readPanelConfig()
