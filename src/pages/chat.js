@@ -3686,7 +3686,7 @@ function formatToolDisplayName(name = '') {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-  return readable ? t('chat.toolNameUnknown') : t('chat.tool')
+  return readable ? t('chat.toolNameFallbackWithName', { name: readable }) : t('chat.tool')
 }
 
 function formatToolStatus(status = '') {
@@ -3700,7 +3700,7 @@ function formatToolStatus(status = '') {
   if (['timeout', 'timed_out', 'expired'].includes(normalized)) return t('chat.toolStatusTimeout')
   if (['skipped', 'ignored', 'noop', 'no_op'].includes(normalized)) return t('chat.toolStatusSkipped')
   if (['cancelled', 'canceled', 'aborted', 'stopped'].includes(normalized)) return t('chat.toolStatusAborted')
-  return normalized ? t('chat.toolStatusValue', { status }) : t('chat.toolStatusSuccess')
+  return normalized ? t('chat.toolStatusOther') : t('chat.toolStatusSuccess')
 }
 
 function summarizeToolInput(input) {
