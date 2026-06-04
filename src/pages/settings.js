@@ -469,9 +469,18 @@ function collectInstallDirsFromVersionInfo(version, cfg) {
 async function handleScanOpenclawInstallPaths(page) {
   const input = page.querySelector('[data-name="openclaw-search-paths"]')
   const cfg = await api.readPanelConfig()
-  const version = await api.getVersionInfo().catch(() => null)
+  const [version, discovered] = await Promise.all([
+    api.getVersionInfo().catch(() => null),
+    api.scanOpenclawPaths?.().catch(() => []),
+  ])
   const existing = parseOpenclawSearchPaths(input?.value || cfg?.openclawSearchPaths?.join?.('\n') || '')
-  const scanned = collectInstallDirsFromVersionInfo(version, cfg)
+  const scanned = collectInstallDirsFromVersionInfo({
+    ...(version || {}),
+    all_installations: [
+      ...((version?.all_installations && Array.isArray(version.all_installations)) ? version.all_installations : []),
+      ...((discovered && Array.isArray(discovered)) ? discovered : []),
+    ],
+  }, cfg)
   const merged = parseOpenclawSearchPaths([...existing, ...scanned].join('\n'))
   if (merged.length === existing.length) {
     toast(t('settings.scanOpenclawInstallPathsEmpty'), 'info')
