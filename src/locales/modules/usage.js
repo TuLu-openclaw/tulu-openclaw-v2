@@ -39,6 +39,7 @@ export default {
   dailyUsage: _('每日用量', 'Daily Usage'),
   sessionDetail: _('会话明细', 'Session Details', '對話明細'),
   recentN: _('最近 {count} 个', 'Recent {count}', '最近 {count} 個'),
+  allN: _('全部 {count} 个', 'All {count}', '全部 {count} 個'),
   totalSessions: _('总会话数', 'Total Sessions', '總會話數'),
   avgPerDay: _('日均 {n}', 'Avg {n}/day', '日均 {n}'),
   estimatedCost: _('预估费用', 'Estimated Cost', '預估費用'),

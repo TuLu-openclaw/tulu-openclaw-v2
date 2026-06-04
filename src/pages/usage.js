@@ -75,7 +75,7 @@ async function loadUsage(page) {
     const now = new Date()
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
-    const data = await wsClient.request('sessions.usage', { startDate: start, endDate: end, limit: 20 })
+    const data = await wsClient.request('sessions.usage', { startDate: start, endDate: end, limit: 200 })
     if (page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
@@ -92,10 +92,41 @@ async function loadUsage(page) {
 function renderUsage(el, data) {
   if (!data) { el.innerHTML = `<div class="usage-empty">${t('usage.noData')}</div>`; return }
 
-  const totals = data.totals || {}
+  const totals = { ...(data.totals || {}), totalCost: data.totals?.totalCost ?? data.totalCost ?? data.cost ?? data.amount ?? data.usd ?? data.costUsd ?? data.costUSD }
   const a = data.aggregates || {}
   const msgs = a.messages || {}
   const tools = a.tools || {}
+
+  const numberFrom = (...values) => {
+    for (const value of values) {
+      if (value == null || value === '') continue
+      const normalized = typeof value === 'string' ? value.replace(/[^0-9.+-]/g, '') : value
+      const n = Number(normalized)
+      if (Number.isFinite(n)) return n
+    }
+    return 0
+  }
+  const pickCost = (obj = {}, keys = []) => numberFrom(
+    ...keys.map(key => obj?.[key]),
+    ...keys.map(key => obj?.costs?.[key]),
+    ...keys.map(key => obj?.cost?.[key]),
+    ...keys.map(key => obj?.usage?.[key]),
+  )
+  const getTotalCost = (obj = {}) => {
+    const direct = pickCost(obj, ['totalCost', 'cost', 'total', 'amount', 'usd', 'costUsd', 'costUSD', 'totalUsd', 'totalUSD'])
+    if (direct > 0) return direct
+    return pickCost(obj, ['inputCost', 'promptCost', 'inputUsd', 'inputUSD']) + pickCost(obj, ['outputCost', 'completionCost', 'outputUsd', 'outputUSD'])
+  }
+  const getInputCost = (obj = {}) => pickCost(obj, ['inputCost', 'promptCost', 'inputUsd', 'inputUSD'])
+  const getOutputCost = (obj = {}) => pickCost(obj, ['outputCost', 'completionCost', 'outputUsd', 'outputUSD'])
+  const sumCosts = (items = [], mapper = item => item) => items.reduce((sum, item) => sum + getTotalCost(mapper(item) || {}), 0)
+  const sessions = data.sessions || []
+  const sessionCostFallback = sumCosts(sessions, s => ({ ...(s.usage || {}), cost: s.cost, totalCost: s.usage?.totalCost ?? s.totalCost }))
+  const modelCostFallback = sumCosts(a.byModel || [], item => item.totals || item)
+  const providerCostFallback = sumCosts(a.byProvider || [], item => item.totals || item)
+  const totalCost = getTotalCost(totals) || sessionCostFallback || modelCostFallback || providerCostFallback
+  const inputCost = getInputCost(totals)
+  const outputCost = getOutputCost(totals)
 
   const fmtTokens = (n) => {
     if (n == null || n === 0) return '0'
@@ -103,7 +134,12 @@ function renderUsage(el, data) {
     if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'
     return String(n)
   }
-  const fmtCost = (n) => n != null && n > 0 ? '$' + n.toFixed(4) : '$0'
+  const fmtCost = (n) => {
+    const value = Number(n)
+    if (!Number.isFinite(value) || value <= 0) return '$0.0000'
+    const decimals = value < 0.0001 ? 8 : (value < 0.01 ? 6 : 4)
+    return '$' + value.toFixed(decimals)
+  }
   const fmtRate = (errors, total) => {
     if (!total) return '—'
     const pct = (errors / total * 100).toFixed(1)
@@ -135,8 +171,8 @@ function renderUsage(el, data) {
       </div>
       <div class="stat-card">
         <div class="stat-card-header"><span class="stat-card-label">${t('usage.cost')}</span></div>
-        <div class="stat-card-value">${fmtCost(totals.totalCost)}</div>
-        <div class="stat-card-meta">${fmtCost(totals.inputCost)} ${t('usage.input')} · ${fmtCost(totals.outputCost)} ${t('usage.output')}</div>
+        <div class="stat-card-value">${fmtCost(totalCost)}</div>
+        <div class="stat-card-meta">${fmtCost(inputCost)} ${t('usage.input')} · ${fmtCost(outputCost)} ${t('usage.output')}</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-header"><span class="stat-card-label">${t('usage.sessions')}</span></div>
@@ -149,7 +185,7 @@ function renderUsage(el, data) {
   // ── Top 排行 ──
   const renderTop = (title, items, keyFn, valueFn) => {
     if (!items || !items.length) return ''
-    const rows = items.slice(0, 5).map(item => {
+    const rows = items.map(item => {
       const name = esc(keyFn(item))
       const value = esc(valueFn(item))
       return `
@@ -168,15 +204,15 @@ function renderUsage(el, data) {
   }
 
   const topModels = renderTop(t('usage.topModels'),
-    a.byModel, m => m.model || t('usage.unknownModel'), m => fmtCost(m.totals?.totalCost) + ' · ' + fmtTokens(m.totals?.totalTokens))
+    a.byModel, m => m.model || t('usage.unknownModel'), m => fmtCost(getTotalCost(m.totals || m)) + ' · ' + fmtTokens(m.totals?.totalTokens || m.totalTokens))
   const topProviders = renderTop(t('usage.topProviders'),
-    a.byProvider, p => p.provider || t('usage.unknownProvider'), p => fmtCost(p.totals?.totalCost) + ' · ' + t('usage.times', { count: p.count }))
+    a.byProvider, p => p.provider || t('usage.unknownProvider'), p => fmtCost(getTotalCost(p.totals || p)) + ' · ' + t('usage.times', { count: p.count }))
   const topTools = renderTop(t('usage.topTools'),
     (tools.tools || []), item => item.name, item => t('usage.timesCall', { count: item.count }))
   const topAgents = renderTop(t('usage.topAgents'),
-    a.byAgent, item => item.agentId || 'main', item => fmtCost(item.totals?.totalCost))
+    a.byAgent, item => item.agentId || 'main', item => fmtCost(getTotalCost(item.totals || item)))
   const topChannels = renderTop(t('usage.topChannels'),
-    a.byChannel, c => c.channel || 'webchat', c => fmtCost(c.totals?.totalCost))
+    a.byChannel, c => c.channel || 'webchat', c => fmtCost(getTotalCost(c.totals || c)))
 
   const topsHtml = `<div class="usage-tops-grid">${topModels}${topProviders}${topTools}${topAgents}${topChannels}</div>`
 
@@ -219,7 +255,6 @@ function renderUsage(el, data) {
   }
 
   // ── 会话列表 ──
-  const sessions = (data.sessions || []).slice(0, 10)
   let sessionsHtml = ''
   if (sessions.length > 0) {
     const rows = sessions.map(s => {
@@ -227,9 +262,10 @@ function renderUsage(el, data) {
       const key = esc(s.key || '').replace(/^agent:main:/, '')
       const model = s.model || u.modelUsage?.[0]?.model || ''
       const provider = u.modelUsage?.[0]?.provider || s.modelProvider || ''
+      const sessionCost = getTotalCost({ ...u, cost: s.cost, totalCost: u.totalCost ?? s.totalCost })
       const metaText = t('usage.sessionMeta', {
         tokens: fmtTokens(u.totalTokens),
-        cost: fmtCost(u.totalCost),
+        cost: fmtCost(sessionCost),
         count: u.messageCounts?.total || 0,
       }) + (u.messageCounts?.errors ? ' · ' + t('usage.errorCount', { count: u.messageCounts.errors }) : '')
       return `<div class="session-row">
@@ -244,7 +280,7 @@ function renderUsage(el, data) {
     }).join('')
     sessionsHtml = `
       <div class="config-section" style="margin-top:var(--space-lg)">
-        <div class="config-section-title">${t('usage.sessionDetail')} <span style="font-weight:normal;color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('usage.recentN', { count: sessions.length })}</span></div>
+        <div class="config-section-title">${t('usage.sessionDetail')} <span style="font-weight:normal;color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('usage.allN', { count: sessions.length })}</span></div>
         <div class="session-list">${rows}</div>
       </div>
     `
