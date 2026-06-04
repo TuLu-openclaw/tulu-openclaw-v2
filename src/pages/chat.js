@@ -1683,7 +1683,7 @@ function renderSessionList(sessions) {
     if (groupItem) { e.stopPropagation(); switchGroupSession(groupItem.dataset.groupKey); return }
     const item = e.target.closest('[data-key]')
     if (item) {
-      if (_isSessionMultiSelectMode) { e.stopPropagation(); toggleSessionSelection(item.dataset.key); return }
+      if (_isSessionMultiSelectMode) { e.stopPropagation(); if (_isDeletingSelectedSessions) return; toggleSessionSelection(item.dataset.key); return }
       void switchSession(item.dataset.key)
     }
   }
@@ -1712,10 +1712,13 @@ function renderSessionCard(s) {
   const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
   const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
+  const mainKey = wsClient.snapshot?.sessionDefaults?.mainSessionKey || 'agent:main:main'
+  const isMain = key === mainKey
   const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key) ? ' selected' : ''
-  const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" title="${t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
+  const disabled = _isSessionMultiSelectMode && isMain ? ' disabled' : ''
+  const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" ${isMain ? 'disabled aria-disabled="true"' : ''} title="${isMain ? t('chat.cannotDeleteMain') : t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
   const deleteButton = _isSessionMultiSelectMode ? '' : `<button class="chat-session-del" data-del="${escapeAttr(key)}" title="${t('common.delete')}">×</button>`
-  return `<div class="chat-session-card${active}${selected}" data-key="${escapeAttr(key)}">
+  return `<div class="chat-session-card${active}${selected}${disabled}" data-key="${escapeAttr(key)}">
     <div class="chat-session-card-header">
       ${checkbox}
       <span class="chat-session-label" title="${t('chat.doubleClickRename')}">${escapeAttr(displayLabel)}</span>
