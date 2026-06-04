@@ -1983,7 +1983,7 @@ async function callChatCompletions(base, messages, onChunk) {
       if (errText) errMsg += `: ${errText.slice(0, 200)}`
     }
     // #Compat-5: 识别 vLLM/Ollama 等本地服务端的常见拒绝消息，附加修复指引
-    throw new Error(enhanceModelCallError(errMsg))
+    throw new Error(enhanceModelCallError(errMsg, t))
   }
 
   // 检测响应是否为 SSE 流式
@@ -2078,7 +2078,7 @@ async function callResponsesAPI(base, messages, onChunk) {
       if (errText) errMsg += `: ${errText.slice(0, 200)}`
     }
     // #Compat-5: 识别本地服务端拒绝消息，附加修复指引
-    throw new Error(enhanceModelCallError(errMsg))
+    throw new Error(enhanceModelCallError(errMsg, t))
   }
 
   await readSSEStream(resp, (json) => {
@@ -2138,7 +2138,7 @@ async function callAnthropicMessages(base, messages, onChunk) {
       if (errText) errMsg += `: ${errText.slice(0, 200)}`
     }
     // #Compat-5: 识别本地服务端拒绝消息，附加修复指引
-    throw new Error(enhanceModelCallError(errMsg))
+    throw new Error(enhanceModelCallError(errMsg, t))
   }
 
   _lastDebugInfo.streaming = true
@@ -2207,7 +2207,7 @@ async function callGeminiGenerate(base, messages, onChunk) {
     let errMsg = `API 错误 ${resp.status}`
     try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
     // #Compat-5: 识别本地服务端拒绝消息，附加修复指引
-    throw new Error(enhanceModelCallError(errMsg))
+    throw new Error(enhanceModelCallError(errMsg, t))
   }
 
   _lastDebugInfo.streaming = true
@@ -2642,7 +2642,7 @@ async function callAIWithTools(messages, onStatus, onToolProgress, onChunk) {
       try { errMsg = JSON.parse(resp.body || '{}').error?.message || errMsg } catch {}
       // #Compat-5: callAIWithTools 场景下 tools 带进 body 最容易踩 vLLM tool choice 限制，
       // 识别并给出启动参数指引，避免用户一脸懵
-      throw new Error(enhanceModelCallError(errMsg))
+      throw new Error(enhanceModelCallError(errMsg, t))
     }
 
     const data = JSON.parse(resp.body || '{}')
