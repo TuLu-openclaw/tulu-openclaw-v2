@@ -48,6 +48,7 @@ jobs:
           rustup default stable
 
       - name: Rust compile cache
+        continue-on-error: true
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
@@ -100,6 +101,7 @@ jobs:
           rustup default stable
 
       - name: Rust compile cache
+        continue-on-error: true
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
@@ -155,6 +157,7 @@ jobs:
           rustup default stable
 
       - name: Rust compile cache
+        continue-on-error: true
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
@@ -214,6 +217,7 @@ jobs:
           rustup default stable
 
       - name: Rust compile cache
+        continue-on-error: true
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
@@ -287,6 +291,7 @@ jobs:
             clang
 
       - name: Rust compile cache
+        continue-on-error: true
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
