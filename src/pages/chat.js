@@ -3377,7 +3377,9 @@ function isRecoverableStreamTimeoutError(message = '') {
 function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
   if (!isRecoverableStreamTimeoutError(errMsg)) return false
   if (!_isStreaming && !_currentAiBubble && !isLongRunningReplyState(_replyStatusState?.state)) return false
-  const activeState = isLongRunningReplyState(_replyStatusState?.state) ? _replyStatusState.state : (_currentAiText ? 'streaming' : 'thinking')
+  if (runId && !_currentRunId) _currentRunId = runId
+  const rawActiveState = isLongRunningReplyState(_replyStatusState?.state) ? _replyStatusState.state : (_currentAiText ? 'streaming' : 'thinking')
+  const activeState = rawActiveState === 'waiting' ? (_currentAiText ? 'streaming' : 'thinking') : rawActiveState
   const detail = activeState === 'tool' ? t('chat.streamToolStillRunning') : t('chat.streamStillRunning')
   console.warn('[chat] recoverable stream timeout error, keep run waiting:', runId || _currentRunId || '(no-run)', errMsg)
   _isStreaming = true
