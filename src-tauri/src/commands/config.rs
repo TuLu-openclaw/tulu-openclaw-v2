@@ -6362,7 +6362,9 @@ pub fn clear_usage_cost_cache() -> Result<String, String> {
     if let Ok(entries) = fs::read_dir(&sessions_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            let Some(name) = path.file_name().and_then(|v| v.to_str()) else { continue };
+            let Some(name) = path.file_name().and_then(|v| v.to_str()) else {
+                continue;
+            };
             if name.starts_with(".usage-cost-cache.json.") && name.ends_with(".tmp") {
                 match fs::remove_file(&path) {
                     Ok(_) => removed += 1,
