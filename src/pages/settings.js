@@ -482,13 +482,18 @@ async function handleScanOpenclawInstallPaths(page) {
     ],
   }, cfg)
   const merged = parseOpenclawSearchPaths([...existing, ...scanned].join('\n'))
-  if (merged.length === existing.length) {
+  const shouldAdoptSingleStandaloneDir = !cfg.openclawStandaloneInstallDir && scanned.length === 1
+  if (merged.length === existing.length && !shouldAdoptSingleStandaloneDir) {
     toast(t('settings.scanOpenclawInstallPathsEmpty'), 'info')
     return
   }
   cfg.openclawSearchPaths = merged
+  if (shouldAdoptSingleStandaloneDir) {
+    cfg.openclawStandaloneInstallDir = scanned[0]
+  }
   await savePanelConfigAndRefreshPaths(cfg)
   await loadOpenclawSearchPaths(page)
+  await loadStandaloneInstallDir(page)
   await loadCliBinding(page)
   toast(t('settings.scanOpenclawInstallPathsSaved', { count: merged.length - existing.length }), 'success')
 }
