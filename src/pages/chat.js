@@ -3302,7 +3302,7 @@ function handleChatEvent(payload) {
         videos: _currentAiVideos,
         audios: _currentAiAudios,
         files: _currentAiFiles,
-        tools: _currentAiTools,
+        tools: finalTools.length ? finalTools : _currentAiTools,
       })
     }
     // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
