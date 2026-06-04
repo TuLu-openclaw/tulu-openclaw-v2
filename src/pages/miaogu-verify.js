@@ -1,3 +1,5 @@
+import { t } from '../lib/i18n.js'
+
 /**
  * 喵咕验证页面
  * 访问 https://yz.blyfw.cn/ 自动查找文档，为用户指定的应用或源码加入最适合的网络卡密验证
@@ -6,40 +8,40 @@
 export default function render(el) {
   el.innerHTML = `
     <div class="page-header">
-      <div class="page-title">喵咕验证</div>
-      <div class="page-desc">网络卡密验证系统 · 自动查找文档快速接入</div>
+      <div class="page-title">${t('verify.miaoguTitle')}</div>
+      <div class="page-desc">${t('verify.miaoguDesc')}</div>
     </div>
     <div class="verify-container">
       <div class="verify-card">
         <div class="verify-card-header">
-          <span class="verify-badge">喵咕验证</span>
-          <span class="verify-status online">服务正常</span>
+          <span class="verify-badge">${t('verify.miaoguTitle')}</span>
+          <span class="verify-status online">${t('verify.serviceOnline')}</span>
         </div>
         <div class="verify-card-body">
           <p style="color:var(--text-secondary);font-size:var(--font-size-sm);margin-bottom:16px;text-align:center">
-            点击下方按钮访问喵咕验证，为您的应用快速接入网络卡密验证功能
+            ${t('verify.miaoguIntro')}
           </p>
           <div class="verify-actions">
             <a class="btn btn-primary btn-lg" href="https://yz.blyfw.cn/" target="_blank" rel="noopener">
-              打开喵咕验证
+              ${t('verify.openMiaogu')}
             </a>
           </div>
           <div class="verify-actions">
             <a class="btn btn-secondary btn-lg" href="https://yz.blyfw.cn/login?type=dev" target="_blank" rel="noopener">
-              开发者登录
+              ${t('verify.developerLogin')}
             </a>
             <a class="btn btn-secondary btn-lg" href="https://yz.blyfw.cn/login?type=agent" target="_blank" rel="noopener">
-              代理登录
+              ${t('verify.agentLogin')}
             </a>
           </div>
           <div class="verify-info">
             <div class="verify-info-item">
-              <span class="verify-info-label">功能说明</span>
-              <span class="verify-info-value">自动查找文档 · 智能卡密验证 · 快速接入</span>
+              <span class="verify-info-label">${t('verify.featureIntro')}</span>
+              <span class="verify-info-value">${t('verify.miaoguFeatureValue')}</span>
             </div>
             <div class="verify-info-item">
-              <span class="verify-info-label">支持类型</span>
-              <span class="verify-info-value">应用验证 · 源码验证 · SDK接入</span>
+              <span class="verify-info-label">${t('verify.supportedTypes')}</span>
+              <span class="verify-info-value">${t('verify.miaoguSupportedValue')}</span>
             </div>
           </div>
         </div>
