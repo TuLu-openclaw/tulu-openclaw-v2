@@ -81,6 +81,7 @@ function createFab() {
 
   // 恢复保存的位置
   restorePosition(fab)
+  syncErrorBadge(fab)
 
   // ── 拖动逻辑 ──
   let _dragging = false
@@ -193,6 +194,7 @@ function createFab() {
   function updateVisibility() {
     const route = getCurrentRoute()
     fab.style.display = HIDE_ROUTES.includes(route) ? 'none' : 'flex'
+    syncErrorBadge(fab)
   }
 
   window.addEventListener('hashchange', updateVisibility)
@@ -200,6 +202,13 @@ function createFab() {
   updateVisibility()
 
   return { el: fab }
+}
+
+function syncErrorBadge(fab) {
+  if (!fab) return
+  const hasErrorContext = !!sessionStorage.getItem('assistant-error-context')
+  const route = getCurrentRoute()
+  fab.classList.toggle('has-error', hasErrorContext && route !== '/assistant')
 }
 
 function getCurrentRoute() {
