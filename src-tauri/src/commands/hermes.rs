@@ -1008,7 +1008,11 @@ pub fn check_hermes() -> Result<Value, String> {
             let trimmed = line.trim();
             for var in &managed_keys {
                 if trimmed.starts_with(var) && trimmed.contains('=') {
-                    let val = trimmed.splitn(2, '=').nth(1).unwrap_or("").trim();
+                    let val = trimmed
+                        .split_once('=')
+                        .map(|(_, val)| val)
+                        .unwrap_or("")
+                        .trim();
                     if !val.is_empty() && val != "sk-xxx" && val != "your-key-here" {
                         provider_configured = true;
                         configured_provider = var.replace("_API_KEY", "").to_lowercase();

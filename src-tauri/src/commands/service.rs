@@ -1481,7 +1481,7 @@ mod platform {
                     }
                 }
             }
-            return (true, None);
+            (true, None)
         }
 
         // non-Windows：先用 fuser（Linux）或 lsof（macOS）查 PID
@@ -1600,7 +1600,10 @@ mod platform {
             None
         }
         #[cfg(not(target_os = "windows"))]
-        None
+        {
+            let _ = port;
+            None
+        }
     }
 
     async fn gateway_command(action: &str) -> Result<(), String> {

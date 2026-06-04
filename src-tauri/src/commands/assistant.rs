@@ -870,7 +870,6 @@ try {{
 }
 
 /// 打开独立播放器窗口（Tauri 内嵌窗口，不影响主界面）
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn open_player_window(
     app: tauri::AppHandle,
@@ -2449,7 +2448,7 @@ pub async fn navigate_window(
 ) -> Result<(), String> {
     use tauri::Manager;
     if let Some(win) = app.get_webview_window(&label) {
-        win.eval(&format!(
+        win.eval(format!(
             "window.location.href = '{}';",
             url.replace("'", "\\'")
         ))
