@@ -42,6 +42,7 @@ export default {
   topTools: _('热门工具', 'Top Tools', '熱門工具'),
   topAgents: _('热门 Agent', 'Top Agents', '熱門 Agent'),
   topChannels: _('热门渠道', 'Top Channels', '熱門頻道'),
+  topProjects: _('核心项目', 'Top Projects', '核心專案'),
   tokenBreakdown: _('Token 分类', 'Token Breakdown', 'Token 分類', 'トークン内訳'),
   outputTokens: _('输出', 'Output', '輸出', '出力トークン', '출력 토큰'),
   inputTokens: _('输入', 'Input', '輸入', '入力トークン', '입력 토큰'),
@@ -67,4 +68,5 @@ export default {
   errorCount: _('{count} 个错误', '{count} errors', '{count} 個錯誤'),
   unknownModel: _('未知', 'Unknown'),
   unknownProvider: _('未知', 'Unknown'),
+  unknownProject: _('未知项目', 'Unknown project', '未知專案'),
 }

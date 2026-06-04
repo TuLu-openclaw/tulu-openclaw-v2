@@ -38,7 +38,7 @@ export async function render() {
       loadUsage(page)
     }
   })
-  page.querySelector('#btn-usage-refresh')?.addEventListener('click', () => loadUsage(page))
+  page.querySelector('#btn-usage-refresh')?.addEventListener('click', () => loadUsage(page, { requestRefresh: true }))
 
   loadUsage(page)
   return page
@@ -51,7 +51,7 @@ export function cleanup() {
 
 let _days = 7
 
-async function loadUsage(page) {
+async function loadUsage(page, options = {}) {
   const el = page.querySelector('#usage-content')
   if (!el) return
   el.innerHTML = `<div class="stat-card loading-placeholder" style="height:120px"></div>
@@ -75,7 +75,7 @@ async function loadUsage(page) {
     const now = new Date()
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
-    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 60, includeArchived: false, requestRefresh: false })
+    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 60, includeArchived: false, requestRefresh: !!options.requestRefresh })
     if (page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
@@ -92,7 +92,7 @@ async function loadUsage(page) {
       <div class="form-hint">${hint}</div>
       <button class="btn btn-secondary btn-sm" style="margin-top:8px" id="btn-usage-retry">${t('usage.retry')}</button>
     </div>`
-    el.querySelector('#btn-usage-retry')?.addEventListener('click', () => page.querySelector('#btn-usage-refresh')?.click())
+    el.querySelector('#btn-usage-retry')?.addEventListener('click', () => loadUsage(page, { requestRefresh: true }))
   }
 }
 
@@ -267,9 +267,12 @@ function renderUsage(el, data) {
     a.byAgent, item => item.agentId || 'main', item => fmtCostOrMissing(getTotalCost(item.totals || item), item.totals || item))
   const topChannels = renderTop(t('usage.topChannels'),
     a.byChannel, c => c.channel || 'webchat', c => fmtCostOrMissing(getTotalCost(c.totals || c), c.totals || c))
+  const projectRows = buildProjectRows(data, sessions, getTotalCost)
+  const topProjects = renderTop(t('usage.topProjects'),
+    projectRows, p => p.name, p => fmtCostOrMissing(p.cost, p) + ' · ' + fmtTokens(p.tokens || 0))
 
   const costNoticeHtml = costUnavailable ? `<div class="usage-empty" style="margin-bottom:var(--space-lg);text-align:left"><strong>${t('usage.costNotConfiguredTitle')}</strong><div class="form-hint">${t('usage.costNotConfiguredHint', { count: missingCostCount })}${zeroPricedProviders.length ? ' ' + t('usage.zeroPricedProviders', { providers: zeroPricedProviders.join(', ') }) : ''}</div></div>` : ''
-  const topsHtml = `<div class="usage-tops-grid">${topModels}${topProviders}${topTools}${topAgents}${topChannels}</div>`
+  const topsHtml = `<div class="usage-tops-grid">${topModels}${topProviders}${topTools}${topAgents}${topChannels}${topProjects}</div>`
 
   // ── Token 分类 ──
   const tokenBreakdownHtml = `
@@ -343,6 +346,38 @@ function renderUsage(el, data) {
   }
 
   el.innerHTML = overviewHtml + costNoticeHtml + topsHtml + tokenBreakdownHtml + dailyHtml + sessionsHtml
+}
+
+function buildProjectRows(data, sessions, getTotalCost) {
+  const direct = data?.aggregates?.byProject || data?.byProject || data?.projects || []
+  if (Array.isArray(direct) && direct.length) {
+    return direct.map(item => ({
+      name: projectNameFrom(item?.project || item?.name || item?.workspace || item?.cwd || item?.path || item?.root || item?.repo || item?.key || t('usage.unknownProject')),
+      cost: getTotalCost(item?.totals || item),
+      tokens: Number(item?.totals?.totalTokens ?? item?.totalTokens ?? item?.tokens ?? 0) || 0,
+    })).filter(item => item.name)
+  }
+
+  const byProject = new Map()
+  for (const session of sessions || []) {
+    const usage = session?.usage || {}
+    const rawProject = session?.project || session?.projectName || session?.workspace || session?.cwd || session?.repoPath || usage?.project || usage?.workspace || usage?.cwd
+    const name = projectNameFrom(rawProject)
+    if (!name) continue
+    const current = byProject.get(name) || { name, cost: 0, tokens: 0 }
+    current.cost += getTotalCost({ ...usage, cost: session?.cost, totalCost: usage?.totalCost ?? session?.totalCost })
+    current.tokens += Number(usage?.totalTokens ?? session?.totalTokens ?? 0) || 0
+    byProject.set(name, current)
+  }
+  return Array.from(byProject.values()).sort((a, b) => (b.cost - a.cost) || (b.tokens - a.tokens)).slice(0, 8)
+}
+
+function projectNameFrom(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const normalized = text.replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || text || t('usage.unknownProject')
 }
 
 function esc(str) {
