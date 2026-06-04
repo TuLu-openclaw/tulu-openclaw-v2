@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI 助手页面
  * 独立模型配置，不依赖 OpenClaw
  * 支持：流式响应、Markdown 渲染、会话管理、日志分析、上下文注入
@@ -278,12 +278,12 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'run_command',
-        description: '在本机终端执行 shell 命令。用于系统管理、服务操作、文件查看等。注意：命令会直接在用户的机器上执行，请谨慎使用。',
+        description: t('assistant.toolDescRunCommand'),
         parameters: {
           type: 'object',
           properties: {
-            command: { type: 'string', description: '要执行的 shell 命令' },
-            cwd: { type: 'string', description: '工作目录（可选，默认为用户主目录）' },
+            command: { type: 'string', description: t('assistant.toolParamCommand') },
+            cwd: { type: 'string', description: t('assistant.toolParamCwd') },
           },
           required: ['command'],
         },
@@ -295,7 +295,7 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'get_system_info',
-        description: '获取当前系统信息，包括操作系统类型（windows/macos/linux）、CPU 架构、用户主目录、主机名、默认 Shell。在执行任何命令前应先调用此工具来判断操作系统，以选择正确的命令语法。',
+        description: t('assistant.toolDescSystemInfo'),
         parameters: { type: 'object', properties: {}, required: [] },
       },
     },
@@ -305,11 +305,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'list_processes',
-        description: '列出当前运行中的进程。可以按名称过滤，用于检查某个服务是否在运行（如 node、openclaw、gateway）。',
+        description: t('assistant.toolDescListProcesses'),
         parameters: {
           type: 'object',
           properties: {
-            filter: { type: 'string', description: '过滤关键词（可选），只返回包含该关键词的进程' },
+            filter: { type: 'string', description: t('assistant.toolParamProcessFilter') },
           },
           required: [],
         },
@@ -319,11 +319,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'check_port',
-        description: '检测指定端口是否被占用，并返回占用该端口的进程信息。常用端口：Gateway 18789、WebSocket 18790。',
+        description: t('assistant.toolDescCheckPort'),
         parameters: {
           type: 'object',
           properties: {
-            port: { type: 'integer', description: '要检测的端口号' },
+            port: { type: 'integer', description: t('assistant.toolParamPort') },
           },
           required: ['port'],
         },
@@ -335,18 +335,18 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'ask_user',
-        description: '向用户提问并等待回答。支持单选、多选和自由输入。当你需要用户做决定、确认方案、选择选项时使用此工具。用户可以选择预设选项，也可以输入自定义内容。',
+        description: t('assistant.toolDescAskUser'),
         parameters: {
           type: 'object',
           properties: {
-            question: { type: 'string', description: '要问用户的问题' },
-            type: { type: 'string', enum: ['single', 'multiple', 'text'], description: '交互类型：single=单选, multiple=多选, text=自由输入' },
+            question: { type: 'string', description: t('assistant.toolParamQuestion') },
+            type: { type: 'string', enum: ['single', 'multiple', 'text'], description: t('assistant.toolParamQuestionType') },
             options: {
               type: 'array',
               items: { type: 'string' },
-              description: '预设选项列表（single/multiple 时必填，text 时可选作为建议）',
+              description: t('assistant.toolParamQuestionOptions'),
             },
-            placeholder: { type: 'string', description: '自由输入时的占位提示文字（可选）' },
+            placeholder: { type: 'string', description: t('assistant.toolParamQuestionPlaceholder') },
           },
           required: ['question', 'type'],
         },
@@ -358,12 +358,12 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'web_search',
-        description: '联网搜索关键词，返回搜索结果列表（标题、链接、摘要）。用于查找错误解决方案、最新文档、GitHub Issues 等。',
+        description: t('assistant.toolDescWebSearch'),
         parameters: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: '搜索关键词' },
-            max_results: { type: 'integer', description: '最大结果数（默认 5）' },
+            query: { type: 'string', description: t('assistant.toolParamSearchQuery') },
+            max_results: { type: 'integer', description: t('assistant.toolParamMaxResults') },
           },
           required: ['query'],
         },
@@ -373,11 +373,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'fetch_url',
-        description: '抓取指定 URL 的网页内容，返回纯文本/Markdown 格式。用于获取搜索结果中某个页面的详细内容。',
+        description: t('assistant.toolDescFetchUrl'),
         parameters: {
           type: 'object',
           properties: {
-            url: { type: 'string', description: '要抓取的网页 URL' },
+            url: { type: 'string', description: t('assistant.toolParamUrl') },
           },
           required: ['url'],
         },
@@ -472,11 +472,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'read_file',
-        description: '读取指定路径的文件内容。用于查看配置文件、日志文件等。',
+        description: t('assistant.toolDescReadFile'),
         parameters: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: '文件的完整路径' },
+            path: { type: 'string', description: t('assistant.toolParamFilePath') },
           },
           required: ['path'],
         },
@@ -486,12 +486,12 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'write_file',
-        description: '写入或创建文件。会自动创建父目录。注意：会覆盖已有内容。',
+        description: t('assistant.toolDescWriteFile'),
         parameters: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: '文件的完整路径' },
-            content: { type: 'string', description: '要写入的内容' },
+            path: { type: 'string', description: t('assistant.toolParamFilePath') },
+            content: { type: 'string', description: t('assistant.toolParamFileContent') },
           },
           required: ['path', 'content'],
         },
@@ -501,11 +501,11 @@ const TOOL_DEFS = {
       type: 'function',
       function: {
         name: 'list_directory',
-        description: '列出目录下的文件和子目录。',
+        description: t('assistant.toolDescListDirectory'),
         parameters: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: '目录路径' },
+            path: { type: 'string', description: t('assistant.toolParamDirPath') },
           },
           required: ['path'],
         },
