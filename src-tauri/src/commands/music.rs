@@ -656,26 +656,23 @@ async fn get_kugou_url(client: &reqwest::Client, id: &str) -> Result<String, Str
         id
     );
 
-    match client
+    if let Ok(resp) = client
         .get(&search_url)
         .header("Referer", "https://www.kugou.com/")
         .send()
         .await
     {
-        Ok(resp) => {
-            if let Ok(data) = resp.json::<serde_json::Value>().await {
-                if let Some(url) = data
-                    .get("data")
-                    .and_then(|d| d.get("play_url"))
-                    .and_then(|u| u.as_str())
-                {
-                    if !url.is_empty() {
-                        return Ok(url.to_string());
-                    }
+        if let Ok(data) = resp.json::<serde_json::Value>().await {
+            if let Some(url) = data
+                .get("data")
+                .and_then(|d| d.get("play_url"))
+                .and_then(|u| u.as_str())
+            {
+                if !url.is_empty() {
+                    return Ok(url.to_string());
                 }
             }
         }
-        Err(_) => {}
     }
 
     // Fallback: meting 多镜像
@@ -698,21 +695,18 @@ async fn get_kuwo_url(client: &reqwest::Client, id: &str) -> Result<String, Stri
         cid
     );
 
-    match client.get(&url).send().await {
-        Ok(resp) => {
-            if let Ok(text) = resp.text().await {
-                // 解析 <url>...</url> 格式
-                if let Some(start) = text.find("<url>") {
-                    if let Some(end) = text.find("</url>") {
-                        let url = &text[start + 5..end];
-                        if !url.is_empty() {
-                            return Ok(url.to_string());
-                        }
+    if let Ok(resp) = client.get(&url).send().await {
+        if let Ok(text) = resp.text().await {
+            // 解析 <url>...</url> 格式
+            if let Some(start) = text.find("<url>") {
+                if let Some(end) = text.find("</url>") {
+                    let url = &text[start + 5..end];
+                    if !url.is_empty() {
+                        return Ok(url.to_string());
                     }
                 }
             }
         }
-        Err(_) => {}
     }
 
     // Fallback: meting 多镜像
@@ -732,21 +726,18 @@ async fn get_migu_url(client: &reqwest::Client, id: &str) -> Result<String, Stri
         id
     );
 
-    match client.get(&url).send().await {
-        Ok(resp) => {
-            if let Ok(data) = resp.json::<serde_json::Value>().await {
-                if let Some(data_obj) = data.get("data").and_then(|d| d.as_object()) {
-                    for (_, v) in data_obj {
-                        if let Some(url) = v.get("url").and_then(|u| u.as_str()) {
-                            if !url.is_empty() {
-                                return Ok(url.to_string());
-                            }
+    if let Ok(resp) = client.get(&url).send().await {
+        if let Ok(data) = resp.json::<serde_json::Value>().await {
+            if let Some(data_obj) = data.get("data").and_then(|d| d.as_object()) {
+                for (_, v) in data_obj {
+                    if let Some(url) = v.get("url").and_then(|u| u.as_str()) {
+                        if !url.is_empty() {
+                            return Ok(url.to_string());
                         }
                     }
                 }
             }
         }
-        Err(_) => {}
     }
 
     // Fallback: meting 多镜像
@@ -814,14 +805,11 @@ pub async fn music_proxy_audio(url: String, platform: String) -> Result<String, 
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("audio/mpeg")
                     .to_string();
-                match resp.bytes().await {
-                    Ok(bytes) => {
-                        if ct.contains("audio") || bytes.len() > 1024 {
-                            let b64 = base64_encode(&bytes);
-                            return Ok(format!("data:{};base64,{}", ct, b64));
-                        }
+                if let Ok(bytes) = resp.bytes().await {
+                    if ct.contains("audio") || bytes.len() > 1024 {
+                        let b64 = base64_encode(&bytes);
+                        return Ok(format!("data:{};base64,{}", ct, b64));
                     }
-                    Err(_) => {}
                 }
             }
             Err(format!("Failed to fetch audio: {}", status))
