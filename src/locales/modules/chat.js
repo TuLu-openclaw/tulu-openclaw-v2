@@ -293,6 +293,8 @@ export default {
   replyStreamingProgress: _('正在生成回复：已收到 {count} 个字符', 'Generating reply: received {count} characters', '正在生成回覆：已收到 {count} 個字元'),
   replyActivityReceivingOutput: _('持续接收模型输出', 'Receiving model output continuously', '持續接收模型輸出'),
   replyActivityAwaitingMoreEvents: _('已等待 {seconds}s，任务未结束，继续监听后续输出', 'Waited {seconds}s; the task has not ended, continuing to listen for more output', '已等待 {seconds}s，任務未結束，繼續監聽後續輸出'),
+  replyActivityRuntimeSynced: _('已同步 Gateway 会话真实状态', 'Synced with the real Gateway session state', '已同步 Gateway 對話真實狀態'),
+  replyActivityRuntimeSyncedWithReason: _('已同步 Gateway 会话真实状态（{reason}）', 'Synced with the real Gateway session state ({reason})', '已同步 Gateway 對話真實狀態（{reason}）'),
   replyDetailAgent: _('Agent：{agent}', 'Agent: {agent}', 'Agent：{agent}'),
   replyDetailModel: _('模型：{model}', 'Model: {model}', '模型：{model}'),
   replyDetailRun: _('Run：{run}', 'Run: {run}', 'Run：{run}'),

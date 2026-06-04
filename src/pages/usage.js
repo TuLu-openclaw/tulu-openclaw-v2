@@ -75,7 +75,7 @@ async function loadUsage(page) {
     const now = new Date()
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
-    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 120 })
+    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 60, includeArchived: false, requestRefresh: false })
     if (page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
@@ -117,6 +117,7 @@ function renderUsage(el, data) {
   if (!data) { el.innerHTML = `<div class="usage-empty">${t('usage.noData')}</div>`; return }
 
   const totals = { ...(data.totals || {}), totalCost: data.totals?.totalCost ?? data.totalCost ?? data.cost ?? data.amount ?? data.usd ?? data.costUsd ?? data.costUSD }
+  if (!totals.totalTokens) totals.totalTokens = (Number(totals.input) || 0) + (Number(totals.output) || 0) + (Number(totals.cacheRead) || 0) + (Number(totals.cacheWrite) || 0)
   const a = data.aggregates || {}
   const msgs = a.messages || {}
   const tools = a.tools || {}
@@ -151,6 +152,35 @@ function renderUsage(el, data) {
   const totalCost = getTotalCost(totals) || sessionCostFallback || modelCostFallback || providerCostFallback
   const inputCost = getInputCost(totals)
   const outputCost = getOutputCost(totals)
+  const missingCostEntries = numberFrom(totals.missingCostEntries, data.missingCostEntries)
+    || sessions.reduce((sum, s) => sum + numberFrom(s?.usage?.missingCostEntries, s?.missingCostEntries), 0)
+  const pricingFingerprintText = String(data.pricingFingerprint || data.cacheStatus?.pricingFingerprint || data.costPricingFingerprint || '')
+  const pricingEntries = (() => {
+    try {
+      const parsed = JSON.parse(pricingFingerprintText || '{}')
+      return [
+        ...(parsed.gatewayPricing || []),
+        ...(parsed.configuredRaw || []),
+        ...(parsed.configuredNormalized || []),
+      ]
+    } catch {
+      return []
+    }
+  })()
+  const zeroPricedProviders = Array.from(new Set(pricingEntries
+    .filter(([key, price]) => key && price && Number(price.input || 0) <= 0 && Number(price.output || 0) <= 0 && Number(price.cacheRead || 0) <= 0 && Number(price.cacheWrite || 0) <= 0)
+    .map(([key]) => String(key).split('/')[0])
+    .filter(Boolean)))
+  const visibleTokenItems = [totals, ...(a.byModel || []).map(x => x.totals || x), ...(sessions || []).map(x => x.usage || x)]
+  const hasTokens = visibleTokenItems.some(item => numberFrom(item?.totalTokens, item?.input, item?.output, item?.cacheRead, item?.cacheWrite) > 0)
+  const hasAnyCost = [totals, ...(a.byModel || []).map(x => x.totals || x), ...(a.byProvider || []).map(x => x.totals || x), ...(sessions || []).map(x => x.usage || x)]
+    .some(item => getTotalCost(item || {}) > 0 || getInputCost(item || {}) > 0 || getOutputCost(item || {}) > 0)
+  const costUnavailable = hasTokens && !hasAnyCost
+  const missingCostCount = missingCostEntries || sessions.reduce((sum, item) => sum + numberFrom(item?.usage?.countedRecords, item?.usage?.messageCounts?.assistant, item?.messageCounts?.assistant), 0) || (costUnavailable ? 1 : 0)
+  const fmtCostOrMissing = (n, item = null) => {
+    const itemHasCost = item && (getTotalCost(item) > 0 || getInputCost(item) > 0 || getOutputCost(item) > 0)
+    return (costUnavailable && !itemHasCost) ? t('usage.costNotConfiguredShort') : fmtCost(n)
+  }
 
   const fmtTokens = (n) => {
     if (n == null || n === 0) return '0'
@@ -195,8 +225,8 @@ function renderUsage(el, data) {
       </div>
       <div class="stat-card">
         <div class="stat-card-header"><span class="stat-card-label">${t('usage.cost')}</span></div>
-        <div class="stat-card-value">${fmtCost(totalCost)}</div>
-        <div class="stat-card-meta">${fmtCost(inputCost)} ${t('usage.input')} · ${fmtCost(outputCost)} ${t('usage.output')}</div>
+        <div class="stat-card-value">${fmtCostOrMissing(totalCost)}</div>
+        <div class="stat-card-meta">${costUnavailable ? t('usage.costNotConfiguredMeta') : `${fmtCost(inputCost)} ${t('usage.input')} · ${fmtCost(outputCost)} ${t('usage.output')}`}</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-header"><span class="stat-card-label">${t('usage.sessions')}</span></div>
@@ -228,16 +258,17 @@ function renderUsage(el, data) {
   }
 
   const topModels = renderTop(t('usage.topModels'),
-    a.byModel, m => m.model || t('usage.unknownModel'), m => fmtCost(getTotalCost(m.totals || m)) + ' · ' + fmtTokens(m.totals?.totalTokens || m.totalTokens))
+    a.byModel, m => m.model || t('usage.unknownModel'), m => fmtCostOrMissing(getTotalCost(m.totals || m), m.totals || m) + ' · ' + fmtTokens(m.totals?.totalTokens || m.totalTokens))
   const topProviders = renderTop(t('usage.topProviders'),
-    a.byProvider, p => p.provider || t('usage.unknownProvider'), p => fmtCost(getTotalCost(p.totals || p)) + ' · ' + t('usage.times', { count: p.count }))
+    a.byProvider, p => p.provider || t('usage.unknownProvider'), p => fmtCostOrMissing(getTotalCost(p.totals || p), p.totals || p) + ' · ' + t('usage.times', { count: p.count }))
   const topTools = renderTop(t('usage.topTools'),
     (tools.tools || []), item => item.name, item => t('usage.timesCall', { count: item.count }))
   const topAgents = renderTop(t('usage.topAgents'),
-    a.byAgent, item => item.agentId || 'main', item => fmtCost(getTotalCost(item.totals || item)))
+    a.byAgent, item => item.agentId || 'main', item => fmtCostOrMissing(getTotalCost(item.totals || item), item.totals || item))
   const topChannels = renderTop(t('usage.topChannels'),
-    a.byChannel, c => c.channel || 'webchat', c => fmtCost(getTotalCost(c.totals || c)))
+    a.byChannel, c => c.channel || 'webchat', c => fmtCostOrMissing(getTotalCost(c.totals || c), c.totals || c))
 
+  const costNoticeHtml = costUnavailable ? `<div class="usage-empty" style="margin-bottom:var(--space-lg);text-align:left"><strong>${t('usage.costNotConfiguredTitle')}</strong><div class="form-hint">${t('usage.costNotConfiguredHint', { count: missingCostCount })}${zeroPricedProviders.length ? ' ' + t('usage.zeroPricedProviders', { providers: zeroPricedProviders.join(', ') }) : ''}</div></div>` : ''
   const topsHtml = `<div class="usage-tops-grid">${topModels}${topProviders}${topTools}${topAgents}${topChannels}</div>`
 
   // ── Token 分类 ──
@@ -281,7 +312,8 @@ function renderUsage(el, data) {
   // ── 会话列表 ──
   let sessionsHtml = ''
   if (sessions.length > 0) {
-    const rows = sessions.map(s => {
+    const detailSessions = sessions.slice(0, 40)
+    const rows = detailSessions.map(s => {
       const u = s.usage || {}
       const key = esc(s.key || '').replace(/^agent:main:/, '')
       const model = s.model || u.modelUsage?.[0]?.model || ''
@@ -289,7 +321,7 @@ function renderUsage(el, data) {
       const sessionCost = getTotalCost({ ...u, cost: s.cost, totalCost: u.totalCost ?? s.totalCost })
       const metaText = t('usage.sessionMeta', {
         tokens: fmtTokens(u.totalTokens),
-        cost: fmtCost(sessionCost),
+        cost: fmtCostOrMissing(sessionCost, u),
         count: u.messageCounts?.total || 0,
       }) + (u.messageCounts?.errors ? ' · ' + t('usage.errorCount', { count: u.messageCounts.errors }) : '')
       return `<div class="session-row">
@@ -304,13 +336,13 @@ function renderUsage(el, data) {
     }).join('')
     sessionsHtml = `
       <div class="config-section" style="margin-top:var(--space-lg)">
-        <div class="config-section-title">${t('usage.sessionDetail')} <span style="font-weight:normal;color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('usage.allN', { count: sessions.length })}</span></div>
+        <div class="config-section-title">${t('usage.sessionDetail')} <span style="font-weight:normal;color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('usage.recentN', { count: detailSessions.length })}</span></div>
         <div class="session-list">${rows}</div>
       </div>
     `
   }
 
-  el.innerHTML = overviewHtml + topsHtml + tokenBreakdownHtml + dailyHtml + sessionsHtml
+  el.innerHTML = overviewHtml + costNoticeHtml + topsHtml + tokenBreakdownHtml + dailyHtml + sessionsHtml
 }
 
 function esc(str) {

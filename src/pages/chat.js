@@ -124,7 +124,7 @@ const _toolEventData = new Map()
 const _toolRunIndex = new Map()
 const _toolEventSeen = new Set()
 let _errorTimer = null, _lastErrorMsg = null
-let _responseWatchdog = null, _postFinalCheck = null
+let _responseWatchdog = null, _postFinalCheck = null, _runtimeStatusSyncTimer = null
 let _attachments = []
 let _hasEverConnected = false
 let _availableModels = []
@@ -3014,6 +3014,52 @@ function isLongRunningReplyState(state = _replyStatusState?.state) {
   return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing'].includes(state)
 }
 
+function isSessionRuntimeBusy(item = {}) {
+  const raw = String(item.status || item.state || item.phase || item.runState || item.runtimeStatus || '').toLowerCase()
+  if (!raw) return false
+  return ['queued', 'sending', 'thinking', 'streaming', 'tool', 'running', 'in_progress', 'busy', 'working', 'executing', 'finalizing'].some(v => raw.includes(v))
+}
+
+function findRuntimeSession(sessions = [], sessionKey = _sessionKey) {
+  if (!sessionKey) return null
+  return sessions.find(item => (item.sessionKey || item.key || '') === sessionKey) || null
+}
+
+async function syncReplyStatusWithRuntime(reason = '') {
+  if (!wsClient.gatewayReady || !_sessionKey || !isLongRunningReplyState()) return false
+  try {
+    const result = await wsClient.sessionsList(100, { activeMinutes: 10, includeGlobal: true, includeUnknown: true })
+    const sessions = result?.sessions || result || []
+    updateSessionRuntimeCache(sessions, result?.defaults)
+    const item = findRuntimeSession(sessions, _sessionKey)
+    if (!item || isSessionRuntimeBusy(item)) return false
+    const doneRunId = _currentRunId || _replyStatusState?.runId || ''
+    if (_sessionKey && _messagesEl && _pageActive) {
+      _lastHistoryHash = ''
+      await loadHistory()
+    }
+    if (isLongRunningReplyState()) {
+      showTyping(false)
+      resetStreamState()
+      setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: reason ? t('chat.replyActivityRuntimeSyncedWithReason', { reason }) : t('chat.replyActivityRuntimeSynced') })
+      processMessageQueue()
+    }
+    return true
+  } catch (e) {
+    console.debug('[chat] runtime status sync failed:', e)
+    return false
+  }
+}
+
+function scheduleRuntimeStatusSync(reason = '') {
+  clearTimeout(_runtimeStatusSyncTimer)
+  if (!isLongRunningReplyState()) return
+  _runtimeStatusSyncTimer = setTimeout(() => {
+    _runtimeStatusSyncTimer = null
+    syncReplyStatusWithRuntime(reason).catch(() => {})
+  }, 1200)
+}
+
 function scheduleStreamSafetyTimeout() {
   clearTimeout(_streamSafetyTimer)
   _streamSafetyTimer = setTimeout(() => {
@@ -3053,6 +3099,7 @@ function scheduleStreamSafetyTimeout() {
         }).catch(() => {})
       }
       showTyping(true, detail)
+      scheduleRuntimeStatusSync('quiet')
       scheduleStreamSafetyTimeout()
       return
     }
@@ -3372,6 +3419,7 @@ function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
   showTyping(true, detail)
   updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: activeState, progress: TASK_PROGRESS[activeState] || TASK_PROGRESS.thinking, error: '' })
   setReplyStatus(activeState, detail, { runId: runId || _currentRunId, activity: t('chat.replyActivityAwaitingMoreEvents', { seconds: _streamStartTime ? Math.max(1, Math.round((Date.now() - _streamStartTime) / 1000)) : 1 }) })
+  scheduleRuntimeStatusSync('recoverable-timeout')
   scheduleStreamSafetyTimeout()
   if (_sessionKey && _messagesEl && _pageActive) {
     _lastHistoryHash = ''
@@ -3841,6 +3889,8 @@ function _startResponseWatchdog() {
         _lastHistoryHash = ''
         await loadHistory()
         setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: t('chat.replyActivityDone') })
+      } else if (await syncReplyStatusWithRuntime('watchdog')) {
+        return
       } else if (!_currentAiBubble) {
         _isStreaming = true
         _streamStartTime = _streamStartTime || Date.now()
@@ -3873,6 +3923,7 @@ function _schedulePostFinalCheck() {
 
 function resetStreamState() {
   clearTimeout(_streamSafetyTimer)
+  clearTimeout(_runtimeStatusSyncTimer)
   if (_currentAiBubble && (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length)) {
     flushStreamRender()
     appendImagesToEl(_currentAiBubble, _currentAiImages)
