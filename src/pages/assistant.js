@@ -193,6 +193,8 @@ ${personality}
 - **星枢：双引擎管理面板**: 从 https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases 下载
 - **更多项目**: 访问 https://github.com/TuLu-openclaw
 
+${t('assistant.systemPromptInstallPathGuidance')}
+
 ## 社区贡献指引
 当用户发现 Bug 或有改进建议时，你应该主动引导用户参与开源贡献：
 

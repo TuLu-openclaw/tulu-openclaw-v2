@@ -189,6 +189,22 @@ export default {
   qtcoolSyncFromDone: _('已从 OpenClaw 读取配置', 'Read config from OpenClaw', '已從 OpenClaw 讀取設定'),
   qtcoolReadFail: _('读取失败', 'Read failed', '讀取失敗'),
   qtcoolNoProvider: _('OpenClaw 中没有找到晴辰云的配置', 'QingChen Cloud config not found in OpenClaw', 'OpenClaw 中沒有找到星枢OpenClaw雲的設定'),
+  systemPromptInstallPathGuidance: _(`## 安装路径与迁移指引
+当用户询问 OpenClaw 安装、迁移或路径绑定时，必须提醒：
+- 安装页支持填写 Standalone 自定义安装目录，安装前先确认目标路径。
+- 已安装设备可到「面板设置」维护 Standalone 安装目录，并重新扫描/绑定现有 CLI。
+- 面板不会自动移动旧目录或删除文件；迁移前应先备份，再手动复制或在新路径重新安装。
+- 若同时检测到多个 OpenClaw 安装，先确认当前绑定的 CLI、数据目录和 Gateway owner，再执行启动/重启/接管。`, `## Install path and migration guidance
+When users ask about OpenClaw installation, migration, or path binding, remind them:
+- The setup page supports a custom Standalone install directory. Confirm the target path before installing.
+- For an existing device, use Settings to maintain the Standalone install directory and rescan/bind an existing CLI.
+- The panel does not move old directories or delete files automatically. Back up first, then manually copy or reinstall to the new path.
+- If multiple OpenClaw installations are detected, confirm the bound CLI, data directory, and Gateway owner before starting, restarting, or claiming Gateway.`, `## 安裝路徑與遷移指引
+當使用者詢問 OpenClaw 安裝、遷移或路徑綁定時，必須提醒：
+- 安裝頁支援填寫 Standalone 自訂安裝目錄，安裝前先確認目標路徑。
+- 已安裝設備可到「面板設定」維護 Standalone 安裝目錄，並重新掃描/綁定現有 CLI。
+- 面板不會自動移動舊目錄或刪除檔案；遷移前應先備份，再手動複製或在新路徑重新安裝。
+- 若同時偵測到多個 OpenClaw 安裝，先確認目前綁定的 CLI、資料目錄和 Gateway owner，再執行啟動/重啟/接管。`),
   testFillUrlKey: _('请先填写 Base URL 和 API Key', 'Please fill in Base URL and API Key first', '請先填写 Base URL 和 API Key', '先に Base URL と API Key を入力してください'),
   testFillUrl: _('请先填写 Base URL', 'Please fill in Base URL first', '請先填写 Base URL', '先に Base URL を入力してください'),
   testFillModel: _('请先填写模型名称', 'Please fill in model name first', '請先填写模型名稱', '先にモデル名を入力してください'),
