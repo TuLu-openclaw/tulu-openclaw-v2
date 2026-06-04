@@ -1442,7 +1442,6 @@ mod platform {
 
     /// 跨平台统一检测：TCP 连端口
     #[allow(dead_code)]
-    #[allow(dead_code)]
     pub async fn check_service_status(_uid: u32, _label: &str) -> (bool, Option<u32>) {
         let port = crate::commands::gateway_listen_port();
         let addr = format!("127.0.0.1:{port}");
@@ -1460,7 +1459,6 @@ mod platform {
         if !result {
             return (false, None);
         }
-
         // Windows：用 netstat 查询端口占用进程的 PID
         #[cfg(target_os = "windows")]
         {
@@ -1578,32 +1576,25 @@ mod platform {
     }
 
     /// Windows 专用的 PID 查找（供 cleanup_zombie_gateway_processes 调用）
+    #[cfg(target_os = "windows")]
     fn find_gateway_pid_by_port_impl(port: u16) -> Option<u32> {
-        #[cfg(target_os = "windows")]
-        {
-            let output = std::process::Command::new("netstat")
-                .args(["-ano", "-p", "TCP"])
-                .output()
-                .ok()?;
-            let lines = String::from_utf8_lossy(&output.stdout);
-            for line in lines.lines() {
-                let line = line.trim();
-                if line.contains(&format!(":{port}")) && line.contains("LISTENING") {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 5 {
-                        if let Ok(pid) = parts[4].parse::<u32>() {
-                            return Some(pid);
-                        }
+        let output = std::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .output()
+            .ok()?;
+        let lines = String::from_utf8_lossy(&output.stdout);
+        for line in lines.lines() {
+            let line = line.trim();
+            if line.contains(&format!(":{port}")) && line.contains("LISTENING") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 5 {
+                    if let Ok(pid) = parts[4].parse::<u32>() {
+                        return Some(pid);
                     }
                 }
             }
-            None
         }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = port;
-            None
-        }
+        None
     }
 
     async fn gateway_command(action: &str) -> Result<(), String> {

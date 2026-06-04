@@ -870,7 +870,9 @@ try {{
 }
 
 /// 打开独立播放器窗口（Tauri 内嵌窗口，不影响主界面）
+#[cfg(target_os = "windows")]
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn open_player_window(
     app: tauri::AppHandle,
     url: String,
@@ -980,6 +982,7 @@ pub async fn open_player_window(
     Ok("ok".into())
 }
 
+#[cfg(target_os = "windows")]
 fn urlencoding_encode(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {
@@ -999,9 +1002,11 @@ fn urlencoding_encode(s: &str) -> String {
 }
 
 /// Star-Office-UI 后端进程 PID
+#[cfg(target_os = "windows")]
 static STAR_OFFICE_PID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 /// 查找 Star-Office-UI-master 目录（优先 resource_dir，回退多级路径）
+#[cfg(target_os = "windows")]
 fn find_star_office_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     // 1. 优先从 Tauri resource_dir 查找（打包后的正确路径）
     if let Ok(res_dir) = app.path().resource_dir() {
@@ -1056,6 +1061,7 @@ fn find_star_office_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
 }
 
 /// 启动 Star-Office-UI Python 后端
+#[cfg(target_os = "windows")]
 async fn start_star_office_backend(app: &tauri::AppHandle) -> Result<u16, String> {
     let port: u16 = 19000;
     let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
@@ -1157,6 +1163,7 @@ async fn start_star_office_backend(app: &tauri::AppHandle) -> Result<u16, String
 }
 
 /// 打开龙虾办公室独立窗口
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn open_lobster_office(app: tauri::AppHandle) -> Result<String, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1621,7 +1628,6 @@ pub fn close_live_player(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// navigate_window
-
 /// save_recording - 保存录屏数据到用户指定路径（通过Tauri对话框选择）
 #[tauri::command]
 pub async fn save_recording(
