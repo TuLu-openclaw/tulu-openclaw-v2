@@ -2345,22 +2345,22 @@ function pickDirectUrl(url) {
       <div class="tvbox-crawl-panel">
         <div class="tvbox-crawl-header">
           <div class="tvbox-crawl-icon">🕷️</div>
-          <div class="tvbox-crawl-title">万能播放器</div>
-          <div class="tvbox-crawl-sub">粘贴任意视频链接，自动提取并播放</div>
+          <div class="tvbox-crawl-title">${mt('crawlPlayerTitle')}</div>
+          <div class="tvbox-crawl-sub">${mt('crawlPlayerSubtitle')}</div>
         </div>
         <div class="tvbox-crawl-form" style="margin-bottom:8px">
-          <input id="t-crawl-url" type="url" placeholder="https://...（粘贴视频页地址，试试看）" />
-          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#e74c3c">🔬 深度嗅探</button>
+          <input id="t-crawl-url" type="url" placeholder="${mt('crawlUrlPlaceholder')}" />
+          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#e74c3c">🔬 ${mt('deepSniff')}</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-secondary)">
             <input id="t-crawl-auto" type="checkbox" style="width:15px;height:15px" checked />
-            🚀 自动播放（找到第一个链接直接播放）
+            🚀 ${mt('crawlAutoplay')}
           </label>
-          <button id="t-crawl-urlbtn" class="tvbox-tab" style="font-size:12px;padding:2px 10px">📋 直接输入m3u8/mp4链接</button>
+          <button id="t-crawl-urlbtn" class="tvbox-tab" style="font-size:12px;padding:2px 10px">📋 ${mt('directUrlInput')}</button>
         </div>
         <div class="tvbox-crawl-hint">
-          <p>💡 支持：m3u8/mp4直链、视频详情页、播放器iframe、百度/夸克云盘</p>
+          <p>${mt('crawlSupportHint')}</p>
         </div>
         <div id="t-crawl-status" class="tvbox-crawl-status"></div>
         <div id="t-crawl-results" class="tvbox-crawl-results"></div>
@@ -2374,26 +2374,26 @@ function pickDirectUrl(url) {
     async function doCrawl() {
       const url = normalizeHttpUrl(input.value)
       if (!url) {
-        showCrawlStatus('❌ 请输入有效的 http/https URL', 'error')
+        showCrawlStatus(mt('invalidHttpUrl'), 'error')
         return
       }
       input.value = url
       btn.disabled = true
-      btn.textContent = autoPlay.checked ? '⏳ 边嗅边播...' : '⏳ 嗅探中...'
-      showCrawlStatus(autoPlay.checked ? '🚀 正在边嗅边播...' : '🔍 正在深度嗅探页面...', 'loading')
+      btn.textContent = autoPlay.checked ? `⏳ ${mt('sniffAndPlayLoading')}` : `⏳ ${mt('sniffingLoading')}`
+      showCrawlStatus(autoPlay.checked ? `🚀 ${mt('sniffAndPlayStatus')}` : `🔍 ${mt('deepSniffStatus')}`, 'loading')
       _crawlResults = []
       let autoPlayed = false
       const results = await crawlSite(url, autoPlay.checked ? (name, u) => {
         if (autoPlayed) return
         autoPlayed = true
         // 第一个可用链接 → 直接播放（独立窗口）
-        showCrawlStatus('✅ 找到可用链接，正在播放: ' + name, 'success')
-        btn.disabled = false; btn.textContent = '🔬 深度嗅探'
+        showCrawlStatus(mt('crawlPlayableFound', { name }), 'success')
+        btn.disabled = false; btn.textContent = `🔬 ${mt('deepSniff')}`
         playCrawlVideo(name, u, 0, [], [u])
       } : null)
       _crawlResults = results
       btn.disabled = false
-      btn.textContent = '🔬 深度嗅探'
+      btn.textContent = `🔬 ${mt('deepSniff')}`
       if (!autoPlay.checked || !results.length) renderCrawlResults(results)
     }
 
@@ -2452,7 +2452,7 @@ function pickDirectUrl(url) {
     url = normalizeHttpUrl(url)
     if (!url) return []
     if (isDirectVideoUrl(url)) {
-      const name = url.split('/').pop().replace(/\.(m3u8|mp4|mpd)/i, '') || '直链视频'
+      const name = url.split('/').pop().replace(/\.(m3u8|mp4|mpd)/i, '') || mt('directVideo')
       const results = [{ name, url, thumb: '', type: 'direct' }]
       onFirstMatch?.(name, url)
       return results
@@ -2461,17 +2461,17 @@ function pickDirectUrl(url) {
     // 云盘检测
     const panDomains = ['pan.baidu.com', 'yun.baidu.com', 'wangpan.cn', 'uc.cn', 'quark.cn']
     if (panDomains.some(d => url.includes(d))) {
-      showCrawlStatus('☁️ 检测到云盘链接，尝试解析...', 'loading')
+      showCrawlStatus(mt('cloudLinkDetected'), 'loading')
       try {
         const resp = await fetch('https://api.pan666.cn/?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined })
         const json = await resp.json().catch(() => null)
-        if (json && json.url) { onFirstMatch?.('云盘直链', json.url); return [{ name: '云盘直链', url: json.url, thumb: '', type: 'direct' }] }
+        if (json && json.url) { const cloudName = mt('cloudDirectLink'); onFirstMatch?.(cloudName, json.url); return [{ name: cloudName, url: json.url, thumb: '', type: 'direct' }] }
       } catch {}
-      return [{ name: '云盘待解析', url, thumb: '', type: 'cloud' }]
+      return [{ name: mt('cloudPendingParse'), url, thumb: '', type: 'cloud' }]
     }
 
     let html = ''
-    try { html = await crawlFetch(url) } catch (e) { showCrawlStatus('❌ 页面获取失败: ' + e.message, 'error'); return [] }
+    try { html = await crawlFetch(url) } catch (e) { showCrawlStatus(mt('pageFetchFailed', { msg: e.message }), 'error'); return [] }
 
     const thumb = extractThumb(html)
     let domain = ''
@@ -2810,16 +2810,16 @@ function pickDirectUrl(url) {
   function renderCrawlResults(results) {
     const container = el.querySelector('#t-crawl-results')
     if (!results || results.length === 0) {
-      container.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">🔍</div><div class="tvbox-empty-title">未找到视频</div><div class="tvbox-empty-sub">该页面无法提取视频链接，可能是非视频类网站或需要登录</div></div>'
+      container.innerHTML = `<div class="tvbox-empty"><div class="tvbox-empty-icon">🔍</div><div class="tvbox-empty-title">${mt('crawlNoVideoTitle')}</div><div class="tvbox-empty-sub">${mt('crawlNoVideoSubtitle')}</div></div>`
       showCrawlStatus('', 'info')
       return
     }
-    showCrawlStatus('✅ 找到 ' + results.length + ' 个可播放链接', 'success')
+    showCrawlStatus(mt('crawlPlayableCount', { count: results.length }), 'success')
 
     // 导出按钮
     const exportBar = '<div style="display:flex;gap:10px;margin-bottom:16px">' +
-      '<button id="_crawl-export-json" class="tvbox-crawl-btn" style="flex:1">📥 导出 JSON</button>' +
-      '<button id="_crawl-export-m3u" class="tvbox-crawl-btn" style="flex:1">📄 导出 M3U</button></div>'
+      `<button id="_crawl-export-json" class="tvbox-crawl-btn" style="flex:1">📥 ${mt('exportJson')}</button>` +
+      `<button id="_crawl-export-m3u" class="tvbox-crawl-btn" style="flex:1">📄 ${mt('exportM3u')}</button></div>`
     container.innerHTML = exportBar + '<div class="tvbox-grid">' + results.map((r, i) => {
       const typeIcon = { direct: '🎬', m3u8: '📺', mp4: '🎞️', dash: '📡', m4s: '🎞️', cloud: '☁️', link: '🔗' }[r.type] || '📺'
       const picHtml = r.thumb
@@ -2899,17 +2899,16 @@ function pickDirectUrl(url) {
     overlay.className = 'tvbox-url-overlay'
     overlay.innerHTML = `
       <div class="tvbox-url-box">
-        <div class="tvbox-url-title">🔗 链接解析播放</div>
+        <div class="tvbox-url-title">🔗 ${mt('urlParserTitle')}</div>
         <div class="tvbox-url-err" id="_urlerr"></div>
         <div class="tvbox-url-row">
-          <input id="_urlin" type="url" placeholder="粘贴视频页面 URL、m3u8 直链或分享页链接..." autofocus />
-          <button class="tvbox-url-go" id="_urlgo">解析</button>
+          <input id="_urlin" type="url" placeholder="${mt('urlParserPlaceholder')}" autofocus />
+          <button class="tvbox-url-go" id="_urlgo">${mt('parse')}</button>
         </div>
         <div class="tvbox-url-hint">
-          支持：<span>m3u8/MP4 直链</span>、<span>量子/暴风分享页</span>、<span>任意视频页 URL</span><br>
-          提示：解析结果会尽可能提取直链 m3u8，无法提取时显示说明
+          ${mt('urlParserHint')}
         </div>
-        <button class="tvbox-url-cancel" id="_urlcancel">取消</button>
+        <button class="tvbox-url-cancel" id="_urlcancel">${mt('cancel')}</button>
       </div>`
 
     document.body.appendChild(overlay)
@@ -2925,18 +2924,18 @@ function pickDirectUrl(url) {
 
     async function doUrlParse(rawUrl) {
       const parsedUrl = normalizeHttpUrl(rawUrl)
-      if (!parsedUrl) { showErr('请输入有效的 http/https 链接'); return }
+      if (!parsedUrl) { showErr(mt('invalidHttpLink')); return }
       inp.value = parsedUrl
       clearErr()
       const goBtn = overlay.querySelector('#_urlgo')
       goBtn.disabled = true
-      goBtn.textContent = '解析中...'
+      goBtn.textContent = mt('parsing')
 
       try {
         // 直链直接播
         if (isDirectVideoUrl(parsedUrl)) {
           overlay.remove()
-          openFloatPlayer('直链播放', parsedUrl, parsedUrl, 'url_input', '直链播放', '', [parsedUrl], 0)
+          openFloatPlayer(mt('directPlayback'), parsedUrl, parsedUrl, 'url_input', mt('directPlayback'), '', [parsedUrl], 0)
           return
         }
 
@@ -2944,27 +2943,27 @@ function pickDirectUrl(url) {
         const isLzShare = /\/share\//.test(parsedUrl) || parsedUrl.includes('v.lfthirtytwo.com') || parsedUrl.includes('vip.lz-')
         if (isLzShare) {
           overlay.remove()
-          openFloatPlayer('解析中', parsedUrl, parsedUrl, 'share_page', '解析中', '', [parsedUrl], 0)
+          openFloatPlayer(mt('parsing'), parsedUrl, parsedUrl, 'share_page', mt('parsing'), '', [parsedUrl], 0)
           // 先尝试用 vod_fetch 找详情接口
           await tryExtractFromSharePage(parsedUrl)
           return
         }
 
         // 其他页面 → 尝试复用爬虫解析，避免“无法解析”假播放旧状态
-        showErr('正在解析页面，请稍候...')
+        showErr(mt('parsingPageWait'))
         const results = await crawlSite(parsedUrl, null)
         const playable = results.filter(r => r?.url && (isDirectVideoUrl(r.url) || r.type !== 'cloud'))
         if (playable.length) {
           const first = playable[0]
           overlay.remove()
-          playCrawlVideo(first.name || '解析结果', first.url, 0, [], playable.map(r => r.url))
+          playCrawlVideo(first.name || mt('parseResult'), first.url, 0, [], playable.map(r => r.url))
           return
         }
-        showErr('未提取到可播放链接，可切换到“网站爬虫”进行深度嗅探')
+        showErr(mt('noPlayableUrlDeepSniffHint'))
       } finally {
         if (document.body.contains(overlay)) {
           goBtn.disabled = false
-          goBtn.textContent = '解析'
+          goBtn.textContent = mt('parse')
         }
       }
     }
@@ -2982,7 +2981,7 @@ function pickDirectUrl(url) {
     // 无法直接提取 hash → vod_id 映射，改用 iframe 尝试
     const vidWrap = document.querySelector('#_fvid')
     if (vidWrap) {
-      vidWrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">⚠️ 分享页需浏览器打开防盗链</div>'
+      vidWrap.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">${mt('sharePageBrowserRequired')}</div>`
     }
     // 更新说明
     const urlBar = document.querySelector('.tvbox-float-url-bar')
