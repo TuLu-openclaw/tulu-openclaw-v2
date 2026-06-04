@@ -3106,15 +3106,16 @@ function scheduleStreamSafetyTimeout() {
     }
 
     const timeoutText = t('chat.streamTimeout')
-    console.warn('[chat] 流式安全检查发现非活动状态长时间无事件，改为保守等待并刷新历史:', runId || '(no-run)', activeState)
-    appendSystemMessage(timeoutText)
-    setReplyStatus('waiting', timeoutText, { runId, activity: t('chat.replyActivityRefreshHistory') })
-    resetStreamState()
+    console.warn('[chat] 流式安全检查发现状态暂时不活跃，但仍保留任务等待并刷新历史:', runId || '(no-run)', activeState)
+    const waitState = activeState && !['done', 'error', 'aborted'].includes(activeState) ? activeState : 'thinking'
+    setReplyStatus(waitState, timeoutText, { runId, activity: t('chat.replyActivityRefreshHistory') })
     if (_sessionKey && _messagesEl && _pageActive) {
       _lastHistoryHash = ''
       loadHistory().catch(() => {})
     }
-    processMessageQueue()
+    showTyping(true, timeoutText)
+    scheduleRuntimeStatusSync('quiet-timeout')
+    scheduleStreamSafetyTimeout()
   }, STREAM_IDLE_NOTICE_MS)
 }
 
