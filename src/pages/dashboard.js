@@ -4,6 +4,7 @@
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
+import { wsClient } from '../lib/ws-client.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
@@ -245,8 +246,21 @@ async function openGatewayConflict(page, error = null, reason = null) {
   })
 }
 
+function formatGatewayReconnectState(state) {
+  const key = String(state || 'idle').toLowerCase()
+  const labels = {
+    idle: t('dashboard.reconnectIdle'),
+    scheduled: t('dashboard.reconnectScheduled'),
+    attempting: t('dashboard.reconnectAttempting'),
+  }
+  return labels[key] || t('dashboard.reconnectUnknown', { state: key })
+}
+
 function gatewayDashboardStatus() {
   const state = getGatewayHealthState()
+  const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+  const reconnectLabel = formatGatewayReconnectState(wsInfo?.reconnectState)
+  const phase = wsInfo?.phase || wsInfo?.status || t('common.unknown')
   if (state.foreign) {
     return {
       text: t('dashboard.externalInstance'),
@@ -257,27 +271,52 @@ function gatewayDashboardStatus() {
   if (state.health === 'running') {
     return {
       text: t('dashboard.gatewayReady'),
-      meta: t('dashboard.gatewayReadyMeta'),
+      meta: t('dashboard.gatewayRunningDetail', {
+        phase,
+        ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
+        handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
+      }),
       tone: 'running',
     }
   }
   if (state.health === 'degraded') {
+    const detailKey = state?.reason ? 'gatewayDegradedDetailWithReason' : 'gatewayDegradedDetail'
     return {
       text: t('dashboard.gatewayDegraded'),
-      meta: t('dashboard.gatewayDegradedMeta'),
+      meta: t(`dashboard.${detailKey}`, {
+        phase,
+        ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
+        handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
+        reason: state?.reason || t('dashboard.gatewayDegradedMeta'),
+        reconnect: reconnectLabel,
+      }),
       tone: 'warning',
     }
   }
   if (state.health === 'recovering') {
     return {
       text: t('dashboard.gatewayRecovering'),
-      meta: t('dashboard.gatewayRecoveringMeta'),
+      meta: t('dashboard.gatewayRecoveringDetail', { phase, reconnect: reconnectLabel }),
+      tone: 'warning',
+    }
+  }
+  if (state.health === 'starting') {
+    return {
+      text: t('dashboard.gatewayRecovering'),
+      meta: t('dashboard.gatewayStartingDetail', {
+        phase,
+        ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
+        handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
+      }),
       tone: 'warning',
     }
   }
   return {
     text: t('common.stopped'),
-    meta: t('dashboard.notStarted'),
+    meta: t('dashboard.gatewayStoppedDetail', {
+      ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
+      handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
+    }),
     tone: 'stopped',
   }
 }

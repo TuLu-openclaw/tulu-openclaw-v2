@@ -12,12 +12,23 @@ import { diagnoseInstallError } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
+function formatGatewayReconnectState(state) {
+  const key = String(state || 'idle').toLowerCase()
+  const labels = {
+    idle: t('services.reconnectIdle'),
+    scheduled: t('services.reconnectScheduled'),
+    attempting: t('services.reconnectAttempting'),
+  }
+  return labels[key] || t('services.reconnectUnknown', { state: key })
+}
+
 // HTML 转义，防止 XSS
 function getGatewayUiSnapshot(service) {
   const state = getGatewayHealthState()
   const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
   const health = state?.health || 'unknown'
   const reconnectState = wsInfo?.reconnectState || 'idle'
+  const reconnectLabel = formatGatewayReconnectState(reconnectState)
   const gatewayReady = !!wsInfo?.gatewayReady
   const wsConnected = !!wsInfo?.connected
   const lastCheckLabel = state?.lastCheckAt ? new Date(state.lastCheckAt).toLocaleTimeString() : t('common.unknown')
@@ -50,7 +61,7 @@ function getGatewayUiSnapshot(service) {
     t('services.gatewayDetailStatus', { status: statusText }),
     t('services.gatewayDetailWs', { status: wsConnected ? t('services.connected') : t('services.notConnected') }),
     t('services.gatewayDetailHandshake', { status: gatewayReady ? t('services.completed') : t('services.notCompleted') }),
-    t('services.gatewayDetailReconnect', { state: reconnectState }),
+    t('services.gatewayDetailReconnect', { state: reconnectLabel }),
     t('services.gatewayDetailLastCheck', { time: lastCheckLabel }),
   ]
 
