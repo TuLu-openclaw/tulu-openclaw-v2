@@ -349,8 +349,10 @@ async function handleSaveStandaloneInstallDir(page) {
   const input = page.querySelector('[data-name="standalone-install-dir"]')
   const value = (input?.value || '').trim()
   const cfg = await api.readPanelConfig()
-  if (value) cfg.openclawStandaloneInstallDir = value
-  else delete cfg.openclawStandaloneInstallDir
+  if (value) {
+    cfg.openclawStandaloneInstallDir = value
+    mergeOpenclawSearchPath(cfg, value)
+  } else delete cfg.openclawStandaloneInstallDir
   await savePanelConfigAndRefreshPaths(cfg)
   await loadStandaloneInstallDir(page)
   await loadCliBinding(page)
@@ -406,6 +408,17 @@ function parseOpenclawSearchPaths(raw) {
     values.push(value)
   }
   return values
+}
+
+function mergeOpenclawSearchPath(config, pathValue) {
+  const value = String(pathValue || '').trim()
+  if (!value) return false
+  const paths = Array.isArray(config.openclawSearchPaths) ? [...config.openclawSearchPaths] : []
+  const exists = paths.some(item => String(item || '').trim().toLowerCase() === value.toLowerCase())
+  if (exists) return false
+  paths.push(value)
+  config.openclawSearchPaths = paths
+  return true
 }
 
 async function savePanelConfigAndRefreshPaths(config) {
@@ -851,6 +864,7 @@ async function handleUseCliInstallDir(page, path) {
   if (!ok) return
   const cfg = await api.readPanelConfig()
   cfg.openclawStandaloneInstallDir = dir
+  mergeOpenclawSearchPath(cfg, dir)
   await savePanelConfigAndRefreshPaths(cfg)
   await loadStandaloneInstallDir(page)
   await loadCliBinding(page)
