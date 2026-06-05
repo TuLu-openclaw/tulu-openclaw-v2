@@ -5,6 +5,11 @@
   nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM "${PROC_NAME}"'
 !macroend
 
+!macro _CLEAR_XINGSHU_SELF_EXIT_SIGNAL
+  Delete "$PROFILE\.openclaw\星枢OpenClaw\install-shutdown.signal"
+  Delete "$LOCALAPPDATA\星枢OpenClaw\install-shutdown.signal"
+!macroend
+
 !macro _REQUEST_XINGSHU_SELF_EXIT
   DetailPrint "Requesting running XingShu/OpenClaw to exit..."
   CreateDirectory "$PROFILE\.openclaw\星枢OpenClaw"
@@ -30,36 +35,29 @@
   Sleep 3000
 !macroend
 
-!macro _UNLOCK_OLD_XINGSHU_EXE
+!macro _CLEAN_FAILED_INSTALL_LEFTOVERS
   ; Remove previous failed-install leftovers. Do not use /REBOOTOK and do not create new .old files.
   ${If} ${FileExists} "$INSTDIR\XingShu.exe.old"
     Delete "$INSTDIR\XingShu.exe.old"
   ${EndIf}
-
-  ${If} ${FileExists} "$INSTDIR\XingShu.exe"
-    ClearErrors
-    Delete "$INSTDIR\XingShu.exe"
-    ${If} ${Errors}
-      DetailPrint "Old XingShu.exe is still locked after self-exit signal and hidden taskkill."
-      MessageBox MB_ICONSTOP|MB_OK "安装器无法替换旧版 XingShu.exe。旧版程序或 Windows WebView2 子进程仍占用文件。请打开任务管理器结束 XingShu.exe 后重新安装。新版安装后，后续更新会通过自退出信号自动退出。"
-      Abort
-    ${EndIf}
-  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
+  !insertmacro _CLEAR_XINGSHU_SELF_EXIT_SIGNAL
   SetRebootFlag false
   !insertmacro _CLOSE_XINGSHU_PROCESSES
-  !insertmacro _UNLOCK_OLD_XINGSHU_EXE
+  !insertmacro _CLEAN_FAILED_INSTALL_LEFTOVERS
   SetRebootFlag false
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  !insertmacro _CLEAR_XINGSHU_SELF_EXIT_SIGNAL
   SetRebootFlag false
   !insertmacro _CLOSE_XINGSHU_PROCESSES
   SetRebootFlag false
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  !insertmacro _CLEAR_XINGSHU_SELF_EXIT_SIGNAL
   SetRebootFlag false
 !macroend

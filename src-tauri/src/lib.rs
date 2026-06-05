@@ -67,7 +67,17 @@ fn start_install_shutdown_watcher(app: tauri::AppHandle) {
         }
 
         loop {
-            if signal_paths.iter().any(|path| path.is_file()) {
+            let now = std::time::SystemTime::now();
+            let fresh_signal = signal_paths.iter().any(|path| {
+                path.metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+                    .and_then(|modified| now.duration_since(modified).ok())
+                    .map(|age| age <= std::time::Duration::from_secs(120))
+                    .unwrap_or(false)
+            });
+
+            if fresh_signal {
                 for path in &signal_paths {
                     let _ = std::fs::remove_file(path);
                 }
