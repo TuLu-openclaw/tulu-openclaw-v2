@@ -171,8 +171,25 @@ export async function detectOpenclawStatus() {
   return _openclawReady
 }
 
-function _emitGatewayState() {
+let _lastGatewayEmitSignature = ''
+
+function _gatewayEmitSignature(snapshot) {
+  // lastCheckAt 每次轮询都会变，不能作为 UI 刷新触发条件，否则 dashboard 会自激循环刷新。
+  return JSON.stringify({
+    running: !!snapshot.running,
+    foreign: !!snapshot.foreign,
+    health: snapshot.health || 'unknown',
+    recovering: !!snapshot.recovering,
+    autoRestartCount: snapshot.autoRestartCount || 0,
+    userStopped: !!snapshot.userStopped,
+  })
+}
+
+function _emitGatewayState(force = false) {
   const snapshot = getGatewayHealthState()
+  const signature = _gatewayEmitSignature(snapshot)
+  if (!force && signature === _lastGatewayEmitSignature) return
+  _lastGatewayEmitSignature = signature
   _gwListeners.forEach(fn => {
     try { fn(snapshot.running, snapshot.foreign, snapshot) } catch {}
   })

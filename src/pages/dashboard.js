@@ -10,6 +10,8 @@ import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
 
 let _unsubGw = null
+let _unsubWsStatus = null
+let _unsubWsReady = null
 let _dashboardReloadTimer = null
 const _dashboardActionTimers = new Set()
 
@@ -80,9 +82,19 @@ export async function render() {
   })
   page.__retryLoad = () => loadDashboardData(page).catch(() => {})
 
-  // 监听 Gateway 状态变化，自动刷新仪表盘
+  // 监听 Gateway / WebSocket 状态变化，自动刷新仪表盘。
+  // Gateway 端口状态和 WS 握手状态是两条链路；dashboard 不能只监听端口状态，
+  // 否则会出现“必须切到 chat 页才显示连接成功”的假象。
   if (_unsubGw) _unsubGw()
+  if (_unsubWsStatus) _unsubWsStatus()
+  if (_unsubWsReady) _unsubWsReady()
   _unsubGw = onGatewayChange(() => {
+    scheduleDashboardReload(page)
+  })
+  _unsubWsStatus = wsClient.onStatusChange(() => {
+    scheduleDashboardReload(page)
+  })
+  _unsubWsReady = wsClient.onReady(() => {
     scheduleDashboardReload(page)
   })
 
@@ -91,6 +103,8 @@ export async function render() {
 
 export function cleanup() {
   if (_unsubGw) { _unsubGw(); _unsubGw = null }
+  if (_unsubWsStatus) { _unsubWsStatus(); _unsubWsStatus = null }
+  if (_unsubWsReady) { _unsubWsReady(); _unsubWsReady = null }
   if (_dashboardReloadTimer) { clearTimeout(_dashboardReloadTimer); _dashboardReloadTimer = null }
   for (const timer of _dashboardActionTimers) clearTimeout(timer)
   _dashboardActionTimers.clear()
