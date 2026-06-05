@@ -27,11 +27,13 @@ const GUARDIAN_INTERVAL: Duration = Duration::from_secs(15);
 const GUARDIAN_RESTART_COOLDOWN: Duration = Duration::from_secs(60);
 const GUARDIAN_STABLE_WINDOW: Duration = Duration::from_secs(120);
 const GUARDIAN_MAX_AUTO_RESTART: u32 = 3;
+const GUARDIAN_FAILURE_THRESHOLD: u32 = 3;
 
 #[derive(Debug, Default)]
 struct GuardianRuntimeState {
     last_seen_running: Option<bool>,
     running_since: Option<Instant>,
+    consecutive_failures: u32,
     auto_restart_count: u32,
     last_restart_time: Option<Instant>,
     manual_hold: bool,
@@ -274,6 +276,7 @@ pub(crate) fn guardian_mark_manual_stop() {
     state.manual_hold = true;
     state.give_up = false;
     state.auto_restart_count = 0;
+    state.consecutive_failures = 0;
     state.last_restart_time = None;
     state.running_since = None;
     guardian_log("用户主动停止 Gateway，后端守护进入手动停机保持状态");
@@ -284,6 +287,7 @@ pub(crate) fn guardian_mark_manual_start() {
     state.manual_hold = false;
     state.give_up = false;
     state.auto_restart_count = 0;
+    state.consecutive_failures = 0;
     state.last_restart_time = None;
     state.running_since = None;
     guardian_log("用户主动启动/恢复 Gateway，后端守护已重置自动重启状态");
@@ -341,12 +345,16 @@ async fn guardian_tick(app: &tauri::AppHandle) {
         if state.last_seen_running.is_none() {
             state.last_seen_running = Some(running);
             state.running_since = running.then_some(now);
+            state.consecutive_failures = 0;
             return;
         }
 
         if !ready {
             state.last_seen_running = Some(running);
             state.running_since = running.then_some(now);
+            if running {
+                state.consecutive_failures = 0;
+            }
             return;
         }
 
@@ -357,6 +365,9 @@ async fn guardian_tick(app: &tauri::AppHandle) {
             } else {
                 None
             };
+            if running {
+                state.consecutive_failures = 0;
+            }
             return;
         }
 
@@ -366,6 +377,7 @@ async fn guardian_tick(app: &tauri::AppHandle) {
                     state.manual_hold = false;
                     state.give_up = false;
                     state.auto_restart_count = 0;
+                    state.consecutive_failures = 0;
                     state.last_restart_time = None;
                     guardian_log("检测到 Gateway 已重新运行，后端守护已退出手动停机/放弃状态");
                 }
@@ -379,11 +391,23 @@ async fn guardian_tick(app: &tauri::AppHandle) {
                     .unwrap_or(false)
             {
                 state.auto_restart_count = 0;
+                state.consecutive_failures = 0;
                 state.last_restart_time = None;
                 guardian_log("Gateway 已稳定运行，后端守护已清零自动重启计数");
             }
 
+            state.consecutive_failures = 0;
             state.last_seen_running = Some(true);
+            return;
+        }
+
+        state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+        guardian_log(&format!(
+            "Gateway 状态检测失败 ({}/{})，先保持现状不重启，避免低配机器瞬时抖动触发重连",
+            state.consecutive_failures, GUARDIAN_FAILURE_THRESHOLD
+        ));
+
+        if state.consecutive_failures < GUARDIAN_FAILURE_THRESHOLD {
             return;
         }
 
@@ -412,6 +436,7 @@ async fn guardian_tick(app: &tauri::AppHandle) {
             (restart_attempt, emit_give_up)
         } else {
             state.auto_restart_count += 1;
+            state.consecutive_failures = 0;
             state.last_restart_time = Some(now);
             restart_attempt = Some(state.auto_restart_count);
             (restart_attempt, emit_give_up)
@@ -471,12 +496,8 @@ pub fn start_backend_guardian(app: tauri::AppHandle) {
         return;
     }
 
-    // Windows 重启后清理残留的僵尸 Gateway 进程（防止多进程堆积）
-    #[cfg(target_os = "windows")]
-    {
-        platform::cleanup_zombie_gateway_processes();
-    }
-
+    // 守护启动本身不做进程扫描/清理，避免应用启动热路径触发 netstat/WMIC/lsof/fuser。
+    // 残留清理只放在“端口不通且确实准备启动 Gateway”的冷路径里。
     guardian_log("后端守护循环已启动");
     tauri::async_runtime::spawn(async move {
         loop {
@@ -560,7 +581,7 @@ mod platform {
         format!("{}/Library/LaunchAgents/{}.plist", home.display(), label)
     }
 
-    /// 跨平台统一检测：TCP 连端口 + lsof 获取 PID
+    /// 跨平台统一检测：普通状态轮询只做 TCP 连通性检测，不查 PID，避免 lsof 等系统命令造成低配机器抖动。
     pub fn check_service_status(_uid: u32, _label: &str) -> (bool, Option<u32>) {
         let port = crate::commands::gateway_listen_port();
         let addr = format!("127.0.0.1:{port}");
@@ -568,25 +589,13 @@ mod platform {
             Ok(a) => a,
             Err(_) => return (false, None),
         };
-        match std::net::TcpStream::connect_timeout(&socket_addr, std::time::Duration::from_secs(1))
-        {
-            Ok(_) => {
-                // 尝试通过 lsof 获取 PID
-                let pid = get_pid_by_lsof(port);
-                (true, pid)
-            }
+        match std::net::TcpStream::connect_timeout(
+            &socket_addr,
+            std::time::Duration::from_millis(500),
+        ) {
+            Ok(_) => (true, None),
             Err(_) => (false, None),
         }
-    }
-
-    /// 通过 lsof 获取监听指定端口的进程 PID
-    fn get_pid_by_lsof(port: u16) -> Option<u32> {
-        let output = Command::new("lsof")
-            .args(["-i", &format!("TCP:{}", port), "-sTCP:LISTEN", "-t"])
-            .output()
-            .ok()?;
-        let text = String::from_utf8_lossy(&output.stdout);
-        text.lines().next()?.trim().parse::<u32>().ok()
     }
 
     /// launchctl 失败时的回退：直接通过 CLI spawn Gateway 进程
@@ -1417,7 +1426,7 @@ mod platform {
         vec!["ai.openclaw.gateway".to_string()]
     }
 
-    /// 跨平台统一检测：TCP 连端口
+    /// 跨平台统一检测：普通状态轮询只做 TCP 连通性检测，不查 PID，避免 fuser/lsof 等系统命令造成低配机器抖动。
     #[allow(dead_code)]
     pub async fn check_service_status(_uid: u32, _label: &str) -> (bool, Option<u32>) {
         let port = crate::commands::gateway_listen_port();
@@ -1426,79 +1435,16 @@ mod platform {
             Ok(a) => a,
             Err(_) => return (false, None),
         };
-        let port_u16 = port;
         let result = tokio::task::spawn_blocking(move || {
-            std::net::TcpStream::connect_timeout(&socket_addr, std::time::Duration::from_secs(1))
-                .is_ok()
+            std::net::TcpStream::connect_timeout(
+                &socket_addr,
+                std::time::Duration::from_millis(500),
+            )
+            .is_ok()
         })
         .await
         .unwrap_or(false);
-        if !result {
-            return (false, None);
-        }
-        // Windows：用 netstat 查询端口占用进程的 PID
-        #[cfg(target_os = "windows")]
-        {
-            let output = std::process::Command::new("netstat")
-                .args(["-ano", "-p", "TCP"])
-                .output();
-            if let Ok(output) = output {
-                let lines = String::from_utf8_lossy(&output.stdout);
-                for line in lines.lines() {
-                    let line = line.trim();
-                    if line.contains(&format!(":{port_u16}")) && line.contains("LISTENING") {
-                        let parts: Vec<&str> = line.split_whitespace().collect();
-                        if parts.len() >= 5 {
-                            if let Ok(pid) = parts[4].parse::<u32>() {
-                                return (true, Some(pid));
-                            }
-                        }
-                    }
-                }
-            }
-            (true, None)
-        }
-
-        // non-Windows：先用 fuser（Linux）或 lsof（macOS）查 PID
-        #[cfg(target_os = "linux")]
-        {
-            let output = std::process::Command::new("fuser")
-                .args([&format!("{port_u16}/tcp")])
-                .output();
-            if let Ok(output) = output {
-                let s = String::from_utf8_lossy(&output.stdout);
-                for pid_str in s.split_whitespace() {
-                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                        return (true, Some(pid));
-                    }
-                }
-            }
-            (true, None)
-        }
-
-        #[cfg(target_os = "macos")]
-        {
-            let output = std::process::Command::new("lsof")
-                .args(["-i", &format!(":{port_u16}"), "-t"])
-                .output();
-            if let Ok(output) = output {
-                let s = String::from_utf8_lossy(&output.stdout);
-                let pid = s.trim().parse::<u32>();
-                if let Ok(pid) = pid {
-                    return (true, Some(pid));
-                }
-            }
-            return (true, None);
-        }
-
-        #[cfg(all(
-            not(target_os = "windows"),
-            not(target_os = "linux"),
-            not(target_os = "macos")
-        ))]
-        {
-            (result, None)
-        }
+        (result, None)
     }
 
     /// 清理残留的 Gateway 进程（跨平台：通过 fuser/lsof 查端口占用进程并 kill）
