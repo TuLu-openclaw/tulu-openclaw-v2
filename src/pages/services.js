@@ -45,9 +45,52 @@ function formatGatewayWsPhase(status) {
     '连接已断开': t('services.wsPhaseDisconnected'),
     '正在生成身份验证信息': t('services.wsPhaseAuthenticating'),
     '认证失败': t('services.wsPhaseAuthFailed'),
+    '正在刷新 Gateway Token': t('services.wsPhaseAuthRefreshing'),
+    'Gateway Token 已刷新': t('services.wsPhaseAuthRefreshed'),
+    '握手失败': t('services.wsPhaseHandshakeFailed'),
+    '自动修复失败': t('services.wsPhaseAutoFixFailed'),
+    '重连次数过多': t('services.wsPhaseReconnectExhausted'),
+    '网关连接已就绪': t('services.wsPhaseReady'),
     '网关已就绪': t('services.wsPhaseReady'),
   }
   return zhLabels[raw] || raw || t('common.unknown')
+}
+
+function formatGatewayWsDetail(detail) {
+  const raw = String(detail || '').trim()
+  if (!raw) return ''
+  const endpoint = raw.match(/^wss?:\/\//i) ? raw : null
+  if (endpoint) return t('services.wsDetailEndpoint', { endpoint })
+  if (/^agent:[^\s]+/i.test(raw)) return t('services.wsDetailSession', { session: raw })
+  const reconnectMatch = raw.match(/^第\s*(\d+)\/(\d+)\s*次重连，\s*(\d+)\s*秒后重试$/)
+  if (reconnectMatch) {
+    return t('services.wsDetailReconnectScheduled', {
+      current: reconnectMatch[1],
+      total: reconnectMatch[2],
+      seconds: reconnectMatch[3],
+    })
+  }
+  const autoPairMatch = raw.match(/^正在执行自动配对（第\s*(\d+)\s*次）$/)
+  if (autoPairMatch) return t('services.wsDetailAutoPairing', { count: autoPairMatch[1] })
+  const pairingFailed = raw.match(/^配对失败[:：]\s*(.+)$/)
+  if (pairingFailed) return t('services.wsDetailPairingFailed', { reason: pairingFailed[1] })
+  const zhDetails = {
+    '等待网关下发 connect.challenge': t('services.wsDetailWaitingChallenge'),
+    '网关未及时返回握手指令，客户端正在主动发起连接': t('services.wsDetailChallengeFallback'),
+    'Gateway Token 不匹配，自动刷新失败；请点击“修复并重连”重新同步本地配置': t('services.wsDetailAuthRefreshFailed'),
+    '检测到来源限制，正在重新配对并重连': t('services.wsDetailOriginPairing'),
+    '来源受限，请点击修复并重连': t('services.wsDetailOriginBlocked'),
+    '来源受限，请点击“修复并重连”': t('services.wsDetailOriginBlocked'),
+    'WebSocket 发生异常，请稍后重试': t('services.wsDetailSocketError'),
+    '正在生成身份验证信息': t('services.wsDetailGeneratingAuth'),
+    '检测到认证失败，正在重新读取本地 Gateway 配置并重连': t('services.wsDetailAuthRefreshing'),
+    '已读取最新本地 token，正在重连': t('services.wsDetailTokenRefreshed'),
+    '正在发送带签名的 connect frame': t('services.wsDetailSendingSignedConnect'),
+    '网关未返回 challenge，客户端主动发起连接': t('services.wsDetailSendingFallbackConnect'),
+    'WebSocket 未处于可发送状态': t('services.wsDetailSocketNotSendable'),
+    '已停止自动重连，请手动刷新页面重试': t('services.wsDetailReconnectExhausted'),
+  }
+  return zhDetails[raw] || raw
 }
 
 // HTML 转义，防止 XSS
@@ -85,11 +128,13 @@ function getGatewayUiSnapshot(service) {
     statusText = t('services.gatewayStarting')
   }
 
+  const phaseDetail = formatGatewayWsDetail(wsInfo?.statusDetail)
   const details = [
     t('services.gatewayDetailStatus', { status: statusText }),
     t('services.gatewayDetailWs', { status: wsConnected ? t('services.connected') : t('services.notConnected') }),
     t('services.gatewayDetailHandshake', { status: gatewayReady ? t('services.completed') : t('services.notCompleted') }),
     t('services.gatewayDetailPhase', { phase: formatGatewayWsPhase(wsInfo?.phase || wsInfo?.status) }),
+    ...(phaseDetail ? [t('services.gatewayDetailReason', { reason: phaseDetail })] : []),
     t('services.gatewayDetailReconnect', { state: reconnectLabel }),
     t('services.gatewayDetailLastCheck', { time: lastCheckLabel }),
   ]
