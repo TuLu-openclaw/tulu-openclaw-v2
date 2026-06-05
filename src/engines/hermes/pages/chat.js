@@ -738,6 +738,29 @@ export function render() {
     `
   }
 
+  function formatHermesToolName(name = '') {
+    const raw = String(name || '').trim()
+    const lower = raw.toLowerCase()
+    const normalized = lower.replace(/[.-]/g, '_')
+    const leaf = lower.split(/[.:/]/).filter(Boolean).pop() || lower
+    const leafNormalized = leaf.replace(/[.-]/g, '_')
+    const map = {
+      bash: t('chat.toolNameExec'), shell: t('chat.toolNameExec'), exec: t('chat.toolNameExec'),
+      process: t('chat.toolNameProcess'), read: t('chat.toolNameRead'), write: t('chat.toolNameWrite'), edit: t('chat.toolNameEdit'),
+      memory_search: t('chat.toolNameMemorySearch'), memory_get: t('chat.toolNameMemoryGet'), web_search: t('chat.toolNameWebSearch'), web_fetch: t('chat.toolNameWebFetch'),
+      image: t('chat.toolNameImage'), image_generate: t('chat.toolNameImageGenerate'), video_generate: t('chat.toolNameVideoGenerate'), pdf: t('chat.toolNamePdf'),
+      message: t('chat.toolNameMessage'), cron: t('chat.toolNameCron'), canvas: t('chat.toolNameCanvas'), update_plan: t('chat.toolNameUpdatePlan'),
+      tool: t('chat.tool'),
+    }
+    if (map[normalized]) return map[normalized]
+    if (normalized.startsWith('functions_') && map[normalized.slice('functions_'.length)]) return map[normalized.slice('functions_'.length)]
+    if (normalized.startsWith('tools_') && map[normalized.slice('tools_'.length)]) return map[normalized.slice('tools_'.length)]
+    if (map[leafNormalized]) return map[leafNormalized]
+    if (!raw) return t('chat.tool')
+    const readable = leafNormalized.split('_').filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+    return readable || t('chat.toolNameUnknown')
+  }
+
   function renderToolMessage(m) {
     const expanded = expandedToolIds.has(m.id)
     const hasDetails = !!(m.toolArgs || m.toolResult)
@@ -747,7 +770,7 @@ export function render() {
           ${hasDetails
             ? `<span class="hm-chat-tool-chevron ${expanded ? 'is-open' : ''}">${ICONS.chevron}</span>`
             : `<span class="hm-chat-tool-icon">${ICONS.tool}</span>`}
-          <span class="hm-chat-tool-name">${escHtml(m.toolName || 'tool')}</span>
+          <span class="hm-chat-tool-name">${escHtml(formatHermesToolName(m.toolName))}</span>
           ${!expanded && m.toolPreview ? `<span class="hm-chat-tool-preview">${escHtml(m.toolPreview)}</span>` : ''}
           ${m.toolStatus === 'running' ? `<span class="hm-chat-tool-spinner"></span>` : ''}
           ${m.toolStatus === 'error' ? `<span class="hm-chat-tool-err">${escHtml(t('engine.chatErrorBadge'))}</span>` : ''}
@@ -821,7 +844,7 @@ export function render() {
             ${tools.slice().reverse().map(tc => `
               <div class="hm-chat-live-tool">
                 <span class="hm-chat-live-tool-icon">${ICONS.tool}</span>
-                <span class="hm-chat-live-tool-name">${escHtml(tc.name)}</span>
+                <span class="hm-chat-live-tool-name">${escHtml(formatHermesToolName(tc.name))}</span>
                 ${tc.preview ? `<span class="hm-chat-live-tool-preview">${escHtml(tc.preview)}</span>` : ''}
                 ${tc.status === 'running' ? `<span class="hm-chat-tool-spinner"></span>` : ''}
                 ${tc.status === 'error' ? `<span class="hm-chat-tool-err">${escHtml(t('engine.chatErrorBadge'))}</span>` : ''}
