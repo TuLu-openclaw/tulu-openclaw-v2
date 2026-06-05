@@ -1,71 +1,48 @@
 !include LogicLib.nsh
 
-!macro _TASKKILL_EXE PROC_NAME
-  DetailPrint "Force closing ${PROC_NAME}..."
-  ClearErrors
-  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "${PROC_NAME}"' $1
+!macro _HIDDEN_TASKKILL_EXE PROC_NAME
+  DetailPrint "Closing ${PROC_NAME} if running..."
+  nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM "${PROC_NAME}"'
 !macroend
 
-!macro _CLOSE_XINGSHU_BY_TASKKILL
-  DetailPrint "Force closing known XingShu/OpenClaw process names..."
-  !insertmacro _TASKKILL_EXE "XingShu.exe"
-  !insertmacro _TASKKILL_EXE "星枢OpenClaw.exe"
-  !insertmacro _TASKKILL_EXE "XingShuOpenClaw.exe"
-  !insertmacro _TASKKILL_EXE "TuLuOpenClaw.exe"
-  !insertmacro _TASKKILL_EXE "clawpanel.exe"
-!macroend
-
-!macro _CLOSE_XINGSHU_BY_SCRIPT
-  DetailPrint "Closing running XingShu/OpenClaw by process path..."
-  FileOpen $0 "$TEMP\xingshu-close-running.ps1" w
-  FileWrite $0 "$$ErrorActionPreference = 'SilentlyContinue'`r`n"
-  FileWrite $0 "$$names = @('XingShu', '星枢OpenClaw', 'XingShuOpenClaw', 'TuLuOpenClaw', 'clawpanel')`r`n"
-  FileWrite $0 "$$installDir = [IO.Path]::GetFullPath('$INSTDIR')`r`n"
-  FileWrite $0 "function Test-XingShuProcess($$p) {`r`n"
-  FileWrite $0 "  if ($$names -contains $$p.ProcessName) { return $$true }`r`n"
-  FileWrite $0 "  if ($$p.Path) { try { return [IO.Path]::GetFullPath($$p.Path).StartsWith($$installDir, [StringComparison]::OrdinalIgnoreCase) } catch {} }`r`n"
-  FileWrite $0 "  return $$false`r`n"
-  FileWrite $0 "}`r`n"
-  FileWrite $0 "$$targets = Get-Process | Where-Object { Test-XingShuProcess $$_ }`r`n"
-  FileWrite $0 "foreach ($$p in $$targets) { try { $$p.CloseMainWindow() | Out-Null } catch {} }`r`n"
-  FileWrite $0 "Start-Sleep -Milliseconds 1000`r`n"
-  FileWrite $0 "foreach ($$p in (Get-Process | Where-Object { Test-XingShuProcess $$_ })) { try { Stop-Process -Id $$p.Id -Force } catch {} }`r`n"
-  FileWrite $0 "for ($$i = 0; $$i -lt 30; $$i++) {`r`n"
-  FileWrite $0 "  $$left = Get-Process | Where-Object { Test-XingShuProcess $$_ }`r`n"
-  FileWrite $0 "  if (-not $$left) { exit 0 }`r`n"
-  FileWrite $0 "  Start-Sleep -Milliseconds 300`r`n"
-  FileWrite $0 "}`r`n"
-  FileWrite $0 "exit 1`r`n"
+!macro _REQUEST_XINGSHU_SELF_EXIT
+  DetailPrint "Requesting running XingShu/OpenClaw to exit..."
+  CreateDirectory "$PROFILE\.openclaw\星枢OpenClaw"
+  FileOpen $0 "$PROFILE\.openclaw\星枢OpenClaw\install-shutdown.signal" w
+  FileWrite $0 "install`r`n"
   FileClose $0
-  ClearErrors
-  ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\xingshu-close-running.ps1"' $1
-  Delete "$TEMP\xingshu-close-running.ps1"
+  CreateDirectory "$LOCALAPPDATA\星枢OpenClaw"
+  FileOpen $0 "$LOCALAPPDATA\星枢OpenClaw\install-shutdown.signal" w
+  FileWrite $0 "install`r`n"
+  FileClose $0
 !macroend
 
 !macro _CLOSE_XINGSHU_PROCESSES
-  !insertmacro _CLOSE_XINGSHU_BY_TASKKILL
-  Sleep 1000
-  !insertmacro _CLOSE_XINGSHU_BY_SCRIPT
-  Sleep 1000
-  !insertmacro _CLOSE_XINGSHU_BY_TASKKILL
-  Sleep 1000
+  !insertmacro _REQUEST_XINGSHU_SELF_EXIT
+  Sleep 3000
+
+  DetailPrint "Force closing XingShu/OpenClaw process tree without visible console..."
+  !insertmacro _HIDDEN_TASKKILL_EXE "XingShu.exe"
+  !insertmacro _HIDDEN_TASKKILL_EXE "星枢OpenClaw.exe"
+  !insertmacro _HIDDEN_TASKKILL_EXE "XingShuOpenClaw.exe"
+  !insertmacro _HIDDEN_TASKKILL_EXE "TuLuOpenClaw.exe"
+  !insertmacro _HIDDEN_TASKKILL_EXE "clawpanel.exe"
+  Sleep 3000
 !macroend
 
 !macro _UNLOCK_OLD_XINGSHU_EXE
+  ; Remove previous failed-install leftovers. Do not use /REBOOTOK and do not create new .old files.
+  ${If} ${FileExists} "$INSTDIR\XingShu.exe.old"
+    Delete "$INSTDIR\XingShu.exe.old"
+  ${EndIf}
+
   ${If} ${FileExists} "$INSTDIR\XingShu.exe"
     ClearErrors
     Delete "$INSTDIR\XingShu.exe"
     ${If} ${Errors}
-      DetailPrint "Old XingShu.exe is still locked; trying to move it aside."
-      ClearErrors
-      Rename "$INSTDIR\XingShu.exe" "$INSTDIR\XingShu.exe.old"
-      ${If} ${Errors}
-        DetailPrint "Old XingShu.exe could not be moved after automatic close attempts."
-        MessageBox MB_ICONSTOP|MB_OK "安装器已自动尝试关闭旧版 星枢OpenClaw，但 Windows 仍报告文件被占用。请等待 5 秒后重新运行安装器；如果仍失败，再在任务栏右键退出 星枢OpenClaw。"
-        Abort
-      ${Else}
-        Delete "$INSTDIR\XingShu.exe.old"
-      ${EndIf}
+      DetailPrint "Old XingShu.exe is still locked after self-exit signal and hidden taskkill."
+      MessageBox MB_ICONSTOP|MB_OK "安装器无法替换旧版 XingShu.exe。旧版程序或 Windows WebView2 子进程仍占用文件。请打开任务管理器结束 XingShu.exe 后重新安装。新版安装后，后续更新会通过自退出信号自动退出。"
+      Abort
     ${EndIf}
   ${EndIf}
 !macroend

@@ -49,6 +49,39 @@ fn sync_text_file(path: &std::path::Path, content: &str, label: &str) -> Result<
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn start_install_shutdown_watcher(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut signal_paths = vec![
+            commands::openclaw_dir()
+                .join("星枢OpenClaw")
+                .join("install-shutdown.signal"),
+        ];
+
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            signal_paths.push(
+                std::path::PathBuf::from(local_app_data)
+                    .join("星枢OpenClaw")
+                    .join("install-shutdown.signal"),
+            );
+        }
+
+        loop {
+            if signal_paths.iter().any(|path| path.is_file()) {
+                for path in &signal_paths {
+                    let _ = std::fs::remove_file(path);
+                }
+                app.exit(0);
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
+    });
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_install_shutdown_watcher(_app: tauri::AppHandle) {}
+
 pub fn run() {
     let hot_update_dir = commands::openclaw_dir()
         .join("星枢OpenClaw")
@@ -108,6 +141,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            start_install_shutdown_watcher(app.handle().clone());
             service::start_backend_guardian(app.handle().clone());
             if let Err(e) = sync_codex_prompt_workspace_folder() {
                 eprintln!("[codex-prompt] 同步 Agent 工作区文件夹失败: {e}");
