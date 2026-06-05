@@ -12,7 +12,8 @@ import { showModal, showConfirm, showContentModal } from '../components/modal.js
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
-const RENDER_THROTTLE = 30
+const RENDER_THROTTLE = 80
+const STREAM_RENDER_MAX_PENDING_MS = 240
 const RESPONSE_WATCHDOG_MS = 15000
 const STREAM_IDLE_NOTICE_MS = 90000
 const STREAM_STALE_REFRESH_MS = 10 * 60 * 1000
@@ -2976,8 +2977,32 @@ function findStreamOverlapSuffix(existing = '', incoming = '') {
   return 0
 }
 
+function normalizeStreamText(text = '') {
+  return String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .replace(/([^\n])\n(#{1,6}\s+)/g, '$1\n\n$2')
+    .replace(/([^\n])\n((?:[-*+] |\d+[.)] |>|```|~~~))/g, '$1\n\n$2')
+}
+
+function normalizeStreamDelta(text = '') {
+  return normalizeStreamText(text)
+}
+
+function makeStreamRenderSnapshot(text = '') {
+  let snapshot = normalizeStreamText(text)
+  const fenceMatches = snapshot.match(/(^|\n)(```|~~~)/g) || []
+  if (fenceMatches.length % 2 === 1) {
+    const lastFence = fenceMatches[fenceMatches.length - 1].trim().slice(0, 3)
+    snapshot += `\n${lastFence}`
+  }
+  return snapshot
+}
+
 function applyStreamText(nextText = '') {
-  const text = String(nextText || '')
+  const text = normalizeStreamDelta(nextText)
   if (!text) return false
   const fingerprint = `${text.length}:${text.slice(0, 32)}:${text.slice(-32)}`
   if (fingerprint === _lastStreamDeltaFingerprint) return false
@@ -2996,12 +3021,12 @@ function applyStreamText(nextText = '') {
   const overlap = findStreamOverlapSuffix(_currentAiText, text)
   const appendText = overlap > 0 ? text.slice(overlap) : text
   if (!appendText) return false
-  _currentAiText += appendText
+  _currentAiText = normalizeStreamText(_currentAiText + appendText)
   return true
 }
 
 function reconcileFinalText(finalText = '') {
-  const text = String(finalText || '')
+  const text = normalizeStreamText(finalText)
   if (!text) return false
   if (text === _currentAiText) return false
   // The final message is the authoritative assistant response. Delta streams can
@@ -3308,7 +3333,7 @@ function handleChatEvent(payload) {
     // 如果流式阶段没有创建 bubble，从 final message 中提取
     if (!_currentAiBubble && hasContent) {
       _currentAiBubble = createStreamBubble()
-      _currentAiText = finalText
+      _currentAiText = normalizeStreamText(finalText)
     } else if (finalText) {
       reconcileFinalText(finalText)
     }
@@ -3387,7 +3412,7 @@ function handleChatEvent(payload) {
   if (state === 'aborted') {
     showTyping(false)
     if (_currentAiBubble && _currentAiText) {
-      _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
+      _currentAiBubble.innerHTML = renderMarkdown(makeStreamRenderSnapshot(_currentAiText))
     }
     appendSystemMessage(t('chat.generationStopped'))
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'aborted', progress: 100 })
@@ -3889,7 +3914,8 @@ function throttledRender() {
   if (!_currentAiBubble || !_currentAiText) return
   const now = performance.now()
   const elapsed = now - _lastRenderTime
-  if (!_renderPending && elapsed >= RENDER_THROTTLE) {
+  const forceRender = elapsed >= STREAM_RENDER_MAX_PENDING_MS
+  if (!_renderPending && (elapsed >= RENDER_THROTTLE || forceRender)) {
     doRender()
     return
   }
@@ -3918,7 +3944,8 @@ function doRender() {
   _lastRenderTime = performance.now()
   if (_currentAiBubble && _currentAiText) {
     if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || ''
-    _currentAiBubble.innerHTML = renderMarkdown(_currentAiText)
+    const renderText = makeStreamRenderSnapshot(_currentAiText)
+    _currentAiBubble.innerHTML = renderMarkdown(renderText)
     scrollToBottom()
   }
 }
