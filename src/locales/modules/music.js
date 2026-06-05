@@ -69,6 +69,7 @@ export default {
   settingNotify: _('通知设置', 'Notifications', '通知設定'),
   settingNotifyDesc: _('切歌时显示通知', 'Show notification on track change', '切歌時顯示通知'),
   settingAbout: _('关于', 'About', '關於'),
+  aboutVersion: _('星枢音乐播放器 v2.0', 'Xingsu Music Player v2.0', '星樞音樂播放器 v2.0'),
   settingDownloadDirPrompt: _('请输入下载目录路径：', 'Enter download directory path:', '請輸入下載目錄路徑：'),
   settingSaved: _('设置已保存', 'Settings saved', '設定已儲存'),
   settingError: _('设置保存失败：{error}', 'Failed to save settings: {error}', '設定儲存失敗：{error}'),
@@ -92,4 +93,13 @@ export default {
   catLove: _('情歌', 'Love Songs', '情歌'),
   catRock: _('摇滚', 'Rock', '搖滾'),
   catRap: _('说唱', 'Rap', '說唱'),
+
+  catHotKeywords: _('热门,流行,排行榜', 'hot,pop,chart', '熱門,流行,排行榜'),
+  catNewKeywords: _('新歌,2024,最新', 'new songs,2024,latest', '新歌,2024,最新'),
+  catSoarKeywords: _('飙升,热门,热门歌曲', 'trending,hot,viral songs', '飆升,熱門,熱門歌曲'),
+  catDouyinKeywords: _('抖音,神曲,热门', 'douyin,tiktok hits,hot', '抖音,神曲,熱門'),
+  catClassicKeywords: _('经典,老歌,怀旧', 'classics,old songs,nostalgia', '經典,老歌,懷舊'),
+  catLoveKeywords: _('情歌,爱情,甜蜜', 'love songs,romance,sweet', '情歌,愛情,甜蜜'),
+  catRockKeywords: _('摇滚,乐队,金属', 'rock,band,metal', '搖滾,樂隊,金屬'),
+  catRapKeywords: _('说唱,rap,hiphop', 'rap,hiphop,hip-hop', '說唱,rap,hiphop'),
 }

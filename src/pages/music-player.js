@@ -18,6 +18,22 @@ const PLATFORMS = {
   migu: { name: t('music.platformMigu'), icon: '🎤', color: '#ff2d51' },
 }
 
+const DEFAULT_RECOMMENDATIONS = [
+  { name: '孤勇者', artist: '陈奕迅', platform: 'netease', id: '1901371647', album: '单打独斗', duration: 298000, cover: '' },
+  { name: '起风了', artist: '买辣椒也用券', platform: 'netease', id: '1842022081', album: '起风了', duration: 305000, cover: '' },
+  { name: '漠河舞厅', artist: '柳爽', platform: 'netease', id: '1498195650', album: '漠河舞厅', duration: 268000, cover: '' },
+  { name: '稻香', artist: '周杰伦', platform: 'netease', id: '18600163', album: '魔杰座', duration: 224000, cover: '' },
+  { name: '晴天', artist: '周杰伦', platform: 'netease', id: '18600102', album: '叶惠美', duration: 267000, cover: '' },
+  { name: '七里香', artist: '周杰伦', platform: 'netease', id: '18600103', album: '七里香', duration: 268000, cover: '' },
+]
+
+function getCategorySearchKeywords(key) {
+  return t(`music.${key}`)
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
 // ===== 状态管理 =====
 const state = {
   activeTab: 'discover',
@@ -409,14 +425,14 @@ function renderDiscover() {
 
 function renderRecommendationCategories() {
   const categories = [
-    { id: 'hot', name: '🔥 ' + t('music.catHot'), icon: '🔥', keywords: ['热门', '流行', '排行榜'] },
-    { id: 'new', name: '🆕 ' + t('music.catNew'), icon: '🆕', keywords: ['新歌', '2024', '最新'] },
-    { id: 'soar', name: '📈 ' + t('music.catSoar'), icon: '📈', keywords: ['飙升', '热门', '热门歌曲'] },
-    { id: 'douyin', name: '🎵 ' + t('music.catDouyin'), icon: '🎵', keywords: ['抖音', '神曲', '热门'] },
-    { id: 'classic', name: '🎸 ' + t('music.catClassic'), icon: '🎸', keywords: ['经典', '老歌', '怀旧'] },
-    { id: 'love', name: '❤️ ' + t('music.catLove'), icon: '❤️', keywords: ['情歌', '爱情', '甜蜜'] },
-    { id: 'rock', name: '🎸 ' + t('music.catRock'), icon: '🎸', keywords: ['摇滚', '乐队', '金属'] },
-    { id: 'rap', name: '🎤 ' + t('music.catRap'), icon: '🎤', keywords: ['说唱', 'rap', 'hiphop'] },
+    { id: 'hot', name: '🔥 ' + t('music.catHot'), icon: '🔥', keywords: getCategorySearchKeywords('catHotKeywords') },
+    { id: 'new', name: '🆕 ' + t('music.catNew'), icon: '🆕', keywords: getCategorySearchKeywords('catNewKeywords') },
+    { id: 'soar', name: '📈 ' + t('music.catSoar'), icon: '📈', keywords: getCategorySearchKeywords('catSoarKeywords') },
+    { id: 'douyin', name: '🎵 ' + t('music.catDouyin'), icon: '🎵', keywords: getCategorySearchKeywords('catDouyinKeywords') },
+    { id: 'classic', name: '🎸 ' + t('music.catClassic'), icon: '🎸', keywords: getCategorySearchKeywords('catClassicKeywords') },
+    { id: 'love', name: '❤️ ' + t('music.catLove'), icon: '❤️', keywords: getCategorySearchKeywords('catLoveKeywords') },
+    { id: 'rock', name: '🎸 ' + t('music.catRock'), icon: '🎸', keywords: getCategorySearchKeywords('catRockKeywords') },
+    { id: 'rap', name: '🎤 ' + t('music.catRap'), icon: '🎤', keywords: getCategorySearchKeywords('catRapKeywords') },
   ]
   return `
     <div class="xingmu-section">
@@ -434,14 +450,7 @@ function renderRecommendationCategories() {
 }
 
 function renderRecommendations() {
-  const recs = [
-    { name: '孤勇者', artist: '陈奕迅', platform: 'netease', id: '1901371647', album: '单打独斗', duration: 298000, cover: '' },
-    { name: '起风了', artist: '买辣椒也用券', platform: 'netease', id: '1842022081', album: '起风了', duration: 305000, cover: '' },
-    { name: '漠河舞厅', artist: '柳爽', platform: 'netease', id: '1498195650', album: '漠河舞厅', duration: 268000, cover: '' },
-    { name: '稻香', artist: '周杰伦', platform: 'netease', id: '18600163', album: '魔杰座', duration: 224000, cover: '' },
-    { name: '晴天', artist: '周杰伦', platform: 'netease', id: '18600102', album: '叶惠美', duration: 267000, cover: '' },
-    { name: '七里香', artist: '周杰伦', platform: 'netease', id: '18600103', album: '七里香', duration: 268000, cover: '' },
-  ]
+  const recs = DEFAULT_RECOMMENDATIONS
   return `
     <div class="xingmu-section">
       <div class="xingmu-section-title">🔥 ${t('music.recTitle')}</div>
@@ -563,7 +572,7 @@ function renderSettingsPage() {
       <div class="xingmu-section">
         <div class="xingmu-section-title">ℹ️ ${t('music.settingAbout')}</div>
         <div class="xingmu-setting-row">
-          <span class="xingmu-setting-label">星枢音乐播放器 v2.0</span>
+          <span class="xingmu-setting-label">${t('music.aboutVersion')}</span>
         </div>
       </div>
     </div>
@@ -770,14 +779,7 @@ function bindEvents(page) {
     card.addEventListener('click', async () => {
       const idx = parseInt(card.dataset.recIndex)
       if (!isNaN(idx)) {
-        const recs = [
-          { name: '孤勇者', artist: '陈奕迅', platform: 'netease', id: '1901371647', album: '单打独斗', duration: 298000, cover: '' },
-          { name: '起风了', artist: '买辣椒也用券', platform: 'netease', id: '1842022081', album: '起风了', duration: 305000, cover: '' },
-          { name: '漠河舞厅', artist: '柳爽', platform: 'netease', id: '1498195650', album: '漠河舞厅', duration: 268000, cover: '' },
-          { name: '稻香', artist: '周杰伦', platform: 'netease', id: '18600163', album: '魔杰座', duration: 224000, cover: '' },
-          { name: '晴天', artist: '周杰伦', platform: 'netease', id: '18600102', album: '叶惠美', duration: 267000, cover: '' },
-          { name: '七里香', artist: '周杰伦', platform: 'netease', id: '18600103', album: '七里香', duration: 268000, cover: '' },
-        ]
+        const recs = DEFAULT_RECOMMENDATIONS
         if (recs[idx]) {
           state.queue = [recs[idx]]
           state.queueIndex = 0
