@@ -279,9 +279,52 @@ function formatGatewayWsPhase(status) {
     '连接已断开': t('dashboard.wsPhaseDisconnected'),
     '正在生成身份验证信息': t('dashboard.wsPhaseAuthenticating'),
     '认证失败': t('dashboard.wsPhaseAuthFailed'),
+    '正在刷新 Gateway Token': t('dashboard.wsPhaseAuthRefreshing'),
+    'Gateway Token 已刷新': t('dashboard.wsPhaseAuthRefreshed'),
+    '握手失败': t('dashboard.wsPhaseHandshakeFailed'),
+    '自动修复失败': t('dashboard.wsPhaseAutoFixFailed'),
+    '重连次数过多': t('dashboard.wsPhaseReconnectExhausted'),
+    '网关连接已就绪': t('dashboard.wsPhaseReady'),
     '网关已就绪': t('dashboard.wsPhaseReady'),
   }
   return zhLabels[raw] || raw || t('common.unknown')
+}
+
+function formatGatewayWsDetail(detail) {
+  const raw = String(detail || '').trim()
+  if (!raw) return ''
+  const endpoint = raw.match(/^wss?:\/\//i) ? raw : null
+  if (endpoint) return t('dashboard.wsDetailEndpoint', { endpoint })
+  if (/^agent:[^\s]+/i.test(raw)) return t('dashboard.wsDetailSession', { session: raw })
+  const reconnectMatch = raw.match(/^第\s*(\d+)\/(\d+)\s*次重连，\s*(\d+)\s*秒后重试$/)
+  if (reconnectMatch) {
+    return t('dashboard.wsDetailReconnectScheduled', {
+      current: reconnectMatch[1],
+      total: reconnectMatch[2],
+      seconds: reconnectMatch[3],
+    })
+  }
+  const autoPairMatch = raw.match(/^正在执行自动配对（第\s*(\d+)\s*次）$/)
+  if (autoPairMatch) return t('dashboard.wsDetailAutoPairing', { count: autoPairMatch[1] })
+  const pairingFailed = raw.match(/^配对失败[:：]\s*(.+)$/)
+  if (pairingFailed) return t('dashboard.wsDetailPairingFailed', { reason: pairingFailed[1] })
+  const zhDetails = {
+    '等待网关下发 connect.challenge': t('dashboard.wsDetailWaitingChallenge'),
+    '网关未及时返回握手指令，客户端正在主动发起连接': t('dashboard.wsDetailChallengeFallback'),
+    'Gateway Token 不匹配，自动刷新失败；请点击“修复并重连”重新同步本地配置': t('dashboard.wsDetailAuthRefreshFailed'),
+    '检测到来源限制，正在重新配对并重连': t('dashboard.wsDetailOriginPairing'),
+    '来源受限，请点击修复并重连': t('dashboard.wsDetailOriginBlocked'),
+    '来源受限，请点击“修复并重连”': t('dashboard.wsDetailOriginBlocked'),
+    'WebSocket 发生异常，请稍后重试': t('dashboard.wsDetailSocketError'),
+    '正在生成身份验证信息': t('dashboard.wsDetailGeneratingAuth'),
+    '检测到认证失败，正在重新读取本地 Gateway 配置并重连': t('dashboard.wsDetailAuthRefreshing'),
+    '已读取最新本地 token，正在重连': t('dashboard.wsDetailTokenRefreshed'),
+    '正在发送带签名的 connect frame': t('dashboard.wsDetailSendingSignedConnect'),
+    '网关未返回 challenge，客户端主动发起连接': t('dashboard.wsDetailSendingFallbackConnect'),
+    'WebSocket 未处于可发送状态': t('dashboard.wsDetailSocketNotSendable'),
+    '已停止自动重连，请手动刷新页面重试': t('dashboard.wsDetailReconnectExhausted'),
+  }
+  return zhDetails[raw] || raw
 }
 
 function gatewayDashboardStatus() {
@@ -289,6 +332,8 @@ function gatewayDashboardStatus() {
   const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
   const reconnectLabel = formatGatewayReconnectState(wsInfo?.reconnectState)
   const phase = formatGatewayWsPhase(wsInfo?.phase || wsInfo?.status)
+  const phaseDetail = formatGatewayWsDetail(wsInfo?.statusDetail)
+  const withPhaseDetail = meta => phaseDetail ? `${meta} · ${phaseDetail}` : meta
   if (state.foreign) {
     return {
       text: t('dashboard.externalInstance'),
@@ -299,11 +344,11 @@ function gatewayDashboardStatus() {
   if (state.health === 'running') {
     return {
       text: t('dashboard.gatewayReady'),
-      meta: t('dashboard.gatewayRunningDetail', {
+      meta: withPhaseDetail(t('dashboard.gatewayRunningDetail', {
         phase,
         ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
         handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
-      }),
+      })),
       tone: 'running',
     }
   }
@@ -311,40 +356,40 @@ function gatewayDashboardStatus() {
     const detailKey = state?.reason ? 'gatewayDegradedDetailWithReason' : 'gatewayDegradedDetail'
     return {
       text: t('dashboard.gatewayDegraded'),
-      meta: t(`dashboard.${detailKey}`, {
+      meta: withPhaseDetail(t(`dashboard.${detailKey}`, {
         phase,
         ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
         handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
         reason: state?.reason || t('dashboard.gatewayDegradedMeta'),
         reconnect: reconnectLabel,
-      }),
+      })),
       tone: 'warning',
     }
   }
   if (state.health === 'recovering') {
     return {
       text: t('dashboard.gatewayRecovering'),
-      meta: t('dashboard.gatewayRecoveringDetail', { phase, reconnect: reconnectLabel }),
+      meta: withPhaseDetail(t('dashboard.gatewayRecoveringDetail', { phase, reconnect: reconnectLabel })),
       tone: 'warning',
     }
   }
   if (state.health === 'starting') {
     return {
       text: t('dashboard.gatewayStarting'),
-      meta: t('dashboard.gatewayStartingDetail', {
+      meta: withPhaseDetail(t('dashboard.gatewayStartingDetail', {
         phase,
         ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
         handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
-      }),
+      })),
       tone: 'warning',
     }
   }
   return {
     text: t('common.stopped'),
-    meta: t('dashboard.gatewayStoppedDetail', {
+    meta: withPhaseDetail(t('dashboard.gatewayStoppedDetail', {
       ws: wsInfo?.connected ? t('dashboard.wsConnected') : t('dashboard.wsDisconnected'),
       handshake: wsInfo?.gatewayReady ? t('dashboard.handshakeComplete') : t('dashboard.handshakePending'),
-    }),
+    })),
     tone: 'stopped',
   }
 }
