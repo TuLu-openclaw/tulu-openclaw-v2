@@ -3030,15 +3030,25 @@ function isLongRunningReplyState(state = _replyStatusState?.state) {
   return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing'].includes(state)
 }
 
-function isSessionRuntimeBusy(item = {}) {
-  const raw = String(item.status || item.state || item.phase || item.runState || item.runtimeStatus || '').toLowerCase()
+function escapeRuntimeStatusRegex(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/_/g, '[_-]')
+}
+
+function hasRuntimeStatus(item = {}, values = []) {
+  const raw = String(item.status || item.state || item.phase || item.runState || item.runtimeStatus || '').toLowerCase().trim()
   if (!raw) return false
-  return ['queued', 'sending', 'thinking', 'streaming', 'tool', 'running', 'in_progress', 'busy', 'working', 'executing', 'finalizing'].some(v => raw.includes(v))
+  return values.some(value => {
+    const pattern = new RegExp(`(^|[^a-z0-9_-])${escapeRuntimeStatusRegex(value)}($|[^a-z0-9_-])`)
+    return pattern.test(raw)
+  })
+}
+
+function isSessionRuntimeBusy(item = {}) {
+  return hasRuntimeStatus(item, ['queued', 'sending', 'thinking', 'streaming', 'tool', 'running', 'in_progress', 'busy', 'working', 'executing', 'finalizing'])
 }
 
 function isSessionRuntimeCompleted(item = {}) {
-  const raw = String(item.status || item.state || item.phase || item.runState || item.runtimeStatus || '').toLowerCase()
-  if (raw && ['done', 'complete', 'completed', 'success', 'succeeded', 'idle', 'waiting'].some(v => raw.includes(v))) return true
+  if (hasRuntimeStatus(item, ['done', 'complete', 'completed', 'success', 'succeeded', 'idle', 'waiting', 'stopped', 'cancelled'])) return true
   if (item.completedAt || item.completed_at || item.finishedAt || item.finished_at || item.endedAt || item.ended_at) return true
   return false
 }
