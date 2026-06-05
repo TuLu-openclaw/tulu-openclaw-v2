@@ -17,6 +17,36 @@ const _dashboardActionTimers = new Set()
 
 let _dashboardWsEnsureTimer = null
 let _dashboardWsEnsureInFlight = false
+let _dashboardAutoChatTimer = null
+
+function isDashboardRouteActive() {
+  const hash = window.location.hash.slice(1) || '/dashboard'
+  return hash.split('?')[0] === '/dashboard'
+}
+
+function clearDashboardAutoChatTimer() {
+  if (_dashboardAutoChatTimer) {
+    clearTimeout(_dashboardAutoChatTimer)
+    _dashboardAutoChatTimer = null
+  }
+}
+
+function scheduleAutoChatWhenGatewayStarting(page, gwStatus) {
+  const shouldJump = gwStatus?.text === t('dashboard.gatewayStarting')
+  if (!shouldJump) {
+    clearDashboardAutoChatTimer()
+    return
+  }
+  if (_dashboardAutoChatTimer || !page?.isConnected || !isDashboardRouteActive()) return
+  _dashboardAutoChatTimer = setTimeout(() => {
+    _dashboardAutoChatTimer = null
+    if (!page?.isConnected || !isDashboardRouteActive()) return
+    const latest = gatewayDashboardStatus()
+    if (latest?.text === t('dashboard.gatewayStarting')) {
+      navigate('/chat')
+    }
+  }, 1000)
+}
 
 async function ensureDashboardWebSocket() {
   const state = getGatewayHealthState()
@@ -150,6 +180,7 @@ export function cleanup() {
   if (_unsubWsReady) { _unsubWsReady(); _unsubWsReady = null }
   if (_dashboardReloadTimer) { clearTimeout(_dashboardReloadTimer); _dashboardReloadTimer = null }
   if (_dashboardWsEnsureTimer) { clearTimeout(_dashboardWsEnsureTimer); _dashboardWsEnsureTimer = null }
+  clearDashboardAutoChatTimer()
   _dashboardWsEnsureInFlight = false
   for (const timer of _dashboardActionTimers) clearTimeout(timer)
   _dashboardActionTimers.clear()
@@ -465,6 +496,7 @@ function renderStatCards(page, services, version, agents, config, panelConfig) {
   const gw = services.find(s => s.label === 'ai.openclaw.gateway')
   const foreignGateway = isForeignGatewayService(gw)
   const gwStatus = gatewayDashboardStatus()
+  scheduleAutoChatWhenGatewayStarting(page, gwStatus)
   const runningCount = services.filter(s => s.running).length
   const versionMeta = version.recommended
     ? `${version.ahead_of_recommended ? t('dashboard.versionAhead', { version: version.recommended }) : version.is_recommended ? t('dashboard.versionStable', { version: version.recommended }) : t('dashboard.versionRecommend', { version: version.recommended })}${version.latest_update_available && version.latest ? ' · ' + t('dashboard.versionLatest', { version: version.latest }) : ''}`
