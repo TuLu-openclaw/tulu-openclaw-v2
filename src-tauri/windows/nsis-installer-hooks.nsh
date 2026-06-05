@@ -1,18 +1,52 @@
+!include LogicLib.nsh
+!include x64.nsh
+
+!macro _CLOSE_PROCESS_BY_NAME PROC_NAME
+  ClearErrors
+  FindProcDLL::FindProc "${PROC_NAME}"
+  ${If} $R0 == 1
+    DetailPrint "Closing ${PROC_NAME}..."
+    KillProcDLL::KillProc "${PROC_NAME}"
+    Sleep 800
+  ${Else}
+    DetailPrint "${PROC_NAME} is not running."
+  ${EndIf}
+!macroend
+
 !macro _KILL_XINGSHU_PROCESSES
   DetailPrint "Closing running XingShu/OpenClaw processes before install..."
+  !insertmacro _CLOSE_PROCESS_BY_NAME "XingShu.exe"
+  !insertmacro _CLOSE_PROCESS_BY_NAME "星枢OpenClaw.exe"
+  !insertmacro _CLOSE_PROCESS_BY_NAME "XingShuOpenClaw.exe"
+  !insertmacro _CLOSE_PROCESS_BY_NAME "TuLuOpenClaw.exe"
+  !insertmacro _CLOSE_PROCESS_BY_NAME "clawpanel.exe"
   nsExec::ExecToLog 'taskkill /F /T /IM "XingShu.exe"'
   nsExec::ExecToLog 'taskkill /F /T /IM "星枢OpenClaw.exe"'
   nsExec::ExecToLog 'taskkill /F /T /IM "XingShuOpenClaw.exe"'
   nsExec::ExecToLog 'taskkill /F /T /IM "TuLuOpenClaw.exe"'
   nsExec::ExecToLog 'taskkill /F /T /IM "clawpanel.exe"'
-  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "$names = @(''XingShu'',''星枢OpenClaw'',''XingShuOpenClaw'',''TuLuOpenClaw'',''clawpanel''); $roots = @(''$INSTDIR''); if ($env:LOCALAPPDATA) { $roots += Join-Path $env:LOCALAPPDATA ''星枢OpenClaw''; $roots += Join-Path $env:LOCALAPPDATA ''Programs\XingShu'' }; $roots = $roots | Where-Object { $_ } | ForEach-Object { try { [IO.Path]::GetFullPath($_).TrimEnd([char]92) } catch { $_ } }; Get-Process | Where-Object { $proc = $_; ($names -contains $proc.ProcessName) -or ($proc.Path -and ($roots | Where-Object { $proc.Path.StartsWith(($_ + [char]92), [StringComparison]::OrdinalIgnoreCase) })) } | Stop-Process -Force -ErrorAction SilentlyContinue"'
-  Sleep 1000
-  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "$names = @(''XingShu'',''星枢OpenClaw'',''XingShuOpenClaw'',''TuLuOpenClaw'',''clawpanel''); $roots = @(''$INSTDIR''); if ($env:LOCALAPPDATA) { $roots += Join-Path $env:LOCALAPPDATA ''星枢OpenClaw''; $roots += Join-Path $env:LOCALAPPDATA ''Programs\XingShu'' }; $roots = $roots | Where-Object { $_ } | ForEach-Object { try { [IO.Path]::GetFullPath($_).TrimEnd([char]92) } catch { $_ } }; for ($i = 0; $i -lt 30; $i++) { $p = Get-Process | Where-Object { $proc = $_; ($names -contains $proc.ProcessName) -or ($proc.Path -and ($roots | Where-Object { $proc.Path.StartsWith(($_ + [char]92), [StringComparison]::OrdinalIgnoreCase) })) }; if (-not $p) { exit 0 }; $p | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500 }; exit 1"'
-  Sleep 500
+  Sleep 1200
+!macroend
+
+!macro _UNLOCK_OLD_XINGSHU_EXE
+  ${If} ${FileExists} "$INSTDIR\XingShu.exe"
+    ClearErrors
+    Delete "$INSTDIR\XingShu.exe"
+    ${If} ${Errors}
+      DetailPrint "XingShu.exe is still locked; scheduling old file replacement after reboot."
+      Rename "$INSTDIR\XingShu.exe" "$INSTDIR\XingShu.exe.old"
+      ${If} ${Errors}
+        Delete /REBOOTOK "$INSTDIR\XingShu.exe"
+      ${Else}
+        Delete /REBOOTOK "$INSTDIR\XingShu.exe.old"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
   !insertmacro _KILL_XINGSHU_PROCESSES
+  !insertmacro _UNLOCK_OLD_XINGSHU_EXE
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
