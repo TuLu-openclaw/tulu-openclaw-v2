@@ -233,7 +233,7 @@ function parseCMSList(config) {
 function parseTvboxList(config) {
   const result = []
   for (const cat of (config?.list || [])) {
-    const catName = cat.name || '未分类'
+    const catName = cat.name || mt('uncategorized')
     for (const v of (cat.list || [])) {
       const dl = parseTvboxDl(v)
       result.push({
@@ -274,7 +274,7 @@ function parseTvboxDl(v) {
   flags.forEach((flag, fi) => {
     const urls = (urlGrps[fi] || urlGrps[0] || '').split('#').filter(Boolean)
     if (urls.length) result.push({
-      flag: flag.trim() || '默认',
+      flag: flag.trim() || mt('defaultLine'),
       urls: urls.map(u => { const [n, url] = u.split('$'); return (n || '') + '$' + url })
     })
   })
@@ -290,7 +290,7 @@ async function searchTvboxList(config, kw, api = null) {
   )
   if (local.length) return local
 
-  const directApis = api?.api ? [{ name: api.name || '当前源', api: normalizeCmsApiBase(api.api) }] : []
+  const directApis = api?.api ? [{ name: api.name || mt('currentSource'), api: normalizeCmsApiBase(api.api) }] : []
   const targets = [...directApis, ...getSearchableTvboxSites(config)].filter(s => s.api).slice(0, 16)
   if (!targets.length) return []
 
@@ -331,7 +331,7 @@ function getActiveTvbox() {
 
 function getTvboxSourceName(api) {
   const b = TVBOX_BUILTIN.find(a => a.key === api.key)
-  return b ? b.name : (api.name || '自定义')
+  return b ? b.name : (api.name || mt('custom'))
 }
 
 // 初始化自定义 TVBox 列表
@@ -2432,7 +2432,7 @@ function pickDirectUrl(url) {
     const segMatches = html.match(/["']([^"']*init\.mp4[^"']*)["']/gi) || []
     segMatches.forEach(raw => {
       const url = raw.replace(/['">]/g, '')
-      if (url.startsWith('http')) results.push({ name: 'M4S片段视频', url, thumb: '', type: 'm4s' })
+      if (url.startsWith('http')) results.push({ name: mt('m4sSegmentVideo'), url, thumb: '', type: 'm4s' })
     })
     return results
   }
@@ -2479,10 +2479,10 @@ function pickDirectUrl(url) {
     const siteStrat = domain ? getSiteStrategy(domain) : null
 
     const strategies = [
-      { name: 'm3u8正则', fn: () => extractM3u8(html, url, thumb) },
-      { name: 'mp4正则',  fn: () => extractMp4(html, url) },
-      { name: 'DASH检测', fn: () => extractDash(html, url) },
-      { name: 'iframe递归', fn: async () => {
+      { name: mt('crawlStrategyM3u8Regex'), fn: () => extractM3u8(html, url, thumb) },
+      { name: mt('crawlStrategyMp4Regex'),  fn: () => extractMp4(html, url) },
+      { name: mt('crawlStrategyDashDetect'), fn: () => extractDash(html, url) },
+      { name: mt('crawlStrategyIframeRecursive'), fn: async () => {
         const iframes = extractIframes(html, url)
         const found = []
         for (const iframe of iframes.slice(0, 3)) {
@@ -2504,7 +2504,7 @@ function pickDirectUrl(url) {
         }
         return found
       }},
-      { name: 'CMS播放页JS提取', fn: async () => {
+      { name: mt('crawlStrategyCmsPlayerJs'), fn: async () => {
         // 如果 URL 本身就是播放页（ruvodplay/play/vodplay），直接用当前页HTML提取
         let playUrl = ''
         let playHtml = ''
@@ -2548,7 +2548,7 @@ function pickDirectUrl(url) {
               // 反转义 JS Unicode 转义 \u3a \\u3a → :
               try { videoUrl = JSON.parse('"' + videoUrl + '"') } catch {}
               if (videoUrl && (videoUrl.includes('.m3u8') || videoUrl.includes('.mp4'))) {
-                const name = playUrl.split('/').pop().replace(/\.html/i, '') || 'CMS视频'
+                const name = playUrl.split('/').pop().replace(/\.html/i, '') || mt('cmsVideo')
                 found.push({ name, url: videoUrl, thumb, type: videoUrl.includes('.m3u8') ? 'm3u8' : 'mp4' })
               }
             }
@@ -2560,15 +2560,15 @@ function pickDirectUrl(url) {
         ;[...directM3u8, ...directMp4].forEach(raw => {
           const u = raw.replace(/[\\"]/g, '').split('?')[0]
           if (u.startsWith('http') && (u.includes('.m3u8') || u.includes('.mp4'))) {
-            found.push({ name: u.split('/').pop().replace(/\.(m3u8|mp4).*/i, '') || '视频', url: u, thumb, type: u.includes('.m3u8') ? 'm3u8' : 'mp4' })
+            found.push({ name: u.split('/').pop().replace(/\.(m3u8|mp4).*/i, '') || mt('videoTitleFallback'), url: u, thumb, type: u.includes('.m3u8') ? 'm3u8' : 'mp4' })
           }
         })
         return found
       }},
-      { name: '列表提取', fn: () => extractVideoList(html, url) },
-      { name: '脚本解析', fn: () => extractFromScript(html, url) },
+      { name: mt('crawlStrategyListExtract'), fn: () => extractVideoList(html, url) },
+      { name: mt('crawlStrategyScriptParse'), fn: () => extractFromScript(html, url) },
       // 策略6：JS渲染（用 Edge headless + CDP 渲染后提取）
-      { name: 'JS渲染提取', fn: async () => {
+      { name: mt('crawlStrategyJsRender'), fn: async () => {
         const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
         if (!invoke) return []
         try {
@@ -2577,7 +2577,7 @@ function pickDirectUrl(url) {
           const arr = JSON.parse(result)
           if (!Array.isArray(arr)) return []
           return arr.filter(r => r && r.url).map(r => ({
-            name: r.name || r.url.split('/').pop().replace(/\.[^.]+$/, '') || 'JS视频',
+            name: r.name || r.url.split('/').pop().replace(/\.[^.]+$/, '') || mt('jsVideo'),
             url: r.url,
             thumb: r.thumb || '',
             type: r.url.includes('.m3u8') ? 'm3u8' : (r.url.includes('.mp4') ? 'mp4' : r.type || 'unknown')
@@ -2719,7 +2719,7 @@ function pickDirectUrl(url) {
       const raw = m[1].replace(/['"]/g, '').split('?')[0]
       const resolved = raw.startsWith('http') ? raw : new URL(raw, base).href
       if (resolved.includes('.mp4')) {
-        const name = raw.split('/').pop().replace('.mp4', '') || 'MP4 视频'
+        const name = raw.split('/').pop().replace('.mp4', '') || mt('mp4Video')
         results.push({ name, url: resolved, thumb: '', type: 'mp4' })
       }
     }
@@ -2785,7 +2785,7 @@ function pickDirectUrl(url) {
         const url = raw.replace(/["' >]/g, '').split('?')[0]
         if (url.startsWith('http')) {
           const type = url.includes('.m3u8') ? 'm3u8' : 'mp4'
-          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || (type === 'm3u8' ? 'M3U8' : 'MP4') + ' 视频'
+          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || mt(type === 'm3u8' ? 'm3u8Video' : 'mp4Video')
           results.push({ name, url, thumb: '', type })
         }
       })
@@ -2799,7 +2799,7 @@ function pickDirectUrl(url) {
         const url = raw.replace(/["' >]/g, '').split('?')[0]
         if (url.startsWith('http')) {
           const type = url.includes('.m3u8') ? 'm3u8' : 'mp4'
-          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || (type === 'm3u8' ? 'M3U8' : 'MP4') + ' 视频'
+          const name = decodeURIComponent(url.split('/').pop().replace(/\.(m3u8|mp4)/i, '')) || mt(type === 'm3u8' ? 'm3u8Video' : 'mp4Video')
           results.push({ name, url, thumb: '', type })
         }
       })
