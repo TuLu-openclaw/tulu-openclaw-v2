@@ -822,7 +822,7 @@ mod platform {
     /// 记录当前活跃的 Gateway 子进程（用于 stop 时精确 kill）
     static ACTIVE_GATEWAY_CHILD: Mutex<Option<u32>> = Mutex::new(None);
 
-    /// 缓存 PID 命令行查询结果，避免服务状态轮询频繁 spawn PowerShell/WMIC
+    /// 缓存 PID 命令行查询结果，避免停止/清理 Gateway 时重复 spawn WMIC
     static PROCESS_COMMAND_LINE_CACHE: Mutex<Vec<(u32, Instant, Option<String>)>> = Mutex::new(Vec::new());
     const PROCESS_COMMAND_LINE_CACHE_TTL: Duration = Duration::from_secs(60);
 
@@ -886,8 +886,8 @@ mod platform {
             }
         }
 
-        // 使用 wmic 查询命令行：售卖版启动/轮询阶段不应频繁拉起可见的 powershell 进程。
-        // 如果 wmic 不可用，返回 None；调用方会把端口连通视为 running，避免误判未运行后重复拉起。
+        // 使用 wmic 查询命令行：仅用于停止/清理 Gateway 时精确识别 PID。
+        // 普通状态轮询严禁调用这里，避免低配电脑上因进程查询造成 CPU 抖动。
         let mut result = None;
         if let Ok(output) = StdCommand::new("wmic")
             .args([
@@ -1120,8 +1120,8 @@ mod platform {
         vec!["ai.openclaw.gateway".to_string()]
     }
 
-    /// 检测 Gateway 是否在运行，并返回其 PID
-    /// 策略：先 TCP 端口检测连通性，再用 netstat+WMIC 验证命令行是 OpenClaw Gateway
+    /// 检测 Gateway 是否在运行。
+    /// 售卖版普通状态轮询只做 TCP 连通性检测，避免 netstat/WMIC/PowerShell 造成 CPU 抖动，影响 Gateway 稳定性。
     pub fn check_service_status(_uid: u32, _label: &str) -> (bool, Option<u32>) {
         let port = crate::commands::gateway_listen_port();
         let addr = format!("127.0.0.1:{port}");
@@ -1129,7 +1129,7 @@ mod platform {
             Ok(a) => a,
             Err(_) => return (false, None),
         };
-        if std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_secs(1)).is_err() {
+        if std::net::TcpStream::connect_timeout(&socket_addr, Duration::from_millis(500)).is_err() {
             // 端口不通，先清空已知的僵死 PID
             let mut known = LAST_KNOWN_GATEWAY_PID
                 .lock()
@@ -1138,17 +1138,8 @@ mod platform {
             return (false, None);
         }
 
-        // 端口通了，PID 识别仅作为增强信息
-        if let Some(pid) = get_gateway_pid_by_port(port) {
-            let mut known = LAST_KNOWN_GATEWAY_PID
-                .lock()
-                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
-            *known = Some(pid);
-            (true, Some(pid))
-        } else {
-            // 避免因命令行查询失败误判为“未运行”并触发重复拉起
-            (true, None)
-        }
+        // 端口连通就是稳定运行；PID 只在 stop/cleanup 等少数路径精确查询。
+        (true, None)
     }
 
     fn cleanup_legacy_gateway_window() {
@@ -1199,19 +1190,16 @@ mod platform {
             );
         }
 
-        // Windows 重启后清理残留的僵尸 Gateway 进程（防止多进程堆积）
+        // 先用纯 TCP 判断 Gateway 是否已运行；运行中直接返回，避免每次启动请求都触发 netstat/WMIC 清理扫描。
+        if check_service_status(0, "").0 {
+            return Ok(());
+        }
+
+        // 只有端口不通、确实准备启动时，才清理残留的僵尸 Gateway 进程（防止多进程堆积）
         cleanup_zombie_gateway_processes();
 
-        // 端口已通 → 检查是不是我们的进程
-        let (running, pid) = check_service_status(0, "");
-        if running {
-            // 已有 Gateway 在跑，更新已知 PID（避免后续重复拉起导致 lock 冲突），直接返回成功
-            if let Some(p) = pid {
-                let mut known = LAST_KNOWN_GATEWAY_PID
-                    .lock()
-                    .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
-                *known = Some(p);
-            }
+        // 清理后再次确认端口，避免清理过程期间 Gateway 已恢复
+        if check_service_status(0, "").0 {
             return Ok(());
         }
 
@@ -1224,36 +1212,20 @@ mod platform {
             .stdout(stdout_log)
             .stderr(stderr_log);
 
-        // 记录 spawn 前的已知 PID
-        let before_pid = *LAST_KNOWN_GATEWAY_PID
-            .lock()
-            .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
-
         let child = cmd.spawn().map_err(|e| format!("启动 Gateway 失败: {e}"))?;
         let spawned_pid = child.id();
-
-        // 记录活跃子进程 PID（用于 stop 时精确 kill）
         {
             let mut active = ACTIVE_GATEWAY_CHILD.lock().unwrap();
             *active = Some(spawned_pid);
         }
 
-        // 轮询等待：端口就绪 AND PID 变化（说明新进程已接管端口）
+        // 轮询等待：端口就绪即认为 Gateway 已稳定运行。
+        // 不在启动等待中查询 PID，避免低配电脑上因 netstat/WMIC 抖动影响 Gateway。
         let deadline = Instant::now() + Duration::from_secs(300);
         while Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(300)).await;
-            let (running2, pid2) = check_service_status(0, "");
-
-            if let (true, Some(current_pid)) = (running2, pid2) {
-                // PID 变了（新进程接管了端口）或 PID 仍然是我们刚 spawn 的
-                let is_new = Some(current_pid) != before_pid;
-                let is_spawned = current_pid == spawned_pid;
-                if is_new || is_spawned {
-                    // 验证这个 PID 确实还活着
-                    if is_process_alive(current_pid) {
-                        return Ok(());
-                    }
-                }
+            if check_service_status(0, "").0 {
+                return Ok(());
             }
         }
 
