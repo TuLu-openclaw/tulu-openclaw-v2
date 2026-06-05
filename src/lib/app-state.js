@@ -79,12 +79,14 @@ export function isGatewayForeign() {
 }
 
 export function getGatewayHealthState() {
+  const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : null
+  const wsReady = !!wsInfo?.gatewayReady
   return {
-    running: _gatewayRunning,
-    foreign: _gatewayForeign,
-    health: _gatewayHealth,
+    running: wsReady ? true : _gatewayRunning,
+    foreign: wsReady ? false : _gatewayForeign,
+    health: wsReady ? 'running' : _gatewayHealth,
     lastCheckAt: _gatewayLastCheckAt,
-    recovering: _gatewayRecovering,
+    recovering: wsReady ? false : _gatewayRecovering,
     autoRestartCount: _autoRestartCount,
     userStopped: _userStopped,
   }
@@ -340,6 +342,36 @@ export async function refreshGatewayStatus() {
   }
   return _gatewayRunning
 }
+
+export function syncGatewayHealthFromWebSocket(force = false) {
+  const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : null
+  if (!wsInfo) return
+  if (wsInfo.gatewayReady) {
+    _gwStopCount = 0
+    _gatewayRunning = true
+    _gatewayForeign = false
+    _gatewayHealth = 'running'
+    _gatewayRecovering = false
+    _gatewayFirstRunningAt = 0
+    if (!_gatewayRunningSince) _gatewayRunningSince = Date.now()
+    _emitGatewayState(force)
+    return
+  }
+  if (_gatewayRunning && !wsInfo.intentionalClose && (wsInfo.connected || wsInfo.connecting || wsInfo.handshaking || wsInfo.reconnectState === 'attempting' || wsInfo.reconnectState === 'scheduled')) {
+    const nextHealth = _deriveGatewayHealth({ ownedRunning: true, foreignRunning: false, wsInfo })
+    if (_gatewayHealth !== nextHealth) {
+      _gatewayHealth = nextHealth
+      _emitGatewayState(force)
+    } else if (force) {
+      _emitGatewayState(true)
+    }
+  }
+}
+
+// WS 握手状态是 Gateway 是否真正可用的强信号；必须反向同步到 app-state。
+// 否则非 chat 页面可能只看到端口 running，却长期显示“初始化/idle”。
+wsClient.onStatusChange(() => syncGatewayHealthFromWebSocket(true))
+wsClient.onReady(() => syncGatewayHealthFromWebSocket(true))
 
 /** 启动 Gateway 状态轮询（启动/修复窗口内 1 秒轮询，稳定后退回 15 秒） */
 export function startGatewayPoll() {

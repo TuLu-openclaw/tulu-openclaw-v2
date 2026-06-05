@@ -110,7 +110,7 @@ async function ensureServicesWebSocket() {
   try {
     const config = await api.readOpenclawConfig().catch(() => ({}))
     const port = config?.gateway?.port || 18789
-    const rawToken = config?.gateway?.auth?.token
+    const rawToken = config?.gateway?.auth?.token ?? config?.gateway?.authToken
     const token = typeof rawToken === 'string' ? rawToken : ''
     const inst = getActiveInstance()
     let host
@@ -149,7 +149,7 @@ function getGatewayUiSnapshot(service) {
   if (state?.foreign) {
     tone = 'warning'
     statusText = t('services.gatewayForeign')
-  } else if (health === 'running' && gatewayReady) {
+  } else if (gatewayReady || health === 'running') {
     tone = 'running'
     statusText = t('services.gatewayReady')
   } else if (health === 'recovering') {

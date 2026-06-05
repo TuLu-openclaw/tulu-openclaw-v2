@@ -720,7 +720,7 @@ async function autoConnectWebSocket() {
     console.debug(`[main] 自动连接 WebSocket (实例: ${inst.name})...`)
     const config = await api.readOpenclawConfig()
     const port = config?.gateway?.port || 18789
-    const rawToken = config?.gateway?.auth?.token
+    const rawToken = config?.gateway?.auth?.token ?? config?.gateway?.authToken
     const token = (typeof rawToken === 'string') ? rawToken : ''
 
     let host
@@ -985,8 +985,10 @@ function setupGatewayBanner() {
   onGatewayChange(update)
   wsClient.onStatusChange(() => {
     scheduleUpdate()
-    // WS ready/connected/reconnecting 等状态变化要反向刷新全局 Gateway 健康状态，
-    // 否则 dashboard/services 可能继续显示“初始化中”，直到进入 chat 页面才刷新。
+    refreshGatewayStatus().catch(() => {})
+  })
+  wsClient.onReady(() => {
+    scheduleUpdate()
     refreshGatewayStatus().catch(() => {})
   })
 }

@@ -27,7 +27,7 @@ async function ensureDashboardWebSocket() {
   try {
     const config = await api.readOpenclawConfig().catch(() => ({}))
     const port = config?.gateway?.port || 18789
-    const rawToken = config?.gateway?.auth?.token
+    const rawToken = config?.gateway?.auth?.token ?? config?.gateway?.authToken
     const token = typeof rawToken === 'string' ? rawToken : ''
     const inst = getActiveInstance()
     let host
@@ -407,7 +407,7 @@ function gatewayDashboardStatus() {
       tone: 'warning',
     }
   }
-  if (state.health === 'running') {
+  if (wsInfo?.gatewayReady || state.health === 'running') {
     return {
       text: t('dashboard.gatewayReady'),
       meta: withPhaseDetail(t('dashboard.gatewayRunningDetail', {
