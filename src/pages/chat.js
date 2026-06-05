@@ -3224,6 +3224,10 @@ function handleChatEvent(payload) {
     console.debug('[chat] 跳过已完成 run 的 delta, runId:', runId)
     return
   }
+  if (runId && ['error', 'aborted'].includes(state) && _seenRunIds.has(runId)) {
+    console.debug('[chat] 跳过已完成 run 的 late terminal event, runId:', runId, 'state:', state)
+    return
+  }
 
   if (state === 'queued') {
     if (_currentRunId && runId && runId !== _currentRunId) {
