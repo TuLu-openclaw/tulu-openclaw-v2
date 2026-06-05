@@ -38,13 +38,14 @@ import verify from './modules/verify.js'
 import tvbox from './modules/tvbox.js'
 import movieTool from './modules/movie-tool.js'
 import xingshuChat from './modules/xingshuChat.js'
+import channelLabels from './modules/channelLabels.js'
 import lobsterOffice from './modules/lobsterOffice.js'
 
 const MODULES = {
   common, sidebar, instance, dashboard, services, settings,
   models, agents, agentDetail, gateway, security, communication, channels,
   memory, cron, usage, skills, chat, chatDebug, setup, about,
-  ext, logs, assistant, toast, modal, engagement, engine, music, openclawSetup, kami, verify, tvbox, movieTool, xingshuChat, lobsterOffice,
+  ext, logs, assistant, toast, modal, engagement, engine, music, openclawSetup, kami, verify, tvbox, movieTool, xingshuChat, channelLabels, lobsterOffice,
 }
 
 /** 构建所有语言字典 { 'zh-CN': { common: {...}, sidebar: {...}, ... }, ... } */

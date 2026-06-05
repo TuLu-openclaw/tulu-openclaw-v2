@@ -1,22 +1,34 @@
-/** 渠道 key → 中文显示名（供多页面复用） */
-export const CHANNEL_LABELS = {
-  qqbot: 'QQ 机器人',
-  telegram: 'Telegram',
-  feishu: '飞书',
-  dingtalk: '钉钉',
-  'dingtalk-connector': '钉钉',
-  discord: 'Discord',
-  slack: 'Slack',
-  whatsapp: 'WhatsApp',
-  msteams: 'Microsoft Teams',
-  signal: 'Signal',
-  matrix: 'Matrix',
-  irc: 'IRC',
-  googlechat: 'Google Chat',
-  imessage: 'iMessage',
-  line: 'LINE',
-  nostr: 'Nostr',
-  mattermost: 'Mattermost',
-  'openclaw-weixin': '微信',
-  weixin: '微信',
+import { t } from './i18n.js'
+
+const CHANNEL_LABEL_KEYS = {
+  qqbot: 'qqbot',
+  telegram: 'telegram',
+  feishu: 'feishu',
+  dingtalk: 'dingtalk',
+  'dingtalk-connector': 'dingtalkConnector',
+  discord: 'discord',
+  slack: 'slack',
+  whatsapp: 'whatsapp',
+  msteams: 'msteams',
+  signal: 'signal',
+  matrix: 'matrix',
+  irc: 'irc',
+  googlechat: 'googlechat',
+  imessage: 'imessage',
+  line: 'line',
+  nostr: 'nostr',
+  mattermost: 'mattermost',
+  'openclaw-weixin': 'openclawWeixin',
+  weixin: 'weixin',
 }
+
+export function getChannelLabel(channel) {
+  const key = CHANNEL_LABEL_KEYS[channel]
+  return key ? t(`channelLabels.${key}`) : (channel || '')
+}
+
+export const CHANNEL_LABELS = new Proxy({}, {
+  get(_target, prop) {
+    return typeof prop === 'string' ? getChannelLabel(prop) : undefined
+  },
+})
