@@ -22,6 +22,34 @@ function formatGatewayReconnectState(state) {
   return labels[key] || t('services.reconnectUnknown', { state: key })
 }
 
+function formatGatewayWsPhase(status) {
+  const raw = String(status || '').trim()
+  const key = raw.toLowerCase()
+  const labels = {
+    idle: t('services.wsPhaseIdle'),
+    connecting: t('services.wsPhaseConnecting'),
+    connected: t('services.wsPhaseConnected'),
+    ready: t('services.wsPhaseReady'),
+    reconnecting: t('services.wsPhaseReconnecting'),
+    disconnected: t('services.wsPhaseDisconnected'),
+    error: t('services.wsPhaseError'),
+    auth_failed: t('services.wsPhaseAuthFailed'),
+  }
+  if (labels[key]) return labels[key]
+  const zhLabels = {
+    '正在连接网关': t('services.wsPhaseConnecting'),
+    '等待握手指令': t('services.wsPhaseWaitingHandshake'),
+    '握手超时，正在主动补发连接': t('services.wsPhaseHandshakeRetry'),
+    '正在自动修复连接': t('services.wsPhaseAutoFixing'),
+    '连接失败': t('services.wsPhaseError'),
+    '连接已断开': t('services.wsPhaseDisconnected'),
+    '正在生成身份验证信息': t('services.wsPhaseAuthenticating'),
+    '认证失败': t('services.wsPhaseAuthFailed'),
+    '网关已就绪': t('services.wsPhaseReady'),
+  }
+  return zhLabels[raw] || raw || t('common.unknown')
+}
+
 // HTML 转义，防止 XSS
 function getGatewayUiSnapshot(service) {
   const state = getGatewayHealthState()
@@ -61,6 +89,7 @@ function getGatewayUiSnapshot(service) {
     t('services.gatewayDetailStatus', { status: statusText }),
     t('services.gatewayDetailWs', { status: wsConnected ? t('services.connected') : t('services.notConnected') }),
     t('services.gatewayDetailHandshake', { status: gatewayReady ? t('services.completed') : t('services.notCompleted') }),
+    t('services.gatewayDetailPhase', { phase: formatGatewayWsPhase(wsInfo?.phase || wsInfo?.status) }),
     t('services.gatewayDetailReconnect', { state: reconnectLabel }),
     t('services.gatewayDetailLastCheck', { time: lastCheckLabel }),
   ]

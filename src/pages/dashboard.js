@@ -256,11 +256,39 @@ function formatGatewayReconnectState(state) {
   return labels[key] || t('dashboard.reconnectUnknown', { state: key })
 }
 
+function formatGatewayWsPhase(status) {
+  const raw = String(status || '').trim()
+  const key = raw.toLowerCase()
+  const labels = {
+    idle: t('dashboard.wsPhaseIdle'),
+    connecting: t('dashboard.wsPhaseConnecting'),
+    connected: t('dashboard.wsPhaseConnected'),
+    ready: t('dashboard.wsPhaseReady'),
+    reconnecting: t('dashboard.wsPhaseReconnecting'),
+    disconnected: t('dashboard.wsPhaseDisconnected'),
+    error: t('dashboard.wsPhaseError'),
+    auth_failed: t('dashboard.wsPhaseAuthFailed'),
+  }
+  if (labels[key]) return labels[key]
+  const zhLabels = {
+    '正在连接网关': t('dashboard.wsPhaseConnecting'),
+    '等待握手指令': t('dashboard.wsPhaseWaitingHandshake'),
+    '握手超时，正在主动补发连接': t('dashboard.wsPhaseHandshakeRetry'),
+    '正在自动修复连接': t('dashboard.wsPhaseAutoFixing'),
+    '连接失败': t('dashboard.wsPhaseError'),
+    '连接已断开': t('dashboard.wsPhaseDisconnected'),
+    '正在生成身份验证信息': t('dashboard.wsPhaseAuthenticating'),
+    '认证失败': t('dashboard.wsPhaseAuthFailed'),
+    '网关已就绪': t('dashboard.wsPhaseReady'),
+  }
+  return zhLabels[raw] || raw || t('common.unknown')
+}
+
 function gatewayDashboardStatus() {
   const state = getGatewayHealthState()
   const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
   const reconnectLabel = formatGatewayReconnectState(wsInfo?.reconnectState)
-  const phase = wsInfo?.phase || wsInfo?.status || t('common.unknown')
+  const phase = formatGatewayWsPhase(wsInfo?.phase || wsInfo?.status)
   if (state.foreign) {
     return {
       text: t('dashboard.externalInstance'),
