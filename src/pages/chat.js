@@ -3095,12 +3095,16 @@ function scheduleStreamSafetyTimeout() {
         loadHistory().then(async () => {
           if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
             setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
+            const doneTask = updateTaskByRunOrSession(runId || _currentRunId, _sessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
+            completeTaskRound(doneTask)
             resetStreamState()
             // loadHistory deliberately avoids repainting while a stream is active.
             // When a silent/long-running run only completes in history (no final WS event),
             // render once more after clearing stream state so the completed answer is visible.
             _lastHistoryHash = ''
             await loadHistory()
+            setReplyStatus('done', replyStatusText('done'), { runId, activity: t('chat.replyActivityDone') })
+            refreshSessionList()
             processMessageQueue()
           }
         }).catch(() => {})
@@ -3891,12 +3895,16 @@ function _startResponseWatchdog() {
       if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
         const doneRunId = _currentRunId || ''
         showTyping(false)
+        const doneTask = updateTaskByRunOrSession(doneRunId, _sessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
+        completeTaskRound(doneTask)
         resetStreamState()
         // The first refresh only persists history while waiting/streaming; repaint now that
         // the watchdog has confirmed the answer arrived without a live final event.
         _lastHistoryHash = ''
         await loadHistory()
         setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: t('chat.replyActivityDone') })
+        refreshSessionList()
+        processMessageQueue()
       } else if (await syncReplyStatusWithRuntime('watchdog')) {
         return
       } else if (!_currentAiBubble) {
