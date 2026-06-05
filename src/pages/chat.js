@@ -3072,6 +3072,7 @@ async function syncReplyStatusWithRuntime(reason = '') {
       await loadHistory()
     }
     if (isLongRunningReplyState()) {
+      if (doneRunId) rememberSeenRunId(doneRunId)
       showTyping(false)
       resetStreamState()
       // The first loadHistory() above runs while streaming and only warms local cache.
