@@ -4911,6 +4911,10 @@ body[data-active-engine="hermes"][data-theme="dark"] {
   color: var(--hm-text-primary);
   font-weight: 500;
 }
+[data-engine="hermes"] .hm-chat-tool-status {
+  font-size: 10px;
+  color: var(--hm-text-tertiary);
+}
 [data-engine="hermes"] .hm-chat-tool-preview {
   color: var(--hm-text-tertiary);
   max-width: 360px;

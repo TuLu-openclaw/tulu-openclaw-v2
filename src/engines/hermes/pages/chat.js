@@ -761,6 +761,20 @@ export function render() {
     return readable || t('chat.toolNameUnknown')
   }
 
+  function formatHermesToolStatus(status = '') {
+    const normalized = String(status || '').trim().toLowerCase()
+    const map = {
+      done: t('chat.toolStatusSuccess'),
+      success: t('chat.toolStatusSuccess'),
+      completed: t('chat.toolStatusSuccess'),
+      error: t('chat.toolStatusFailed'),
+      failed: t('chat.toolStatusFailed'),
+      running: t('chat.toolStatusRunning'),
+      pending: t('chat.toolStatusPending'),
+    }
+    return map[normalized] || (normalized ? t('chat.toolStatusValue', { status }) : t('chat.toolStatusSuccess'))
+  }
+
   function renderToolMessage(m) {
     const expanded = expandedToolIds.has(m.id)
     const hasDetails = !!(m.toolArgs || m.toolResult)
@@ -771,9 +785,10 @@ export function render() {
             ? `<span class="hm-chat-tool-chevron ${expanded ? 'is-open' : ''}">${ICONS.chevron}</span>`
             : `<span class="hm-chat-tool-icon">${ICONS.tool}</span>`}
           <span class="hm-chat-tool-name">${escHtml(formatHermesToolName(m.toolName))}</span>
+          <span class="hm-chat-tool-status">${escHtml(formatHermesToolStatus(m.toolStatus))}</span>
           ${!expanded && m.toolPreview ? `<span class="hm-chat-tool-preview">${escHtml(m.toolPreview)}</span>` : ''}
           ${m.toolStatus === 'running' ? `<span class="hm-chat-tool-spinner"></span>` : ''}
-          ${m.toolStatus === 'error' ? `<span class="hm-chat-tool-err">${escHtml(t('engine.chatErrorBadge'))}</span>` : ''}
+          ${m.toolStatus === 'error' ? `<span class="hm-chat-tool-err">${escHtml(t('chat.toolStatusFailed'))}</span>` : ''}
         </div>
         ${expanded && hasDetails ? `
           <div class="hm-chat-tool-details">
