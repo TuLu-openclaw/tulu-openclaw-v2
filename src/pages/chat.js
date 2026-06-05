@@ -3074,6 +3074,13 @@ async function syncReplyStatusWithRuntime(reason = '') {
     if (isLongRunningReplyState()) {
       showTyping(false)
       resetStreamState()
+      // The first loadHistory() above runs while streaming and only warms local cache.
+      // After runtime says the run completed, repaint once with streaming cleared so
+      // silent/history-only completions become visible before the status turns idle.
+      if (_sessionKey && _messagesEl && _pageActive) {
+        _lastHistoryHash = ''
+        await loadHistory()
+      }
       setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: reason ? t('chat.replyActivityRuntimeSyncedWithReason', { reason }) : t('chat.replyActivityRuntimeSynced') })
       processMessageQueue()
     }
