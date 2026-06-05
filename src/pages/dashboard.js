@@ -3,7 +3,7 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
+import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus, boostGatewayPolling } from '../lib/app-state.js'
 import { wsClient } from '../lib/ws-client.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
@@ -14,6 +14,49 @@ let _unsubWsStatus = null
 let _unsubWsReady = null
 let _dashboardReloadTimer = null
 const _dashboardActionTimers = new Set()
+
+let _dashboardWsEnsureTimer = null
+let _dashboardWsEnsureInFlight = false
+
+async function ensureDashboardWebSocket() {
+  const state = getGatewayHealthState()
+  const info = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+  if (!state.running || state.foreign || info.connected || info.gatewayReady || info.connecting || info.handshaking || info.reconnectState === 'attempting' || info.reconnectState === 'scheduled') return
+  if (_dashboardWsEnsureInFlight) return
+  _dashboardWsEnsureInFlight = true
+  try {
+    const config = await api.readOpenclawConfig().catch(() => ({}))
+    const port = config?.gateway?.port || 18789
+    const rawToken = config?.gateway?.auth?.token
+    const token = typeof rawToken === 'string' ? rawToken : ''
+    const inst = getActiveInstance()
+    let host
+    if (inst?.type !== 'local' && inst?.endpoint) {
+      try {
+        const url = new URL(inst.endpoint)
+        host = `${url.hostname}:${inst.gatewayPort || port}`
+      } catch {
+        host = `127.0.0.1:${port}`
+      }
+    } else {
+      host = `127.0.0.1:${port}`
+    }
+    boostGatewayPolling()
+    wsClient.connect(host, token)
+  } catch (e) {
+    console.warn('[dashboard] ensure websocket failed:', e)
+  } finally {
+    _dashboardWsEnsureInFlight = false
+  }
+}
+
+function scheduleDashboardWebSocketEnsure(delayMs = 0) {
+  if (_dashboardWsEnsureTimer) clearTimeout(_dashboardWsEnsureTimer)
+  _dashboardWsEnsureTimer = setTimeout(() => {
+    _dashboardWsEnsureTimer = null
+    ensureDashboardWebSocket().catch(() => {})
+  }, delayMs)
+}
 
 function scheduleDashboardFollowup(page, delayMs, fn) {
   if (!page?.isConnected) return
@@ -106,6 +149,8 @@ export function cleanup() {
   if (_unsubWsStatus) { _unsubWsStatus(); _unsubWsStatus = null }
   if (_unsubWsReady) { _unsubWsReady(); _unsubWsReady = null }
   if (_dashboardReloadTimer) { clearTimeout(_dashboardReloadTimer); _dashboardReloadTimer = null }
+  if (_dashboardWsEnsureTimer) { clearTimeout(_dashboardWsEnsureTimer); _dashboardWsEnsureTimer = null }
+  _dashboardWsEnsureInFlight = false
   for (const timer of _dashboardActionTimers) clearTimeout(timer)
   _dashboardActionTimers.clear()
 }
@@ -152,6 +197,7 @@ function syncDashboardInstanceScope() {
 
 async function loadDashboardData(page, fullRefresh = false) {
   await refreshGatewayStatus().catch(() => {})
+  scheduleDashboardWebSocketEnsure(0)
   syncDashboardInstanceScope()
   // 分波加载：关键数据先渲染，次要数据后填充，减少白屏等待
   // 轻量调用（读文件）每次都做；重量调用（spawn CLI/网络请求）只在首次或手动刷新时做

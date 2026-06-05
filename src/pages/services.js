@@ -5,7 +5,7 @@
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { showConfirm, showModal, showUpgradeModal } from '../components/modal.js'
-import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart, getGatewayHealthState, refreshGatewayStatus } from '../lib/app-state.js'
+import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart, getGatewayHealthState, refreshGatewayStatus, getActiveInstance, boostGatewayPolling } from '../lib/app-state.js'
 import { wsClient } from '../lib/ws-client.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { diagnoseInstallError } from '../lib/error-diagnosis.js'
@@ -97,6 +97,40 @@ function formatGatewayWsDetail(detail) {
     '已停止自动重连，请手动刷新页面重试': t('services.wsDetailReconnectExhausted'),
   }
   return zhDetails[raw] || raw
+}
+
+let _servicesWsEnsureInFlight = false
+
+async function ensureServicesWebSocket() {
+  const state = getGatewayHealthState()
+  const info = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
+  if (!state.running || state.foreign || info.connected || info.gatewayReady || info.connecting || info.handshaking || info.reconnectState === 'attempting' || info.reconnectState === 'scheduled') return
+  if (_servicesWsEnsureInFlight) return
+  _servicesWsEnsureInFlight = true
+  try {
+    const config = await api.readOpenclawConfig().catch(() => ({}))
+    const port = config?.gateway?.port || 18789
+    const rawToken = config?.gateway?.auth?.token
+    const token = typeof rawToken === 'string' ? rawToken : ''
+    const inst = getActiveInstance()
+    let host
+    if (inst?.type !== 'local' && inst?.endpoint) {
+      try {
+        const url = new URL(inst.endpoint)
+        host = `${url.hostname}:${inst.gatewayPort || port}`
+      } catch {
+        host = `127.0.0.1:${port}`
+      }
+    } else {
+      host = `127.0.0.1:${port}`
+    }
+    boostGatewayPolling()
+    wsClient.connect(host, token)
+  } catch (e) {
+    console.warn('[services] ensure websocket failed:', e)
+  } finally {
+    _servicesWsEnsureInFlight = false
+  }
 }
 
 // HTML 转义，防止 XSS
@@ -436,6 +470,8 @@ function renderServiceLoadFallback(container, error) {
 async function loadServices(page) {
   const container = page.querySelector('#services-list')
   try {
+    await refreshGatewayStatus().catch(() => {})
+    await ensureServicesWebSocket().catch(() => {})
     const services = await api.getServicesStatus()
     renderServices(container, services)
     const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0] || null
