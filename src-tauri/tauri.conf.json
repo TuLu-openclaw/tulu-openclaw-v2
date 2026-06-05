@@ -59,6 +59,12 @@
         "displayLanguageSelector": true,
         "installerHooks": "./windows/nsis-installer-hooks.nsh"
       }
+    },
+    "linux": {
+      "deb": {
+        "preInstallScript": "./linux/close-running-app.sh",
+        "preRemoveScript": "./linux/close-running-app.sh"
+      }
     }
   }
 }
