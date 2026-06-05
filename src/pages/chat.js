@@ -3036,6 +3036,13 @@ function isSessionRuntimeBusy(item = {}) {
   return ['queued', 'sending', 'thinking', 'streaming', 'tool', 'running', 'in_progress', 'busy', 'working', 'executing', 'finalizing'].some(v => raw.includes(v))
 }
 
+function isSessionRuntimeCompleted(item = {}) {
+  const raw = String(item.status || item.state || item.phase || item.runState || item.runtimeStatus || '').toLowerCase()
+  if (raw && ['done', 'complete', 'completed', 'success', 'succeeded', 'idle', 'waiting'].some(v => raw.includes(v))) return true
+  if (item.completedAt || item.completed_at || item.finishedAt || item.finished_at || item.endedAt || item.ended_at) return true
+  return false
+}
+
 function findRuntimeSession(sessions = [], sessionKey = _sessionKey) {
   if (!sessionKey) return null
   return sessions.find(item => (item.sessionKey || item.key || '') === sessionKey) || null
@@ -3048,7 +3055,7 @@ async function syncReplyStatusWithRuntime(reason = '') {
     const sessions = result?.sessions || result || []
     updateSessionRuntimeCache(sessions, result?.defaults)
     const item = findRuntimeSession(sessions, _sessionKey)
-    if (!item || isSessionRuntimeBusy(item)) return false
+    if (!item || isSessionRuntimeBusy(item) || !isSessionRuntimeCompleted(item)) return false
     const doneRunId = _currentRunId || _replyStatusState?.runId || ''
     if (_sessionKey && _messagesEl && _pageActive) {
       _lastHistoryHash = ''
