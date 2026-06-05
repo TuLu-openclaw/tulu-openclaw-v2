@@ -1198,14 +1198,8 @@ mod platform {
             return Ok(());
         }
 
-        // 只有端口不通、确实准备启动时，才清理残留的僵尸 Gateway 进程（防止多进程堆积）
-        cleanup_zombie_gateway_processes();
-
-        // 清理后再次确认端口，避免清理过程期间 Gateway 已恢复
-        if check_service_status(0, "").0 {
-            return Ok(());
-        }
-
+        // 快速路径：端口不通时直接隐藏启动 Gateway。
+        // 不在正常启动前做 netstat/PID 僵尸扫描；那是慢路径，且低配机器上会明显拖慢冷启动。
         let (stdout_log, stderr_log) = create_gateway_log_files()?;
 
         let mut cmd = crate::utils::openclaw_command();
@@ -1224,8 +1218,18 @@ mod platform {
 
         // 轮询等待：端口就绪即认为 Gateway 已稳定运行。
         // 不在启动等待中查询 PID，避免低配电脑上因 netstat/WMIC 抖动影响 Gateway。
-        let deadline = Instant::now() + Duration::from_secs(300);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            if check_service_status(0, "").0 {
+                return Ok(());
+            }
+        }
+
+        // 慢路径兜底：正常启动超时才清理残留 Gateway，再给一次短暂恢复窗口。
+        cleanup_zombie_gateway_processes();
+        let retry_deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < retry_deadline {
             tokio::time::sleep(Duration::from_millis(300)).await;
             if check_service_status(0, "").0 {
                 return Ok(());
@@ -1439,6 +1443,22 @@ mod platform {
         (result, None)
     }
 
+    fn create_gateway_log_files() -> Result<(std::fs::File, std::fs::File), String> {
+        let log_dir = crate::commands::openclaw_dir().join("logs");
+        std::fs::create_dir_all(&log_dir).map_err(|e| format!("创建日志目录失败: {e}"))?;
+        let stdout_log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_dir.join("gateway.log"))
+            .map_err(|e| format!("创建日志文件失败: {e}"))?;
+        let stderr_log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_dir.join("gateway.err.log"))
+            .map_err(|e| format!("创建错误日志失败: {e}"))?;
+        Ok((stdout_log, stderr_log))
+    }
+
     /// 清理残留的 Gateway 进程（跨平台：通过 fuser/lsof 查端口占用进程并 kill）
     fn cleanup_zombie_gateway_processes() {
         let port = crate::commands::gateway_listen_port();
@@ -1605,28 +1625,21 @@ mod platform {
             return Ok(());
         }
 
-        let output = crate::utils::openclaw_command_async()
-            .args(["gateway", "start"])
-            .output()
-            .await
-            .map_err(|e| format!("执行 openclaw gateway start 失败: {e}"))?;
+        let (stdout_log, stderr_log) = create_gateway_log_files()?;
+        let mut child = crate::utils::openclaw_command_async();
+        child
+            .arg("gateway")
+            .stdin(std::process::Stdio::null())
+            .stdout(stdout_log)
+            .stderr(stderr_log);
+        child
+            .spawn()
+            .map_err(|e| format!("后台启动 Gateway 失败: {e}"))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if is_port_ready(addr, 500).await {
-                return Ok(());
-            }
-            return Err(if stderr.is_empty() {
-                "openclaw gateway start 失败（未返回 stderr）".to_string()
-            } else {
-                format!("openclaw gateway start 失败: {stderr}")
-            });
-        }
-
-        // 等端口就绪（最多 45s），避免 Windows 慢启动时被过早误判失败
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
+        // 端口就绪即返回，不等待 `openclaw gateway start` 命令退出，避免 Linux 售卖版启动卡太久。
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
             if is_port_ready(addr, 250).await {
                 return Ok(());
             }

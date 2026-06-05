@@ -26,8 +26,8 @@ const CHALLENGE_TIMEOUT = 8000
 const MAX_RECONNECT_ATTEMPTS = 20
 const HEARTBEAT_TIMEOUT = 90000
 const MESSAGE_CACHE_SIZE = 100
-// Gateway 启动前的初始重连延迟（尽快首连，同时保留重试退避）
-const INITIAL_RECONNECT_DELAY = 3000
+// Gateway 启动前的初始重连延迟：启动期要快速贴上端口，避免首页一直等到进入 chat 才重连。
+const INITIAL_RECONNECT_DELAY = 1000
 
 export class WsClient {
   constructor() {

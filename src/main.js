@@ -649,11 +649,13 @@ window.addEventListener('lobster-work-end', () => {
       // Gateway 冷启动期间 ws-client 会自动重试；这样首页/dashboard/services 不会一直停在“初始化中”。
       autoConnectWebSocket()
 
-      // 监听 Gateway 状态变化，自动连接/断开 WebSocket
-      onGatewayChange((running) => {
-        if (running) {
+      // 监听 Gateway 状态变化，自动连接；不要在短暂 offline/starting 时主动 disconnect。
+      // 之前这里一旦轮询误判未运行就 intentionalClose，导致首页/dashboard/services 停在“初始化中”；
+      // 进入 chat 页后 connectGateway() 重新打开连接，所以看起来必须手动切到 chat 才成功。
+      onGatewayChange((running, foreign, state = {}) => {
+        if (running || (!foreign && !state.userStopped)) {
           autoConnectWebSocket()
-        } else {
+        } else if (foreign || state.userStopped) {
           wsClient.disconnect()
         }
         // 通知龙虾办公室：Gateway 状态变化（实时联动）
