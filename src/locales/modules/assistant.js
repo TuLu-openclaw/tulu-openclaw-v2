@@ -45,6 +45,7 @@ export default {
   skillPrAssistantDesc: _('帮你走一遍 PR 流程', 'Walk through the PR process', '幫你走一遍 PR 流程'),
   skillSkillsManager: _('Skills 管理', 'Skills Manager'),
   skillSkillsManagerDesc: _('管理 OpenClaw 的 Skills', 'Manage OpenClaw Skills'),
+  promptCheckConfig: _('检查 OpenClaw 配置文件、目录结构与常见配置错误，并给出健康度评估和改进建议', 'Check OpenClaw configuration files, directory structure, and common configuration mistakes, then provide a health summary and improvement suggestions', '檢查 OpenClaw 設定檔、目錄結構與常見設定錯誤，並給出健康度評估和改進建議'),
   soulFileSoul: _('核心人格', 'Core persona'),
   soulFileIdentity: _('身份信息', 'Identity info', '身份資訊'),
   soulFileUser: _('用户偏好', 'User preferences', '使用者偏好'),

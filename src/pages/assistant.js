@@ -561,17 +561,7 @@ const BUILTIN_SKILLS = [
     name: t('assistant.skillCheckConfig'),
     desc: t('assistant.skillCheckConfigDesc'),
     tools: ['fileOps'],
-    prompt: `请帮我检查 OpenClaw 的配置文件。
-
-具体操作：
-1. 调用 get_system_info 获取系统信息，确定主目录和 OS 类型
-2. 用 list_directory 查看 ~/.openclaw/ 目录结构
-3. 用 read_file 读取 ~/.openclaw/openclaw.json
-4. 分析配置内容，检查：
-   - models.providers 服务商配置（baseUrl 格式、apiKey 是否存在）
-   - gateway 配置（port 默认 18789、mode 必须在 gateway 对象内）
-   - 常见配置错误（mode 放在顶层、缺少 gateway 对象、controlUi.allowedOrigins 未配置）
-5. 给出配置健康度评估和具体改进建议`,
+    prompt: t('assistant.promptCheckConfig'),
   },
   {
     id: 'diagnose-gateway',
