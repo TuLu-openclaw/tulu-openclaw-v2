@@ -1,31 +1,18 @@
 !include LogicLib.nsh
-!include x64.nsh
 
-!macro _CLOSE_PROCESS_BY_NAME PROC_NAME
-  ClearErrors
-  FindProcDLL::FindProc "${PROC_NAME}"
-  ${If} $R0 == 1
-    DetailPrint "Closing ${PROC_NAME}..."
-    KillProcDLL::KillProc "${PROC_NAME}"
-    Sleep 800
-  ${Else}
-    DetailPrint "${PROC_NAME} is not running."
-  ${EndIf}
+!macro _TASKKILL_PROCESS PROC_NAME
+  DetailPrint "Closing ${PROC_NAME} if running..."
+  nsExec::ExecToLog 'cmd /C taskkill /F /T /IM "${PROC_NAME}" 2>NUL || exit /B 0'
 !macroend
 
 !macro _KILL_XINGSHU_PROCESSES
   DetailPrint "Closing running XingShu/OpenClaw processes before install..."
-  !insertmacro _CLOSE_PROCESS_BY_NAME "XingShu.exe"
-  !insertmacro _CLOSE_PROCESS_BY_NAME "星枢OpenClaw.exe"
-  !insertmacro _CLOSE_PROCESS_BY_NAME "XingShuOpenClaw.exe"
-  !insertmacro _CLOSE_PROCESS_BY_NAME "TuLuOpenClaw.exe"
-  !insertmacro _CLOSE_PROCESS_BY_NAME "clawpanel.exe"
-  nsExec::ExecToLog 'taskkill /F /T /IM "XingShu.exe"'
-  nsExec::ExecToLog 'taskkill /F /T /IM "星枢OpenClaw.exe"'
-  nsExec::ExecToLog 'taskkill /F /T /IM "XingShuOpenClaw.exe"'
-  nsExec::ExecToLog 'taskkill /F /T /IM "TuLuOpenClaw.exe"'
-  nsExec::ExecToLog 'taskkill /F /T /IM "clawpanel.exe"'
-  Sleep 1200
+  !insertmacro _TASKKILL_PROCESS "XingShu.exe"
+  !insertmacro _TASKKILL_PROCESS "星枢OpenClaw.exe"
+  !insertmacro _TASKKILL_PROCESS "XingShuOpenClaw.exe"
+  !insertmacro _TASKKILL_PROCESS "TuLuOpenClaw.exe"
+  !insertmacro _TASKKILL_PROCESS "clawpanel.exe"
+  Sleep 1500
 !macroend
 
 !macro _UNLOCK_OLD_XINGSHU_EXE
@@ -33,9 +20,11 @@
     ClearErrors
     Delete "$INSTDIR\XingShu.exe"
     ${If} ${Errors}
-      DetailPrint "XingShu.exe is still locked; scheduling old file replacement after reboot."
+      DetailPrint "Old XingShu.exe is still locked; trying to move it aside."
+      ClearErrors
       Rename "$INSTDIR\XingShu.exe" "$INSTDIR\XingShu.exe.old"
       ${If} ${Errors}
+        DetailPrint "Old XingShu.exe could not be moved; scheduling deletion after reboot."
         Delete /REBOOTOK "$INSTDIR\XingShu.exe"
       ${Else}
         Delete /REBOOTOK "$INSTDIR\XingShu.exe.old"
