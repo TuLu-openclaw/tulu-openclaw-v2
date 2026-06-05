@@ -3017,6 +3017,15 @@ function beginStreamBubble(runId = '') {
   setReplyStatus('queued', replyStatusText('queued'), { runId: _currentRunId, activity: t('chat.replyActivityStreamReady') })
 }
 
+function rememberSeenRunId(runId) {
+  if (!runId) return
+  _seenRunIds.add(runId)
+  if (_seenRunIds.size > 200) {
+    const first = _seenRunIds.values().next().value
+    _seenRunIds.delete(first)
+  }
+}
+
 function isLongRunningReplyState(state = _replyStatusState?.state) {
   return ['queued', 'sending', 'thinking', 'tool', 'streaming', 'finalizing'].includes(state)
 }
@@ -3095,6 +3104,7 @@ function scheduleStreamSafetyTimeout() {
         loadHistory().then(async () => {
           if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
             setReplyStatus('finalizing', t('chat.streamHistoryUpdated'), { runId, activity: t('chat.replyActivityFinalizing', { count: 0 }) })
+            if (runId) rememberSeenRunId(runId)
             const doneTask = updateTaskByRunOrSession(runId || _currentRunId, _sessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
             completeTaskRound(doneTask)
             resetStreamState()
@@ -3253,14 +3263,7 @@ function handleChatEvent(payload) {
     const hasContent = finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length
     // 忽略空 final（Gateway 会为一条消息触发多个 run，部分是空 final）
     if (!_currentAiBubble && !hasContent) return
-    // 标记 runId 为已处理，防止重复
-    if (runId) {
-      _seenRunIds.add(runId)
-      if (_seenRunIds.size > 200) {
-        const first = _seenRunIds.values().next().value
-        _seenRunIds.delete(first)
-      }
-    }
+    if (runId) rememberSeenRunId(runId)
     showTyping(false)
     // 如果流式阶段没有创建 bubble，从 final message 中提取
     if (!_currentAiBubble && hasContent) {
@@ -3894,6 +3897,7 @@ function _startResponseWatchdog() {
       await loadHistory()
       if (_lastHistoryHash && _lastHistoryHash !== oldHash) {
         const doneRunId = _currentRunId || ''
+        if (doneRunId) rememberSeenRunId(doneRunId)
         showTyping(false)
         const doneTask = updateTaskByRunOrSession(doneRunId, _sessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
         completeTaskRound(doneTask)
