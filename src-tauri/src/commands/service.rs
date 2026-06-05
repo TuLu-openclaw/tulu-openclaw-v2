@@ -823,7 +823,8 @@ mod platform {
     static ACTIVE_GATEWAY_CHILD: Mutex<Option<u32>> = Mutex::new(None);
 
     /// 缓存 PID 命令行查询结果，避免停止/清理 Gateway 时重复 spawn WMIC
-    static PROCESS_COMMAND_LINE_CACHE: Mutex<Vec<(u32, Instant, Option<String>)>> = Mutex::new(Vec::new());
+    static PROCESS_COMMAND_LINE_CACHE: Mutex<Vec<(u32, Instant, Option<String>)>> =
+        Mutex::new(Vec::new());
     const PROCESS_COMMAND_LINE_CACHE_TTL: Duration = Duration::from_secs(60);
 
     /// 清理残留的僵尸 Gateway 进程（启动时调用，防止 Windows 重启后多进程堆积）
@@ -881,7 +882,8 @@ mod platform {
         let now = Instant::now();
         if let Ok(mut cache) = PROCESS_COMMAND_LINE_CACHE.lock() {
             cache.retain(|(_, ts, _)| now.duration_since(*ts) < PROCESS_COMMAND_LINE_CACHE_TTL);
-            if let Some((_, _, cached)) = cache.iter().find(|(cached_pid, _, _)| *cached_pid == pid) {
+            if let Some((_, _, cached)) = cache.iter().find(|(cached_pid, _, _)| *cached_pid == pid)
+            {
                 return cached.clone();
             }
         }
