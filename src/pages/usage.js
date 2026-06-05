@@ -80,7 +80,7 @@ async function loadUsage(page, options = {}) {
     const now = new Date()
     const end = now.toISOString().slice(0, 10)
     const start = new Date(now.getTime() - (_days - 1) * 86400000).toISOString().slice(0, 10)
-    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 60, includeArchived: false, requestRefresh: !!options.requestRefresh })
+    const data = await requestUsageWithCacheRecovery({ startDate: start, endDate: end, limit: 60 })
     if (seq !== _loadSeq || page !== _page || !page.isConnected || !el.isConnected) return
     renderUsage(el, data)
   } catch (e) {
