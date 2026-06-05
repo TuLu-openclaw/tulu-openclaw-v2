@@ -822,6 +822,10 @@ mod platform {
     /// 记录当前活跃的 Gateway 子进程（用于 stop 时精确 kill）
     static ACTIVE_GATEWAY_CHILD: Mutex<Option<u32>> = Mutex::new(None);
 
+    /// 缓存 PID 命令行查询结果，避免服务状态轮询频繁 spawn PowerShell/WMIC
+    static PROCESS_COMMAND_LINE_CACHE: Mutex<Vec<(u32, Instant, Option<String>)>> = Mutex::new(Vec::new());
+    const PROCESS_COMMAND_LINE_CACHE_TTL: Duration = Duration::from_secs(60);
+
     /// 清理残留的僵尸 Gateway 进程（启动时调用，防止 Windows 重启后多进程堆积）
     pub(crate) fn cleanup_zombie_gateway_processes() {
         let port = crate::commands::gateway_listen_port();
@@ -874,27 +878,18 @@ mod platform {
     }
 
     fn read_process_command_line(pid: u32) -> Option<String> {
-        // 优先用 PowerShell Get-CimInstance（wmic 在 Win11 已弃用）
-        // fallback 到 wmic 以兼容旧版 Windows
-        let ps_output = StdCommand::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                &format!(
-                    "(Get-CimInstance Win32_Process -Filter 'ProcessId={}').CommandLine",
-                    pid
-                ),
-            ])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output();
-        if let Ok(o) = ps_output {
-            let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            if !text.is_empty() {
-                return Some(text);
+        let now = Instant::now();
+        if let Ok(mut cache) = PROCESS_COMMAND_LINE_CACHE.lock() {
+            cache.retain(|(_, ts, _)| now.duration_since(*ts) < PROCESS_COMMAND_LINE_CACHE_TTL);
+            if let Some((_, _, cached)) = cache.iter().find(|(cached_pid, _, _)| *cached_pid == pid) {
+                return cached.clone();
             }
         }
-        // fallback: wmic（兼容 Win10 及更早版本）
-        let output = match StdCommand::new("wmic")
+
+        // 使用 wmic 查询命令行：售卖版启动/轮询阶段不应频繁拉起可见的 powershell 进程。
+        // 如果 wmic 不可用，返回 None；调用方会把端口连通视为 running，避免误判未运行后重复拉起。
+        let mut result = None;
+        if let Ok(output) = StdCommand::new("wmic")
             .args([
                 "process",
                 "where",
@@ -906,16 +901,24 @@ mod platform {
             .creation_flags(CREATE_NO_WINDOW)
             .output()
         {
-            Ok(o) => String::from_utf8_lossy(&o.stdout).to_string(),
-            Err(_) => return None,
-        };
-        for line in output.lines() {
-            let line = line.trim();
-            if let Some(cmd) = line.strip_prefix("CommandLine=") {
-                return Some(cmd.to_string());
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                let line = line.trim();
+                if let Some(cmd) = line.strip_prefix("CommandLine=") {
+                    let cmd = cmd.trim();
+                    if !cmd.is_empty() {
+                        result = Some(cmd.to_string());
+                        break;
+                    }
+                }
             }
         }
-        None
+
+        if let Ok(mut cache) = PROCESS_COMMAND_LINE_CACHE.lock() {
+            cache.push((pid, now, result.clone()));
+        }
+
+        result
     }
 
     fn kill_process_tree(pid: u32) {
