@@ -52,9 +52,12 @@ pub async fn device_info() -> Result<DeviceInfo, String> {
 async fn read_primary_mac_address() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        let script = "Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.MACAddress -and $_.IPEnabled } | Select-Object -First 1 -ExpandProperty MACAddress";
-        return tokio::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", script])
+        // 售卖版启动热路径禁止 PowerShell：Get-CimInstance 会频繁拉起 powershell.exe。
+        // getmac 是轻量原生命令，隐藏窗口执行；读不到时返回 None，不阻塞应用启动。
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        return tokio::process::Command::new("getmac")
+            .args(["/fo", "csv", "/nh"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .await
             .ok()
@@ -349,10 +352,10 @@ pub async fn assistant_list_processes(filter: Option<String>) -> Result<String, 
     let output;
     #[cfg(target_os = "windows")]
     {
-        output = tokio::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command",
-                "Get-Process | Select-Object Id, ProcessName, CPU, WorkingSet64 | Sort-Object ProcessName | Format-Table -AutoSize | Out-String -Width 200"])
-
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        output = tokio::process::Command::new("tasklist")
+            .args(["/fo", "table"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .await;
     }
@@ -418,10 +421,10 @@ async fn get_port_process(port: u16) -> String {
     let output;
     #[cfg(target_os = "windows")]
     {
-        output = tokio::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command",
-                &format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | Select-Object OwningProcess | ForEach-Object {{ (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName }}", port)])
-
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        output = tokio::process::Command::new("netstat")
+            .args(["-ano", "-p", "TCP"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .await;
     }
@@ -436,6 +439,24 @@ async fn get_port_process(port: u16) -> String {
     match output {
         Ok(o) => {
             let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            #[cfg(target_os = "windows")]
+            {
+                let port_token = format!(":{}", port);
+                let line = s
+                    .lines()
+                    .find(|line| {
+                        line.contains(&port_token)
+                            && line.to_ascii_uppercase().contains("LISTENING")
+                    })
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                if line.is_empty() {
+                    return String::new();
+                }
+                return format!("\n占用信息: {}", line);
+            }
+            #[cfg(not(target_os = "windows"))]
             if s.is_empty() {
                 String::new()
             } else {
@@ -522,74 +543,47 @@ pub async fn assistant_web_search(
     Ok(output)
 }
 
-/// 通过 PowerShell iwr 代理 HTTP 请求（绕过 WebView CORS 限制，继承系统网络和代理设置）
+/// 影视接口请求：使用 Rust HTTP 客户端，自动解压并按 UTF-8/GBK 解码。
+/// 旧实现依赖 PowerShell iwr，会在影视工具频繁搜索/播放时反复拉起 powershell.exe。
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn vod_fetch(url: String, _timeout_secs: Option<u64>) -> Result<String, String> {
-    use std::process::Command;
+pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String, String> {
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
-    let escaped = url.replace("'", "''");
-    // 正确处理 GBK 编码 + gzip/deflate 自动解压，用 Base64 传输避免编码问题
-    let ps = format!(
-        r#"try {{
-            Add-Type -AssemblyName System.IO.Compression
-            $req = [System.Net.WebRequest]::Create('{}')
-            $req.UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            $req.Accept = 'application/json, text/plain, */*'
-            $req.Timeout = 30000
-            $resp = $req.GetResponse()
-            $rs = $resp.GetResponseStream()
-            $ms = [System.IO.MemoryStream]::new()
-            if ($resp.ContentEncoding -and $resp.ContentEncoding.ToLower().Contains('gzip')) {{
-                $gz = [System.IO.Compression.GZipStream]::new($rs, [System.IO.Compression.CompressionMode]::Decompress)
-                $gz.CopyTo($ms)
-                $gz.Close()
-            }} else {{
-                $rs.CopyTo($ms)
-            }}
-            $rs.Close(); $resp.Close()
-            $bytes = $ms.ToArray()
-            $ms.Close()
-            # ── 编码处理：用 UTF-8 直接输出，绕过控制台编码问题
-            [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-            $OutputEncoding = [System.Text.Encoding]::UTF8
-            $textUtf8 = [System.Text.Encoding]::UTF8.GetString($bytes)
-            $ffc = ($textUtf8.ToCharArray() | Where-Object {{ [int]$_ -eq 0xFFFD }} | Measure-Object).Count
-            if ($ffc -gt 0) {{
-                # 含乱码 → GBK 字节序列，用 [Console] 输出绕过编码
-                $gbk = [System.Text.Encoding]::GetEncoding('GBK')
-                $decoded = $gbk.GetString($bytes)
-                [System.Console]::Out.Flush()
-                [System.Console]::Out.NewLine = ''
-                [System.Console]::Out.Write($decoded)
-            }} else {{
-                [System.Console]::Out.Flush()
-                [System.Console]::Out.NewLine = ''
-                [System.Console]::Out.Write($textUtf8)
-            }}
-        }} catch {{
-            Write-Output ('VOD_ERROR:' + $_.Exception.Message)
-        }}"#,
-        escaped
-    );
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
-        .output()
-        .map_err(|e| format!("PowerShell 执行失败: {e}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success() || stdout.contains("VOD_ERROR:") {
-        let msg = if stdout.starts_with("VOD_ERROR:") {
-            stdout.trim_start_matches("VOD_ERROR:").trim()
-        } else {
-            stderr.trim()
-        };
-        return Err(format!("vod_fetch failed: {}", msg));
+
+    let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(30).clamp(3, 120));
+    let client = super::build_http_client(
+        timeout,
+        Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+    )
+    .map_err(|e| format!("vod_fetch HTTP 客户端错误: {e}"))?;
+
+    let resp = client
+        .get(&url)
+        .header("Accept", "application/json, text/plain, */*")
+        .send()
+        .await
+        .map_err(|e| format!("vod_fetch 请求失败: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("vod_fetch HTTP {}", resp.status()));
     }
-    Ok(stdout)
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("vod_fetch 读取响应失败: {e}"))?;
+
+    let utf8 = String::from_utf8_lossy(&bytes).to_string();
+    let replacement_count = utf8.matches('\u{FFFD}').count();
+    if replacement_count > 0 {
+        let (decoded, _, had_errors) = encoding_rs::GBK.decode(&bytes);
+        if !had_errors || decoded.matches('\u{FFFD}').count() < replacement_count {
+            return Ok(decoded.into_owned());
+        }
+    }
+    Ok(utf8)
 }
 
 /// 抓取 URL 内容（通过 Jina Reader API）

@@ -645,10 +645,9 @@ window.addEventListener('lobster-work-end', () => {
       setupGatewayBanner()
       startGatewayPoll()
 
-      // 自动连接 WebSocket（如果 Gateway 正在运行）
-      if (isGatewayRunning()) {
-        autoConnectWebSocket()
-      }
+      // 应用启动后立即启动 WebSocket 连接，不依赖 chat 页面触发。
+      // Gateway 冷启动期间 ws-client 会自动重试；这样首页/dashboard/services 不会一直停在“初始化中”。
+      autoConnectWebSocket()
 
       // 监听 Gateway 状态变化，自动连接/断开 WebSocket
       onGatewayChange((running) => {
@@ -982,7 +981,12 @@ function setupGatewayBanner() {
 
   update(isGatewayRunning(), isGatewayForeign())
   onGatewayChange(update)
-  wsClient.onStatusChange(() => scheduleUpdate())
+  wsClient.onStatusChange(() => {
+    scheduleUpdate()
+    // WS ready/connected/reconnecting 等状态变化要反向刷新全局 Gateway 健康状态，
+    // 否则 dashboard/services 可能继续显示“初始化中”，直到进入 chat 页面才刷新。
+    refreshGatewayStatus().catch(() => {})
+  })
 }
 
 function showGuardianRecovery() {

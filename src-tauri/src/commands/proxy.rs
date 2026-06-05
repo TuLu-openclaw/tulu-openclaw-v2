@@ -10,75 +10,72 @@ pub struct ProxyResponse {
     pub set_cookie: Option<String>,
 }
 
-/// 用 PowerShell 的 Invoke-WebRequest 发请求，支持 Cookie 维护登录态。
-/// 返回 HTML 内容供 iframe srcdoc 渲染，并返回 Set-Cookie 供前端注入。
-fn fetch_with_powershell(url: &str, cookie: Option<&str>) -> ProxyResponse {
-    use std::process::Command;
-
-    let cookie_arg = cookie
-        .filter(|c| !c.is_empty())
-        .map(|c| format!("; 'Cookie'='{}'", c.replace("'", "''")))
-        .unwrap_or_default();
-
-    let ps_script = format!(
-        r#"$headers = @{{'Accept'='text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';'Accept-Language'='zh-CN,zh;q=0.9'}}{}; $r = iwr '{}' -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' -Headers $headers -TimeoutSec 20 -UseBasicParsing -ErrorAction Stop; $sc = $r.Headers['Set-Cookie']; ConvertTo-Json @{{ok=$true; status=$r.StatusCode; contentType=$r.Headers['Content-Type']; html=$r.Content; setCookie=$sc}} -Compress"#,
-        cookie_arg,
-        url.replace("'", "''")
-    );
-
-    match Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps_script])
-        .output()
-    {
-        Ok(result) => {
-            if result.status.success() {
-                let stdout = String::from_utf8_lossy(&result.stdout);
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                    let set_cookie = parsed
-                        .get("setCookie")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.is_empty())
-                        .map(String::from);
-                    return ProxyResponse {
-                        ok: parsed.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
-                        status: parsed.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
-                        content_type: parsed
-                            .get("contentType")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                        html: parsed
-                            .get("html")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                        set_cookie,
-                        error: None,
-                    };
-                }
-            }
-            let stderr = String::from_utf8_lossy(&result.stderr);
-            ProxyResponse {
-                ok: false,
-                status: 0,
-                content_type: None,
-                html: None,
-                set_cookie: None,
-                error: Some(format!("PowerShell error: {}", stderr)),
-            }
-        }
-        Err(e) => ProxyResponse {
+/// 代为请求目标 URL，支持 Cookie 维护会话。
+/// 前端 iframe 通过 srcdoc 加载返回的 HTML。
+///
+/// 注意：售卖版普通功能路径禁止 PowerShell。旧实现使用 Invoke-WebRequest，
+/// 在页面刷新/代理 iframe 场景下会频繁拉起 powershell.exe；这里改为 Rust HTTP 客户端。
+#[tauri::command]
+pub async fn proxy_url(url: String, cookie: Option<String>) -> Result<ProxyResponse, String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Ok(ProxyResponse {
             ok: false,
             status: 0,
             content_type: None,
             html: None,
+            error: Some("URL 必须以 http:// 或 https:// 开头".into()),
             set_cookie: None,
-            error: Some(format!("Failed to run PowerShell: {}", e)),
-        },
+        });
     }
-}
 
-/// 代为请求目标 URL，支持 Cookie 维护会话。
-/// 前端 iframe 通过 srcdoc 加载返回的 HTML。
-#[tauri::command]
-pub async fn proxy_url(url: String, cookie: Option<String>) -> Result<ProxyResponse, String> {
-    Ok(fetch_with_powershell(&url, cookie.as_deref()))
+    let client = super::build_http_client(
+        std::time::Duration::from_secs(20),
+        Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
+    )
+    .map_err(|e| format!("HTTP 客户端初始化失败: {e}"))?;
+
+    let mut req = client
+        .get(&url)
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        .header("Accept-Language", "zh-CN,zh;q=0.9");
+
+    if let Some(cookie) = cookie.as_deref().filter(|c| !c.trim().is_empty()) {
+        req = req.header("Cookie", cookie);
+    }
+
+    match req.send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let content_type = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            let set_cookie = resp
+                .headers()
+                .get(reqwest::header::SET_COOKIE)
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            let html = resp.text().await.ok();
+            Ok(ProxyResponse {
+                ok: (200..400).contains(&status),
+                status,
+                content_type,
+                html,
+                error: None,
+                set_cookie,
+            })
+        }
+        Err(e) => Ok(ProxyResponse {
+            ok: false,
+            status: 0,
+            content_type: None,
+            html: None,
+            error: Some(format!("HTTP request failed: {e}")),
+            set_cookie: None,
+        }),
+    }
 }
