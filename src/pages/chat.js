@@ -907,19 +907,25 @@ async function refreshRuntimeModelFromSessions(sessionKey = _sessionKey) {
   return applyRuntimeModelToSelect(sessionKey)
 }
 
+function getSessionRuntimeInfo(item = {}) {
+  const runtime = item.runtime || item.run || item.currentRun || item.activeRun || item.execution || item.task || {}
+  return (runtime && typeof runtime === 'object') ? runtime : {}
+}
+
 function updateSessionRuntimeCache(sessions, defaults = null) {
   applySessionDefaultsModel(defaults)
   const defaultCtx = Number(defaults?.contextTokens ?? defaults?.context_tokens ?? defaults?.contextWindow ?? 0) || 0
   if (defaultCtx > 0) _defaultContextTokens = defaultCtx
   for (const item of (sessions || [])) {
-    const key = item.sessionKey || item.key || ''
+    const key = item.sessionKey || item.key || item.id || item.name || ''
     if (!key) continue
-    const model = normalizeModelValue(item.model || item.runtimeModel || item.currentModel || '', item.modelProvider || item.provider || '')
+    const runtime = getSessionRuntimeInfo(item)
+    const model = normalizeModelValue(item.model || item.runtimeModel || item.currentModel || runtime.model || runtime.runtimeModel || runtime.currentModel || '', item.modelProvider || item.provider || runtime.modelProvider || runtime.provider || '')
     if (model) _sessionModels.set(key, model)
     else _sessionModels.delete(key)
-    const ctx = Number(item.contextTokens ?? item.context_tokens ?? item.contextWindow ?? item.context_window ?? defaultCtx ?? 0) || 0
+    const ctx = Number(item.contextTokens ?? item.context_tokens ?? item.contextWindow ?? item.context_window ?? runtime.contextTokens ?? runtime.context_tokens ?? runtime.contextWindow ?? runtime.context_window ?? defaultCtx ?? 0) || 0
     if (ctx > 0) _sessionContextTokens.set(key, ctx)
-    const total = Number(item.totalTokens ?? item.total_tokens ?? item.contextUsedTokens ?? item.usedTokens ?? 0) || 0
+    const total = Number(item.totalTokens ?? item.total_tokens ?? item.contextUsedTokens ?? item.usedTokens ?? runtime.totalTokens ?? runtime.total_tokens ?? runtime.contextUsedTokens ?? runtime.usedTokens ?? 0) || 0
     if (total > 0) _sessionTokenTotals.set(key, total)
   }
 }
@@ -3035,7 +3041,11 @@ function escapeRuntimeStatusRegex(value = '') {
 }
 
 function hasRuntimeStatus(item = {}, values = []) {
-  const raw = String(item.status || item.state || item.phase || item.runState || item.runtimeStatus || '').toLowerCase().trim()
+  const runtime = getSessionRuntimeInfo(item)
+  const raw = [
+    item.status, item.state, item.phase, item.runState, item.runtimeStatus,
+    runtime.status, runtime.state, runtime.phase, runtime.runState, runtime.runtimeStatus,
+  ].map(value => String(value || '').toLowerCase().trim()).filter(Boolean).join(' ')
   if (!raw) return false
   return values.some(value => {
     const pattern = new RegExp(`(^|[^a-z0-9_-])${escapeRuntimeStatusRegex(value)}($|[^a-z0-9_-])`)
@@ -3048,14 +3058,15 @@ function isSessionRuntimeBusy(item = {}) {
 }
 
 function isSessionRuntimeCompleted(item = {}) {
+  const runtime = getSessionRuntimeInfo(item)
   if (hasRuntimeStatus(item, ['done', 'complete', 'completed', 'success', 'succeeded', 'idle', 'waiting', 'stopped', 'cancelled'])) return true
-  if (item.completedAt || item.completed_at || item.finishedAt || item.finished_at || item.endedAt || item.ended_at) return true
+  if (item.completedAt || item.completed_at || item.finishedAt || item.finished_at || item.endedAt || item.ended_at || runtime.completedAt || runtime.completed_at || runtime.finishedAt || runtime.finished_at || runtime.endedAt || runtime.ended_at) return true
   return false
 }
 
 function findRuntimeSession(sessions = [], sessionKey = _sessionKey) {
   if (!sessionKey) return null
-  return sessions.find(item => (item.sessionKey || item.key || '') === sessionKey) || null
+  return sessions.find(item => (item.sessionKey || item.key || item.id || item.name || '') === sessionKey) || null
 }
 
 async function syncReplyStatusWithRuntime(reason = '') {
