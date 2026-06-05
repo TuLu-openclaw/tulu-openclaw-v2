@@ -399,9 +399,10 @@ function renderSkillCard(skill, checked) {
   const desc = skill.description || ''
   const eligible = skill.eligible !== false
   const disabled = skill.disabled === true
+  const unavailable = !eligible || disabled
   return `
-    <label class="agent-skill-card ${!eligible || disabled ? 'is-muted' : ''}">
-      <input type="checkbox" class="agent-skill-checkbox" data-skill-name="${esc(skill.name)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+    <label class="agent-skill-card ${unavailable ? 'is-muted' : ''}">
+      <input type="checkbox" class="agent-skill-checkbox" data-skill-name="${esc(skill.name)}" ${checked ? 'checked' : ''} ${unavailable ? 'disabled' : ''}>
       <div class="agent-skill-main">
         <div class="agent-skill-head">
           <span class="agent-skill-name">${emoji} ${esc(skill.name)}</span>
