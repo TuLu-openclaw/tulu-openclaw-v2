@@ -5,7 +5,7 @@
 import { api, invalidate, isTauriRuntime } from '../lib/tauri-api.js'
 import { navigate } from '../router.js'
 import { wsClient, uuid } from '../lib/ws-client.js'
-import { renderMarkdown } from '../lib/markdown.js'
+import { renderMarkdown, resolveImageSrc } from '../lib/markdown.js'
 import { saveMessage, saveMessages, getLocalMessages, clearSessionMessages, isStorageAvailable } from '../lib/message-db.js'
 import { toast } from '../components/toast.js'
 import { showModal, showConfirm, showContentModal } from '../components/modal.js'
@@ -2950,6 +2950,10 @@ function handleEvent(msg) {
     const current = _toolEventData.get(toolCallId) || {}
     if (payload.data?.args && current.input == null) current.input = payload.data.args
     if (payload.data?.meta && current.output == null) current.output = payload.data.meta
+    const mediaRefs = extractMediaRefsFromValue(payload.data?.meta || payload.data?.output || payload.data?.result || payload.data?.content)
+    if (mediaRefs.length && (!payload.sessionKey || payload.sessionKey === _sessionKey) && (!_currentRunId || !payload.runId || payload.runId === _currentRunId)) {
+      renderStreamMediaRefs(mediaRefs, payload.runId || _currentRunId)
+    }
     if (typeof payload.data?.isError === 'boolean' && current.status == null) current.status = payload.data.isError ? 'error' : 'ok'
     if (current.time == null) current.time = ts || null
     _toolEventData.set(toolCallId, current)
@@ -3251,6 +3255,48 @@ function scheduleStreamSafetyTimeout() {
   }, STREAM_IDLE_NOTICE_MS)
 }
 
+function appendMediaRefsToStreamText(refs = []) {
+  const lines = []
+  for (const ref of refs) {
+    const value = typeof ref === 'string' ? ref : (ref?.url || ref?.path || ref?.filePath || ref?.fullPath || '')
+    if (!value) continue
+    const line = `MEDIA:${value}`
+    if (_currentAiText.includes(line) || lines.includes(line)) continue
+    lines.push(line)
+  }
+  if (!lines.length) return false
+  _currentAiText = normalizeStreamText([_currentAiText, ...lines].filter(Boolean).join('\n'))
+  return true
+}
+
+function extractMediaRefsFromValue(value, refs = []) {
+  if (value == null) return refs
+  if (typeof value === 'string') {
+    const re = /(?:https?:\/\/[^\s<>()]+|file:\/\/[^\s<>()]+|[A-Za-z]:[\\/][^\s<>()"'`]+|(?:\.\.?[\\/]|[\\/])[^\s<>()"'`]+)\.(?:png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|m4v|avi|mkv|mp3|wav|ogg|m4a|flac|aac)(?:[?#][^\s<>()]*)?/gi
+    let match
+    while ((match = re.exec(value))) refs.push(match[0])
+    return refs
+  }
+  if (Array.isArray(value)) { value.forEach(item => extractMediaRefsFromValue(item, refs)); return refs }
+  if (typeof value === 'object') {
+    for (const key of ['url', 'path', 'filePath', 'fullPath', 'media', 'output', 'result', 'image', 'video', 'audio', 'content']) extractMediaRefsFromValue(value[key], refs)
+    return refs
+  }
+  return refs
+}
+
+function renderStreamMediaRefs(refs = [], runId = _currentRunId) {
+  if (!refs.length) return false
+  beginStreamBubble(runId)
+  const changed = appendMediaRefsToStreamText(refs)
+  if (changed) {
+    showTyping(false)
+    setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: runId || _currentRunId, activity: t('chat.replyActivityReceivingOutput') })
+    flushStreamRender()
+    scheduleStreamSafetyTimeout()
+  }
+  return changed
+}
 function handleChatEvent(payload) {
   const { state } = payload
   const runId = payload.runId
@@ -3345,6 +3391,10 @@ function handleChatEvent(payload) {
     if (c?.audios?.length) _currentAiAudios = c.audios
     if (c?.files?.length) _currentAiFiles = c.files
     if (c?.tools?.length) _currentAiTools = c.tools
+    const structuredMediaRefs = [..._currentAiImages, ..._currentAiVideos, ..._currentAiAudios, ..._currentAiFiles]
+      .map(item => item?.url || item?.path || item?.filePath || item?.fullPath || '')
+      .filter(Boolean)
+    if (structuredMediaRefs.length) renderStreamMediaRefs(structuredMediaRefs, runId || _currentRunId)
     if (c?.text && applyStreamText(c.text)) {
       showTyping(false)
       beginStreamBubble(runId)
@@ -4595,8 +4645,8 @@ function appendImagesToEl(el, images) {
     } else if (img.image_url?.url) {
       imgEl.src = img.image_url.url
     // URL 格式
-    } else if (img.url) {
-      imgEl.src = img.url
+    } else if (img.url || img.path || img.filePath || img.fullPath) {
+      imgEl.src = resolveImageSrc(img.url || img.path || img.filePath || img.fullPath)
     } else {
       return
     }
@@ -4617,7 +4667,7 @@ function appendVideosToEl(el, videos) {
     videoEl.preload = 'metadata'
     videoEl.playsInline = true
     if (vid.data) videoEl.src = `data:${vid.mediaType};base64,${vid.data}`
-    else if (vid.url) videoEl.src = vid.url
+    else if (vid.url || vid.path || vid.filePath || vid.fullPath) videoEl.src = resolveImageSrc(vid.url || vid.path || vid.filePath || vid.fullPath)
     el.appendChild(videoEl)
   })
 }
@@ -4631,7 +4681,7 @@ function appendAudiosToEl(el, audios) {
     audioEl.controls = true
     audioEl.preload = 'metadata'
     if (aud.data) audioEl.src = `data:${aud.mediaType};base64,${aud.data}`
-    else if (aud.url) audioEl.src = aud.url
+    else if (aud.url || aud.path || aud.filePath || aud.fullPath) audioEl.src = resolveImageSrc(aud.url || aud.path || aud.filePath || aud.fullPath)
     el.appendChild(audioEl)
   })
 }
