@@ -1648,6 +1648,35 @@
   border-radius: 4px;
   padding: 1px 5px;
 }
+.msg-media-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+.msg-media-open,
+.msg-media-copy {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.msg-media-open:hover,
+.msg-media-copy:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+.msg-media-error {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
 
 /* 消息内视频 */
 .msg-video {

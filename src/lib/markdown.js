@@ -307,17 +307,24 @@ function extractTextMediaRefs(text = '') {
   return refs
 }
 
+function mediaPathActionsHtml(path = '') {
+  const safePath = escapeHtml(path)
+  const safeAttr = escapeAttr(path).replace(/\\/g, '&#x5c;')
+  const safeHref = escapeAttr(resolveImageSrc(path)).replace(/\\/g, '&#x5c;')
+  return `<div class="msg-media-path"><span>存放路径：</span><code>${safePath}</code><div class="msg-media-actions"><button type="button" class="msg-media-open" data-media-open="${safeAttr}" data-media-href="${safeHref}">打开文件</button><button type="button" class="msg-media-copy" data-media-copy="${safeAttr}">复制路径</button></div></div>`
+}
+
 function renderTextMediaRefs(text = '') {
   const refs = extractTextMediaRefs(text)
   if (!refs.length) return ''
   const items = refs.map(ref => {
-    const safePath = escapeHtml(ref.path)
     const safeSrc = escapeAttr(resolveImageSrc(ref.path)).replace(/\\/g, '&#x5c;')
+    const errorSrc = escapeAttr(ref.path).replace(/\\/g, '&#x5c;')
     let preview = ''
-    if (ref.type === 'image') preview = `<img src="${safeSrc}" alt="${escapeAttr(ref.path)}" class="msg-img" data-error-src="${escapeAttr(ref.path)}" />`
+    if (ref.type === 'image') preview = `<img src="${safeSrc}" alt="${escapeAttr(ref.path)}" class="msg-img" data-error-src="${errorSrc}" />`
     else if (ref.type === 'video') preview = `<video class="msg-video" controls preload="metadata" playsinline src="${safeSrc}"></video>`
     else if (ref.type === 'audio') preview = `<audio class="msg-audio" controls preload="metadata" src="${safeSrc}"></audio>`
-    return `<div class="msg-media-ref msg-media-ref-${ref.type}">${preview}<div class="msg-media-path"><span>存放路径：</span><code>${safePath}</code></div></div>`
+    return `<div class="msg-media-ref msg-media-ref-${ref.type}">${preview}${mediaPathActionsHtml(ref.path)}</div>`
   }).join('')
   return `<div class="msg-media-refs">${items}</div>`
 }
@@ -387,12 +394,12 @@ function handleMarkdownImageError(evt) {
   img.style.display = 'none'
   const next = img.nextElementSibling
   if (next?.dataset?.markdownImageError === '1') return
-  const span = document.createElement('span')
-  span.dataset.markdownImageError = '1'
-  span.style.color = 'var(--text-tertiary)'
-  span.style.fontSize = '12px'
-  span.textContent = t('common.imageLoadFailedWithSrc', { src: img.dataset.errorSrc || img.getAttribute('src') || '' })
-  img.insertAdjacentElement('afterend', span)
+  const src = img.dataset.errorSrc || img.getAttribute('src') || ''
+  const box = document.createElement('div')
+  box.dataset.markdownImageError = '1'
+  box.className = 'msg-media-error'
+  box.innerHTML = `<span>${escapeHtml(t('common.imageLoadFailedWithSrc', { src }))}</span>${mediaPathActionsHtml(src)}`
+  img.insertAdjacentElement('afterend', box)
 }
 
 if (typeof window !== 'undefined' && !window.__markdownImageErrorHandlerInstalled) {
@@ -414,6 +421,42 @@ function copyMarkdownCode(btn) {
   })
 }
 
+async function openMarkdownMediaPath(path = '', href = '') {
+  const value = String(path || '').trim()
+  if (!value) return
+  try {
+    if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.location?.hostname === 'tauri.localhost')) {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(value)
+      return
+    }
+  } catch {}
+  if (href && /^(https?|file|blob|data):/i.test(href)) {
+    try { window.open(href, '_blank') } catch {}
+  }
+  try { await navigator.clipboard?.writeText(value) } catch {}
+}
+
+async function copyMarkdownMediaPath(path = '') {
+  try { await navigator.clipboard?.writeText(String(path || '')) } catch {}
+}
+
+if (typeof window !== 'undefined' && !window.__markdownMediaActionHandlerInstalled) {
+  window.__markdownMediaActionHandlerInstalled = true
+  document.addEventListener('click', (evt) => {
+    const openBtn = evt.target?.closest?.('.msg-media-open')
+    if (openBtn) {
+      evt.preventDefault()
+      openMarkdownMediaPath(openBtn.dataset.mediaOpen || '', openBtn.dataset.mediaHref || '')
+      return
+    }
+    const copyBtn = evt.target?.closest?.('.msg-media-copy')
+    if (copyBtn) {
+      evt.preventDefault()
+      copyMarkdownMediaPath(copyBtn.dataset.mediaCopy || '')
+    }
+  })
+}
 if (typeof window !== 'undefined' && !window.__markdownCodeCopyHandlerInstalled) {
   window.__markdownCodeCopyHandlerInstalled = true
   document.addEventListener('click', (evt) => {
