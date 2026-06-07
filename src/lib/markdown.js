@@ -303,6 +303,12 @@ function renderTextMediaRefs(text = '') {
   return `<div class="msg-media-refs">${items}</div>`
 }
 
+function restoreSafeEscapedCodeTags(html = '') {
+  return String(html || '')
+    .replace(/&lt;\s*code\s*&gt;([\s\S]*?)&lt;\s*\/\s*code\s*&gt;/gi, '<code>$1</code>')
+    .replace(/&lt;\s*pre\s*&gt;([\s\S]*?)&lt;\s*\/\s*pre\s*&gt;/gi, '<pre><code>$1</code></pre>')
+}
+
 function autoLinkUrls(html = '') {
   const placeholders = []
   const stash = (match) => {
@@ -311,6 +317,8 @@ function autoLinkUrls(html = '') {
     return key
   }
   let linked = String(html || '')
+    .replace(/<pre\b[^>]*>[\s\S]*?<\/pre>/gi, stash)
+    .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, stash)
     .replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, stash)
     .replace(/<img\b[^>]*>/gi, stash)
     .replace(/(^|[\s([{])((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?\])}])/gi, (match, prefix, rawUrl) => {
@@ -323,7 +331,7 @@ function autoLinkUrls(html = '') {
 
 function inlineFormat(text) {
   const escapedText = escapeHtml(text)
-  const html = escapedText
+  const html = restoreSafeEscapedCodeTags(escapedText)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>')
