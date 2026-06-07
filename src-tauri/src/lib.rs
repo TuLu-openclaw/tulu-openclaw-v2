@@ -294,6 +294,8 @@ pub fn run() {
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,
             assistant::assistant_load_image,
+            assistant::assistant_load_media_file,
+            assistant::assistant_open_containing_folder,
             assistant::assistant_delete_image,
             // Hermes Agent
             hermes::check_hermes,

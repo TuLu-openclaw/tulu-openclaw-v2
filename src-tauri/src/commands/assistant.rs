@@ -194,6 +194,102 @@ pub async fn assistant_load_image(id: String) -> Result<String, String> {
     Ok(format!("data:{};base64,{}", mime, b64))
 }
 
+fn media_mime_from_path(path: &std::path::Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "svg" => "image/svg+xml",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "m4v" => "video/mp4",
+        "avi" => "video/x-msvideo",
+        "mkv" => "video/x-matroska",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "m4a" => "audio/mp4",
+        "flac" => "audio/flac",
+        "aac" => "audio/aac",
+        _ => "application/octet-stream",
+    }
+}
+
+#[tauri::command]
+pub async fn assistant_load_media_file(path: String) -> Result<String, String> {
+    let filepath = PathBuf::from(path.trim().trim_start_matches("file://"));
+    if !filepath.exists() {
+        return Err(format!("媒体文件不存在: {}", filepath.to_string_lossy()));
+    }
+    if !filepath.is_file() {
+        return Err(format!("不是文件: {}", filepath.to_string_lossy()));
+    }
+    let bytes = tokio::fs::read(&filepath)
+        .await
+        .map_err(|e| format!("读取媒体文件失败: {e}"))?;
+    let mime = media_mime_from_path(&filepath);
+    let b64 = general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
+#[tauri::command]
+pub async fn assistant_open_containing_folder(path: String) -> Result<(), String> {
+    let raw = path.trim().trim_start_matches("file://");
+    let filepath = PathBuf::from(raw);
+    let folder = if filepath.is_dir() {
+        filepath.clone()
+    } else {
+        filepath
+            .parent()
+            .map(|p| p.to_path_buf())
+            .ok_or_else(|| format!("无法获取所在文件夹: {raw}"))?
+    };
+    if !folder.exists() {
+        return Err(format!("文件夹不存在: {}", folder.to_string_lossy()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        tokio::process::Command::new("explorer.exe")
+            .arg(folder.to_string_lossy().to_string())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        tokio::process::Command::new("open")
+            .arg(&folder)
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        tokio::process::Command::new("xdg-open")
+            .arg(&folder)
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败: {e}"))?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("当前系统不支持打开文件夹".into())
+}
+
 /// 删除图片文件
 #[tauri::command]
 pub async fn assistant_delete_image(id: String) -> Result<(), String> {

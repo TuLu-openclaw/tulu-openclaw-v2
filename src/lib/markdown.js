@@ -1,4 +1,5 @@
 import { t } from './i18n.js'
+import { api, isTauriRuntime } from './tauri-api.js'
 
 /**
  * Markdown 渲染器 - 轻量级，支持代码高亮
@@ -311,7 +312,7 @@ function mediaPathActionsHtml(path = '') {
   const safePath = escapeHtml(path)
   const safeAttr = escapeAttr(path).replace(/\\/g, '&#x5c;')
   const safeHref = escapeAttr(resolveImageSrc(path)).replace(/\\/g, '&#x5c;')
-  return `<div class="msg-media-path"><span>存放路径：</span><code>${safePath}</code><div class="msg-media-actions"><button type="button" class="msg-media-open" data-media-open="${safeAttr}" data-media-href="${safeHref}">打开文件</button><button type="button" class="msg-media-copy" data-media-copy="${safeAttr}">复制路径</button></div></div>`
+  return `<div class="msg-media-path"><span>存放路径：</span><code>${safePath}</code><div class="msg-media-actions"><button type="button" class="msg-media-open" data-media-open="${safeAttr}" data-media-href="${safeHref}">打开所在文件夹</button><button type="button" class="msg-media-copy" data-media-copy="${safeAttr}">复制路径</button></div></div>`
 }
 
 function renderTextMediaRefs(text = '') {
@@ -321,9 +322,9 @@ function renderTextMediaRefs(text = '') {
     const safeSrc = escapeAttr(resolveImageSrc(ref.path)).replace(/\\/g, '&#x5c;')
     const errorSrc = escapeAttr(ref.path).replace(/\\/g, '&#x5c;')
     let preview = ''
-    if (ref.type === 'image') preview = `<img src="${safeSrc}" alt="${escapeAttr(ref.path)}" class="msg-img" data-error-src="${errorSrc}" />`
-    else if (ref.type === 'video') preview = `<video class="msg-video" controls preload="metadata" playsinline src="${safeSrc}"></video>`
-    else if (ref.type === 'audio') preview = `<audio class="msg-audio" controls preload="metadata" src="${safeSrc}"></audio>`
+    if (ref.type === 'image') preview = `<img src="${safeSrc}" alt="${escapeAttr(ref.path)}" class="msg-img msg-media-needs-load" data-media-src="${errorSrc}" data-error-src="${errorSrc}" />`
+    else if (ref.type === 'video') preview = `<video class="msg-video msg-media-needs-load" controls preload="metadata" playsinline src="${safeSrc}" data-media-src="${errorSrc}"></video>`
+    else if (ref.type === 'audio') preview = `<audio class="msg-audio msg-media-needs-load" controls preload="metadata" src="${safeSrc}" data-media-src="${errorSrc}"></audio>`
     return `<div class="msg-media-ref msg-media-ref-${ref.type}">${preview}${mediaPathActionsHtml(ref.path)}</div>`
   }).join('')
   return `<div class="msg-media-refs">${items}</div>`
@@ -421,13 +422,43 @@ function copyMarkdownCode(btn) {
   })
 }
 
+async function hydrateMarkdownMedia(root = document) {
+  if (!isTauriRuntime()) return
+  const nodes = root.querySelectorAll?.('.msg-media-needs-load[data-media-src]') || []
+  for (const node of nodes) {
+    if (node.dataset.mediaLoaded === '1') continue
+    node.dataset.mediaLoaded = '1'
+    const src = node.dataset.mediaSrc || ''
+    if (!/^(?:[A-Za-z]:[\\/]|\/)/.test(src)) continue
+    try {
+      const dataUrl = await api.loadMediaFile(src)
+      if (dataUrl) node.setAttribute('src', dataUrl)
+    } catch (e) {
+      console.warn('[markdown] load local media failed:', e)
+      node.dataset.mediaLoaded = 'error'
+    }
+  }
+}
+
+if (typeof window !== 'undefined' && !window.__markdownMediaHydratorInstalled) {
+  window.__markdownMediaHydratorInstalled = true
+  const run = () => hydrateMarkdownMedia(document)
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true })
+  else setTimeout(run, 0)
+  new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes?.forEach?.(node => {
+        if (node.nodeType === 1) hydrateMarkdownMedia(node)
+      })
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true })
+}
 async function openMarkdownMediaPath(path = '', href = '') {
   const value = String(path || '').trim()
   if (!value) return
   try {
     if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.location?.hostname === 'tauri.localhost')) {
-      const { open } = await import('@tauri-apps/plugin-shell')
-      await open(value)
+      await api.openContainingFolder(value)
       return
     }
   } catch {}
