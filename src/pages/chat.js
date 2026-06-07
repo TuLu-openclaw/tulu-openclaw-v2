@@ -2991,8 +2991,35 @@ function normalizeStreamDelta(text = '') {
   return normalizeStreamText(text)
 }
 
+function countHtmlTag(text = '', tag = '') {
+  if (!tag) return 0
+  const pattern = new RegExp(`<\\s*${tag}(?=\\s|>|/)|<\\s*/\\s*${tag}\\s*>`, 'gi')
+  let count = 0
+  let match
+  while ((match = pattern.exec(text))) {
+    count += /^<\s*\//.test(match[0]) ? -1 : 1
+  }
+  return count
+}
+
+function escapeRawHtmlCodeTags(text = '') {
+  return String(text || '')
+    .replace(/<\s*(\/?)\s*(code|pre)(\s[^>]*)?>/gi, (_, slash, tag) => `&lt;${slash || ''}${tag}&gt;`)
+}
+
+function closeDanglingHtmlCodeTags(text = '') {
+  let snapshot = text
+  const missingCodeClose = countHtmlTag(snapshot, 'code') > 0
+  const missingPreClose = countHtmlTag(snapshot, 'pre') > 0
+  if (missingCodeClose) snapshot += '</code>'
+  if (missingPreClose) snapshot += '</pre>'
+  return snapshot
+}
+
 function makeStreamRenderSnapshot(text = '') {
   let snapshot = normalizeStreamText(text)
+  snapshot = closeDanglingHtmlCodeTags(snapshot)
+  snapshot = escapeRawHtmlCodeTags(snapshot)
   const fenceMatches = snapshot.match(/(^|\n)(```|~~~)/g) || []
   if (fenceMatches.length % 2 === 1) {
     const lastFence = fenceMatches[fenceMatches.length - 1].trim().slice(0, 3)
@@ -5339,3 +5366,4 @@ export function cleanup() {
   _workspaceLoadSeq = 0
   _workspaceOpenSeq = 0
 }
+
