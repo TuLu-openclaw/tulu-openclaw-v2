@@ -52,11 +52,9 @@ fn sync_text_file(path: &std::path::Path, content: &str, label: &str) -> Result<
 #[cfg(target_os = "windows")]
 fn start_install_shutdown_watcher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut signal_paths = vec![
-            commands::openclaw_dir()
-                .join("星枢OpenClaw")
-                .join("install-shutdown.signal"),
-        ];
+        let mut signal_paths = vec![commands::openclaw_dir()
+            .join("星枢OpenClaw")
+            .join("install-shutdown.signal")];
 
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             signal_paths.push(
