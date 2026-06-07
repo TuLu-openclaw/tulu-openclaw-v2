@@ -3877,15 +3877,45 @@ function summarizeToolInput(input) {
   return text.length > 96 ? text.slice(0, 96) + '…' : text
 }
 
+function cleanStatusText(value = '') {
+  return String(value || '')
+    .replace(/<\/?\s*(code|pre)\s*>/gi, '')
+    .replace(/&lt;\/?\s*(code|pre)\s*&gt;/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function compactStatusText(value = '', max = 64) {
+  const text = cleanStatusText(value)
+  if (!text) return ''
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function renderStatusChips(items = []) {
+  return items
+    .filter(item => item?.value)
+    .map(item => `<span class="chat-status-chip${item.className ? ` ${item.className}` : ''}">${escapeHtml(item.label ? `${item.label}：` : '')}${escapeHtml(compactStatusText(item.value, item.max || 72))}</span>`)
+    .join('')
+}
+
 function buildReplyStatusDetail(status = _replyStatusState) {
-  const parts = []
   const model = status.model || getSessionDisplayModel(status.sessionKey || _sessionKey) || getSessionRuntimeModel(status.sessionKey || _sessionKey) || _selectedModel || _primaryModel || ''
   const agent = status.agentId || parseSessionAgent(status.sessionKey || _sessionKey) || 'main'
-  if (agent) parts.push(t('chat.replyDetailAgent', { agent }))
-  if (model) parts.push(t('chat.replyDetailModel', { model: shortModelName(model) }))
-  if (status.runId) parts.push(t('chat.replyDetailRun', { run: String(status.runId).slice(0, 8) }))
-  if (status.activity) parts.push(t('chat.replyDetailActivity', { activity: status.activity }))
-  return parts.join(' · ')
+  return renderStatusChips([
+    { label: t('chat.replyChipAgent'), value: agent, max: 24 },
+    { label: t('chat.replyChipModel'), value: model ? shortModelName(model) : '', max: 32 },
+    { label: t('chat.replyChipRun'), value: status.runId ? String(status.runId).slice(0, 8) : '', max: 12 },
+    { label: t('chat.replyChipAction'), value: status.activity, max: 56 },
+  ])
+}
+
+function buildReplyStatusTools(status = _replyStatusState) {
+  if (!status?.toolName) return status?.state === 'tool' ? `<span class="chat-status-chip">${escapeHtml(t('chat.toolWaitingName'))}</span>` : ''
+  return renderStatusChips([
+    { label: t('chat.tool'), value: formatToolDisplayName(status.toolName), max: 32 },
+    { label: t('chat.replyChipEvent'), value: status.toolCount ? String(status.toolCount) : '', max: 8 },
+    { label: t('chat.toolParams'), value: status.toolInput, max: 56, className: 'is-muted' },
+  ])
 }
 
 function renderReplyStatus(status = _replyStatusState) {
@@ -3897,22 +3927,20 @@ function renderReplyStatus(status = _replyStatusState) {
   _replyStatusRowEl.hidden = false
   _replyStatusRowEl.dataset.state = status.state
   _replyStatusRowEl.dataset.sessionKey = status.sessionKey || _sessionKey || ''
-  _replyStatusRowEl.title = status.detail || replyStatusText(status.state) || ''
+  _replyStatusRowEl.title = compactStatusText(status.detail || replyStatusText(status.state) || '', 160)
   const phase = replyStatusPhase(status.state)
   if (_replyStatusPhaseEl) _replyStatusPhaseEl.textContent = phase
-  _replyStatusTextEl.textContent = status.detail || replyStatusText(status.state)
-  if (_replyStatusDetailEl) _replyStatusDetailEl.textContent = buildReplyStatusDetail(status)
+  _replyStatusTextEl.textContent = compactStatusText(status.detail || replyStatusText(status.state), 72)
+  if (_replyStatusDetailEl) _replyStatusDetailEl.innerHTML = buildReplyStatusDetail(status)
   if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(status)
   if (_replyStatusMetaEl) {
     const hint = ['queued','sending','thinking','tool','streaming','finalizing'].includes(status.state)
-      ? t('chat.replyMetaActive')
-      : (status.state === 'done' ? t('chat.replyMetaDone') : t('chat.replyMetaWaiting'))
+      ? t('chat.replyMetaActiveShort')
+      : (status.state === 'done' ? t('chat.replyMetaDoneShort') : t('chat.replyMetaWaitingShort'))
     _replyStatusMetaEl.textContent = hint
   }
   if (_replyStatusToolsEl) {
-    _replyStatusToolsEl.textContent = status.toolName
-      ? `${t('chat.tool')}：${formatToolDisplayName(status.toolName)}${status.toolCount ? ` · ${t('chat.toolEventCount', { count: status.toolCount })}` : ''}${status.toolInput ? ` · ${t('chat.toolParams')}：${status.toolInput}` : ''}`
-      : (status.state === 'tool' ? t('chat.toolWaitingName') : '')
+    _replyStatusToolsEl.innerHTML = buildReplyStatusTools(status)
   }
   markStatusMarquee()
   scheduleReplyStatusTimer(status)
@@ -3924,12 +3952,12 @@ function setReplyStatus(state, detail = '', options = {}) {
   const keepToolContext = ['tool', 'streaming', 'finalizing'].includes(state)
   const next = normalizeReplyStatus({
     state,
-    detail,
+    detail: compactStatusText(detail || replyStatusText(state), 90),
     ts: options.ts || (state === previous.state && previous.ts ? previous.ts : Date.now()),
     sessionKey,
     runId: options.runId || _currentRunId || previous.runId || '',
     toolName: options.toolName ?? (keepToolContext ? previous.toolName || '' : ''),
-    toolInput: options.toolInput ?? (keepToolContext ? previous.toolInput || '' : ''),
+    toolInput: options.toolInput != null ? compactStatusText(options.toolInput, 96) : (keepToolContext ? previous.toolInput || '' : ''),
     toolCount: options.toolCount ?? (keepToolContext ? previous.toolCount ?? 0 : 0),
     lastToolAt: options.lastToolAt || (keepToolContext ? previous.lastToolAt || 0 : 0),
     activity: options.activity || '',
