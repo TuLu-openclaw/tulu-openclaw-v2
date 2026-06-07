@@ -2913,6 +2913,29 @@ function stopGeneration() {
 
 // ── 事件处理（参照 clawapp 实现） ──
 
+function normalizeChatEventPayload(event, payload = {}) {
+  if (event === 'chat') return payload
+  if (!event?.startsWith?.('chat.')) return null
+  const kind = event.slice('chat.'.length)
+  const message = payload.message || payload.data?.message || payload.data || payload
+  if (kind === 'message' && message?.role && message.role !== 'assistant') return null
+  const stateMap = {
+    queued: 'queued', start: 'queued', started: 'queued', run: 'queued',
+    delta: 'delta', stream: 'delta', token: 'delta',
+    message: 'final', final: 'final', done: 'final', complete: 'final', completed: 'final',
+    error: 'error', aborted: 'aborted', abort: 'aborted', stopped: 'aborted',
+  }
+  const state = payload.state || stateMap[kind]
+  if (!state) return null
+  return {
+    ...payload,
+    state,
+    runId: payload.runId || payload.run_id || payload.id || message?.runId || message?.run_id || '',
+    sessionKey: payload.sessionKey || payload.session_key || message?.sessionKey || message?.session_key || _sessionKey,
+    message,
+  }
+}
+
 function handleEvent(msg) {
   const { event, payload } = msg
   if (!payload) return
@@ -2954,7 +2977,8 @@ function handleEvent(msg) {
     }
   }
 
-  if (event === 'chat') handleChatEvent(payload)
+  const chatPayload = normalizeChatEventPayload(event, payload)
+  if (chatPayload) handleChatEvent(chatPayload)
 
   // Compaction 状态指示：上游 2026.3.12 新增 status_reaction 事件
   if (event === 'chat.status_reaction' || event === 'status_reaction') {
@@ -3309,6 +3333,7 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'delta') {
+    if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 delta，避免串流:', runId, 'current:', _currentRunId)
       return
@@ -3331,6 +3356,7 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'final') {
+    if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 final，避免覆盖当前流:', runId, 'current:', _currentRunId)
       return
