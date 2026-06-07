@@ -58,7 +58,7 @@ if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
 }
 
 /** 将本地文件路径转换为可加载的 URL */
-function resolveImageSrc(src) {
+export function resolveImageSrc(src) {
   if (!src) return src
   // 已经是 http/https/data URL → 直接返回
   if (/^(https?|data|blob):/.test(src)) return src
@@ -174,7 +174,11 @@ export function renderMarkdown(text) {
 
     if (inList) { result.push(`</${listType}>`); inList = false }
     if (line.trim() === '') { result.push(''); continue }
-    if (!line.startsWith('<')) { result.push(`<p>${inlineFormat(line)}</p>`) }
+    if (!line.startsWith('<')) {
+      result.push(`<p>${inlineFormat(line)}</p>`)
+      const mediaHtml = renderTextMediaRefs(line)
+      if (mediaHtml) result.push(mediaHtml)
+    }
     else { result.push(line) }
   }
 
@@ -242,9 +246,84 @@ function renderTable(rows) {
   return table.join('\n')
 }
 
+const TEXT_MEDIA_EXTENSIONS = {
+  image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'],
+  video: ['mp4', 'webm', 'mov', 'm4v', 'avi', 'mkv'],
+  audio: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'],
+}
+const TEXT_MEDIA_EXTENSION_SET = new Set(Object.values(TEXT_MEDIA_EXTENSIONS).flat())
+
+function normalizeMediaPath(raw = '') {
+  return String(raw || '').trim().replace(/^MEDIA:\s*/i, '').replace(/^file:\/\//i, '')
+}
+
+function getTextMediaType(path = '') {
+  const clean = normalizeMediaPath(path).split(/[?#]/)[0]
+  const ext = clean.match(/\.([A-Za-z0-9]+)$/)?.[1]?.toLowerCase()
+  if (!ext || !TEXT_MEDIA_EXTENSION_SET.has(ext)) return ''
+  if (TEXT_MEDIA_EXTENSIONS.image.includes(ext)) return 'image'
+  if (TEXT_MEDIA_EXTENSIONS.video.includes(ext)) return 'video'
+  if (TEXT_MEDIA_EXTENSIONS.audio.includes(ext)) return 'audio'
+  return ''
+}
+
+function extractTextMediaRefs(text = '') {
+  const refs = []
+  const seen = new Set()
+  const add = (raw) => {
+    const path = normalizeMediaPath(raw).replace(/[。；，、]+$/g, '').replace(/[),.;:!?]+$/g, '')
+    const type = getTextMediaType(path)
+    if (!type) return
+    const key = `${type}:${path}`
+    if (seen.has(key)) return
+    seen.add(key)
+    refs.push({ type, path })
+  }
+  const source = String(text || '')
+  const mediaLineRe = /^\s*MEDIA:\s*(\S.+?)\s*$/gmi
+  let match
+  while ((match = mediaLineRe.exec(source))) add(match[1])
+  const pathRe = /(?:https?:\/\/[^\s<>()]+|file:\/\/[^\s<>()]+|[A-Za-z]:[\\/][^\s<>()"'`]+|(?:\.\.?[\\/]|[\\/])[^\s<>()"'`]+)\.(?:png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|m4v|avi|mkv|mp3|wav|ogg|m4a|flac|aac)(?:[?#][^\s<>()]*)?/gi
+  while ((match = pathRe.exec(source))) add(match[0])
+  return refs
+}
+
+function renderTextMediaRefs(text = '') {
+  const refs = extractTextMediaRefs(text)
+  if (!refs.length) return ''
+  const items = refs.map(ref => {
+    const safePath = escapeHtml(ref.path)
+    const safeSrc = escapeAttr(resolveImageSrc(ref.path)).replace(/\\/g, '&#x5c;')
+    let preview = ''
+    if (ref.type === 'image') preview = `<img src="${safeSrc}" alt="${escapeAttr(ref.path)}" class="msg-img" data-error-src="${escapeAttr(ref.path)}" />`
+    else if (ref.type === 'video') preview = `<video class="msg-video" controls preload="metadata" playsinline src="${safeSrc}"></video>`
+    else if (ref.type === 'audio') preview = `<audio class="msg-audio" controls preload="metadata" src="${safeSrc}"></audio>`
+    return `<div class="msg-media-ref msg-media-ref-${ref.type}">${preview}<div class="msg-media-path"><span>存放路径：</span><code>${safePath}</code></div></div>`
+  }).join('')
+  return `<div class="msg-media-refs">${items}</div>`
+}
+
+function autoLinkUrls(html = '') {
+  const placeholders = []
+  const stash = (match) => {
+    const key = `\x00LINK${placeholders.length}\x00`
+    placeholders.push(match)
+    return key
+  }
+  let linked = String(html || '')
+    .replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, stash)
+    .replace(/<img\b[^>]*>/gi, stash)
+    .replace(/(^|[\s([{])((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?\])}])/gi, (match, prefix, rawUrl) => {
+      const href = rawUrl.startsWith('www.') ? `https://${rawUrl}` : rawUrl
+      return `${prefix}<a href="${escapeAttr(href)}" target="_blank" rel="noopener">${escapeHtml(rawUrl)}</a>`
+    })
+  placeholders.forEach((value, index) => { linked = linked.replace(`\x00LINK${index}\x00`, value) })
+  return linked
+}
+
 function inlineFormat(text) {
   const escapedText = escapeHtml(text)
-  return escapedText
+  const html = escapedText
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>')
@@ -262,6 +341,7 @@ function inlineFormat(text) {
       const safe = /^https?:|^mailto:/i.test(rawUrl) ? escapeHtml(rawUrl) : '#'
       return `<a href="${safe}" target="_blank" rel="noopener">${label}</a>`
     })
+  return autoLinkUrls(html)
 }
 
 function unescapeHtmlEntities(str) {
