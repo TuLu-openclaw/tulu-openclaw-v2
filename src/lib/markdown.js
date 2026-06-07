@@ -57,24 +57,35 @@ if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
   import('@tauri-apps/api/core').then(m => { _convertFileSrc = m.convertFileSrc }).catch(() => {})
 }
 
+function pathToFileUrl(path = '') {
+  const normalized = String(path || '').replace(/\\/g, '/')
+  const prefixed = normalized.startsWith('/') ? normalized : `/${normalized}`
+  return `file://${prefixed.replace(/#/g, '%23').replace(/\?/g, '%3F')}`
+}
+
 /** 将本地文件路径转换为可加载的 URL */
 export function resolveImageSrc(src) {
   if (!src) return src
-  // 已经是 http/https/data URL → 直接返回
-  if (/^(https?|data|blob):/.test(src)) return src
+  const value = String(src || '').trim()
+  // 已经是 http/https/data/blob/file URL → 直接返回
+  if (/^(https?|data|blob|file):/i.test(value)) return value
   // Windows 绝对路径 (C:\... or C:/...)
-  const isWinPath = /^[A-Za-z]:[\\/]/.test(src)
+  const isWinPath = /^[A-Za-z]:[\\/]/.test(value)
   // Unix 绝对路径 (/Users/... /home/... /tmp/...)
-  const isUnixPath = /^\/[^/]/.test(src)
+  const isUnixPath = /^\/[^/]/.test(value)
   if (isWinPath || isUnixPath) {
-    // Tauri 环境：使用 convertFileSrc 转换为 asset protocol URL
-    if (_convertFileSrc) {
-      try { return _convertFileSrc(src) } catch {}
+    // Tauri 环境：优先使用同步 internals 或 convertFileSrc 转换为 asset protocol URL
+    const internalConvert = typeof window !== 'undefined' ? window.__TAURI_INTERNALS__?.convertFileSrc : null
+    if (typeof internalConvert === 'function') {
+      try { return internalConvert(value) } catch {}
     }
-    // Tauri 未就绪或 Web 模式：返回原始路径（onerror 会处理显示）
-    return src
+    if (_convertFileSrc) {
+      try { return _convertFileSrc(value) } catch {}
+    }
+    // Web/预览环境：至少转为合法 file:// URL，避免 C:\... 被当成无效相对地址
+    return pathToFileUrl(value)
   }
-  return src
+  return value
 }
 
 export function renderMarkdown(text) {
@@ -174,10 +185,18 @@ export function renderMarkdown(text) {
 
     if (inList) { result.push(`</${listType}>`); inList = false }
     if (line.trim() === '') { result.push(''); continue }
+    const storagePathMatch = line.match(/(?:存放路径|保存路径|文件路径|路径|Path|Saved\s+to)\s*[：:]\s*(.+?)\s*$/i)
+    const nextMediaMatch = lines[i + 1]?.match(/^\s*MEDIA:\s*(\S.+?)\s*$/i)
+    if (storagePathMatch && nextMediaMatch && normalizeMediaPath(storagePathMatch[1]) === normalizeMediaPath(nextMediaMatch[1])) continue
+    const shouldRenderMedia = !/(存放路径|保存路径|文件路径|路径：|Path\s*:|Saved\s+to\s*:)/i.test(line)
+    const mediaOnlyHtml = shouldRenderMedia ? renderTextMediaRefs(line) : ''
+    if (/^\s*MEDIA:\s*/i.test(line) && mediaOnlyHtml) {
+      result.push(mediaOnlyHtml)
+      continue
+    }
     if (!line.startsWith('<')) {
       result.push(`<p>${inlineFormat(line)}</p>`)
-      const mediaHtml = renderTextMediaRefs(line)
-      if (mediaHtml) result.push(mediaHtml)
+      if (mediaOnlyHtml) result.push(mediaOnlyHtml)
     }
     else { result.push(line) }
   }
@@ -321,7 +340,7 @@ function autoLinkUrls(html = '') {
     .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, stash)
     .replace(/<a\b[^>]*>[\s\S]*?<\/a>/gi, stash)
     .replace(/<img\b[^>]*>/gi, stash)
-    .replace(/(^|[\s([{])((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?\])}])/gi, (match, prefix, rawUrl) => {
+    .replace(/(^|[\s([{：:])((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?\])}])/gi, (match, prefix, rawUrl) => {
       const href = rawUrl.startsWith('www.') ? `https://${rawUrl}` : rawUrl
       return `${prefix}<a href="${escapeAttr(href)}" target="_blank" rel="noopener">${escapeHtml(rawUrl)}</a>`
     })

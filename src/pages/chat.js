@@ -3811,7 +3811,7 @@ function scheduleReplyStatusTimer(status = _replyStatusState) {
   if (!['queued','sending','thinking','tool','streaming','finalizing'].includes(status?.state)) return
   _replyStatusTimer = setInterval(() => {
     if (_replyStatusElapsedEl) _replyStatusElapsedEl.textContent = formatStatusElapsed(_replyStatusState)
-    if (_replyStatusDetailEl) _replyStatusDetailEl.textContent = buildReplyStatusDetail(_replyStatusState)
+    if (_replyStatusDetailEl) _replyStatusDetailEl.innerHTML = buildReplyStatusDetail(_replyStatusState)
     markStatusMarquee()
   }, 1000)
 }
@@ -3899,23 +3899,16 @@ function renderStatusChips(items = []) {
 }
 
 function buildReplyStatusDetail(status = _replyStatusState) {
-  const model = status.model || getSessionDisplayModel(status.sessionKey || _sessionKey) || getSessionRuntimeModel(status.sessionKey || _sessionKey) || _selectedModel || _primaryModel || ''
-  const agent = status.agentId || parseSessionAgent(status.sessionKey || _sessionKey) || 'main'
-  return renderStatusChips([
-    { label: t('chat.replyChipAgent'), value: agent, max: 24 },
-    { label: t('chat.replyChipModel'), value: model ? shortModelName(model) : '', max: 32 },
-    { label: t('chat.replyChipRun'), value: status.runId ? String(status.runId).slice(0, 8) : '', max: 12 },
-    { label: t('chat.replyChipAction'), value: status.activity, max: 56 },
-  ])
+  const items = []
+  if (status.state === 'tool' && status.toolName) items.push({ label: t('chat.tool'), value: formatToolDisplayName(status.toolName), max: 32 })
+  if (status.activity) items.push({ label: t('chat.replyChipAction'), value: status.activity, max: 56 })
+  return renderStatusChips(items)
 }
 
 function buildReplyStatusTools(status = _replyStatusState) {
-  if (!status?.toolName) return status?.state === 'tool' ? `<span class="chat-status-chip">${escapeHtml(t('chat.toolWaitingName'))}</span>` : ''
-  return renderStatusChips([
-    { label: t('chat.tool'), value: formatToolDisplayName(status.toolName), max: 32 },
-    { label: t('chat.replyChipEvent'), value: status.toolCount ? String(status.toolCount) : '', max: 8 },
-    { label: t('chat.toolParams'), value: status.toolInput, max: 56, className: 'is-muted' },
-  ])
+  if (status?.state !== 'tool') return ''
+  if (!status?.toolName) return `<span class="chat-status-chip">${escapeHtml(t('chat.toolWaitingName'))}</span>`
+  return ''
 }
 
 function renderReplyStatus(status = _replyStatusState) {
