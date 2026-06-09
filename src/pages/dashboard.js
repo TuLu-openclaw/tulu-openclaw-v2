@@ -5,6 +5,7 @@ import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { getActiveInstance, onGatewayChange, getGatewayHealthState, refreshGatewayStatus, boostGatewayPolling } from '../lib/app-state.js'
 import { wsClient } from '../lib/ws-client.js'
+import { classifyGatewayRuntime, formatGatewayReconnectStateLabel } from '../lib/gateway-runtime-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { navigate } from '../router.js'
 import { t } from '../lib/i18n.js'
@@ -48,10 +49,30 @@ function scheduleAutoChatWhenGatewayStarting(page, gwStatus) {
   }, 1000)
 }
 
+const DASHBOARD_HALF_CONNECTED_TIMEOUT = 10000
+let _dashboardHalfConnectedSince = 0
+
 async function ensureDashboardWebSocket() {
   const state = getGatewayHealthState()
   const info = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
-  if (!state.running || state.foreign || info.connected || info.gatewayReady || info.connecting || info.handshaking || info.reconnectState === 'attempting' || info.reconnectState === 'scheduled') return
+  if (!state.running || state.foreign || info.gatewayReady) {
+    if (info.gatewayReady) _dashboardHalfConnectedSince = 0
+    return
+  }
+
+  const halfConnected = info.connected && !info.gatewayReady
+  const waitingConnection = info.connecting || info.handshaking || info.reconnectState === 'attempting' || info.reconnectState === 'scheduled'
+  if (halfConnected || waitingConnection) {
+    const now = Date.now()
+    if (!_dashboardHalfConnectedSince) _dashboardHalfConnectedSince = now
+    if (now - _dashboardHalfConnectedSince < DASHBOARD_HALF_CONNECTED_TIMEOUT) return
+    console.warn('[dashboard] Gateway WS 半连接/等待过久，强制重连')
+    wsClient.reconnect()
+    _dashboardHalfConnectedSince = now
+    return
+  }
+
+  _dashboardHalfConnectedSince = 0
   if (_dashboardWsEnsureInFlight) return
   _dashboardWsEnsureInFlight = true
   try {
@@ -338,13 +359,7 @@ async function openGatewayConflict(page, error = null, reason = null) {
 }
 
 function formatGatewayReconnectState(state) {
-  const key = String(state || 'idle').toLowerCase()
-  const labels = {
-    idle: t('dashboard.reconnectIdle'),
-    scheduled: t('dashboard.reconnectScheduled'),
-    attempting: t('dashboard.reconnectAttempting'),
-  }
-  return labels[key] || t('dashboard.reconnectUnknown', { state: key })
+  return formatGatewayReconnectStateLabel(state, t, 'dashboard')
 }
 
 function formatGatewayWsPhase(status) {
@@ -438,7 +453,8 @@ function gatewayDashboardStatus() {
       tone: 'warning',
     }
   }
-  if (wsInfo?.gatewayReady || state.health === 'running') {
+  const runtime = classifyGatewayRuntime({ service: null, gatewayState: state, wsInfo })
+  if (runtime.ready) {
     return {
       text: t('dashboard.gatewayReady'),
       meta: withPhaseDetail(t('dashboard.gatewayRunningDetail', {
@@ -449,7 +465,7 @@ function gatewayDashboardStatus() {
       tone: 'running',
     }
   }
-  if (state.health === 'degraded') {
+  if ((runtime.degraded && !['recovering', 'process_starting', 'ws_connecting', 'handshaking'].includes(runtime.phase)) || state.health === 'degraded') {
     const detailKey = state?.reason ? 'gatewayDegradedDetailWithReason' : 'gatewayDegradedDetail'
     return {
       text: t('dashboard.gatewayDegraded'),
@@ -463,14 +479,14 @@ function gatewayDashboardStatus() {
       tone: 'warning',
     }
   }
-  if (state.health === 'recovering') {
+  if (runtime.phase === 'recovering' || state.health === 'recovering') {
     return {
       text: t('dashboard.gatewayRecovering'),
       meta: withPhaseDetail(t('dashboard.gatewayRecoveringDetail', { phase, reconnect: reconnectLabel })),
       tone: 'warning',
     }
   }
-  if (state.health === 'starting') {
+  if (runtime.phase === 'process_starting' || runtime.phase === 'ws_connecting' || runtime.phase === 'handshaking' || state.health === 'starting') {
     return {
       text: t('dashboard.gatewayStarting'),
       meta: withPhaseDetail(t('dashboard.gatewayStartingDetail', {

@@ -4,22 +4,17 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { showConfirm, showModal, showUpgradeModal } from '../components/modal.js'
+import { showConfirm, showContentModal, showUpgradeModal } from '../components/modal.js'
 import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart, getGatewayHealthState, refreshGatewayStatus, getActiveInstance, boostGatewayPolling } from '../lib/app-state.js'
 import { wsClient } from '../lib/ws-client.js'
+import { classifyGatewayRuntime, formatGatewayReconnectStateLabel, buildGatewayStartFailureDiagnosis, renderGatewayStartFailureDiagnosisHtml } from '../lib/gateway-runtime-state.js'
 import { isForeignGatewayError, isForeignGatewayService, maybeShowForeignGatewayBindingPrompt, showGatewayConflictGuidance } from '../lib/gateway-ownership.js'
 import { diagnoseInstallError } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
 function formatGatewayReconnectState(state) {
-  const key = String(state || 'idle').toLowerCase()
-  const labels = {
-    idle: t('services.reconnectIdle'),
-    scheduled: t('services.reconnectScheduled'),
-    attempting: t('services.reconnectAttempting'),
-  }
-  return labels[key] || t('services.reconnectUnknown', { state: key })
+  return formatGatewayReconnectStateLabel(state, t, 'services')
 }
 
 function formatGatewayWsPhase(status) {
@@ -137,35 +132,35 @@ async function ensureServicesWebSocket() {
 function getGatewayUiSnapshot(service) {
   const state = getGatewayHealthState()
   const wsInfo = typeof wsClient?.getConnectionInfo === 'function' ? wsClient.getConnectionInfo() : {}
-  const health = state?.health || 'unknown'
-  const reconnectState = wsInfo?.reconnectState || 'idle'
+  const runtime = classifyGatewayRuntime({ service, gatewayState: state, wsInfo })
+  const reconnectState = runtime.reconnectState || 'idle'
   const reconnectLabel = formatGatewayReconnectState(reconnectState)
-  const gatewayReady = !!wsInfo?.gatewayReady
-  const wsConnected = !!wsInfo?.connected
+  const gatewayReady = runtime.gatewayReady
+  const wsConnected = runtime.wsConnected
   const lastCheckLabel = state?.lastCheckAt ? new Date(state.lastCheckAt).toLocaleTimeString() : t('common.unknown')
 
   let tone = 'stopped'
   let statusText = t('services.stop')
-  if (state?.foreign) {
+  if (runtime.foreign) {
     tone = 'warning'
     statusText = t('services.gatewayForeign')
-  } else if (gatewayReady || health === 'running') {
+  } else if (runtime.ready) {
     tone = 'running'
     statusText = t('services.gatewayReady')
-  } else if (health === 'recovering') {
+  } else if (runtime.phase === 'recovering') {
     tone = 'loading'
     statusText = t('services.gatewayRecovering')
-  } else if (health === 'starting') {
+  } else if (runtime.phase === 'process_starting' || runtime.phase === 'ws_connecting' || runtime.phase === 'handshaking') {
     tone = 'loading'
     statusText = t('services.gatewayStarting')
-  } else if (health === 'degraded') {
+  } else if (runtime.degraded) {
     tone = 'warning'
     statusText = reconnectState === 'scheduled' || reconnectState === 'attempting'
       ? t('services.gatewayReconnect')
       : t('services.gatewayDegraded')
-  } else if (service?.running) {
+  } else if (runtime.processRunning) {
     tone = 'warning'
-    statusText = t('services.gatewayStarting')
+    statusText = t('services.gatewayDegraded')
   }
 
   const phaseDetail = formatGatewayWsDetail(wsInfo?.statusDetail)
@@ -179,7 +174,7 @@ function getGatewayUiSnapshot(service) {
     t('services.gatewayDetailLastCheck', { time: lastCheckLabel }),
   ]
 
-  return { tone, statusText, details: details.join(' · '), state, wsInfo }
+  return { tone, statusText, details: details.join(' · '), state, wsInfo, runtime }
 }
 
 function escapeHtml(str) {
@@ -866,6 +861,48 @@ function isGatewayActionSettled(action, service) {
   return false
 }
 
+async function showGatewayStartFailureDiagnosis(error, label = 'ai.openclaw.gateway') {
+  try {
+    const diagnosis = await buildGatewayStartFailureDiagnosis({ label, startError: error })
+    const html = renderGatewayStartFailureDiagnosisHtml(diagnosis, escapeHtml, t)
+    const overlay = showContentModal({
+      title: t('services.gatewayStartDiagnosisTitle'),
+      content: html,
+      width: 720,
+      buttons: [
+        { label: t('services.runDoctorFix'), id: 'gw-diag-doctor', className: 'btn btn-primary btn-sm' },
+        { label: t('services.retryStart'), id: 'gw-diag-retry', className: 'btn btn-secondary btn-sm' },
+      ],
+    })
+    overlay.querySelector('#gw-diag-doctor')?.addEventListener('click', async () => {
+      try {
+        toast(t('services.fixing'), 'info')
+        await api.doctorFix()
+        await refreshGatewayStatus().catch(() => {})
+        toast(t('services.fixDoneRestarting'), 'success')
+        await api.startService(label)
+        await refreshGatewayStatus().catch(() => {})
+        overlay.close?.()
+      } catch (e) {
+        toast(t('services.fixDoneRestartFail') + ': ' + (e?.message || e), 'error')
+      }
+    })
+    overlay.querySelector('#gw-diag-retry')?.addEventListener('click', async () => {
+      try {
+        toast(t('services.startSent'), 'info')
+        await api.startService(label)
+        await refreshGatewayStatus().catch(() => {})
+        overlay.close?.()
+      } catch (e) {
+        overlay.close?.()
+        await showGatewayStartFailureDiagnosis(e, label)
+      }
+    })
+  } catch (diagErr) {
+    toast(t('services.gatewayStartDiagnosisFailed') + ': ' + (diagErr?.message || diagErr), 'error')
+  }
+}
+
 async function handleServiceAction(action, label, page) {
   const fn = { start: api.startService, stop: api.stopService, restart: api.restartService }[action]
   const actionLabel = ACTION_LABELS[action]
@@ -905,6 +942,9 @@ async function handleServiceAction(action, label, page) {
       await openGatewayConflict(page, e)
     } else {
       toast(t('services.actionCmdFailed', { action: actionLabel, error: e.message || e }), 'error')
+      if (action === 'start' || action === 'restart') {
+        await showGatewayStartFailureDiagnosis(e, label)
+      }
     }
     if (actionsEl) actionsEl.innerHTML = origHtml
     if (dot) dot.className = 'status-dot stopped'
@@ -935,6 +975,9 @@ async function handleServiceAction(action, label, page) {
     // 超时
     if (elapsed > POLL_TIMEOUT) {
       toast(t('services.actionTimeout', { action: actionLabel }), 'warning')
+      if (action === 'start' || action === 'restart') {
+        await showGatewayStartFailureDiagnosis(new Error(t('services.actionTimeout', { action: actionLabel })), label)
+      }
       break
     }
 

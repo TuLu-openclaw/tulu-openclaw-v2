@@ -264,6 +264,7 @@ export class WsClient {
       console.error('[ws] WebSocket 错误:', err)
       this._status = '网关连接异常'
       this._statusDetail = 'WebSocket 发生异常，请稍后重试'
+      this._setConnected(false, 'error', this._statusDetail)
     }
   }
 
@@ -463,6 +464,8 @@ export class WsClient {
       this._handshaking = false
       this._status = '握手信息生成失败'
       this._statusDetail = String(e)
+      this._setConnected(false, 'error', this._statusDetail)
+      if (!this._intentionalClose) this._scheduleReconnect()
     }
   }
 
