@@ -3303,7 +3303,7 @@ function renderStreamToolCard(tool = {}) {
   const outputText = stripAnsi(safeStringify(tool.output || tool.result || tool.content || ''))
   const statusText = formatToolStatus(status)
   return `
-    <details class="msg-tool-item msg-tool-live-item ${status === 'error' ? 'is-error' : status === 'running' ? 'is-running' : 'is-done'}" data-tool-id="${escapeAttr(String(id))}" open>
+    <details class="msg-tool-item msg-tool-live-item ${status === 'error' ? 'is-error' : status === 'running' ? 'is-running' : 'is-done'}" data-tool-id="${escapeAttr(String(id))}">
       <summary>${escapeHtml(name)} · ${escapeHtml(statusText)}${status === 'running' ? ' …' : ''}</summary>
       <div class="msg-tool-body">
         <div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputText || t('chat.noParams'))}</pre></div>
