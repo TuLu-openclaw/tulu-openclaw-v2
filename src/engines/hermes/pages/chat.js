@@ -777,7 +777,7 @@ export function render() {
 
   function renderToolMessage(m) {
     const expanded = expandedToolIds.has(m.id)
-    const hasDetails = !!(m.toolArgs || m.toolResult)
+    const hasDetails = !!(m.toolArgs || m.toolResult || m.toolError)
     return `
       <div class="hm-chat-msg hm-chat-msg--tool" data-mid="${escAttr(m.id)}">
         <div class="hm-chat-tool-line ${hasDetails ? 'is-expandable' : ''}" data-tool-toggle="${escAttr(m.id)}">
@@ -804,6 +804,12 @@ export function render() {
                 <pre class="hm-chat-tool-code">${escHtml(prettyJson(m.toolResult))}</pre>
               </div>
             ` : ''}
+            ${m.toolError ? `
+              <div class="hm-chat-tool-section hm-chat-tool-section--error">
+                <div class="hm-chat-tool-label">${escHtml(t('engine.chatErrorBadge'))}</div>
+                <pre class="hm-chat-tool-code">${escHtml(prettyJson(m.toolError))}</pre>
+              </div>
+            ` : ''}
           </div>
         ` : ''}
       </div>
@@ -813,8 +819,9 @@ export function render() {
   function renderMessage(m) {
     if (m.role === 'tool') return renderToolMessage(m)
     if (m.role === 'system') {
+      const errorClass = m.severity === 'error' ? ' hm-chat-msg--error' : ''
       return `
-        <div class="hm-chat-msg hm-chat-msg--system" data-mid="${escAttr(m.id)}">
+        <div class="hm-chat-msg hm-chat-msg--system${errorClass}" data-mid="${escAttr(m.id)}">
           <div class="hm-chat-msg-bubble">
             <div class="hm-chat-msg-content">${renderMarkdownCached(m.content)}</div>
           </div>
@@ -846,29 +853,7 @@ export function render() {
   }
 
   function renderLiveTools() {
-    if (!store.state.streaming) return ''
-    const tools = store.state.liveTools
-    return `
-      <div class="hm-chat-streaming">
-        <div class="hm-chat-streaming-mark">
-          <span class="hm-chat-streaming-pulse"></span>
-          <span class="hm-chat-streaming-label">${escHtml(t('engine.chatThinking'))}</span>
-        </div>
-        ${tools.length ? `
-          <div class="hm-chat-live-tools">
-            ${tools.slice().reverse().map(tc => `
-              <div class="hm-chat-live-tool">
-                <span class="hm-chat-live-tool-icon">${ICONS.tool}</span>
-                <span class="hm-chat-live-tool-name">${escHtml(formatHermesToolName(tc.name))}</span>
-                ${tc.preview ? `<span class="hm-chat-live-tool-preview">${escHtml(tc.preview)}</span>` : ''}
-                ${tc.status === 'running' ? `<span class="hm-chat-tool-spinner"></span>` : ''}
-                ${tc.status === 'error' ? `<span class="hm-chat-tool-err">${escHtml(t('engine.chatErrorBadge'))}</span>` : ''}
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-      </div>
-    `
+    return ''
   }
 
   function renderMessages() {

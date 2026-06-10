@@ -29,6 +29,7 @@ const STORAGE_PINNED_PREFIX = 'hermes_chat_pinned_'
 const STORAGE_COLLAPSED_PREFIX = 'hermes_chat_collapsed_groups_'
 const STORAGE_MSGS_PREFIX = 'hermes_chat_msgs_v2_'
 const LIVE_BADGE_WINDOW_MS = 5 * 60 * 1000  // 5 min
+const STREAM_PERSIST_DEBOUNCE_MS = 600
 
 const SOURCE_LABELS = {
   telegram: 'Telegram',
@@ -230,8 +231,9 @@ function createStore() {
     activeProfile: safeGet(STORAGE_PROFILE) || 'default',
     loadingProfiles: false,
 
-    // Live tool calls for the current run (shown in the streaming indicator).
-    liveTools: [],             // [{ id, name, status, preview, args, result }]
+    // Live tool calls for the current run (kept for compatibility; live tools
+    // are also written into the same message stream immediately).
+    liveTools: [],             // [{ id, messageId, name, status, preview, args, result }]
 
     // UI prefs (persisted).
     pinned: new Set(loadJson(STORAGE_PINNED_PREFIX + profileKey(safeGet(STORAGE_PROFILE) || 'default')) || []),
@@ -264,10 +266,15 @@ function createStore() {
       setTimeout(flushNotify, 0)
     }
   }
-  /** Force an immediate, unbatched notification (used by deterministic tests). */
-  function notifySync() {
+  /** Force an immediate, unbatched notification. Critical stream/tool/error
+   * events use this so the UI never waits a frame behind the latest state. */
+  function notifyImmediate() {
     scheduled = false
     flushNotify()
+  }
+  /** Force an immediate, unbatched notification (used by deterministic tests). */
+  function notifySync() {
+    notifyImmediate()
   }
 
   // --- persistence ---
@@ -276,6 +283,8 @@ function createStore() {
   const pinnedKey = () => STORAGE_PINNED_PREFIX + profileKey(state.activeProfile)
   const collapsedKey = () => STORAGE_COLLAPSED_PREFIX + profileKey(state.activeProfile)
   const messagesKey = (sid) => STORAGE_MSGS_PREFIX + profileKey(state.activeProfile) + '_' + encodeURIComponent(String(sid || ''))
+
+  let streamPersistTimer = null
 
   function persistSessions() {
     saveJson(sessionsKey(), state.sessions.map(s => ({ ...s, messages: [] })))
@@ -288,6 +297,20 @@ function createStore() {
     if (!sid) return
     const s = state.sessions.find(x => x.id === sid)
     if (s) saveJson(messagesKey(sid), s.messages)
+  }
+  function flushStreamPersist() {
+    if (streamPersistTimer != null) {
+      clearTimeout(streamPersistTimer)
+      streamPersistTimer = null
+    }
+    persistSessionMessages(state.runningSessionId || state.activeSessionId)
+  }
+  function scheduleStreamPersist(sessionId) {
+    if (streamPersistTimer != null) clearTimeout(streamPersistTimer)
+    streamPersistTimer = setTimeout(() => {
+      streamPersistTimer = null
+      persistSessionMessages(sessionId)
+    }, STREAM_PERSIST_DEBOUNCE_MS)
   }
   function loadSessionsCache() {
     const cached = loadJson(sessionsKey())
@@ -655,6 +678,107 @@ function createStore() {
     return true
   }
 
+  function extractFirst(obj, keys) {
+    for (const k of keys) {
+      if (obj?.[k] != null && obj[k] !== '') return obj[k]
+    }
+    return null
+  }
+
+  function normalizeErrorMessage(err) {
+    const raw = typeof err === 'string' ? err : stringifyMaybe(err) || 'unknown error'
+    const lower = raw.toLowerCase()
+    const lines = []
+    if (/insufficient|quota|credit|balance|余额|欠费|429|payment|required/.test(lower)) {
+      lines.push('模型服务额度/余额不足，或服务商触发了额度限制。')
+      lines.push('这不是本项目卡住：请求已被模型服务商拒绝，请充值、切换模型或稍后重试。')
+    } else if (/model.*not.*found|not_found|does not exist|unknown model|模型.*不存在|找不到.*模型/.test(lower)) {
+      lines.push('模型不可用：服务端找不到当前配置的模型 ID。')
+      lines.push('请检查模型配置页里的模型名称是否与服务商完全一致，或切换到可用模型。')
+    } else if (/context|token|maximum context|too long|上下文|超.*长度|length/.test(lower)) {
+      lines.push('模型上下文已超限：本次消息或历史对话超过模型可处理长度。')
+      lines.push('请开启新会话、减少上下文，或切换更大上下文窗口的模型。')
+    } else if (/api.?key|unauthorized|forbidden|401|403|invalid key|认证|密钥|权限/.test(lower)) {
+      lines.push('模型认证失败：API Key 无效、过期，或当前账号没有该模型权限。')
+      lines.push('请检查服务商密钥、模型权限和 Base URL 配置。')
+    } else if (/timeout|timed out|etimedout|econnreset|network|fetch failed|连接|超时|网络/.test(lower)) {
+      lines.push('模型请求网络异常：连接超时或服务端中断。')
+      lines.push('这不是项目无响应，请检查网络、代理、服务商状态或稍后重试。')
+    } else {
+      lines.push('模型/Agent 运行失败，系统已第一时间捕获并显示。')
+      lines.push('原始错误如下，便于定位问题来源。')
+    }
+    return `⚠️ ${lines.join('\n')}
+
+原始错误：${raw}`
+  }
+
+  function ensureAssistantMessage(s) {
+    let msg = s.messages.find(m => m.id === state.pendingAssistantId)
+    if (!msg) {
+      msg = { id: uid(), role: 'assistant', content: '', timestamp: Date.now(), isStreaming: true }
+      s.messages.push(msg)
+      state.pendingAssistantId = msg.id
+    }
+    return msg
+  }
+
+  function upsertLiveToolMessage(s, toolName, patch = {}) {
+    const running = state.liveTools.find(x => x.name === toolName && x.status === 'running')
+    let live = running || state.liveTools.find(x => x.name === toolName && x.messageId && !['done', 'error'].includes(x.status))
+    let msg = live?.messageId ? s.messages.find(m => m.id === live.messageId) : null
+    if (!msg) {
+      msg = {
+        id: uid(),
+        role: 'tool',
+        content: '',
+        timestamp: Date.now(),
+        isStreaming: true,
+        toolName,
+        toolStatus: 'running',
+      }
+      s.messages.push(msg)
+      live = {
+        id: uid(),
+        messageId: msg.id,
+        name: toolName,
+        status: 'running',
+        preview: '',
+        args: null,
+        result: null,
+        error: null,
+      }
+      state.liveTools.push(live)
+    }
+    if (patch.status) {
+      live.status = patch.status
+      msg.toolStatus = patch.status
+      msg.isStreaming = patch.status === 'running'
+      if (patch.status !== 'running') delete msg.isStreaming
+    }
+    if ('preview' in patch && patch.preview != null) {
+      live.preview = patch.preview
+      msg.toolPreview = patch.preview || undefined
+    }
+    if ('args' in patch && patch.args != null) {
+      live.args = patch.args
+      msg.toolArgs = stringifyMaybe(patch.args)
+    }
+    if ('result' in patch && patch.result != null) {
+      live.result = patch.result
+      msg.toolResult = stringifyMaybe(patch.result)
+    }
+    if ('error' in patch && patch.error != null) {
+      live.error = patch.error
+      msg.toolError = stringifyMaybe(patch.error)
+      msg.toolStatus = 'error'
+      live.status = 'error'
+      delete msg.isStreaming
+    }
+    msg.timestamp = msg.timestamp || Date.now()
+    return msg
+  }
+
   async function attachStreamListeners(runSessionId) {
     detachStreamListeners()
     state.currentRunId = null
@@ -669,17 +793,13 @@ function createStore() {
       if (!delta) return
       const s = runSession()
       if (!s) return
-      let msg = s.messages.find(m => m.id === state.pendingAssistantId)
-      if (!msg) {
-        msg = { id: uid(), role: 'assistant', content: '', timestamp: Date.now(), isStreaming: true }
-        s.messages.push(msg)
-        state.pendingAssistantId = msg.id
-      }
+      const msg = ensureAssistantMessage(s)
       msg.content += delta
+      msg.isStreaming = true
       s.updatedAt = Date.now()
       s.lastActiveAt = Date.now()
-      persistSessionMessages(s.id)
-      notify()
+      scheduleStreamPersist(s.id)
+      notifyImmediate()
     })
     const u2 = await tauriListen('hermes-run-tool', (e) => {
       if (!isCurrentRunEvent(e?.payload)) return
@@ -687,65 +807,54 @@ function createStore() {
       const evtType = evt.event || ''
       const toolName = evt.tool || evt.tool_name || evt.name || 'tool'
       const preview = evt.preview || evt.detail || evt.message || ''
-      const extract = (obj, keys) => {
-        for (const k of keys) {
-          if (obj[k] != null && obj[k] !== '') return obj[k]
-        }
-        return null
-      }
+      const s = runSession()
+      if (!s) return
+      const input = extractFirst(evt, ['input', 'args', 'arguments', 'parameters', 'params', 'data'])
+      const output = extractFirst(evt, ['output', 'result', 'content', 'data', 'response'])
       if (evtType === 'tool.started') {
         emitLobsterPhase('tool', t('chat.lobsterHermesToolCall', { tool: toolName }))
-        const input = extract(evt, ['input', 'args', 'arguments', 'parameters', 'params', 'data'])
-        state.liveTools.push({
-          id: uid(),
-          name: toolName,
+        upsertLiveToolMessage(s, toolName, {
           status: 'running',
-          preview,
+          preview: preview || t('chat.waitingToolResult'),
           args: input,
-          result: null,
-          error: null,
         })
       } else if (evtType === 'tool.completed') {
-        const t = state.liveTools.find(x => x.name === toolName && x.status === 'running')
-        if (t) {
-          t.status = evt.error ? 'error' : 'done'
-          t.preview = evt.error ? (typeof evt.error === 'string' ? evt.error : 'failed') : preview
-          t.result = extract(evt, ['output', 'result', 'content', 'data', 'response'])
-          if (evt.error) t.error = typeof evt.error === 'string' ? evt.error : JSON.stringify(evt.error)
-          if (!t.args) t.args = extract(evt, ['input', 'args', 'arguments', 'parameters', 'params'])
-        }
+        upsertLiveToolMessage(s, toolName, {
+          status: evt.error ? 'error' : 'done',
+          preview: evt.error ? (typeof evt.error === 'string' ? evt.error : 'failed') : preview,
+          result: output,
+          args: input,
+          error: evt.error ? (typeof evt.error === 'string' ? evt.error : JSON.stringify(evt.error)) : null,
+        })
       } else if (evtType === 'tool.error') {
-        const t = state.liveTools.find(x => x.name === toolName && x.status === 'running')
-        if (t) {
-          t.status = 'error'
-          t.preview = preview || 'failed'
-          t.error = evt.error || preview || 'unknown'
-        }
+        upsertLiveToolMessage(s, toolName, {
+          status: 'error',
+          preview: preview || 'failed',
+          error: evt.error || preview || 'unknown',
+        })
       } else if (evtType === 'tool.progress') {
-        const t = state.liveTools.find(x => x.name === toolName && x.status === 'running')
-        if (t && preview) t.preview = preview
+        upsertLiveToolMessage(s, toolName, {
+          status: 'running',
+          preview: preview || t('chat.waitingToolResult'),
+          args: input,
+        })
       }
-      notify()
+      s.updatedAt = Date.now()
+      s.lastActiveAt = Date.now()
+      scheduleStreamPersist(s.id)
+      notifyImmediate()
     })
     const u3 = await tauriListen('hermes-run-done', (e) => {
       if (!isCurrentRunEvent(e?.payload)) return
       const s = runSession()
       if (!s) { cleanupAfterRun(); return }
 
-      // Commit finished tool calls as messages in the transcript.
-      if (state.liveTools.length) {
-        for (const t of state.liveTools) {
-          s.messages.push({
-            id: uid(),
-            role: 'tool',
-            content: '',
-            timestamp: Date.now(),
-            toolName: t.name,
-            toolPreview: t.preview || undefined,
-            toolArgs: stringifyMaybe(t.args),
-            toolResult: stringifyMaybe(t.result),
-            toolStatus: t.error ? 'error' : 'done',
-          })
+      // Finalize any live tool messages already visible in the unified stream.
+      for (const tool of state.liveTools) {
+        const toolMsg = tool.messageId ? s.messages.find(m => m.id === tool.messageId) : null
+        if (toolMsg) {
+          delete toolMsg.isStreaming
+          toolMsg.toolStatus = tool.error ? 'error' : (tool.status || 'done')
         }
       }
 
@@ -761,6 +870,7 @@ function createStore() {
       s.lastActiveAt = Date.now()
       updateSessionTitleFromFirstUser(s)
 
+      flushStreamPersist()
       persistSessionMessages(s.id)
       persistSessions()
       emitLobsterPhase('done', t('chat.lobsterHermesTaskDone'))
@@ -776,11 +886,14 @@ function createStore() {
         s.messages.push({
           id: uid(),
           role: 'system',
-          content: `⚠️ Agent run failed: ${err}`,
+          content: normalizeErrorMessage(err),
           timestamp: Date.now(),
+          severity: 'error',
         })
+        flushStreamPersist()
         persistSessionMessages(s.id)
         persistSessions()
+        notifyImmediate()
       }
       cleanupAfterRun()
     })
@@ -795,13 +908,14 @@ function createStore() {
   }
 
   function cleanupAfterRun() {
+    flushStreamPersist()
     state.streaming = false
     state.runningSessionId = null
     state.pendingAssistantId = null
     state.currentRunId = null
     state.liveTools = []
     detachStreamListeners()
-    notify()
+    notifyImmediate()
     // After streaming finishes the server has updated the session's
     // input_tokens / output_tokens / estimated_cost_usd aggregates. Refresh
     // the list so the input bar's usage pills reflect the new turn — this
@@ -837,24 +951,17 @@ function createStore() {
           msg.content = msg.content.trimEnd() + ' _(stopped)_'
         }
       }
-      // Commit any finished tool calls we already know about so they aren't
-      // lost when we detach listeners.
-      for (const t of state.liveTools) {
-        if (t.status === 'done' || t.status === 'error') {
-          s.messages.push({
-            id: uid(),
-            role: 'tool',
-            content: '',
-            timestamp: Date.now(),
-            toolName: t.name,
-            toolPreview: t.preview || undefined,
-            toolArgs: stringifyMaybe(t.args),
-            toolResult: stringifyMaybe(t.result),
-            toolStatus: t.error ? 'error' : 'done',
-          })
+      // Live tool calls are already part of s.messages. Just finalize their
+      // visible status instead of appending duplicates.
+      for (const tool of state.liveTools) {
+        const toolMsg = tool.messageId ? s.messages.find(m => m.id === tool.messageId) : null
+        if (toolMsg) {
+          delete toolMsg.isStreaming
+          toolMsg.toolStatus = tool.error ? 'error' : (tool.status || 'done')
         }
       }
       s.updatedAt = Date.now()
+      flushStreamPersist()
       persistSessionMessages(s.id)
       persistSessions()
     }
@@ -927,11 +1034,14 @@ function createStore() {
       s.messages.push({
         id: uid(),
         role: 'system',
-        content: `⚠️ ${e?.message || e}`,
+        content: normalizeErrorMessage(e?.message || e),
         timestamp: Date.now(),
+        severity: 'error',
       })
       persistSessionMessages(s.id)
+      persistSessions()
       emitLobsterPhase('done', t('chat.lobsterHermesTaskFailed'))
+      notifyImmediate()
       cleanupAfterRun()
     }
   }
