@@ -11,9 +11,10 @@ import { toast } from '../components/toast.js'
 import { showModal, showConfirm, showContentModal } from '../components/modal.js'
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
+import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
 
-const RENDER_THROTTLE = 80
-const STREAM_RENDER_MAX_PENDING_MS = 240
+const RENDER_THROTTLE = 16
+const STREAM_RENDER_MAX_PENDING_MS = 64
 const RESPONSE_WATCHDOG_MS = 15000
 const STREAM_IDLE_NOTICE_MS = 90000
 const STREAM_STALE_REFRESH_MS = 10 * 60 * 1000
@@ -2974,8 +2975,17 @@ function handleEvent(msg) {
       scheduleStreamSafetyTimeout()
       const toolLabel = formatToolDisplayName(toolName)
       const toolInput = summarizeToolInput(payload.data?.args || payload.data?.input || payload.data?.parameters || '')
+      const liveTool = mergeToolEventData({
+        id: toolCallId,
+        name: toolName,
+        input: payload.data?.args || payload.data?.input || payload.data?.parameters || current.input || null,
+        output: payload.data?.output || payload.data?.result || payload.data?.content || payload.data?.meta || current.output || null,
+        status: payload.data?.isError ? 'error' : (payload.data?.output || payload.data?.result || payload.data?.content || payload.data?.meta ? 'ok' : 'running'),
+        time: ts || Date.now(),
+      })
+      upsertLiveToolInStream(liveTool, payload.runId || _currentRunId)
       emitLobsterPhase('tool', t('chat.lobsterToolCall', { tool: toolLabel }))
-      showTyping(true, t('chat.typingToolCall', { tool: toolLabel }))
+      showTyping(false)
       const count = payload.runId ? (_toolRunIndex.get(payload.runId) || []).length : 1
       setReplyStatus('tool', t('chat.typingToolCall', { tool: toolLabel }), { runId: payload.runId, toolName, toolInput, toolCount: count, lastToolAt: Date.now(), activity: toolInput ? t('chat.toolParamsWithValue', { value: toolInput }) : t('chat.waitingToolResult') })
     }
@@ -3283,6 +3293,43 @@ function extractMediaRefsFromValue(value, refs = []) {
     return refs
   }
   return refs
+}
+
+function renderStreamToolCard(tool = {}) {
+  const id = tool.id || tool.toolCallId || tool.tool_call_id || tool.name || 'tool'
+  const name = formatToolDisplayName(tool.name || tool.toolName || tool.tool || 'tool')
+  const status = tool.status || (tool.isError ? 'error' : 'running')
+  const inputText = stripAnsi(safeStringify(tool.input || tool.args || tool.parameters || ''))
+  const outputText = stripAnsi(safeStringify(tool.output || tool.result || tool.content || ''))
+  const statusText = formatToolStatus(status)
+  return `
+    <details class="msg-tool-item msg-tool-live-item ${status === 'error' ? 'is-error' : status === 'running' ? 'is-running' : 'is-done'}" data-tool-id="${escapeAttr(String(id))}" open>
+      <summary>${escapeHtml(name)} · ${escapeHtml(statusText)}${status === 'running' ? ' …' : ''}</summary>
+      <div class="msg-tool-body">
+        <div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputText || t('chat.noParams'))}</pre></div>
+        ${outputText ? `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputText)}</pre></div>` : ''}
+      </div>
+    </details>
+  `
+}
+
+function upsertLiveToolInStream(tool = {}, runId = _currentRunId) {
+  beginStreamBubble(runId)
+  if (!_currentAiBubble) return
+  let container = _currentAiBubble.querySelector('.msg-tool.msg-tool-live')
+  if (!container) {
+    container = document.createElement('div')
+    container.className = 'msg-tool msg-tool-live'
+    _currentAiBubble.appendChild(container)
+  }
+  const id = String(tool.id || tool.toolCallId || tool.tool_call_id || tool.name || 'tool')
+  const existing = container.querySelector(`[data-tool-id="${CSS.escape(id)}"]`)
+  const wrapper = document.createElement('div')
+  wrapper.innerHTML = renderStreamToolCard({ ...tool, id })
+  const next = wrapper.firstElementChild
+  if (existing) existing.replaceWith(next)
+  else container.appendChild(next)
+  scrollToBottom()
 }
 
 function renderStreamMediaRefs(refs = [], runId = _currentRunId) {
@@ -3619,7 +3666,18 @@ function translateGatewayError(message = '') {
   }
   if (/origin not allowed/i.test(raw)) return t('chat.gatewayOriginNotAllowed')
   if (/NOT_PAIRED/i.test(raw)) return t('chat.gatewayNotPaired')
-  return raw
+  const enhanced = enhanceModelCallError(raw, t)
+  const lower = raw.toLowerCase()
+  if (/insufficient|quota|credit|balance|余额|欠费|429|payment\s+required/.test(lower)) {
+    return `${enhanced}\n\n💡 模型服务额度/余额不足，或服务商触发额度限制。请求已被模型服务商拒绝，不是本项目卡住。请充值、切换模型或稍后重试。`
+  }
+  if (/api.?key|unauthorized|forbidden|401|403|invalid key|认证|密钥|权限/.test(lower)) {
+    return `${enhanced}\n\n💡 模型认证失败：API Key 无效、过期，或当前账号没有该模型权限。请检查模型配置页的密钥、Base URL 和模型权限。`
+  }
+  if (/timeout|timed out|etimedout|econnreset|network|fetch failed|连接|超时|网络/.test(lower)) {
+    return `${enhanced}\n\n💡 模型请求网络异常：连接超时或服务端中断。不是聊天页无响应，请检查网络、代理或服务商状态。`
+  }
+  return enhanced
 }
 
 /** 从 Gateway message 对象提取文本和所有媒体（参照 clawapp extractContent） */
@@ -4067,9 +4125,11 @@ function flushStreamRender() {
 function doRender() {
   _lastRenderTime = performance.now()
   if (_currentAiBubble && _currentAiText) {
+    const liveTools = _currentAiBubble.querySelector?.('.msg-tool.msg-tool-live')
     if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || ''
     const renderText = makeStreamRenderSnapshot(_currentAiText)
     _currentAiBubble.innerHTML = renderMarkdown(renderText)
+    if (liveTools) _currentAiBubble.appendChild(liveTools)
     scrollToBottom()
   }
 }
@@ -4830,9 +4890,10 @@ function showLightbox(src) {
   document.addEventListener('keydown', onKey)
 }
 
-function appendSystemMessage(text) {
+function appendSystemMessage(text, options = {}) {
   const wrap = document.createElement('div')
-  wrap.className = 'msg msg-system'
+  const isError = options.severity === 'error' || /⚠|错误|失败|error|failed|quota|余额|模型服务|认证失败|不可用/i.test(String(text || ''))
+  wrap.className = `msg msg-system${isError ? ' msg-system-error' : ''}`
   wrap.dataset.rawText = text || ''
   const body = document.createElement('div')
   body.className = 'msg-system-body'

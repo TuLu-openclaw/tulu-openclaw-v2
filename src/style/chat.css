@@ -786,7 +786,14 @@
   padding: var(--space-xs) var(--space-sm);
   max-width: 100%;
 }
-.msg-system-body { text-align: center; }
+.msg.msg-system.msg-system-error {
+  color: var(--error, #ef4444);
+  background: color-mix(in srgb, var(--error, #ef4444) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error, #ef4444) 28%, transparent);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--error, #ef4444) 10%, transparent);
+}
+.msg-system-body { text-align: center; white-space: pre-wrap; }
 .msg-system-meta {
   justify-content: center;
   margin-top: 4px;
@@ -1758,6 +1765,17 @@
   background: var(--bg-tertiary, var(--bg-secondary));
   border-radius: var(--radius-md, 8px);
   padding: 8px 10px;
+}
+.msg-tool-live-item.is-running {
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 40%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+}
+.msg-tool-live-item.is-error {
+  border-color: color-mix(in srgb, var(--error, #ef4444) 45%, var(--border));
+  background: color-mix(in srgb, var(--error, #ef4444) 8%, var(--bg-tertiary, var(--bg-secondary)));
+}
+.msg-tool-live-item.is-done {
+  border-color: color-mix(in srgb, var(--success, #22c55e) 35%, var(--border));
 }
 .msg-tool-item > summary {
   cursor: pointer;
