@@ -273,6 +273,11 @@ async function showKamiModal(isRetry) {
       }, 1000)
     } else {
       errorEl.textContent = result.error || t('kami.invalidOrExpired')
+      if (result.debug) {
+        errorEl.textContent += '\n\n诊断信息:\n' + result.debug
+        errorEl.style.whiteSpace = 'pre-wrap'
+        errorEl.style.textAlign = 'left'
+      }
       verifyBtn.disabled = false
       verifyBtn.innerHTML = t('kami.verifyButton')
       verifyBtn.style.cssText =

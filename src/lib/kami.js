@@ -197,6 +197,19 @@ function getResponseErrorMessage(response, fallback = '验证失败') {
   return fallback
 }
 
+function makeDebugInfo(fields) {
+  return Object.entries(fields)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .join('\n')
+}
+
+function attachDebug(result, fields) {
+  const debug = makeDebugInfo(fields)
+  if (!debug) return result
+  return { ...result, debug }
+}
+
 /**
  * 获取设备标识码
  * 优先使用Tauri API获取MAC地址，降级使用随机UUID（存储在localStorage）
@@ -297,31 +310,59 @@ export async function login(kami) {
 
     const parsed = parseWeiyanResponse(raw)
     if (!parsed.ok) {
-      return { success: false, error: parsed.error, code: parsed.code ?? -10 }
+      return attachDebug(
+        { success: false, error: parsed.error, code: parsed.code ?? -10 },
+        {
+          stage: 'parse-response',
+          markcode: imei,
+          responseMode: parsed.mode,
+          parseCode: parsed.code,
+          rawLength: raw?.length || 0,
+          rawPrefix: String(raw || '').slice(0, 80),
+        },
+      )
     }
 
     const response = parsed.response
 
     // 检查返回码
     if (!responseCodeEquals(response.code, SUCCESS_CODE)) {
-      return { success: false, code: response.code, error: getResponseErrorMessage(response, '卡密验证失败') }
+      return attachDebug(
+        { success: false, code: response.code, error: getResponseErrorMessage(response, '卡密验证失败') },
+        {
+          stage: 'business-code',
+          markcode: imei,
+          responseMode: parsed.mode,
+          responseCode: response.code,
+          responseMsg: response.msg ?? response.message ?? response.error ?? response.data,
+        },
+      )
     }
 
     // 安全校验
     const serverTime = Number(response.time)
     if (!Number.isFinite(serverTime)) {
-      return { success: false, error: '微验成功响应缺少时间字段', code: -2 }
+      return attachDebug(
+        { success: false, error: '微验成功响应缺少时间字段', code: -2 },
+        { stage: 'missing-time', markcode: imei, responseMode: parsed.mode, responseCode: response.code },
+      )
     }
     const timeDiff = Math.abs(serverTime - timestamp)
     if (timeDiff > 30) {
-      return { success: false, error: '设备时间不准，请校准系统时间后重试', code: -2 }
+      return attachDebug(
+        { success: false, error: '设备时间不准，请校准系统时间后重试', code: -2 },
+        { stage: 'time-drift', markcode: imei, serverTime, localTime: timestamp, timeDiff },
+      )
     }
 
     if (response.check) {
       const checkStr = `${serverTime}${APPKEY}${randomValue}`
       const expectedCheck = md5(checkStr)
       if (response.check !== expectedCheck) {
-        return { success: false, error: '校验失败，数据被篡改', code: -3 }
+        return attachDebug(
+          { success: false, error: '校验失败，数据被篡改', code: -3 },
+          { stage: 'check-mismatch', markcode: imei, responseMode: parsed.mode, responseCode: response.code },
+        )
       }
     }
 

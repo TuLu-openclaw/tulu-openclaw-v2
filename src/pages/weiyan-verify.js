@@ -83,6 +83,7 @@ export default function render(el) {
       } else {
         resultEl.className = 'verify-result verify-result-error'
         resultEl.textContent = data.error || t('verify.invalidOrExpired')
+        if (data.debug) resultEl.textContent += '\n\n诊断信息:\n' + data.debug
       }
     } catch (e) {
       resultEl.style.display = ''
