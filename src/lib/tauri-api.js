@@ -158,7 +158,7 @@ const WEB_ONLY_CMDS = new Set([
   'docker_remove_container', 'docker_pull_image', 'docker_pull_status',
   'docker_list_images', 'docker_list_nodes', 'docker_add_node',
   'docker_remove_node', 'docker_cluster_overview',
-  'get_deploy_mode',
+  'get_deploy_mode', 'get_deploy_config',
 ])
 
 let _invokeReady = null
@@ -440,7 +440,7 @@ export const api = {
   openXingshuChatWindow: () => invoke('open_xingshu_chat_window'),
   fetchLiveSources: (url) => invoke('fetch_live_sources', { url }, 30000),
   openLivePlayer: (sources) => invoke('open_live_player', { sources }),
-  fetchPageM3u8: (url) => invoke('fetch_page_m3u8', { url }),
+  fetchPageM3u8: (url) => api.fetchLiveSources(url),
   updateOfficeState: (state, detail) => invoke('update_office_state', { state, detail }),
   syncOpenclawToOffice: () => invoke('sync_openclaw_to_office'),
   getNpmRegistry: () => cachedInvoke('get_npm_registry', {}, 30000),
@@ -674,7 +674,7 @@ export const api = {
   hermesHealthCheck: () => invoke('hermes_health_check'),
   hermesApiProxy: (method, path, body, headers) => invoke('hermes_api_proxy', { method, path, body: body || null, headers: headers || null }),
   musicSearch: (q) => invoke('music_search', { query: q }),
-  musicSearchNetease: (q, limit) => invoke('music_search_netease', { query: q, limit: limit || 20 }),
+  musicSearchNetease: (q, limit) => api.musicSearchAll(q, ['netease'], limit),
   hermesAgentRun: (input, sessionId, conversationHistory, instructions) => invoke('hermes_agent_run', { input, sessionId: sessionId || null, conversationHistory: conversationHistory || null, instructions: instructions || null }, 330000),
   hermesProfilesList: () => invoke('hermes_profiles_list', {}).catch(() => ({ profiles: [], active: 'default' })),
   hermesProfileUse: (name) => {
@@ -731,8 +731,8 @@ export const api = {
   hermesSkillFiles: (category, skillName) => invoke('hermes_skill_files', { category, skillName }),
   hermesSkillToggle: (slug, enabled) => invoke('hermes_skill_toggle', { slug, enabled }),
   hermesToolsetsList: () => invoke('hermes_toolsets_list'),
-  hermesSkillSave: (name, content) => invoke('hermes_skill_save', { name, content }),
-  hermesSkillDelete: (name) => invoke('hermes_skill_delete', { name }),
+  hermesSkillSave: (name, content) => invoke('hermes_skill_write', { filePath: name, content }),
+  hermesSkillDelete: async () => { throw new Error('Hermes skill delete is not supported by the backend') },
   hermesMemoryRead: (type) => invoke('hermes_memory_read', { type: type || 'memory' }),
   hermesMemoryReadAll: () => invoke('hermes_memory_read_all'),
   hermesMemoryWrite: (type, content) => invoke('hermes_memory_write', { type: type || 'memory', content }),

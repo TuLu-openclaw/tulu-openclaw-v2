@@ -254,7 +254,6 @@ jobs:
   build-linux-x64:
     name: Build (Linux x64)
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       contents: write
     steps:
@@ -327,11 +326,37 @@ jobs:
   release:
     name: Create Release
     needs: [build-windows-x64, build-windows-arm64, build-linux-x64, build-macos-arm64, build-macos-intel]
-    if: always() && (startsWith(github.ref, 'refs/tags/v') || (github.event.inputs.tag_name != '' && github.event.inputs.tag_name != null))
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event.inputs.tag_name != '' && github.event.inputs.tag_name != null)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify release tag matches app version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          EXPECTED="v${VERSION}"
+          if [ "${TAG_NAME}" != "${EXPECTED}" ]; then
+            echo "Release tag ${TAG_NAME} does not match package.json version ${VERSION} (expected ${EXPECTED})" >&2
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require('fs')
+          const pkgVersion = require('./package.json').version
+          const tauriVersion = require('./src-tauri/tauri.conf.json').version
+          const cargoToml = fs.readFileSync('./src-tauri/Cargo.toml', 'utf8')
+          const cargoVersion = cargoToml.match(/^version\s*=\s*"([^"]+)"/m)?.[1]
+          const versions = { 'package.json': pkgVersion, 'src-tauri/tauri.conf.json': tauriVersion, 'src-tauri/Cargo.toml': cargoVersion }
+          const mismatches = Object.entries(versions).filter(([, value]) => value !== pkgVersion)
+          if (mismatches.length) {
+            console.error('Version mismatch:', versions)
+            process.exit(1)
+          }
+          NODE
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:

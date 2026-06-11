@@ -135,13 +135,22 @@ jobs:
         run: npm install
 
       - name: TypeScript type check
-        run: npx tsc --noEmit 2>&1 || true
+        run: |
+          if node -e "const fs=require('fs'); const path=require('path'); function hasTs(dir){ for (const entry of fs.readdirSync(dir,{withFileTypes:true})) { const full=path.join(dir,entry.name); if (entry.isDirectory()) { if (hasTs(full)) return true } else if (/\.tsx?$/.test(entry.name)) return true } return false } process.exit(hasTs('src') ? 0 : 1)"; then
+            if [ ! -x node_modules/.bin/tsc ]; then
+              echo "TypeScript source files found, but the typescript package is not installed." >&2
+              exit 1
+            fi
+            node_modules/.bin/tsc --noEmit
+          else
+            echo "No TypeScript source files found; skipping tsc."
+          fi
 
       - name: Frontend build verification
         run: npm run build
 
       - name: Run unit tests
-        run: node --test tests/*.test.js 2>&1 || echo "NO_TESTS"
+        run: node --test tests/*.test.js
 
       - name: Upload test coverage
         if: ${{ always() && hashFiles('coverage/**') != '' }}
@@ -207,7 +216,7 @@ jobs:
         run: npm install
 
       - name: npm dependency security audit
-        run: npx npm-audit-ci --moderate || true
+        run: npm audit --audit-level=moderate
 
       - name: Run Trivy container image scan
         uses: aquasecurity/trivy-action@master
@@ -217,7 +226,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v4
