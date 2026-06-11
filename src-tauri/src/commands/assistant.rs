@@ -99,10 +99,18 @@ async fn read_primary_mac_address() -> Option<String> {
 
 fn parse_mac_output(bytes: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(bytes);
-    text.lines()
-        .map(str::trim)
-        .find(|line| line.len() >= 12 && line.chars().any(|c| c == ':' || c == '-'))
-        .map(|line| line.to_string())
+    for token in text.split(|c: char| c == ',' || c == '"' || c.is_whitespace()) {
+        let value = token.trim();
+        if value.len() == 17
+            && value.chars().enumerate().all(|(idx, ch)| match idx {
+                2 | 5 | 8 | 11 | 14 => ch == ':' || ch == '-',
+                _ => ch.is_ascii_hexdigit(),
+            })
+        {
+            return Some(value.to_string());
+        }
+    }
+    None
 }
 
 /// 确保数据目录及子目录存在，返回目录路径

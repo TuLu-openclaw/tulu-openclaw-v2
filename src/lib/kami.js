@@ -188,19 +188,32 @@ function getResponseErrorMessage(response, fallback = '验证失败') {
   const msg = response?.msg ?? response?.message ?? response?.error ?? response?.data
   if (typeof msg === 'string') return safeErrorText(msg)
   if (msg && typeof msg === 'object') {
-    const text = msg.msg || msg.message || msg.error || msg.info || msg.tips || msg.reason
+    const normalizedMsg = normalizeResponseValue(msg)
+    const text = normalizedMsg.msg || normalizedMsg.message || normalizedMsg.error || normalizedMsg.info || normalizedMsg.tips || normalizedMsg.reason
     if (typeof text === 'string') return safeErrorText(text)
     try {
-      return safeErrorText(JSON.stringify(msg))
+      return safeErrorText(JSON.stringify(normalizedMsg))
     } catch {}
   }
   return fallback
 }
 
+function normalizeResponseValue(value) {
+  if (typeof value === 'string') return normalizeDisplayText(value)
+  if (Array.isArray(value)) return value.map(normalizeResponseValue)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeResponseValue(item)]))
+  }
+  return value
+}
+
 function makeDebugInfo(fields) {
   return Object.entries(fields)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
-    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+    .map(([key, value]) => {
+      const normalized = normalizeResponseValue(value)
+      return `${key}: ${typeof normalized === 'string' ? normalized : JSON.stringify(normalized)}`
+    })
     .join('\n')
 }
 
