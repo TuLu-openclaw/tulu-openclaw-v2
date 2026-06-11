@@ -51,6 +51,33 @@ function safeErrorText(str) {
   return '验证失败，请检查网络后重试'
 }
 
+function binaryStringToBytes(str) {
+  const bytes = new Uint8Array(str.length)
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF
+  return bytes
+}
+
+function tryDecodeUtf8BinaryString(str) {
+  if (!str || typeof str !== 'string') return ''
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(binaryStringToBytes(str))
+  } catch {
+    return ''
+  }
+}
+
+function uniqueNonEmptyStrings(values) {
+  const out = []
+  const seen = new Set()
+  for (const value of values) {
+    if (typeof value !== 'string' || !value) continue
+    if (seen.has(value)) continue
+    seen.add(value)
+    out.push(value)
+  }
+  return out
+}
+
 function normalizeResponseText(text) {
   return String(text || '').replace(/^\uFEFF/, '').trim()
 }
@@ -106,16 +133,24 @@ function parseWeiyanResponse(raw) {
     return { ok: false, error: safeErrorText(e.message), code: -1 }
   }
 
-  if (!isValidUTF8Text(decrypted)) {
+  const decryptedCandidates = uniqueNonEmptyStrings([
+    decrypted,
+    tryDecodeUtf8BinaryString(decrypted),
+  ])
+
+  for (const candidate of decryptedCandidates) {
+    const decryptedJson = tryParseJsonText(candidate)
+    if (decryptedJson) {
+      return { ok: true, response: decryptedJson, mode: 'encrypted-json' }
+    }
+  }
+
+  const decodedPreview = tryDecodeUtf8BinaryString(decrypted) || decrypted
+  if (!isValidUTF8Text(decodedPreview)) {
     return { ok: false, error: '微验加密响应解密后不是有效文本，可能是客户电脑网络返回被替换或密钥不匹配', code: -10 }
   }
 
-  const decryptedJson = tryParseJsonText(decrypted)
-  if (!decryptedJson) {
-    return { ok: false, error: `微验加密响应不是JSON: ${safeErrorText(decrypted.slice(0, 80))}`, code: -10 }
-  }
-
-  return { ok: true, response: decryptedJson, mode: 'encrypted-json' }
+  return { ok: false, error: `微验加密响应不是JSON: ${safeErrorText(decodedPreview.slice(0, 80))}`, code: -10 }
 }
 
 function responseCodeEquals(actual, expected) {
