@@ -34,14 +34,14 @@
     "version:set": "node scripts/sync-version.js"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-shell": "^2.2.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "@tauri-apps/cli": "^2.5.0",
+    "@tauri-apps/cli": "^2.11.2",
     "vite": "^6.3.5"
   }
 }
