@@ -51,6 +51,87 @@ function safeErrorText(str) {
   return '验证失败，请检查网络后重试'
 }
 
+function normalizeResponseText(text) {
+  return String(text || '').replace(/^\uFEFF/, '').trim()
+}
+
+function tryParseJsonText(text) {
+  const normalized = normalizeResponseText(text)
+  if (!normalized) return null
+
+  const candidates = [normalized]
+  if (/%7B|%5B/i.test(normalized)) {
+    try { candidates.push(decodeURIComponent(normalized)) } catch {}
+  }
+
+  for (const candidate of candidates) {
+    const trimmed = normalizeResponseText(candidate)
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) continue
+    try {
+      return JSON.parse(trimmed)
+    } catch {}
+  }
+  return null
+}
+
+function summarizeUnexpectedResponse(raw) {
+  const text = normalizeResponseText(raw)
+  if (!text) return '微验服务器返回空内容'
+  if (/^<!doctype html/i.test(text) || /^<html[\s>]/i.test(text)) {
+    return '微验返回网页内容，可能被客户电脑的代理、杀软、证书扫描、DNS或网络拦截改写'
+  }
+  if (text.startsWith('{') || text.startsWith('[')) {
+    return '微验返回JSON但字段不符合当前验证协议'
+  }
+  return `微验返回非预期内容: ${safeErrorText(text.slice(0, 80))}`
+}
+
+function parseWeiyanResponse(raw) {
+  const text = normalizeResponseText(raw)
+
+  // 某些客户端环境下，微验或中间网络可能返回明文 JSON 错误，而不是 RC4 加密 hex。
+  const plainJson = tryParseJsonText(text)
+  if (plainJson) return { ok: true, response: plainJson, mode: 'plain-json' }
+
+  // 加密协议下响应必须整体是 hex。不要再把 HTML/错误文本里的 a-f 字符抽出来误解密。
+  const bodyHex = text.replace(/\s+/g, '')
+  if (!bodyHex || bodyHex.length < 8 || bodyHex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(bodyHex)) {
+    return { ok: false, error: summarizeUnexpectedResponse(raw), code: -10 }
+  }
+
+  let decrypted
+  try {
+    decrypted = rc4(hexToBin(bodyHex), RC4KEY)
+  } catch (e) {
+    return { ok: false, error: safeErrorText(e.message), code: -1 }
+  }
+
+  if (!isValidUTF8Text(decrypted)) {
+    return { ok: false, error: '微验加密响应解密后不是有效文本，可能是客户电脑网络返回被替换或密钥不匹配', code: -10 }
+  }
+
+  const decryptedJson = tryParseJsonText(decrypted)
+  if (!decryptedJson) {
+    return { ok: false, error: `微验加密响应不是JSON: ${safeErrorText(decrypted.slice(0, 80))}`, code: -10 }
+  }
+
+  return { ok: true, response: decryptedJson, mode: 'encrypted-json' }
+}
+
+function responseCodeEquals(actual, expected) {
+  return String(actual) === String(expected)
+}
+
+function getResponseErrorMessage(response, fallback = '验证失败') {
+  const msg = response?.msg ?? response?.message ?? response?.error ?? response?.data
+  if (typeof msg === 'string') return safeErrorText(msg)
+  if (msg && typeof msg === 'object') {
+    const text = msg.msg || msg.message || msg.error || msg.info
+    if (typeof text === 'string') return safeErrorText(text)
+  }
+  return fallback
+}
+
 /**
  * 获取设备标识码
  * 优先使用Tauri API获取MAC地址，降级使用随机UUID（存储在localStorage）
@@ -149,39 +230,23 @@ export async function login(kami) {
 
     const raw = await httpPost(WY_HOST, `api/?id=kmlogon`, `app=${APPID}&data=${encrypted}`)
 
-    // 提取 hex body
-    let bodyHex = raw.replace(/[^0-9a-fA-F]/g, '')
-
-    if (bodyHex.length < 8 || bodyHex.length % 2 !== 0) {
-      return { success: false, error: '服务器响应格式异常', code: -10 }
+    const parsed = parseWeiyanResponse(raw)
+    if (!parsed.ok) {
+      return { success: false, error: parsed.error, code: parsed.code ?? -10 }
     }
 
-    // RC4 解密
-    let decrypted
-    try {
-      decrypted = rc4(hexToBin(bodyHex), RC4KEY)
-    } catch (e) {
-      return { success: false, error: safeErrorText(e.message), code: -1 }
-    }
-
-    // JSON 解析（先用 UTF-8 验证）
-    let response
-    try {
-      if (!isValidUTF8Text(decrypted)) {
-        throw new Error('decrypted invalid utf8')
-      }
-      response = JSON.parse(decrypted)
-    } catch {
-      return { success: false, error: '响应格式异常，请检查网络后重试', code: -1 }
-    }
+    const response = parsed.response
 
     // 检查返回码
-    if (response.code !== SUCCESS_CODE) {
-      return { success: false, code: response.code, error: safeErrorText(response.msg) }
+    if (!responseCodeEquals(response.code, SUCCESS_CODE)) {
+      return { success: false, code: response.code, error: getResponseErrorMessage(response, '卡密验证失败') }
     }
 
     // 安全校验
-    const serverTime = response.time
+    const serverTime = Number(response.time)
+    if (!Number.isFinite(serverTime)) {
+      return { success: false, error: '微验成功响应缺少时间字段', code: -2 }
+    }
     const timeDiff = Math.abs(serverTime - timestamp)
     if (timeDiff > 30) {
       return { success: false, error: '设备时间不准，请校准系统时间后重试', code: -2 }
@@ -254,26 +319,11 @@ export async function getNotice() {
 
     const raw = await httpPost(WY_HOST, `api/?id=notice`, `app=${APPID}`)
 
-    let bodyHex = raw.replace(/[^0-9a-fA-F]/g, '')
-    if (bodyHex.length < 8 || bodyHex.length % 2 !== 0) return ''
+    const parsed = parseWeiyanResponse(raw)
+    if (!parsed.ok) return ''
 
-    let decrypted
-    try {
-      decrypted = rc4(hexToBin(bodyHex), RC4KEY)
-    } catch {
-      return ''
-    }
-    if (!decrypted || decrypted.length < 2) return ''
-
-    let json
-    try {
-      if (!isValidUTF8Text(decrypted)) return ''
-      json = JSON.parse(decrypted)
-    } catch {
-      return ''
-    }
-
-    if (json.code !== 200 || !json.msg?.app_gg) return ''
+    const json = parsed.response
+    if (!responseCodeEquals(json.code, 200) || !json.msg?.app_gg) return ''
     const text = json.msg.app_gg
 
     localStorage.setItem(KAMI_NOTICE_KEY, JSON.stringify({ text, ts: Date.now() }))
