@@ -85,6 +85,25 @@ function getUnixTimestamp() {
 }
 
 async function httpPost(host, path, body) {
+  const actionMatch = String(path || '').match(/(?:^|[?&])id=([^&]+)/)
+  const action = actionMatch ? decodeURIComponent(actionMatch[1]) : String(path || '').replace(/^api\/?\?id=/, '')
+
+  // Tauri 桌面端必须走 Rust 后端请求：
+  // 1) 任务管理器能看到“星枢OpenClaw”主进程网络；
+  // 2) 避免 WebView fetch 的 CORS/禁止 User-Agent/系统代理差异；
+  // 3) 统一走 build_http_client() 的代理与超时配置。
+  try {
+    const { api, isTauriRuntime } = await import('./tauri-api.js')
+    if (isTauriRuntime() && api.weiyanApiPost) {
+      const res = await api.weiyanApiPost(action, String(body || ''))
+      if (!res?.ok) throw new Error(res?.error || `HTTP ${res?.status || 0}`)
+      return res.text || ''
+    }
+  } catch (err) {
+    throw err
+  }
+
+  // Web/dev fallback only
   const formData = new URLSearchParams()
   for (const [k, v] of new URLSearchParams(body)) formData.append(k, v)
   const controller = new AbortController()
@@ -94,7 +113,6 @@ async function httpPost(host, path, body) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/4.0 (compatible; WeiyanVerify/1.0)',
       },
       body: formData.toString(),
       signal: controller.signal,
@@ -234,17 +252,7 @@ export async function getNotice() {
       } catch {}
     }
 
-    const formData = new URLSearchParams()
-    formData.append('app', APPID)
-    const resp = await fetch(`https://${WY_HOST}/api/?id=notice`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/4.0 (compatible; WeiyanVerify/1.0)',
-      },
-      body: formData.toString(),
-    })
-    const raw = await resp.text()
+    const raw = await httpPost(WY_HOST, `api/?id=notice`, `app=${APPID}`)
 
     let bodyHex = raw.replace(/[^0-9a-fA-F]/g, '')
     if (bodyHex.length < 8 || bodyHex.length % 2 !== 0) return ''

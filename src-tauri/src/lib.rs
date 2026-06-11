@@ -400,8 +400,9 @@ pub fn run() {
             tvbox::tvbox_store_del,
             tvbox::tvbox_cookie_get,
             tvbox::tvbox_parse,
-            // 全球内置代理
+            // 全球内置代理 + 微验卡密 API
             proxy::proxy_url,
+            proxy::weiyan_api_post,
             // 音乐播放器
             music::music_search_all,
             music::music_get_play_url,

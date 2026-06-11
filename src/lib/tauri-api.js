@@ -745,6 +745,9 @@ export const api = {
   hermesDashboardPluginsRescan: () => invoke('hermes_dashboard_plugins_rescan'),
   hermesUsageAnalytics: (days = 30) => invoke('hermes_usage_analytics', { days }),
 
+  proxyUrl: (url, cookie) => invoke('proxy_url', { url, cookie: cookie || null }),
+  weiyanApiPost: (action, body) => invoke('weiyan_api_post', { action, body }, 20000),
+
   // 音乐播放器
   musicSearchAll: (query, platforms, limit) => invoke('music_search_all', { query, platforms: platforms || null, limit: limit || 20 }),
   musicGetPlayUrl: (platform, id) => invoke('music_get_play_url', { platform, id }),

@@ -1,4 +1,5 @@
 import { t } from '../lib/i18n.js'
+import { login as loginKami } from '../lib/kami.js'
 
 /**
  * 微验验证页面
@@ -73,20 +74,15 @@ export default function render(el) {
     resultEl.style.display = 'none'
 
     try {
-      const resp = await fetch('https://wy.llua.cn/api/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appid, key, appkey: 'sd47K5r8v7K0KsH0' })
-      })
-      const data = await resp.json().catch(() => ({}))
+      const data = await loginKami(key)
 
       resultEl.style.display = ''
-      if (data.success || data.code === 2552667173 || data.ret === 2552667173) {
+      if (data.success) {
         resultEl.className = 'verify-result verify-result-success'
         resultEl.textContent = t('verify.verifySuccess')
       } else {
         resultEl.className = 'verify-result verify-result-error'
-        resultEl.textContent = t('verify.invalidOrExpired')
+        resultEl.textContent = data.error || t('verify.invalidOrExpired')
       }
     } catch (e) {
       resultEl.style.display = ''

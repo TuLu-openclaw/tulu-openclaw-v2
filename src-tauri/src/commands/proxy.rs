@@ -1,6 +1,69 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct WeiyanPostResponse {
+    pub ok: bool,
+    pub status: u16,
+    pub text: String,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn weiyan_api_post(action: String, body: String) -> Result<WeiyanPostResponse, String> {
+    let action = action.trim();
+    if action.is_empty()
+        || !action
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("微验接口 action 不合法".into());
+    }
+
+    let client = super::build_http_client(
+        std::time::Duration::from_secs(15),
+        Some("Mozilla/4.0 (compatible; WeiyanVerify/1.0)"),
+    )
+    .map_err(|e| format!("HTTP 客户端初始化失败: {e}"))?;
+
+    let url = format!("https://wy.llua.cn/api/?id={action}");
+    match client
+        .post(&url)
+        .header(
+            reqwest::header::CONTENT_TYPE,
+            "application/x-www-form-urlencoded",
+        )
+        .header(reqwest::header::ACCEPT, "*/*")
+        .body(body)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            match resp.text().await {
+                Ok(text) => Ok(WeiyanPostResponse {
+                    ok: (200..400).contains(&status),
+                    status,
+                    text,
+                    error: None,
+                }),
+                Err(e) => Ok(WeiyanPostResponse {
+                    ok: false,
+                    status,
+                    text: String::new(),
+                    error: Some(format!("读取微验响应失败: {e}")),
+                }),
+            }
+        }
+        Err(e) => Ok(WeiyanPostResponse {
+            ok: false,
+            status: 0,
+            text: String::new(),
+            error: Some(format!("微验请求失败: {e}")),
+        }),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ProxyResponse {
     pub ok: bool,
     pub status: u16,
