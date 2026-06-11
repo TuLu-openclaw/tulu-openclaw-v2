@@ -89,6 +89,23 @@ function uniqueNonEmptyStrings(values) {
   return out
 }
 
+function repairUtf8MojibakeText(str) {
+  if (!str || typeof str !== 'string') return ''
+
+  // 典型现象：中文 UTF-8 字节被按 Latin-1/Windows-1252 解成 å/æ/ç/è/é/ä 等字符。
+  // 只在“看起来明显乱码、且本身不含中文”的情况下修复，避免误伤正常文本。
+  if (/[^\x00-\x7F]/.test(str) && /[\u00C2-\u00F4]/.test(str) && !/[\u3400-\u9FFF]/.test(str)) {
+    const repaired = tryDecodeBinaryString(str, 'utf-8')
+    if (repaired && repaired !== str && /[\u3400-\u9FFF]/.test(repaired)) return repaired
+  }
+
+  return str
+}
+
+function normalizeDisplayText(str) {
+  return repairUtf8MojibakeText(String(str || ''))
+}
+
 function normalizeResponseText(text) {
   return String(text || '').replace(/^\uFEFF/, '').trim()
 }
@@ -357,7 +374,7 @@ export async function getNotice() {
     if (cached) {
       try {
         const { text, ts } = JSON.parse(cached)
-        if (Date.now() - ts < 60 * 60 * 1000) return text
+        if (Date.now() - ts < 60 * 60 * 1000) return normalizeDisplayText(text)
       } catch {}
     }
 
@@ -368,7 +385,7 @@ export async function getNotice() {
 
     const json = parsed.response
     if (!responseCodeEquals(json.code, 200) || !json.msg?.app_gg) return ''
-    const text = json.msg.app_gg
+    const text = normalizeDisplayText(json.msg.app_gg)
 
     localStorage.setItem(KAMI_NOTICE_KEY, JSON.stringify({ text, ts: Date.now() }))
     return text
