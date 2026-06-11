@@ -244,9 +244,17 @@ const WEIYAN_MESSAGE_LABELS = {
   '设备时间不准，请校准系统时间后重试': '设备时间不准：请校准系统时间后重试',
 }
 
+function explainWeiyanCode(value) {
+  const code = Number(value)
+  if (WEIYAN_CODE_LABELS[code]) return WEIYAN_CODE_LABELS[code]
+  if (Number.isFinite(code)) return `${code}（微验返回失败码，具体原因请看“响应信息”）`
+  return value
+}
+
 function normalizeDebugValue(key, value) {
   const normalized = normalizeResponseValue(value)
-  if (key === 'responseCode' && WEIYAN_CODE_LABELS[Number(normalized)]) return WEIYAN_CODE_LABELS[Number(normalized)]
+  if (key === 'responseCode') return explainWeiyanCode(normalized)
+  if (key === 'parseCode') return explainWeiyanCode(normalized)
   if (key === 'responseMsg' && typeof normalized === 'string') return WEIYAN_MESSAGE_LABELS[normalized] || normalized
   if (typeof normalized === 'string') return DEBUG_VALUE_LABELS[normalized] || WEIYAN_MESSAGE_LABELS[normalized] || normalized
   return normalized
