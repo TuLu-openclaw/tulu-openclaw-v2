@@ -207,12 +207,43 @@ function normalizeResponseValue(value) {
   return value
 }
 
+const DEBUG_LABELS = {
+  stage: '阶段',
+  markcode: '设备码',
+  responseMode: '响应模式',
+  responseCode: '响应码',
+  responseMsg: '响应信息',
+  parseCode: '解析码',
+  rawLength: '原始响应长度',
+  rawPrefix: '原始响应片段',
+  serverTime: '服务器时间',
+  localTime: '本机时间',
+  timeDiff: '时间差',
+}
+
+const DEBUG_VALUE_LABELS = {
+  'parse-response': '解析响应失败',
+  'business-code': '业务返回失败',
+  'missing-time': '成功响应缺少时间字段',
+  'time-drift': '系统时间偏差过大',
+  'check-mismatch': '校验签名不匹配',
+  'plain-json': '明文 JSON',
+  'encrypted-json': '加密 JSON',
+}
+
+function normalizeDebugValue(value) {
+  const normalized = normalizeResponseValue(value)
+  if (typeof normalized === 'string') return DEBUG_VALUE_LABELS[normalized] || normalized
+  return normalized
+}
+
 function makeDebugInfo(fields) {
   return Object.entries(fields)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => {
-      const normalized = normalizeResponseValue(value)
-      return `${key}: ${typeof normalized === 'string' ? normalized : JSON.stringify(normalized)}`
+      const label = DEBUG_LABELS[key] || key
+      const normalized = normalizeDebugValue(value)
+      return `${label}: ${typeof normalized === 'string' ? normalized : JSON.stringify(normalized)}`
     })
     .join('\n')
 }
