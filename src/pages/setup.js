@@ -63,6 +63,65 @@ function inferStandaloneInstallDir(cliPath) {
   return withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
 }
 
+async function refreshInstallDetectionCaches() {
+  invalidate('get_version_info', 'check_node', 'check_git', 'get_services_status', 'check_installation')
+  await api.invalidatePathCache().catch(() => {})
+}
+
+async function saveDetectedGitPath(resultEl = null) {
+  const results = await api.scanGitPaths().catch(() => [])
+  const first = Array.isArray(results) ? results.find(item => item?.path) : null
+  if (!first?.path) return ''
+  const cfg = await api.readPanelConfig()
+  cfg.gitPath = first.path
+  await api.writePanelConfig(cfg)
+  await refreshInstallDetectionCaches()
+  const msg = `已自动绑定 Git: ${first.path}`
+  if (resultEl) {
+    resultEl.style.display = 'block'
+    resultEl.innerHTML += `<div style="margin-top:6px;color:var(--success)">✓ ${escapeHtml(msg)}</div>`
+  }
+  return first.path
+}
+
+async function autoBindDetectedOpenclawCli(modal = null) {
+  await refreshInstallDetectionCaches()
+  const results = await api.scanOpenclawPaths().catch(() => [])
+  const first = Array.isArray(results) ? results.find(item => item?.path) : null
+  if (!first?.path) return ''
+
+  const cfg = await api.readPanelConfig()
+  cfg.openclawCliPath = first.path
+  const installDir = inferStandaloneInstallDir(first.path)
+  if (installDir && first.source === 'standalone') cfg.openclawStandaloneInstallDir = installDir
+  await api.writePanelConfig(cfg)
+  await refreshInstallDetectionCaches()
+
+  const msg = `已自动绑定 OpenClaw CLI: ${first.path}`
+  if (modal?.appendHtmlLog) modal.appendHtmlLog(`${statusIcon('ok', 14)} ${escapeHtml(msg)}`)
+  return first.path
+}
+
+async function autoEnterWhenReady(page, delayMs = 1200) {
+  await refreshInstallDetectionCaches()
+  const [nodeRes, clawRes, configRes] = await Promise.allSettled([
+    api.checkNode(),
+    api.getServicesStatus(),
+    api.checkInstallation(),
+  ])
+  const nodeOk = nodeRes.status === 'fulfilled' && nodeRes.value?.installed
+  const cliOk = clawRes.status === 'fulfilled'
+    && clawRes.value?.length > 0
+    && clawRes.value[0]?.cli_installed !== false
+  const configOk = configRes.status === 'fulfilled' && configRes.value?.installed
+  if (nodeOk && cliOk && configOk) {
+    setTimeout(() => { window.location.hash = '/dashboard' }, delayMs)
+    return true
+  }
+  setTimeout(() => runDetect(page), 300)
+  return false
+}
+
 function buildStatusMeta(...parts) {
   return parts
     .map(part => String(part || '').trim())
@@ -141,7 +200,7 @@ async function runDetect(page) {
     <div class="stat-card loading-placeholder" style="height:48px;margin-top:8px"></div>
   `
   // 清除缓存，确保拿到最新检测结果
-  invalidate('get_version_info', 'check_node', 'check_git', 'get_services_status', 'check_installation')
+  await refreshInstallDetectionCaches()
   // 并行检测 Node.js、Git、OpenClaw CLI、配置文件
   const [nodeRes, gitRes, clawRes, configRes, versionRes] = await Promise.allSettled([
     api.checkNode(),
@@ -252,6 +311,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
+          <button class="btn btn-secondary btn-sm" id="btn-scan-git">${t('settings.gitScan')}</button>
           <a class="btn btn-secondary btn-sm" href="https://git-scm.com/downloads" target="_blank" rel="noopener">${t('setup.manualDownload')}</a>
           <a class="btn btn-secondary btn-sm" href="http://221.0.81.162:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">${t('setup.backupDownload')}</a>
         </div>
@@ -593,12 +653,25 @@ function bindEvents(page, nodeOk, detectState) {
     }
     try {
       const msg = await api.autoInstallGit()
-      if (resultEl) resultEl.innerHTML = `<span style="color:var(--success)">✓ ${msg}</span>`
+      const boundGit = await saveDetectedGitPath().catch(() => '')
+      if (resultEl) {
+        resultEl.innerHTML = `<span style="color:var(--success)">✓ ${msg}</span>${boundGit ? `<div style="margin-top:6px;color:var(--success)">✓ ${escapeHtml(`已自动绑定 Git: ${boundGit}`)}</div>` : ''}`
+      }
       toast(t('setup.gitInstallSuccess'), 'success')
-      // 安装成功后自动配置 HTTPS
+      // 安装成功后自动配置 HTTPS，并刷新检测结果
       api.configureGitHttps().catch(() => {})
-      setTimeout(() => runDetect(page), 1000)
+      setTimeout(() => runDetect(page), 800)
     } catch (e) {
+      const boundGit = await saveDetectedGitPath().catch(() => '')
+      if (boundGit) {
+        if (resultEl) {
+          resultEl.innerHTML = `<span style="color:var(--success)">✓ 已发现并绑定 Git: ${escapeHtml(boundGit)}</span>`
+        }
+        toast(t('setup.gitInstallSuccess'), 'success')
+        api.configureGitHttps().catch(() => {})
+        setTimeout(() => runDetect(page), 800)
+        return
+      }
       const errMsg = String(e.message || e)
       if (resultEl) {
         resultEl.innerHTML = `<div>
@@ -613,6 +686,30 @@ function bindEvents(page, nodeOk, detectState) {
     } finally {
       btn.disabled = false
       btn.textContent = t('setup.autoInstallGitBtn')
+    }
+  })
+
+  page.querySelector('#btn-scan-git')?.addEventListener('click', async () => {
+    const btn = page.querySelector('#btn-scan-git')
+    const resultEl = page.querySelector('#git-install-result')
+    if (!btn || !resultEl) return
+    btn.disabled = true
+    resultEl.style.display = 'block'
+    resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('settings.gitScanning')}</span>`
+    try {
+      const boundGit = await saveDetectedGitPath()
+      if (boundGit) {
+        resultEl.innerHTML = `<span style="color:var(--success)">✓ 已发现并绑定 Git: ${escapeHtml(boundGit)}</span>`
+        toast(t('settings.gitPathSaved'), 'success')
+        api.configureGitHttps().catch(() => {})
+        setTimeout(() => runDetect(page), 500)
+      } else {
+        resultEl.innerHTML = `<span style="color:var(--warning)">${t('settings.gitScanEmpty')}</span>`
+      }
+    } catch (e) {
+      resultEl.innerHTML = `<span style="color:var(--danger)">${t('setup.scanFailed', { err: escapeHtml(e?.message || e) })}</span>`
+    } finally {
+      btn.disabled = false
     }
   })
 
@@ -1046,8 +1143,17 @@ function bindEvents(page, nodeOk, detectState) {
             modal.appendHtmlLog(`${statusIcon('warn', 14)} ${t('setup.autoConfigFailed', { err: ce })}`)
           }
 
+          try {
+            const boundCli = await autoBindDetectedOpenclawCli(modal)
+            if (!boundCli) {
+              modal.appendHtmlLog(`${statusIcon('warn', 14)} 安装完成，但暂未自动发现 OpenClaw CLI，请点击“重新检测”或手动扫描。`)
+            }
+          } catch (be) {
+            modal.appendHtmlLog(`${statusIcon('warn', 14)} 自动绑定 OpenClaw CLI 失败：${escapeHtml(be?.message || be)}`)
+          }
+
           toast(t('setup.installSuccess'), 'success')
-          setTimeout(() => window.location.reload(), 1500)
+          await autoEnterWhenReady(page, 1200)
         })
 
         // 后台任务失败
@@ -1088,8 +1194,9 @@ function bindEvents(page, nodeOk, detectState) {
         if (source !== 'official') await api.saveStandaloneInstallDir(installPath)
         const msg = await api.upgradeOpenclaw(source, null, method)
         modal.setDone(msg)
+        await autoBindDetectedOpenclawCli(modal).catch(() => '')
         toast(t('setup.installSuccess'), 'success')
-        setTimeout(() => window.location.reload(), 1500)
+        await autoEnterWhenReady(page, 1200)
         cleanup()
       }
     } catch (e) {
