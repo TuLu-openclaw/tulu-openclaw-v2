@@ -57,13 +57,24 @@ function binaryStringToBytes(str) {
   return bytes
 }
 
-function tryDecodeUtf8BinaryString(str) {
+function tryDecodeBinaryString(str, encoding = 'utf-8') {
   if (!str || typeof str !== 'string') return ''
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(binaryStringToBytes(str))
+    return new TextDecoder(encoding, { fatal: true }).decode(binaryStringToBytes(str))
   } catch {
     return ''
   }
+}
+
+function getDecodedBinaryStringCandidates(str) {
+  // 微验接口历史实现里，中文错误/提示有机会以 GBK/GB18030 字节返回；
+  // RC4 解密得到的是“字节串”，不能只按 JS 字符串或 UTF-8 判断。
+  return uniqueNonEmptyStrings([
+    str,
+    tryDecodeBinaryString(str, 'utf-8'),
+    tryDecodeBinaryString(str, 'gb18030'),
+    tryDecodeBinaryString(str, 'gbk'),
+  ])
 }
 
 function uniqueNonEmptyStrings(values) {
@@ -133,10 +144,7 @@ function parseWeiyanResponse(raw) {
     return { ok: false, error: safeErrorText(e.message), code: -1 }
   }
 
-  const decryptedCandidates = uniqueNonEmptyStrings([
-    decrypted,
-    tryDecodeUtf8BinaryString(decrypted),
-  ])
+  const decryptedCandidates = getDecodedBinaryStringCandidates(decrypted)
 
   for (const candidate of decryptedCandidates) {
     const decryptedJson = tryParseJsonText(candidate)
@@ -145,7 +153,8 @@ function parseWeiyanResponse(raw) {
     }
   }
 
-  const decodedPreview = tryDecodeUtf8BinaryString(decrypted) || decrypted
+  const decodedPreview = decryptedCandidates.find(isValidUTF8Text) || decryptedCandidates[0] || decrypted
+
   if (!isValidUTF8Text(decodedPreview)) {
     return { ok: false, error: '微验加密响应解密后不是有效文本，可能是客户电脑网络返回被替换或密钥不匹配', code: -10 }
   }
