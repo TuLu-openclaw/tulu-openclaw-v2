@@ -231,9 +231,24 @@ const DEBUG_VALUE_LABELS = {
   'encrypted-json': '加密 JSON',
 }
 
-function normalizeDebugValue(value) {
+const WEIYAN_CODE_LABELS = {
+  105: '105（系统时间出错，请校准电脑时间/时区后重试）',
+  149: '149（卡密不存在，请确认输入是否正确）',
+  2552667173: '2552667173（验证成功）',
+}
+
+const WEIYAN_MESSAGE_LABELS = {
+  '系统时间出错': '系统时间出错：请校准电脑时间、时区和 Windows 时间同步',
+  '卡密不存在': '卡密不存在：请确认输入的卡密是否正确',
+  '校验失败，数据被篡改': '校验失败：返回数据可能被篡改，或本机时间/网络环境异常',
+  '设备时间不准，请校准系统时间后重试': '设备时间不准：请校准系统时间后重试',
+}
+
+function normalizeDebugValue(key, value) {
   const normalized = normalizeResponseValue(value)
-  if (typeof normalized === 'string') return DEBUG_VALUE_LABELS[normalized] || normalized
+  if (key === 'responseCode' && WEIYAN_CODE_LABELS[Number(normalized)]) return WEIYAN_CODE_LABELS[Number(normalized)]
+  if (key === 'responseMsg' && typeof normalized === 'string') return WEIYAN_MESSAGE_LABELS[normalized] || normalized
+  if (typeof normalized === 'string') return DEBUG_VALUE_LABELS[normalized] || WEIYAN_MESSAGE_LABELS[normalized] || normalized
   return normalized
 }
 
@@ -242,7 +257,7 @@ function makeDebugInfo(fields) {
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => {
       const label = DEBUG_LABELS[key] || key
-      const normalized = normalizeDebugValue(value)
+      const normalized = normalizeDebugValue(key, value)
       return `${label}: ${typeof normalized === 'string' ? normalized : JSON.stringify(normalized)}`
     })
     .join('\n')
