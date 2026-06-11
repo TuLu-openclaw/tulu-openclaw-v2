@@ -170,24 +170,13 @@ jobs:
         env:
           CARGO_BUILD_JOBS: 2
           RUSTFLAGS: "-C codegen-units=1"
-        shell: bash
         run: |
           npm run build
-          set +e
-          npm run tauri build -- --target aarch64-apple-darwin 2>&1 | tee tauri-macos-arm64-build.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -ne 0 ]; then
-            if grep -q "bundle_dmg.sh" tauri-macos-arm64-build.log && find src-tauri/target/aarch64-apple-darwin/release -name '*.app' -type d | grep -q .; then
-              echo "macOS ARM64 DMG bundling failed, but .app bundle was created; packaging .app.zip fallback."
-            else
-              echo "macOS ARM64 build failed before creating a usable .app bundle." >&2
-              exit "$status"
-            fi
-          fi
+          npm run tauri build -- --target aarch64-apple-darwin
 
-      - name: Find app bundle
-        run: find src-tauri/target/aarch64-apple-darwin/release -name "*.app" -type d
+      - name: Find DMG
+        id: find_dmg
+        run: find src-tauri/target/aarch64-apple-darwin/release/bundle -name "*.dmg" -type f
 
       - name: Normalize artifact tag
         shell: bash
@@ -195,21 +184,11 @@ jobs:
           SAFE_TAG_NAME="${TAG_NAME//\//-}"
           echo "SAFE_TAG_NAME=$SAFE_TAG_NAME" >> "$GITHUB_ENV"
 
-      - name: Package app bundle
-        shell: bash
-        run: |
-          APP_PATH="$(find src-tauri/target/aarch64-apple-darwin/release -name '*.app' -type d | head -n 1)"
-          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
-            echo "macOS ARM64 .app bundle not found" >&2
-            exit 1
-          fi
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "XingShuOpenClaw-${SAFE_TAG_NAME}-macOS-ARM64-app.zip"
-
-      - name: Upload app bundle
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: XingShuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-ARM64-app
-          path: XingShuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-ARM64-app.zip
+          name: XingShuOpenClaw-${{ env.SAFE_TAG_NAME }}-macOS-ARM64-dmg
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
 
   # ─────────── macOS Intel ────────────────────────────────────────
   build-macos-intel:
