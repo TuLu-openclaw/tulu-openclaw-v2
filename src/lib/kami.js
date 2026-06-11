@@ -47,7 +47,8 @@ function isValidUTF8Text(str) {
  */
 function safeErrorText(str) {
   if (!str || typeof str !== 'string') return '未知错误'
-  if (isValidUTF8Text(str)) return str
+  const text = normalizeDisplayText(str)
+  if (isValidUTF8Text(text)) return text
   return '验证失败，请检查网络后重试'
 }
 
@@ -187,8 +188,11 @@ function getResponseErrorMessage(response, fallback = '验证失败') {
   const msg = response?.msg ?? response?.message ?? response?.error ?? response?.data
   if (typeof msg === 'string') return safeErrorText(msg)
   if (msg && typeof msg === 'object') {
-    const text = msg.msg || msg.message || msg.error || msg.info
+    const text = msg.msg || msg.message || msg.error || msg.info || msg.tips || msg.reason
     if (typeof text === 'string') return safeErrorText(text)
+    try {
+      return safeErrorText(JSON.stringify(msg))
+    } catch {}
   }
   return fallback
 }
