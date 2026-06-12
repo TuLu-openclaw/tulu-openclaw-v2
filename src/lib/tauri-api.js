@@ -530,6 +530,7 @@ export const api = {
   checkNodeAtPath: (nodeDir) => invoke('check_node_at_path', { nodeDir }),
   checkOpenclawAtPath: (cliPath) => invoke('check_openclaw_at_path', { cliPath }),
   scanNodePaths: () => invoke('scan_node_paths'),
+  autoInstallNode: () => invoke('auto_install_node'),
   scanOpenclawPaths: () => invoke('scan_openclaw_paths'),
   saveCustomNodePath: (nodeDir) => invoke('save_custom_node_path', { nodeDir }).then(r => { invalidate('check_node', 'get_services_status', 'get_status_summary'); invoke('invalidate_path_cache').catch(() => {}); return r }),
   invalidatePathCache: () => invoke('invalidate_path_cache'),

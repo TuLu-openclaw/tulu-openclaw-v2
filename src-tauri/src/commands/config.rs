@@ -3,11 +3,11 @@ use crate::utils::openclaw_command;
 /// 配置读写命令
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::models::types::VersionInfo;
@@ -312,6 +312,136 @@ fn configured_git_path() -> Option<String> {
         .and_then(|v| v.get("gitPath")?.as_str().map(String::from))
         .map(|custom| custom.trim().to_string())
         .filter(|custom| !custom.is_empty())
+}
+
+fn normalize_git_candidate(path: &Path) -> PathBuf {
+    if path.is_file() {
+        return path.to_path_buf();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let direct = path.join("git.exe");
+        if direct.exists() {
+            return direct;
+        }
+        let cmd = path.join(r"cmd\git.exe");
+        if cmd.exists() {
+            return cmd;
+        }
+        path.join(r"bin\git.exe")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.join("git")
+    }
+}
+
+fn verify_git_executable(path: &Path) -> Option<String> {
+    if !path.exists() {
+        return None;
+    }
+    let mut cmd = Command::new(path);
+    cmd.arg("--version");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+    match cmd.output() {
+        Ok(o) if o.status.success() => Some(path.to_string_lossy().to_string()),
+        _ => None,
+    }
+}
+
+fn maybe_add_git_exe(
+    candidates: &mut Vec<(String, String)>,
+    seen: &mut HashSet<String>,
+    path: PathBuf,
+    source: &str,
+) {
+    let git_exe = normalize_git_candidate(&path);
+    if !git_exe.exists() {
+        return;
+    }
+    let key = git_exe.to_string_lossy().to_lowercase();
+    if seen.insert(key) {
+        candidates.push((git_exe.to_string_lossy().to_string(), source.to_string()));
+    }
+}
+
+fn collect_windows_registry_git_paths() -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut paths = Vec::new();
+        let roots = [
+            r"HKCU\Software\GitForWindows",
+            r"HKLM\Software\GitForWindows",
+            r"HKLM\Software\WOW6432Node\GitForWindows",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths\git.exe",
+            r"HKLM\Software\Microsoft\Windows\CurrentVersion\App Paths\git.exe",
+            r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\git.exe",
+        ];
+        let value_names = ["InstallPath", "Path", ""];
+
+        for root in roots {
+            for value_name in value_names {
+                let mut cmd = Command::new("reg");
+                cmd.args(["query", root]);
+                if !value_name.is_empty() {
+                    cmd.args(["/v", value_name]);
+                }
+                cmd.creation_flags(0x08000000);
+                if let Ok(output) = cmd.output() {
+                    if !output.status.success() {
+                        continue;
+                    }
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    for line in stdout.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        let lower = trimmed.to_ascii_lowercase();
+                        if !value_name.is_empty()
+                            && !lower.contains(&value_name.to_ascii_lowercase())
+                        {
+                            continue;
+                        }
+                        let value = trimmed
+                            .split_whitespace()
+                            .skip_while(|token| {
+                                !token.eq_ignore_ascii_case("REG_SZ")
+                                    && !token.eq_ignore_ascii_case("REG_EXPAND_SZ")
+                            })
+                            .skip(1)
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            .trim()
+                            .trim_matches('"')
+                            .to_string();
+                        if value.is_empty() {
+                            continue;
+                        }
+                        let path = PathBuf::from(&value);
+                        if path.extension().map(|ext| ext.eq_ignore_ascii_case("exe")).unwrap_or(false) {
+                            paths.push(path);
+                        } else {
+                            let git_cmd = path.join(r"cmd\git.exe");
+                            if git_cmd.exists() {
+                                paths.push(git_cmd);
+                            }
+                            let git_bin = path.join(r"bin\git.exe");
+                            if git_bin.exists() {
+                                paths.push(git_bin);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        paths
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
 }
 
 /// 获取用户配置的 git 可执行文件路径，回退到 "git"
@@ -2688,17 +2818,36 @@ pub fn check_openclaw_at_path(cli_path: String) -> Result<Value, String> {
 fn find_git_path() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
+        if let Some(custom) = configured_git_path() {
+            if let Some(path) = verify_git_executable(Path::new(&custom)) {
+                return Some(path);
+            }
+        }
+
         let mut cmd = Command::new("where");
         cmd.arg("git");
         cmd.creation_flags(0x08000000);
         if let Ok(output) = cmd.output() {
             if output.status.success() {
-                if let Some(first_line) = String::from_utf8_lossy(&output.stdout).lines().next() {
-                    let path = first_line.trim().to_string();
-                    if !path.is_empty() && std::path::Path::new(&path).exists() {
+                for line in String::from_utf8_lossy(&output.stdout).lines() {
+                    let candidate = line.trim();
+                    if candidate.is_empty() {
+                        continue;
+                    }
+                    if let Some(path) = verify_git_executable(Path::new(candidate)) {
                         return Some(path);
                     }
                 }
+            }
+        }
+
+        if let Ok(Value::Array(entries)) = scan_git_paths() {
+            if let Some(path) = entries
+                .iter()
+                .filter_map(|entry| entry.get("path").and_then(|v| v.as_str()))
+                .next()
+            {
+                return Some(path.to_string());
             }
         }
     }
@@ -4246,31 +4395,48 @@ pub fn check_node() -> Result<Value, String> {
 fn find_node_path(enhanced_path: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        // Windows: 使用 where 命令
+        if let Some(custom) = configured_node_dir() {
+            let custom_path = PathBuf::from(&custom);
+            let node_exe = normalize_node_candidate(&custom_path);
+            if let Some(path) = verify_node_executable(&node_exe) {
+                return Some(path);
+            }
+        }
+
         let mut cmd = Command::new("where");
         cmd.arg("node");
         cmd.creation_flags(0x08000000);
-        // 设置 PATH 为 enhanced_path，优先查找 node
         if std::env::var("PATH").is_ok() {
             cmd.env("PATH", enhanced_path);
             if let Ok(output) = cmd.output() {
                 if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    // where 输出可能有多行，取第一行
-                    if let Some(first_line) = stdout.lines().next() {
-                        let path = first_line.trim().to_string();
-                        if !path.is_empty() && std::path::Path::new(&path).exists() {
+                    for line in stdout.lines() {
+                        let candidate = line.trim();
+                        if candidate.is_empty() {
+                            continue;
+                        }
+                        if let Some(path) = verify_node_executable(Path::new(candidate)) {
                             return Some(path);
                         }
                     }
                 }
             }
         }
+
+        if let Ok(Value::Array(entries)) = scan_node_paths() {
+            if let Some(path) = entries
+                .iter()
+                .filter_map(|entry| entry.get("path").and_then(|v| v.as_str()))
+                .next()
+            {
+                return Some(path.to_string());
+            }
+        }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        // Unix: 使用 which 命令
         let mut cmd = Command::new("which");
         cmd.arg("node");
         if let Ok(_current_path) = std::env::var("PATH") {
@@ -4287,6 +4453,137 @@ fn find_node_path(enhanced_path: &str) -> Option<String> {
     }
 
     None
+}
+
+fn configured_node_dir() -> Option<String> {
+    super::read_panel_config_value()
+        .and_then(|v| v.get("nodePath")?.as_str().map(String::from))
+        .map(|custom| custom.trim().to_string())
+        .filter(|custom| !custom.is_empty())
+}
+
+fn normalize_node_candidate(path: &Path) -> PathBuf {
+    if path.is_file() {
+        return path.to_path_buf();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        path.join("node.exe")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.join("node")
+    }
+}
+
+fn verify_node_executable(path: &Path) -> Option<String> {
+    if !path.exists() {
+        return None;
+    }
+    let mut cmd = Command::new(path);
+    cmd.arg("--version");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+    match cmd.output() {
+        Ok(o) if o.status.success() => Some(path.to_string_lossy().to_string()),
+        _ => None,
+    }
+}
+
+fn maybe_add_node_dir(
+    candidates: &mut Vec<(String, String)>,
+    seen: &mut HashSet<String>,
+    dir: PathBuf,
+    source: &str,
+) {
+    let node_bin = normalize_node_candidate(&dir);
+    if !node_bin.exists() {
+        return;
+    }
+    let key = node_bin.to_string_lossy().to_lowercase();
+    if seen.insert(key) {
+        candidates.push((dir.to_string_lossy().to_string(), source.to_string()));
+    }
+}
+
+fn collect_windows_registry_node_dirs() -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut dirs = Vec::new();
+        let roots = [
+            r"HKCU\Software\Node.js",
+            r"HKLM\Software\Node.js",
+            r"HKLM\Software\WOW6432Node\Node.js",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths\node.exe",
+            r"HKLM\Software\Microsoft\Windows\CurrentVersion\App Paths\node.exe",
+            r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\node.exe",
+        ];
+        let value_names = ["InstallPath", "Path", ""];
+
+        for root in roots {
+            for value_name in value_names {
+                let mut cmd = Command::new("reg");
+                cmd.args(["query", root]);
+                if !value_name.is_empty() {
+                    cmd.args(["/v", value_name]);
+                }
+                cmd.creation_flags(0x08000000);
+                if let Ok(output) = cmd.output() {
+                    if !output.status.success() {
+                        continue;
+                    }
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    for line in stdout.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        let lower = trimmed.to_ascii_lowercase();
+                        if !value_name.is_empty()
+                            && !lower.contains(&value_name.to_ascii_lowercase())
+                        {
+                            continue;
+                        }
+                        let value = trimmed
+                            .split_whitespace()
+                            .skip_while(|token| {
+                                !token.eq_ignore_ascii_case("REG_SZ")
+                                    && !token.eq_ignore_ascii_case("REG_EXPAND_SZ")
+                            })
+                            .skip(1)
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            .trim()
+                            .trim_matches('"')
+                            .to_string();
+                        if value.is_empty() {
+                            continue;
+                        }
+                        let path = PathBuf::from(&value);
+                        let dir = if path
+                            .extension()
+                            .map(|ext| ext.eq_ignore_ascii_case("exe"))
+                            .unwrap_or(false)
+                        {
+                            path.parent().map(Path::to_path_buf)
+                        } else {
+                            Some(path)
+                        };
+                        if let Some(dir) = dir {
+                            if dir.join("node.exe").exists() {
+                                dirs.push(dir);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        dirs
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
 }
 
 /// 根据 node 路径推断其来源
@@ -4357,10 +4654,7 @@ fn detect_node_source(node_path: &str) -> String {
 #[tauri::command]
 pub fn check_node_at_path(node_dir: String) -> Result<Value, String> {
     let dir = std::path::PathBuf::from(&node_dir);
-    #[cfg(target_os = "windows")]
-    let node_bin = dir.join("node.exe");
-    #[cfg(not(target_os = "windows"))]
-    let node_bin = dir.join("node");
+    let node_bin = normalize_node_candidate(&dir);
 
     let mut result = serde_json::Map::new();
     if !node_bin.exists() {
@@ -4395,6 +4689,7 @@ pub fn scan_node_paths() -> Result<Value, String> {
     let home = dirs::home_dir().unwrap_or_default();
 
     let mut candidates: Vec<(String, String)> = vec![]; // (path, source)
+    let mut discovered_dirs: HashSet<String> = HashSet::new();
 
     #[cfg(target_os = "windows")]
     {
@@ -4404,31 +4699,42 @@ pub fn scan_node_paths() -> Result<Value, String> {
         let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
         let appdata = std::env::var("APPDATA").unwrap_or_default();
 
-        // NVM_SYMLINK - nvm-windows 活跃版本
-        if let Ok(nvm_symlink) = std::env::var("NVM_SYMLINK") {
-            if std::path::Path::new(&nvm_symlink).is_dir() {
-                candidates.push((nvm_symlink, "NVM_SYMLINK".to_string()));
+        if let Some(custom_dir) = configured_node_dir() {
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(custom_dir), "CUSTOM");
+        }
+
+        if let Ok(path_env) = std::env::var("PATH") {
+            for entry in path_env.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                let dir = PathBuf::from(entry.trim_matches('"'));
+                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, dir, "PATH");
             }
         }
 
-        // NVM_HOME - 用户自定义 nvm 目录
+        for dir in collect_windows_registry_node_dirs() {
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, dir, "REGISTRY");
+        }
+
+        if let Ok(nvm_symlink) = std::env::var("NVM_SYMLINK") {
+            if std::path::Path::new(&nvm_symlink).is_dir() {
+                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(nvm_symlink), "NVM_SYMLINK");
+            }
+        }
+
         if let Ok(nvm_home) = std::env::var("NVM_HOME") {
             if std::path::Path::new(&nvm_home).is_dir() {
                 if let Ok(entries) = std::fs::read_dir(&nvm_home) {
                     for entry in entries.flatten() {
                         let p = entry.path();
                         if p.is_dir() && p.join("node.exe").exists() {
-                            // 检查是否是当前激活版本（通过 settings.json）
                             let is_active = is_nvm_active_version(&nvm_home, &p);
                             let source = if is_active { "NVM_ACTIVE" } else { "NVM" };
-                            candidates.push((p.to_string_lossy().to_string(), source.to_string()));
+                            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, p, source);
                         }
                     }
                 }
             }
         }
 
-        // %APPDATA%\nvm - nvm-windows 默认目录
         if !appdata.is_empty() {
             let nvm_dir = std::path::Path::new(&appdata).join("nvm");
             if nvm_dir.is_dir() {
@@ -4436,99 +4742,81 @@ pub fn scan_node_paths() -> Result<Value, String> {
                     for entry in entries.flatten() {
                         let p = entry.path();
                         if p.is_dir() && p.join("node.exe").exists() {
-                            let is_active =
-                                is_nvm_active_version(nvm_dir.to_string_lossy().as_ref(), &p);
+                            let is_active = is_nvm_active_version(nvm_dir.to_string_lossy().as_ref(), &p);
                             let source = if is_active { "NVM_ACTIVE" } else { "NVM" };
-                            candidates.push((p.to_string_lossy().to_string(), source.to_string()));
+                            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, p, source);
                         }
                     }
                 }
             }
         }
 
-        // Volta
-        let volta_bin = format!(r"{}\.volta\bin", home.display());
-        candidates.push((volta_bin.clone(), "VOLTA".to_string()));
-        // 检查 volta 当前激活版本
+        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\.volta\bin", home.display())), "VOLTA");
         if let Ok(volta_home) = std::env::var("VOLTA_HOME") {
             let volta_current = std::path::Path::new(&volta_home).join("current/bin");
             if volta_current.exists() {
-                candidates.push((
-                    volta_current.to_string_lossy().to_string(),
-                    "VOLTA_ACTIVE".to_string(),
-                ));
+                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, volta_current, "VOLTA_ACTIVE");
             }
         }
 
-        // fnm
         if !localappdata.is_empty() {
-            candidates.push((
-                format!(r"{}\fnm_multishells", localappdata),
-                "FNM_TEMP".to_string(),
-            ));
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\fnm_multishells", localappdata)), "FNM_TEMP");
         }
         let fnm_base = std::env::var("FNM_DIR")
             .ok()
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::Path::new(&appdata).join("fnm"));
-        // fnm current
         let fnm_current = fnm_base.join("current/installation");
         if fnm_current.is_dir() && fnm_current.join("node.exe").exists() {
-            candidates.push((
-                fnm_current.to_string_lossy().to_string(),
-                "FNM_ACTIVE".to_string(),
-            ));
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, fnm_current.clone(), "FNM_ACTIVE");
         }
-        // fnm versions
         let fnm_versions = fnm_base.join("node-versions");
         if fnm_versions.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&fnm_versions) {
                 for entry in entries.flatten() {
                     let inst = entry.path().join("installation");
                     if inst.is_dir() && inst.join("node.exe").exists() {
-                        let source = if inst == fnm_current {
-                            "FNM_ACTIVE"
-                        } else {
-                            "FNM"
-                        };
-                        candidates.push((inst.to_string_lossy().to_string(), source.to_string()));
+                        let source = if inst == fnm_current { "FNM_ACTIVE" } else { "FNM" };
+                        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, inst, source);
                     }
                 }
             }
         }
 
-        // npm 全局
         if !appdata.is_empty() {
-            candidates.push((format!(r"{}\npm", appdata), "NPM_GLOBAL".to_string()));
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\npm", appdata)), "NPM_GLOBAL");
         }
         if let Some(prefix) = super::windows_npm_global_prefix() {
-            candidates.push((prefix, "NPM_GLOBAL".to_string()));
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(prefix), "NPM_GLOBAL");
         }
 
-        // 系统默认
-        candidates.push((format!(r"{}\nodejs", pf), "SYSTEM".to_string()));
-        candidates.push((format!(r"{}\nodejs", pf86), "SYSTEM".to_string()));
+        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\nodejs", pf)), "SYSTEM");
+        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\nodejs", pf86)), "SYSTEM");
         if !localappdata.is_empty() {
-            candidates.push((
-                format!(r"{}\Programs\nodejs", localappdata),
-                "SYSTEM".to_string(),
-            ));
+            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\Programs\nodejs", localappdata)), "SYSTEM");
         }
 
-        // 常见盘符
         for drive in &["C", "D", "E", "F", "G"] {
-            candidates.push((format!(r"{}:\nodejs", drive), "MANUAL".to_string()));
-            candidates.push((format!(r"{}:\Node", drive), "MANUAL".to_string()));
-            candidates.push((format!(r"{}:\Node.js", drive), "MANUAL".to_string()));
-            candidates.push((
-                format!(r"{}:\Program Files\nodejs", drive),
-                "SYSTEM".to_string(),
-            ));
-            // AI/Dev 工具目录
-            candidates.push((format!(r"{}:\AI\Node", drive), "MANUAL".to_string()));
-            candidates.push((format!(r"{}:\AI\nodejs", drive), "MANUAL".to_string()));
-            candidates.push((format!(r"{}:\Dev\nodejs", drive), "MANUAL".to_string()));
-            candidates.push((format!(r"{}:\Tools\nodejs", drive), "MANUAL".to_string()));
+            for relative in &[
+                "nodejs",
+                "Node",
+                "Node.js",
+                "Program Files\\nodejs",
+                "AI\\Node",
+                "AI\\nodejs",
+                "Dev\\nodejs",
+                "Tools\\nodejs",
+                "Apps\\Node",
+                "Apps\\nodejs",
+                "Software\\Node",
+                "Software\\nodejs",
+                "Portable\\Node",
+                "Portable\\nodejs",
+                "DevTools\\Node",
+                "DevTools\\nodejs",
+            ] {
+                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}:\{}", drive, relative)), "MANUAL");
+            }
         }
     }
 
@@ -4559,19 +4847,14 @@ pub fn scan_node_paths() -> Result<Value, String> {
         ));
     }
 
-    // 去重并检测 node
     let mut seen_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for (dir, source) in &candidates {
         let path = std::path::Path::new(dir);
-        #[cfg(target_os = "windows")]
-        let node_bin = path.join("node.exe");
-        #[cfg(not(target_os = "windows"))]
-        let node_bin = path.join("node");
+        let node_bin = normalize_node_candidate(path);
 
         if node_bin.exists() {
             let node_path_str = node_bin.to_string_lossy().to_string();
-            // 去重
             if seen_paths.contains(&node_path_str) {
                 continue;
             }
@@ -4588,8 +4871,7 @@ pub fn scan_node_paths() -> Result<Value, String> {
                     entry.insert("path".into(), Value::String(node_path_str));
                     entry.insert("version".into(), Value::String(ver));
                     entry.insert("source".into(), Value::String(source.clone()));
-                    // 标记是否激活
-                    let is_active = source.contains("ACTIVE");
+                    let is_active = source.contains("ACTIVE") || *source == "PATH" || *source == "CUSTOM";
                     entry.insert("active".into(), Value::Bool(is_active));
                     found.push(Value::Object(entry));
                 }
@@ -4597,7 +4879,6 @@ pub fn scan_node_paths() -> Result<Value, String> {
         }
     }
 
-    // 按激活状态排序（激活的版本排在前面）
     found.sort_by(|a, b| {
         let a_active = a.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
         let b_active = b.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -4637,6 +4918,13 @@ fn is_nvm_active_version(nvm_dir: &str, version_dir: &std::path::Path) -> bool {
 /// 保存用户自定义的 Node.js 路径到 ~/.openclaw/星枢OpenClaw.json
 #[tauri::command]
 pub fn save_custom_node_path(node_dir: String) -> Result<(), String> {
+    let raw = node_dir.trim();
+    let normalized = normalize_node_candidate(Path::new(raw));
+    let stored_dir = normalized
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(raw));
+
     let config_path = super::panel_config_path();
     if let Some(parent) = config_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -4648,7 +4936,10 @@ pub fn save_custom_node_path(node_dir: String) -> Result<(), String> {
     } else {
         serde_json::Map::new()
     };
-    config.insert("nodePath".into(), Value::String(node_dir));
+    config.insert(
+        "nodePath".into(),
+        Value::String(stored_dir.to_string_lossy().to_string()),
+    );
     let json = serde_json::to_string_pretty(&Value::Object(config))
         .map_err(|e| format!("序列化失败: {e}"))?;
     std::fs::write(&config_path, json).map_err(|e| format!("写入配置失败: {e}"))?;
@@ -5992,6 +6283,7 @@ pub fn check_git() -> Result<Value, String> {
 pub fn scan_git_paths() -> Result<Value, String> {
     let mut found: Vec<Value> = vec![];
     let mut candidates: Vec<(String, String)> = vec![]; // (path, source)
+    let mut discovered: HashSet<String> = HashSet::new();
 
     #[cfg(target_os = "windows")]
     {
@@ -6000,35 +6292,50 @@ pub fn scan_git_paths() -> Result<Value, String> {
             std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| r"C:\Program Files (x86)".into());
         let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
 
-        // 标准安装路径
-        candidates.push((format!(r"{}\Git\cmd\git.exe", pf), "SYSTEM".into()));
-        candidates.push((format!(r"{}\Git\cmd\git.exe", pf86), "SYSTEM".into()));
+        if let Some(custom_git) = configured_git_path() {
+            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(custom_git), "CUSTOM");
+        }
 
-        // 常见盘符
-        for drive in &["C", "D", "E", "F", "G"] {
-            candidates.push((format!(r"{}:\Git\cmd\git.exe", drive), "MANUAL".into()));
-            candidates.push((
-                format!(r"{}:\Program Files\Git\cmd\git.exe", drive),
-                "SYSTEM".into(),
-            ));
-            // 工具目录
-            for sub in &["Tools", "Dev", "AI", "Apps", "Software"] {
-                candidates.push((
-                    format!(r"{}:\{}\Git\cmd\git.exe", drive, sub),
-                    "MANUAL".into(),
-                ));
+        if let Ok(path_env) = std::env::var("PATH") {
+            for entry in path_env.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                maybe_add_git_exe(
+                    &mut candidates,
+                    &mut discovered,
+                    PathBuf::from(entry.trim_matches('"')),
+                    "PATH",
+                );
             }
         }
 
-        // 自定义应用目录（如 D:\Data\exeApp\Git）
-        for drive in &["C", "D", "E", "F"] {
-            candidates.push((
-                format!(r"{}:\Data\exeApp\Git\cmd\git.exe", drive),
-                "MANUAL".into(),
-            ));
+        for path in collect_windows_registry_git_paths() {
+            maybe_add_git_exe(&mut candidates, &mut discovered, path, "REGISTRY");
         }
 
-        // GitHub Desktop 内置 Git
+        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\Git", pf)), "SYSTEM");
+        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\Git", pf86)), "SYSTEM");
+
+        for drive in &["C", "D", "E", "F", "G"] {
+            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\Git", drive)), "MANUAL");
+            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\Program Files\Git", drive)), "SYSTEM");
+            for sub in &["Tools", "Dev", "AI", "Apps", "Software", "Portable", "DevTools"] {
+                maybe_add_git_exe(
+                    &mut candidates,
+                    &mut discovered,
+                    PathBuf::from(format!(r"{}:\{}\Git", drive, sub)),
+                    "MANUAL",
+                );
+            }
+        }
+
+        for drive in &["C", "D", "E", "F"] {
+            maybe_add_git_exe(
+                &mut candidates,
+                &mut discovered,
+                PathBuf::from(format!(r"{}:\Data\exeApp\Git", drive)),
+                "MANUAL",
+            );
+        }
+
         if !localappdata.is_empty() {
             let gh_dir = std::path::Path::new(&localappdata).join("GitHubDesktop");
             if gh_dir.is_dir() {
@@ -6036,57 +6343,33 @@ pub fn scan_git_paths() -> Result<Value, String> {
                     for entry in entries.flatten() {
                         let p = entry.path();
                         if p.is_dir() {
-                            let git_exe = p
-                                .join("resources")
-                                .join("app")
-                                .join("git")
-                                .join("cmd")
-                                .join("git.exe");
-                            if git_exe.exists() {
-                                candidates.push((
-                                    git_exe.to_string_lossy().to_string(),
-                                    "GITHUB_DESKTOP".into(),
-                                ));
-                            }
+                            let git_dir = p.join("resources").join("app").join("git");
+                            maybe_add_git_exe(&mut candidates, &mut discovered, git_dir, "GITHUB_DESKTOP");
                         }
                     }
                 }
             }
         }
 
-        // VS Code 内置 Git
         if !localappdata.is_empty() {
-            let vscode_git = std::path::Path::new(&localappdata).join(r"Programs\Microsoft VS Code\resources\app\node_modules.asar.unpacked\vscode-git\git\cmd\git.exe");
-            if vscode_git.exists() {
-                candidates.push((vscode_git.to_string_lossy().to_string(), "VSCODE".into()));
-            }
+            let vscode_git = std::path::Path::new(&localappdata)
+                .join(r"Programs\Microsoft VS Code\resources\app\node_modules.asar.unpacked\vscode-git\git");
+            maybe_add_git_exe(&mut candidates, &mut discovered, vscode_git, "VSCODE");
         }
 
-        // MinGW / MSYS2 / Git Bash
-        candidates.push((format!(r"{}\Git\mingw64\bin\git.exe", pf), "MINGW".into()));
+        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\Git\mingw64\bin", pf)), "MINGW");
         for drive in &["C", "D"] {
-            candidates.push((
-                format!(r"{}:\msys64\usr\bin\git.exe", drive),
-                "MSYS2".into(),
-            ));
-            candidates.push((format!(r"{}:\msys2\usr\bin\git.exe", drive), "MSYS2".into()));
+            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\msys64\usr\bin", drive)), "MSYS2");
+            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\msys2\usr\bin", drive)), "MSYS2");
         }
 
-        // Scoop
         let home = dirs::home_dir().unwrap_or_default();
-        candidates.push((
-            format!(r"{}\scoop\apps\git\current\cmd\git.exe", home.display()),
-            "SCOOP".into(),
-        ));
-        candidates.push((
-            format!(r"{}\scoop\shims\git.exe", home.display()),
-            "SCOOP".into(),
-        ));
+        maybe_add_git_exe(&mut candidates, &mut discovered, home.join(r"scoop\apps\git\current"), "SCOOP");
+        maybe_add_git_exe(&mut candidates, &mut discovered, home.join(r"scoop\shims"), "SCOOP");
 
-        // Chocolatey
         let choco_dir = std::env::var("ChocolateyInstall")
             .unwrap_or_else(|_| r"C:\ProgramData\chocolatey".into());
-        candidates.push((format!(r"{}\bin\git.exe", choco_dir), "CHOCOLATEY".into()));
+        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\bin", choco_dir)), "CHOCOLATEY");
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -6094,7 +6377,6 @@ pub fn scan_git_paths() -> Result<Value, String> {
         candidates.push(("/usr/bin/git".into(), "SYSTEM".into()));
         candidates.push(("/usr/local/bin/git".into(), "SYSTEM".into()));
         candidates.push(("/opt/homebrew/bin/git".into(), "BREW".into()));
-        // Xcode
         candidates.push((
             "/Library/Developer/CommandLineTools/usr/bin/git".into(),
             "XCODE_CLT".into(),
@@ -6103,23 +6385,13 @@ pub fn scan_git_paths() -> Result<Value, String> {
             "/Applications/Xcode.app/Contents/Developer/usr/bin/git".into(),
             "XCODE".into(),
         ));
-        // Snap / Flatpak
         candidates.push(("/snap/bin/git".into(), "SNAP".into()));
-        // Nix
         let home = dirs::home_dir().unwrap_or_default();
-        candidates.push((
-            format!("{}/.nix-profile/bin/git", home.display()),
-            "NIX".into(),
-        ));
-        // Linuxbrew
-        candidates.push((
-            format!("{}/.linuxbrew/bin/git", home.display()),
-            "BREW".into(),
-        ));
+        candidates.push((format!("{}/.nix-profile/bin/git", home.display()), "NIX".into()));
+        candidates.push((format!("{}/.linuxbrew/bin/git", home.display()), "BREW".into()));
         candidates.push(("/home/linuxbrew/.linuxbrew/bin/git".into(), "BREW".into()));
     }
 
-    // 去重并检测
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for (path, source) in &candidates {
         let p = std::path::Path::new(path);
@@ -6307,6 +6579,195 @@ pub async fn auto_install_git(app: tauri::AppHandle) -> Result<String, String> {
             return Ok("Git 已安装".to_string());
         }
         Err("Git 安装失败，请手动执行: sudo apt install git".to_string())
+    }
+}
+
+/// 尝试自动安装 Node.js（Windows: winget; macOS: brew/pkg; Linux: apt/yum）
+#[tauri::command]
+pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> {
+    use std::process::Stdio;
+    use tauri::Emitter;
+
+    let _ = app.emit("upgrade-log", "正在尝试自动安装 Node.js...");
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::io::{BufRead, BufReader};
+        let candidates: [(&str, [&str; 7]); 2] = [
+            (
+                "OpenJS.NodeJS.LTS",
+                [
+                    "install",
+                    "--id",
+                    "OpenJS.NodeJS.LTS",
+                    "-e",
+                    "--source",
+                    "winget",
+                    "--accept-package-agreements",
+                ],
+            ),
+            (
+                "OpenJS.NodeJS",
+                [
+                    "install",
+                    "--id",
+                    "OpenJS.NodeJS",
+                    "-e",
+                    "--source",
+                    "winget",
+                    "--accept-package-agreements",
+                ],
+            ),
+        ];
+
+        let mut last_err = String::new();
+        for (pkg_id, args) in candidates {
+            let _ = app.emit("upgrade-log", format!("尝试使用 winget 安装 Node.js: {pkg_id}"));
+            let mut cmd = Command::new("winget");
+            cmd.args(args)
+                .arg("--accept-source-agreements")
+                .creation_flags(0x08000000)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            let mut child = match cmd.spawn() {
+                Ok(child) => child,
+                Err(e) => {
+                    last_err = format!("winget 不可用，请手动安装 Node.js: {e}");
+                    continue;
+                }
+            };
+
+            let stderr = child.stderr.take();
+            let stdout = child.stdout.take();
+            let app2 = app.clone();
+            let handle = std::thread::spawn(move || {
+                if let Some(pipe) = stderr {
+                    for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                        let _ = app2.emit("upgrade-log", &line);
+                    }
+                }
+            });
+            if let Some(pipe) = stdout {
+                for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                    let _ = app.emit("upgrade-log", &line);
+                }
+            }
+            let _ = handle.join();
+            let status = child
+                .wait()
+                .map_err(|e| format!("等待 winget 完成失败: {e}"))?;
+            if status.success() {
+                let _ = app.emit("upgrade-log", format!("Node.js 安装成功（{pkg_id}）！"));
+                super::refresh_enhanced_path();
+                crate::commands::service::invalidate_cli_detection_cache();
+                return Ok("Node.js 已通过 winget 安装".to_string());
+            }
+            last_err = format!("winget 安装 {pkg_id} 失败（exit {:?}）", status.code());
+        }
+
+        Err(format!(
+            "{}\n请手动下载 Node.js：\n主地址：https://nodejs.org/\n建议安装 LTS 版本。",
+            if last_err.is_empty() { "Node.js 自动安装失败" } else { &last_err }
+        ))
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let brew_ok = Command::new("brew")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if brew_ok {
+            let _ = app.emit("upgrade-log", "尝试通过 Homebrew 安装 Node.js...");
+            let status = Command::new("brew")
+                .args(["install", "node"])
+                .status()
+                .map_err(|e| format!("brew 执行失败: {e}"))?;
+            if status.success() {
+                super::refresh_enhanced_path();
+                crate::commands::service::invalidate_cli_detection_cache();
+                return Ok("Node.js 已通过 brew 安装".to_string());
+            }
+        }
+        Err("自动安装 Node.js 失败，请手动访问 https://nodejs.org/ 安装，或执行 brew install node".to_string())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::io::{BufRead, BufReader};
+        let pkg_mgr = if Command::new("apt-get")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            "apt"
+        } else if Command::new("yum")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            "yum"
+        } else if Command::new("dnf")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            "dnf"
+        } else if Command::new("pacman")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            "pacman"
+        } else {
+            return Err("未找到包管理器，请手动安装 Node.js".to_string());
+        };
+
+        let (cmd_name, args): (&str, Vec<&str>) = match pkg_mgr {
+            "apt" => ("sudo", vec!["apt-get", "install", "-y", "nodejs", "npm"]),
+            "yum" => ("sudo", vec!["yum", "install", "-y", "nodejs", "npm"]),
+            "dnf" => ("sudo", vec!["dnf", "install", "-y", "nodejs", "npm"]),
+            "pacman" => ("sudo", vec!["pacman", "-S", "--noconfirm", "nodejs", "npm"]),
+            _ => return Err("不支持的包管理器".to_string()),
+        };
+
+        let _ = app.emit("upgrade-log", format!("执行: {} {}", cmd_name, args.join(" ")));
+        let mut child = Command::new(cmd_name)
+            .args(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("安装命令执行失败: {e}"))?;
+
+        let stderr = child.stderr.take();
+        let stdout = child.stdout.take();
+        let app2 = app.clone();
+        let handle = std::thread::spawn(move || {
+            if let Some(pipe) = stderr {
+                for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                    let _ = app2.emit("upgrade-log", &line);
+                }
+            }
+        });
+        if let Some(pipe) = stdout {
+            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                let _ = app.emit("upgrade-log", &line);
+            }
+        }
+        let _ = handle.join();
+        let status = child.wait().map_err(|e| format!("等待安装完成失败: {e}"))?;
+        if status.success() {
+            super::refresh_enhanced_path();
+            crate::commands::service::invalidate_cli_detection_cache();
+            return Ok("Node.js 已安装".to_string());
+        }
+        Err("Node.js 安装失败，请手动安装。".to_string())
     }
 }
 

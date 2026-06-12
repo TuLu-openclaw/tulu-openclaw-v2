@@ -68,12 +68,31 @@ async function refreshInstallDetectionCaches() {
   await api.invalidatePathCache().catch(() => {})
 }
 
+function normalizeNodeDir(input) {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+  return raw.replace(/[\\/]node(?:\.exe)?$/i, '')
+}
+
+function normalizeGitExePath(input) {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+  return raw.replace(/[\\/]+/g, '\\')
+}
+
+function normalizeOpenclawInstallDir(input) {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+  const normalized = raw.replace(/[\\/]+/g, '\\').replace(/\\$/, '')
+  return normalized.replace(/[\\/](openclaw(?:\.cmd|\.exe|\.ps1)?)$/i, '')
+}
+
 async function saveDetectedGitPath(resultEl = null) {
   const results = await api.scanGitPaths().catch(() => [])
   const first = Array.isArray(results) ? results.find(item => item?.path) : null
   if (!first?.path) return ''
   const cfg = await api.readPanelConfig()
-  cfg.gitPath = first.path
+  cfg.gitPath = normalizeGitExePath(first.path)
   await api.writePanelConfig(cfg)
   await refreshInstallDetectionCaches()
   const msg = `已自动绑定 Git: ${first.path}`
@@ -275,7 +294,8 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
         <p style="color:var(--text-secondary);font-size:var(--font-size-sm);margin-bottom:var(--space-sm)">
           ${t('setup.stepNodeHint')}
         </p>
-        <a class="btn btn-primary btn-sm" href="https://nodejs.org/" target="_blank" rel="noopener">${t('setup.downloadNode')}</a>
+        <button class="btn btn-primary btn-sm" id="btn-auto-install-node">${t('setup.autoInstallNodeBtn')}</button>
+        <a class="btn btn-secondary btn-sm" href="https://nodejs.org/" target="_blank" rel="noopener">${t('setup.downloadNode')}</a>
         <span class="form-hint" style="margin-left:8px">${t('setup.recheckAfterInstall')}</span>
         <div style="margin-top:var(--space-sm);padding:10px 12px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.6">
           <strong>${t('setup.nodeInstalledButNotDetected')}</strong>
@@ -641,6 +661,56 @@ function bindEvents(page, nodeOk, detectState) {
     window.location.hash = '/channels'
   })
 
+  // 一键安装 Node.js
+  page.querySelector('#btn-auto-install-node')?.addEventListener('click', async () => {
+    const btn = page.querySelector('#btn-auto-install-node')
+    const resultEl = page.querySelector('#scan-result')
+    if (!btn || !resultEl) return
+    btn.disabled = true
+    btn.textContent = t('setup.installingNode')
+    resultEl.style.display = 'block'
+    resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.nodeInstallingHint')}</span>`
+    try {
+      const msg = await api.autoInstallNode()
+      const detected = await api.checkNode().catch(() => ({ installed: false }))
+      const detectedPath = normalizeNodeDir(detected?.path || '')
+      if (detectedPath) {
+        await api.saveCustomNodePath(detectedPath).catch(() => {})
+      } else {
+        const scanned = await api.scanNodePaths().catch(() => [])
+        const first = Array.isArray(scanned) ? scanned[0] : null
+        const scannedPath = normalizeNodeDir(first?.path || '')
+        if (scannedPath) await api.saveCustomNodePath(scannedPath).catch(() => {})
+      }
+      resultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(msg)}</span>`
+      toast(t('setup.nodeInstallSuccess'), 'success')
+      setTimeout(() => runDetect(page), 800)
+    } catch (e) {
+      const scanned = await api.scanNodePaths().catch(() => [])
+      const first = Array.isArray(scanned) ? scanned[0] : null
+      const scannedPath = normalizeNodeDir(first?.path || '')
+      if (scannedPath) {
+        await api.saveCustomNodePath(scannedPath).catch(() => {})
+        resultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(`已发现并绑定 Node.js: ${scannedPath}`)}</span>`
+        toast(t('setup.nodeInstallSuccess'), 'success')
+        setTimeout(() => runDetect(page), 800)
+        return
+      }
+      const errMsg = String(e?.message || e)
+      resultEl.innerHTML = `<div>
+        <span style="color:var(--danger)">${t('setup.nodeAutoInstallFailed', { err: errMsg })}</span>
+        <p style="margin-top:6px;font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.5">
+          ${t('setup.nodeManualHint')}<br>
+          ${t('setup.nodeManualInstallHtml')}
+        </p>
+      </div>`
+      toast(t('setup.nodeAutoInstallFailedToast'), 'warning')
+    } finally {
+      btn.disabled = false
+      btn.textContent = t('setup.autoInstallNodeBtn')
+    }
+  })
+
   // 一键安装 Git
   page.querySelector('#btn-auto-install-git')?.addEventListener('click', async () => {
     const btn = page.querySelector('#btn-auto-install-git')
@@ -854,7 +924,8 @@ function bindEvents(page, nodeOk, detectState) {
         ).join('')
         resultEl.querySelectorAll('.btn-use-path').forEach(b => {
           b.addEventListener('click', async () => {
-            await api.saveCustomNodePath(b.dataset.path)
+            const normalizedDir = normalizeNodeDir(b.dataset.path)
+            await api.saveCustomNodePath(normalizedDir)
             toast(t('setup.nodeSaved'), 'success')
             setTimeout(() => runDetect(page), 300)
           })
@@ -872,7 +943,7 @@ function bindEvents(page, nodeOk, detectState) {
   page.querySelector('#btn-check-path')?.addEventListener('click', async () => {
     const input = page.querySelector('#input-node-path')
     const resultEl = page.querySelector('#scan-result')
-    const dir = input?.value?.trim()
+    const dir = normalizeNodeDir(input?.value)
     if (!dir) { toast(t('setup.enterNodeDir'), 'warning'); return }
     resultEl.style.display = 'block'
     resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.detecting2')}</span>`
@@ -1179,7 +1250,8 @@ function bindEvents(page, nodeOk, detectState) {
           try { await api.setNpmRegistry(registry) } catch {}
         }
 
-        if (source !== 'official') await api.saveStandaloneInstallDir(installPath)
+        const normalizedInstallPath = normalizeOpenclawInstallDir(installPath)
+        if (source !== 'official' && normalizedInstallPath) await api.saveStandaloneInstallDir(normalizedInstallPath)
 
         // 发起后台任务（立即返回）
         await api.upgradeOpenclaw(source, null, method)
@@ -1191,7 +1263,8 @@ function bindEvents(page, nodeOk, detectState) {
           modal.appendLog(t('setup.setRegistry', { url: registry }))
           try { await api.setNpmRegistry(registry) } catch {}
         }
-        if (source !== 'official') await api.saveStandaloneInstallDir(installPath)
+        const normalizedInstallPath = normalizeOpenclawInstallDir(installPath)
+        if (source !== 'official' && normalizedInstallPath) await api.saveStandaloneInstallDir(normalizedInstallPath)
         const msg = await api.upgradeOpenclaw(source, null, method)
         modal.setDone(msg)
         await autoBindDetectedOpenclawCli(modal).catch(() => '')

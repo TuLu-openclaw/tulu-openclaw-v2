@@ -174,6 +174,7 @@ pub fn run() {
             config::check_node_at_path,
             config::check_openclaw_at_path,
             config::scan_node_paths,
+            config::auto_install_node,
             config::scan_openclaw_paths,
             config::save_custom_node_path,
             config::write_env_file,
