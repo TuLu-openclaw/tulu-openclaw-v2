@@ -4,7 +4,75 @@
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::time::Duration;
+
+fn stream_child_output_until_exit<FLine, FIdle>(
+    child: &mut std::process::Child,
+    mut on_line: FLine,
+    mut on_idle: FIdle,
+) -> Result<(std::process::ExitStatus, Vec<String>), String>
+where
+    FLine: FnMut(String),
+    FIdle: FnMut(u64),
+{
+    use std::io::{BufRead, BufReader};
+    let (tx, rx) = mpsc::channel::<String>();
+    let mut handles = Vec::new();
+
+    if let Some(stdout) = child.stdout.take() {
+        let tx_out = tx.clone();
+        handles.push(std::thread::spawn(move || {
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                let _ = tx_out.send(line);
+            }
+        }));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        let tx_err = tx.clone();
+        handles.push(std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                let _ = tx_err.send(line);
+            }
+        }));
+    }
+    drop(tx);
+
+    let mut lines = Vec::new();
+    let mut idle_secs = 0u64;
+    let status = loop {
+        match rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(line) => {
+                idle_secs = 0;
+                on_line(line.clone());
+                lines.push(line);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                idle_secs += 1;
+                if let Some(status) = child
+                    .try_wait()
+                    .map_err(|e| format!("等待命令结束失败: {e}"))?
+                {
+                    break status;
+                }
+                on_idle(idle_secs);
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                break child.wait().map_err(|e| format!("等待命令结束失败: {e}"))?;
+            }
+        }
+    };
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+    while let Ok(line) = rx.try_recv() {
+        on_line(line.clone());
+        lines.push(line);
+    }
+
+    Ok((status, lines))
+}
 
 fn platform_storage_key(platform: &str) -> &str {
     match platform {
@@ -1438,11 +1506,10 @@ pub async fn run_channel_action(
         });
 
         let mut progress: u32 = 15;
-        if let Some(pipe) = child.stdout.take() {
-            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-                if let Ok(mut guard) = lines.lock() {
-                    guard.push(line.clone());
-                }
+        let mut last_idle_notice = 0u64;
+        let (status, lines_vec) = stream_child_output_until_exit(
+            &mut child,
+            |line| {
                 let _ = app.emit("channel-action-log", json!({ "platform": &platform, "action": &action, "message": line, "kind": "stdout" }));
                 if progress < 90 {
                     progress += 5;
@@ -1451,14 +1518,18 @@ pub async fn run_channel_action(
                         json!({ "platform": &platform, "action": &action, "progress": progress }),
                     );
                 }
-            }
-        }
-
-        let _ = handle.join();
-        let status = child
-            .wait()
-            .map_err(|e| format!("等待命令结束失败: {}", e))?;
-        let text = lines.lock().ok().map(|g| g.join("\n")).unwrap_or_default();
+            },
+            |idle_secs| {
+                if idle_secs >= 15 && idle_secs - last_idle_notice >= 15 {
+                    last_idle_notice = idle_secs;
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info", "message": format!("安装仍在继续，当前已 {} 秒无新输出，可能正在下载依赖或等待远程响应…", idle_secs) }),
+                    );
+                }
+            },
+        )?;
+        let text = lines_vec.join("\n");
         let _ = app.emit(
             "channel-action-progress",
             json!({ "platform": &platform, "action": &action, "progress": 100 }),
@@ -1567,8 +1638,10 @@ pub async fn run_channel_action(
     });
 
     let mut progress = 15;
-    if let Some(pipe) = child.stdout.take() {
-        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+    let mut last_idle_notice = 0u64;
+    let (status, collected_lines) = stream_child_output_until_exit(
+        &mut child,
+        |line| {
             if let Ok(mut guard) = lines.lock() {
                 guard.push(line.clone());
             }
@@ -1583,25 +1656,38 @@ pub async fn run_channel_action(
                 progress += 5;
                 progress_payload(progress);
             }
-        }
-    }
-
-    let _ = handle.join();
-    let status = child
-        .wait()
-        .map_err(|e| format!("等待命令结束失败: {}", e))?;
-    let message = lines
-        .lock()
-        .ok()
-        .map(|guard| {
-            let text = guard.join("\n");
-            if text.trim().is_empty() {
-                "操作完成".to_string()
-            } else {
-                text
+        },
+        |idle_secs| {
+            if idle_secs >= 15 && idle_secs - last_idle_notice >= 15 {
+                last_idle_notice = idle_secs;
+                emit_payload(
+                    "info",
+                    format!("操作仍在继续，当前已 {} 秒无新输出，可能正在等待远程响应或处理本地任务…", idle_secs),
+                );
             }
-        })
-        .unwrap_or_else(|| "操作完成".into());
+        },
+    )?;
+    let message = if collected_lines.is_empty() {
+        lines
+            .lock()
+            .ok()
+            .map(|guard| {
+                let text = guard.join("\n");
+                if text.trim().is_empty() {
+                    "操作完成".to_string()
+                } else {
+                    text
+                }
+            })
+            .unwrap_or_else(|| "操作完成".into())
+    } else {
+        let text = collected_lines.join("\n");
+        if text.trim().is_empty() {
+            "操作完成".to_string()
+        } else {
+            text
+        }
+    };
 
     if status.success() {
         // 微信登录成功后写入 channels.openclaw-weixin.enabled 以便 list_configured_platforms 检测
