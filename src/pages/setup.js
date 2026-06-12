@@ -112,6 +112,7 @@ async function autoBindDetectedOpenclawCli(modal = null) {
   const cfg = await api.readPanelConfig()
   cfg.openclawCliPath = first.path
   const installDir = inferStandaloneInstallDir(first.path)
+  if (installDir) cfg.openclawDir = installDir
   if (installDir && first.source === 'standalone') cfg.openclawStandaloneInstallDir = installDir
   await api.writePanelConfig(cfg)
   await refreshInstallDetectionCaches()
@@ -971,6 +972,9 @@ function bindEvents(page, nodeOk, detectState) {
     try {
       const cfg = await api.readPanelConfig()
       cfg.openclawCliPath = cliPath
+      const installDir = inferStandaloneInstallDir(cliPath)
+      if (installDir) cfg.openclawDir = installDir
+      if (installDir) cfg.openclawStandaloneInstallDir = installDir
       await api.writePanelConfig(cfg)
       await api.invalidatePathCache().catch(() => {})
       if (resultEl) {

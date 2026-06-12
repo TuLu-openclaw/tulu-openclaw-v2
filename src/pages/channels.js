@@ -1350,7 +1350,7 @@ async function handleGatewayWhatsAppLogin(btn, resultEl, actionDef) {
     btn.textContent = t('channels.waitingScan')
     const statusEl = resultEl.querySelector('#whatsapp-login-status')
 
-    const waitResult = await wsClient.request('web.login.wait', { timeoutMs: 120000 })
+    const waitResult = await wsClient.request('web.login.wait', { timeoutMs: 180000 })
 
     if (waitResult?.connected) {
       if (statusEl) statusEl.innerHTML = `<span style="color:var(--success);font-weight:600">${icon('check', 14)} ${t('channels.linkedSuccess')}</span>`

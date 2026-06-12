@@ -1135,7 +1135,7 @@ pub async fn toggle_messaging_platform(
 #[tauri::command]
 pub async fn verify_bot_token(platform: String, form: Value) -> Result<Value, String> {
     let form_obj = form.as_object().ok_or("表单数据格式错误")?;
-    let client = super::build_http_client(std::time::Duration::from_secs(15), None)
+    let client = super::build_http_client(std::time::Duration::from_secs(180), None)
         .map_err(|e| format!("HTTP 客户端初始化失败: {}", e))?;
 
     match platform.as_str() {
@@ -1184,7 +1184,7 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
 
     // 从 npm registry 获取最新版本
     let mut latest_version: Option<String> = None;
-    let client = super::build_http_client(std::time::Duration::from_secs(8), None)
+    let client = super::build_http_client(std::time::Duration::from_secs(180), None)
         .unwrap_or_else(|_| reqwest::Client::new());
     if let Ok(resp) = client
         .get("https://registry.npmjs.org/@tencent-weixin/openclaw-weixin/latest")
@@ -1408,6 +1408,11 @@ pub async fn run_channel_action(
             c
         };
         cmd.env("PATH", &path_env);
+        let openclaw_dir = super::openclaw_dir();
+        let openclaw_config_path = openclaw_dir.join("openclaw.json");
+        cmd.env("OPENCLAW_HOME", &openclaw_dir);
+        cmd.env("OPENCLAW_STATE_DIR", &openclaw_dir);
+        cmd.env("OPENCLAW_CONFIG_PATH", &openclaw_config_path);
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         crate::commands::apply_proxy_env(&mut cmd);
@@ -1826,7 +1831,7 @@ async fn diagnose_qqbot_channel(account_id: Option<String>) -> Result<Value, Str
         false
     } else {
         match verify_qqbot(
-            &super::build_http_client(Duration::from_secs(15), None)
+            &super::build_http_client(Duration::from_secs(180), None)
                 .map_err(|e| format!("HTTP 客户端初始化失败: {}", e))?,
             &values,
         )
@@ -2854,7 +2859,17 @@ pub async fn install_channel_plugin(
             return Err("插件安装失败：当前 OpenClaw 版本过低，请先升级后重试".into());
         }
         return if rollback_err.is_empty() {
-            Err(format!("插件安装失败：{}", package_name))
+            let detail = all_stderr
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .take(8)
+                .collect::<Vec<_>>()
+                .join(" | ");
+            if detail.is_empty() {
+                Err(format!("插件安装失败：{}", package_name))
+            } else {
+                Err(format!("插件安装失败：{}；原因：{}", package_name, detail))
+            }
         } else {
             Err(format!(
                 "插件安装失败：{}；回退失败：{}",
@@ -3068,7 +3083,19 @@ pub async fn install_qqbot_plugin(
         if is_host_version_issue {
             return Err("插件安装失败：当前 OpenClaw 版本过低，请先升级后重试".into());
         }
-        return Err("QQ 插件安装失败：openclaw plugins install 进程退出码非零".into());
+        let detail = all_stderr
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .take(8)
+            .collect::<Vec<_>>()
+            .join(" | ");
+        if detail.is_empty() {
+            return Err("QQ 插件安装失败：openclaw plugins install 进程退出码非零".into());
+        }
+        return Err(format!(
+            "QQ 插件安装失败：openclaw plugins install 进程退出码非零；原因：{}",
+            detail
+        ));
     }
 
     if !plugin_install_marker_exists(&plugin_dir) {

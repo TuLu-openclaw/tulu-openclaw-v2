@@ -448,8 +448,12 @@ export const api = {
   saveStandaloneInstallDir: async (installDir) => {
     const cfg = await api.readPanelConfig()
     const value = String(installDir || '').trim()
-    if (value) cfg.openclawStandaloneInstallDir = value
-    else delete cfg.openclawStandaloneInstallDir
+    if (value) {
+      cfg.openclawStandaloneInstallDir = value
+      cfg.openclawDir = value
+    } else {
+      delete cfg.openclawStandaloneInstallDir
+    }
     return api.writePanelConfig(cfg)
   },
   testModel: (baseUrl, apiKey, modelId, apiType = null) => invoke('test_model', { baseUrl, apiKey, modelId, apiType }),
