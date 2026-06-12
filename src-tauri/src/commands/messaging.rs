@@ -1413,6 +1413,7 @@ pub async fn run_channel_action(
         cmd.env("OPENCLAW_HOME", &openclaw_dir);
         cmd.env("OPENCLAW_STATE_DIR", &openclaw_dir);
         cmd.env("OPENCLAW_CONFIG_PATH", &openclaw_config_path);
+        cmd.stdin(Stdio::null());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         crate::commands::apply_proxy_env(&mut cmd);
@@ -1525,6 +1526,7 @@ pub async fn run_channel_action(
     let lines: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let spawn_result = crate::utils::openclaw_command()
         .args(args.iter().map(|s| s.as_str()))
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn();
@@ -2786,6 +2788,7 @@ pub async fn install_channel_plugin(
     let _ = app.emit("plugin-log", format!("安装规格: {}", install_spec));
     let spawn_result = crate::utils::openclaw_command()
         .args(["plugins", "install", &install_spec])
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn();
@@ -2965,6 +2968,7 @@ pub async fn install_qqbot_plugin(
     let _ = app.emit("plugin-log", format!("安装规格: {}", install_spec));
     let spawn_result = crate::utils::openclaw_command()
         .args(["plugins", "install", &install_spec])
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn();

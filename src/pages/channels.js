@@ -1514,26 +1514,28 @@ async function openConfigDialog(pid, page, state, accountId) {
         const actionId = btn.dataset.channelAction
         if (!actionId || !actionResultEl) return
 
-        actionResultEl.innerHTML = `
-          <div style="background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:var(--radius-md);padding:12px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-              ${icon('zap', 14)}
-              <span style="font-size:var(--font-size-sm);font-weight:600">${t('channels.executing')}</span>
-              <span id="channel-action-progress-text" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-left:auto">0%</span>
-            </div>
-            <div style="height:6px;background:var(--bg-tertiary);border-radius:999px;overflow:hidden;margin-bottom:10px">
-              <div id="channel-action-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s"></div>
-            </div>
-            <div id="channel-action-log-box" style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);max-height:260px;overflow-y:auto;line-height:1.6;white-space:pre-wrap;word-break:break-all"></div>
-          </div>`
+        actionResultEl.innerHTML = renderTerminalPanel(t('channels.executing'), {
+          progressTextId: 'channel-action-progress-text',
+          progressBarId: 'channel-action-progress-bar',
+          statusId: 'channel-action-status',
+          lastOutputId: 'channel-action-last-output',
+          logBoxId: 'channel-action-log-box',
+          copyBtnId: 'channel-action-copy-btn',
+        })
 
-        const logBox = actionResultEl.querySelector('#channel-action-log-box')
-        const progressBar = actionResultEl.querySelector('#channel-action-progress-bar')
-        const progressText = actionResultEl.querySelector('#channel-action-progress-text')
+        const panel = bindTerminalPanel(actionResultEl, {
+          progressTextId: 'channel-action-progress-text',
+          progressBarId: 'channel-action-progress-bar',
+          statusId: 'channel-action-status',
+          lastOutputId: 'channel-action-last-output',
+          logBoxId: 'channel-action-log-box',
+          copyBtnId: 'channel-action-copy-btn',
+        })
+        const { logBox, progressBar, progressText } = panel.refs
         const { listen } = await import('@tauri-apps/api/event')
         let unlistenLog = null, unlistenProgress = null
         let _qrTimer = null
-        const cleanup = () => { unlistenLog?.(); unlistenProgress?.(); clearTimeout(_qrTimer) }
+        const cleanup = () => { unlistenLog?.(); unlistenProgress?.(); clearTimeout(_qrTimer); panel.dispose() }
 
         try {
           btn.disabled = true
@@ -1613,9 +1615,7 @@ async function openConfigDialog(pid, page, state, accountId) {
               } else if (msg.trim()) {
                 const loadingHint = logBox.querySelector('#action-loading-hint')
                 if (loadingHint) loadingHint.remove()
-                const div = document.createElement('div')
-                div.textContent = msg
-                logBox.appendChild(div)
+                panel.appendLog(msg)
               }
             }
             logBox.scrollTop = logBox.scrollHeight
@@ -2092,28 +2092,28 @@ async function openConfigDialog(pid, page, state, accountId) {
         // 跳过安装：插件已安装或已内置
         if (!pluginStatus?.installed && !pluginStatus?.builtin) {
           btnSave.textContent = t('channels.installingPlugin')
-          resultEl.innerHTML = `
-            <div style="background:var(--bg-tertiary);border-radius:var(--radius-md);padding:12px;margin-top:var(--space-sm)">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                ${icon('download', 14)}
-                <span style="font-size:var(--font-size-sm);font-weight:600">${t('channels.installPlugin')}</span>
-                <span id="plugin-progress-text" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-left:auto">0%</span>
-              </div>
-              <div style="height:4px;background:var(--bg-secondary);border-radius:2px;overflow:hidden;margin-bottom:8px">
-                <div id="plugin-progress-bar" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s"></div>
-              </div>
-              <div id="plugin-log-box" style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);max-height:120px;overflow-y:auto;line-height:1.6;white-space:pre-wrap;word-break:break-all"></div>
-            </div>
-          `
-          const logBox = resultEl.querySelector('#plugin-log-box')
-          const progressBar = resultEl.querySelector('#plugin-progress-bar')
-          const progressText = resultEl.querySelector('#plugin-progress-text')
+          resultEl.innerHTML = renderTerminalPanel(t('channels.installPlugin'), {
+            progressTextId: 'plugin-progress-text',
+            progressBarId: 'plugin-progress-bar',
+            statusId: 'plugin-status',
+            lastOutputId: 'plugin-last-output',
+            logBoxId: 'plugin-log-box',
+            copyBtnId: 'plugin-copy-btn',
+          })
+          const panel = bindTerminalPanel(resultEl, {
+            progressTextId: 'plugin-progress-text',
+            progressBarId: 'plugin-progress-bar',
+            statusId: 'plugin-status',
+            lastOutputId: 'plugin-last-output',
+            logBoxId: 'plugin-log-box',
+            copyBtnId: 'plugin-copy-btn',
+          })
+          const { logBox, progressBar, progressText } = panel.refs
           let unlistenLog, unlistenProgress
           try {
             const { listen } = await import('@tauri-apps/api/event')
             unlistenLog = await listen('plugin-log', (e) => {
-              logBox.textContent += e.payload + '\n'
-              logBox.scrollTop = logBox.scrollHeight
+              panel.appendLog(e.payload)
             })
             unlistenProgress = await listen('plugin-progress', (e) => {
               const pct = e.payload
@@ -2139,6 +2139,7 @@ async function openConfigDialog(pid, page, state, accountId) {
             }
           } catch (e) {
             toast(t('channels.pluginInstallFailed') + ': ' + e, 'error')
+            panel.finish('失败')
             btnSave.disabled = false
             btnVerify.disabled = false
             btnSave.textContent = isEdit ? t('channels.save') : t('channels.connectAndSave')
@@ -2146,6 +2147,7 @@ async function openConfigDialog(pid, page, state, accountId) {
             if (unlistenProgress) unlistenProgress()
             return
           }
+          panel.finish('已完成')
           if (unlistenLog) unlistenLog()
           if (unlistenProgress) unlistenProgress()
         } else {
@@ -2190,6 +2192,91 @@ function getChannelBindingKey(pid) {
     weixin: 'openclaw-weixin',
   }
   return map[pid] || pid
+}
+
+function renderTerminalPanel(title, ids = {}) {
+  const progressTextId = ids.progressTextId || 'exec-progress-text'
+  const progressBarId = ids.progressBarId || 'exec-progress-bar'
+  const statusId = ids.statusId || 'exec-status'
+  const lastOutputId = ids.lastOutputId || 'exec-last-output'
+  const logBoxId = ids.logBoxId || 'exec-log-box'
+  const copyBtnId = ids.copyBtnId || 'exec-copy-btn'
+  return `
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-primary);border-radius:var(--radius-md);padding:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        ${icon('terminal', 14)}
+        <span style="font-size:var(--font-size-sm);font-weight:600">${title}</span>
+        <span id="${statusId}" style="font-size:var(--font-size-xs);color:var(--accent);margin-left:auto">运行中</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;font-size:11px;color:var(--text-tertiary)">
+        <span id="${progressTextId}">0%</span>
+        <span id="${lastOutputId}">等待输出…</span>
+        <button id="${copyBtnId}" class="btn btn-secondary btn-sm" type="button" style="margin-left:auto;padding:2px 8px;font-size:11px">复制日志</button>
+      </div>
+      <div style="height:6px;background:var(--bg-tertiary);border-radius:999px;overflow:hidden;margin-bottom:10px">
+        <div id="${progressBarId}" style="height:100%;background:var(--accent);width:0%;transition:width 0.3s"></div>
+      </div>
+      <div id="${logBoxId}" style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);max-height:220px;overflow-y:auto;line-height:1.6;white-space:pre-wrap;word-break:break-all"></div>
+    </div>`
+}
+
+function bindTerminalPanel(root, ids = {}) {
+  const refs = {
+    logBox: root?.querySelector(`#${ids.logBoxId}`),
+    progressBar: root?.querySelector(`#${ids.progressBarId}`),
+    progressText: root?.querySelector(`#${ids.progressTextId}`),
+    statusEl: root?.querySelector(`#${ids.statusId}`),
+    lastOutputEl: root?.querySelector(`#${ids.lastOutputId}`),
+    copyBtn: root?.querySelector(`#${ids.copyBtnId}`),
+  }
+  let lastOutputAt = Date.now()
+  let logLines = []
+  let watcher = setInterval(() => {
+    const secs = Math.max(0, Math.floor((Date.now() - lastOutputAt) / 1000))
+    if (refs.lastOutputEl) {
+      refs.lastOutputEl.textContent = secs < 2 ? '刚刚有输出' : `${secs} 秒前有输出`
+    }
+    if (refs.statusEl && secs >= 15 && refs.statusEl.dataset.done !== '1') {
+      refs.statusEl.textContent = '运行中（当前无新输出）'
+    }
+  }, 1000)
+  refs.copyBtn?.addEventListener('click', () => {
+    const text = logLines.join('\n')
+    navigator.clipboard?.writeText(text).then(() => toast('日志已复制', 'success')).catch(() => {})
+  })
+  return {
+    refs,
+    appendLog(message) {
+      const msg = String(message || '')
+      if (!msg.trim()) return
+      lastOutputAt = Date.now()
+      logLines.push(msg)
+      if (refs.logBox) {
+        const div = document.createElement('div')
+        div.textContent = msg
+        refs.logBox.appendChild(div)
+        refs.logBox.scrollTop = refs.logBox.scrollHeight
+      }
+    },
+    setProgress(pct) {
+      const value = Math.max(0, Math.min(100, Number(pct || 0)))
+      if (refs.progressBar) refs.progressBar.style.width = `${value}%`
+      if (refs.progressText) refs.progressText.textContent = `${value}%`
+    },
+    setStatus(text, done = false) {
+      if (refs.statusEl) {
+        refs.statusEl.textContent = text
+        refs.statusEl.dataset.done = done ? '1' : '0'
+      }
+    },
+    finish(statusText) {
+      this.setStatus(statusText, true)
+      clearInterval(watcher)
+    },
+    dispose() {
+      clearInterval(watcher)
+    }
+  }
 }
 
 function escapeAttr(str) {
