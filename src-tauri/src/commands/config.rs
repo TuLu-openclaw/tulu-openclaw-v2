@@ -6577,7 +6577,10 @@ pub async fn auto_install_git(app: tauri::AppHandle) -> Result<String, String> {
             let _ = app.emit("upgrade-log", "Git 安装成功！");
             return Ok("Git 已安装".to_string());
         }
-        Err("Git 安装失败，请手动执行: sudo apt install git".to_string())
+        Err(
+            "Git 安装失败，请手动执行: sudo apt install git"
+                .to_string(),
+        )
     }
 }
 
@@ -6667,7 +6670,11 @@ pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> 
 
         Err(format!(
             "{}\n请手动下载 Node.js：\n主地址：https://nodejs.org/\n建议安装 LTS 版本。",
-            if last_err.is_empty() { "Node.js 自动安装失败" } else { &last_err }
+            if last_err.is_empty() {
+                "Node.js 自动安装失败"
+            } else {
+                &last_err
+            }
         ))
     }
 
@@ -6690,7 +6697,10 @@ pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> 
                 return Ok("Node.js 已通过 brew 安装".to_string());
             }
         }
-        Err("自动安装 Node.js 失败，请手动访问 https://nodejs.org/ 安装，或执行 brew install node".to_string())
+        Err(
+            "自动安装 Node.js 失败，请手动访问 https://nodejs.org/ 安装，或执行 brew install node"
+                .to_string(),
+        )
     }
 
     #[cfg(target_os = "linux")]
