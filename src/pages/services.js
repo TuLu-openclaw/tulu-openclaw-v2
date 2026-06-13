@@ -2,7 +2,7 @@
  * 服务管理页面
  * 服务启停 + 更新检测 + 配置备份管理
  */
-import { api } from '../lib/tauri-api.js'
+import { api, invoke } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { showConfirm, showContentModal, showUpgradeModal } from '../components/modal.js'
 import { isMacPlatform, isInDocker, setUpgrading, setUserStopped, resetAutoRestart, getGatewayHealthState, refreshGatewayStatus, getActiveInstance, boostGatewayPolling } from '../lib/app-state.js'
@@ -299,7 +299,20 @@ async function loadVersion(page) {
   const stopSlowHint = startSlowHint(bar, '版本信息加载较慢，仍在继续读取本地版本与更新信息…', 8000)
   try {
     const [info, panelConfig] = await Promise.all([
-      api.getVersionInfo(),
+      invoke('get_version_info_local', {}, 15000).catch(() => ({
+        current: null,
+        latest: null,
+        recommended: null,
+        update_available: false,
+        latest_update_available: false,
+        is_recommended: false,
+        ahead_of_recommended: false,
+        panel_version: '0.0.0',
+        source: 'unknown',
+        cli_path: null,
+        cli_source: null,
+        all_installations: [],
+      })),
       api.readPanelConfig().catch(() => ({})),
     ])
     stopSlowHint()
@@ -515,7 +528,7 @@ async function loadServices(page) {
   try {
     await refreshGatewayStatus().catch(() => {})
     await ensureServicesWebSocket().catch(() => {})
-    const services = await api.getServicesStatus()
+    const services = await invoke('get_services_status', {}, 8000)
     stopSlowHint()
     renderServices(container, services)
     const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0] || null
