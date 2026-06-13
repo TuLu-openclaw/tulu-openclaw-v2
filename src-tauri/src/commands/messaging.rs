@@ -1662,7 +1662,10 @@ pub async fn run_channel_action(
                 last_idle_notice = idle_secs;
                 emit_payload(
                     "info",
-                    format!("操作仍在继续，当前已 {} 秒无新输出，可能正在等待远程响应或处理本地任务…", idle_secs),
+                    format!(
+                        "操作仍在继续，当前已 {} 秒无新输出，可能正在等待远程响应或处理本地任务…",
+                        idle_secs
+                    ),
                 );
             }
         },
