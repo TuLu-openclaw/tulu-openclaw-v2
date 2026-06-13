@@ -368,12 +368,15 @@ async function hasDockerManagerBackend() {
 async function loadDockerManager(page) {
   const bar = page.querySelector('#docker-manager-bar')
   if (!bar) return
-  const backendReady = await hasDockerManagerBackend()
-  if (!backendReady) {
-    bar.innerHTML = `<div class="stat-card"><div class="stat-card-meta">${t('services.dockerManagerUnavailable')}</div></div>`
-    return
-  }
   try {
+    const backendReady = await Promise.race([
+      hasDockerManagerBackend(),
+      new Promise(resolve => setTimeout(() => resolve(false), 5000)),
+    ])
+    if (!backendReady) {
+      bar.innerHTML = `<div class="stat-card"><div class="stat-card-meta">${t('services.dockerManagerUnavailable')}</div></div>`
+      return
+    }
     const [overview, panelConfig] = await Promise.all([
       api.dockerClusterOverview(),
       api.readPanelConfig().catch(() => ({})),
@@ -718,11 +721,12 @@ function renderServices(container, services) {
 
 async function loadBackups(page) {
   const list = page.querySelector('#backup-list')
+  if (!list) return
   try {
     const backups = await api.listBackups()
     renderBackups(list, backups)
   } catch (e) {
-    list.innerHTML = `<div style="color:var(--error)">${t('services.backupLoadFailed')}: ${e}</div>`
+    list.innerHTML = `<div style="color:var(--error)">${t('services.backupLoadFailed')}: ${escapeHtml(e?.message || e)}</div>`
   }
 }
 
@@ -1082,6 +1086,7 @@ async function loadConfigEditor(page) {
   const status = page.querySelector('#config-editor-status')
   const btnSave = page.querySelector('[data-action="save-config"]')
   const btnSaveOnly = page.querySelector('[data-action="save-config-only"]')
+  if (!section || !area || !status || !btnSave || !btnSaveOnly) return
 
   try {
     const config = await api.readOpenclawConfig()
