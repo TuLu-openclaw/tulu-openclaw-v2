@@ -9,6 +9,8 @@ import { t } from '../lib/i18n.js'
 
 let _page = null, _unsubReady = null
 let _loadSeq = 0
+let _usageSlowTimer = null
+let _usageProgressTimer = null
 
 export async function render() {
   const page = document.createElement('div')
@@ -48,6 +50,8 @@ export async function render() {
 export function cleanup() {
   _page = null
   if (_unsubReady) { _unsubReady(); _unsubReady = null }
+  if (_usageSlowTimer) { clearTimeout(_usageSlowTimer); _usageSlowTimer = null }
+  if (_usageProgressTimer) { clearInterval(_usageProgressTimer); _usageProgressTimer = null }
 }
 
 let _days = 7
@@ -56,12 +60,32 @@ async function loadUsage(page, options = {}) {
   const el = page.querySelector('#usage-content')
   if (!el) return
   const seq = ++_loadSeq
+  if (_usageSlowTimer) { clearTimeout(_usageSlowTimer); _usageSlowTimer = null }
+  if (_usageProgressTimer) { clearInterval(_usageProgressTimer); _usageProgressTimer = null }
   setUsageControlsBusy(page, true)
   el.innerHTML = `<div class="stat-card loading-placeholder" style="height:120px"></div>
     <div class="stat-card loading-placeholder" style="height:200px;margin-top:var(--space-md)"></div>
-    <div class="form-hint" style="margin-top:var(--space-sm)">${options.requestRefresh ? t('usage.refreshing') : t('usage.loading')}</div>`
+    <div class="form-hint" id="usage-loading-hint" style="margin-top:var(--space-sm)">${options.requestRefresh ? t('usage.refreshing') : t('usage.loading')}</div>`
+
+  const loadingHintEl = () => el.querySelector('#usage-loading-hint')
+  _usageSlowTimer = setTimeout(() => {
+    if (seq !== _loadSeq || page !== _page || !page.isConnected || !el.isConnected) return
+    const hint = loadingHintEl()
+    if (hint) hint.textContent = '正在等待 Gateway 返回使用情况统计，这一步本身可能需要几十秒。'
+  }, 5000)
+  _usageProgressTimer = setInterval(() => {
+    if (seq !== _loadSeq || page !== _page || !page.isConnected || !el.isConnected) return
+    const hint = loadingHintEl()
+    if (!hint) return
+    const base = options.requestRefresh ? t('usage.refreshing') : t('usage.loading')
+    const elapsed = Math.max(1, Math.round((Date.now() - startMs) / 1000))
+    hint.textContent = `${base}（已等待 ${elapsed}s）`
+  }, 1000)
+  const startMs = Date.now()
 
   if (!wsClient.connected) {
+    if (_usageSlowTimer) { clearTimeout(_usageSlowTimer); _usageSlowTimer = null }
+    if (_usageProgressTimer) { clearInterval(_usageProgressTimer); _usageProgressTimer = null }
     setUsageControlsBusy(page, false)
     el.innerHTML = `<div class="usage-empty">
       <div style="color:var(--text-tertiary);margin-bottom:8px">${t('usage.gwConnecting')}</div>
@@ -99,6 +123,8 @@ async function loadUsage(page, options = {}) {
     </div>`
     el.querySelector('#btn-usage-retry')?.addEventListener('click', () => loadUsage(page, { requestRefresh: true }))
   } finally {
+    if (_usageSlowTimer) { clearTimeout(_usageSlowTimer); _usageSlowTimer = null }
+    if (_usageProgressTimer) { clearInterval(_usageProgressTimer); _usageProgressTimer = null }
     if (seq === _loadSeq && page === _page && page.isConnected) setUsageControlsBusy(page, false)
   }
 }

@@ -242,11 +242,18 @@ export async function render() {
 }
 
 async function loadAll(page) {
-  const tasks = [loadVersion, loadServices, loadDockerManager, loadBackups, loadConfigEditor]
-  await Promise.all(tasks.map(fn => {
-    if (!page?.isConnected) return Promise.resolve()
-    return fn(page).catch(e => console.warn(`[services] ${fn.name} failed:`, e))
-  }))
+  if (!page?.isConnected) return
+  await Promise.all([
+    loadVersion(page).catch(e => console.warn('[services] loadVersion failed:', e)),
+    loadServices(page).catch(e => console.warn('[services] loadServices failed:', e)),
+  ])
+  if (!page?.isConnected) return
+  setTimeout(() => {
+    if (!page?.isConnected) return
+    loadDockerManager(page).catch(e => console.warn('[services] loadDockerManager failed:', e))
+    loadBackups(page).catch(e => console.warn('[services] loadBackups failed:', e))
+    loadConfigEditor(page).catch(e => console.warn('[services] loadConfigEditor failed:', e))
+  }, 0)
 }
 
 // ===== 版本检测 =====

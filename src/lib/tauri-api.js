@@ -70,7 +70,7 @@ async function fetchNpmLatest(source) {
 async function fetchNpmAllVersions(source) {
   const pkg = NPM_PACKAGES[source] || source
   const encoded = pkg.replace('/', '%2F').replace('@', '%40')
-  const result = await fetchWithFallback(`/${encoded}`, 10000)
+  const result = await fetchWithFallback(`/${encoded}`, 30000)
   if (!result.ok) {
     console.warn('[version] all registries failed for', pkg)
     return null
@@ -396,7 +396,7 @@ function invalidateRemoteModelCaches() {
 // 导出 API
 export const api = {
   // 服务管理（状态用短缓存，操作不缓存）
-  getServicesStatus: () => cachedInvoke('get_services_status', {}, 10000),
+  getServicesStatus: () => cachedInvoke('get_services_status', {}, 30000),
   startService: (label) => { invalidateGatewayCaches(); return invoke('start_service', { label }, 300000).then(r => { invalidateGatewayCaches(); return r }) },
   stopService: (label) => { invalidateGatewayCaches(); return invoke('stop_service', { label }, 60000).then(r => { invalidateGatewayCaches(); return r }) },
   restartService: (label) => { invalidateGatewayCaches(); return invoke('restart_service', { label }, 300000).then(r => { invalidateGatewayCaches(); return r }) },
@@ -588,7 +588,7 @@ export const api = {
   hermesSkillhubInstall: (slug) => invoke('hermes_skillhub_install', { slug }),
 
   // 实例管理
-  instanceList: () => cachedInvoke('instance_list', {}, 10000),
+  instanceList: () => cachedInvoke('instance_list', {}, 30000),
   instanceAdd: (instance) => { invalidate('instance_list'); return invoke('instance_add', instance) },
   instanceRemove: (id) => { invalidate('instance_list'); return invoke('instance_remove', { id }) },
   instanceSetActive: (id) => { invalidate('instance_list'); _cache.clear(); return invoke('instance_set_active', { id }) },
