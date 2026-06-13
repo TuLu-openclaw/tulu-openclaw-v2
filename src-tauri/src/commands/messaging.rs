@@ -2824,7 +2824,6 @@ pub async fn install_channel_plugin(
     plugin_id: String,
     version: Option<String>,
 ) -> Result<String, String> {
-    use std::io::{BufRead, BufReader};
     use std::process::Stdio;
     use tauri::Emitter;
 
@@ -2887,43 +2886,62 @@ pub async fn install_channel_plugin(
         }
     };
 
-    let stderr = child.stderr.take();
-    let app2 = app.clone();
-    let stderr_lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-    let stderr_clone = stderr_lines.clone();
-    let handle = std::thread::spawn(move || {
-        if let Some(pipe) = stderr {
-            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-                let _ = app2.emit("plugin-log", &line);
-                stderr_clone.lock().unwrap().push(line);
-            }
-        }
-    });
-
     let _ = app.emit("plugin-progress", 30);
-    let mut progress = 30;
-    if let Some(pipe) = child.stdout.take() {
-        for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+    let mut progress = 30u32;
+    let mut last_idle_notice = 0u64;
+    let (status, lines_vec) = stream_child_output_until_exit(
+        &mut child,
+        |line| {
             let _ = app.emit("plugin-log", &line);
             if progress < 90 {
-                progress += 10;
+                progress += 5;
                 let _ = app.emit("plugin-progress", progress);
             }
-        }
+        },
+        |idle_secs| {
+            if idle_secs >= 15 && idle_secs - last_idle_notice >= 15 {
+                last_idle_notice = idle_secs;
+                let _ = app.emit(
+                    "plugin-log",
+                    format!(
+                        "安装仍在继续，当前已 {} 秒无新输出，可能正在下载依赖或等待远程响应…",
+                        idle_secs
+                    ),
+                );
+            }
+        },
+    )?;
+
+    let _ = app.emit("plugin-progress", 95);
+    let all_output = lines_vec.join("\n");
+
+    // 检测 native binding 缺失（macOS/Linux 上 OpenClaw CLI 自身启动失败）
+    if all_output.contains("native binding") || all_output.contains("Failed to start CLI") {
+        let _ = app.emit("plugin-log", "");
+        let _ = app.emit(
+            "plugin-log",
+            "⚠️ 检测到 OpenClaw CLI 原生依赖问题（native binding 缺失）",
+        );
+        let _ = app.emit(
+            "plugin-log",
+            "这是 OpenClaw 的上游依赖问题，非插件本身的问题。",
+        );
+        let _ = app.emit("plugin-log", "请在终端手动执行以下命令重装 OpenClaw：");
+        let _ = app.emit(
+            "plugin-log",
+            "  npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com",
+        );
+        let _ = app.emit("plugin-log", "重装完成后再回来安装该插件。");
+        let _ = cleanup_failed_plugin_install(plugin_id, had_existing_plugin, had_existing_config);
+        let _ = app.emit("plugin-progress", 100);
+        return Err("OpenClaw CLI 原生依赖缺失，请先在终端重装 OpenClaw（详见上方日志）".into());
     }
 
-    let _ = handle.join();
-    let _ = app.emit("plugin-progress", 95);
-
-    let status = child
-        .wait()
-        .map_err(|e| format!("等待安装进程失败: {}", e))?;
     if !status.success() {
-        let all_stderr = stderr_lines.lock().unwrap().join("\n");
-        let is_host_version_issue = all_stderr.contains("minHostVersion")
-            || all_stderr.contains("minimum host version")
-            || all_stderr.contains("requires OpenClaw")
-            || all_stderr.contains("host version");
+        let is_host_version_issue = all_output.contains("minHostVersion")
+            || all_output.contains("minimum host version")
+            || all_output.contains("requires OpenClaw")
+            || all_output.contains("host version");
         if is_host_version_issue {
             let _ = app.emit(
                 "plugin-log",
@@ -2948,7 +2966,7 @@ pub async fn install_channel_plugin(
             return Err("插件安装失败：当前 OpenClaw 版本过低，请先升级后重试".into());
         }
         return if rollback_err.is_empty() {
-            let detail = all_stderr
+            let detail = all_output
                 .lines()
                 .filter(|line| !line.trim().is_empty())
                 .take(8)
