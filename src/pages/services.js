@@ -243,6 +243,14 @@ export async function render() {
 
 async function loadAll(page) {
   if (!page?.isConnected) return
+
+  markSectionBooting(page.querySelector('#version-bar'), '正在初始化版本信息模块…')
+  markSectionBooting(page.querySelector('#services-list'), '正在初始化服务状态模块…')
+  markSectionBooting(page.querySelector('#docker-manager-bar'), '正在初始化 Docker 管理模块…')
+  markSectionBooting(page.querySelector('#backup-list'), '正在初始化备份模块…')
+  const configStatus = page.querySelector('#config-editor-status')
+  if (configStatus) configStatus.innerHTML = '<span style="color:var(--text-tertiary)">正在初始化配置编辑器模块…</span>'
+
   await Promise.all([
     loadVersion(page).catch(e => console.warn('[services] loadVersion failed:', e)),
     loadServices(page).catch(e => console.warn('[services] loadServices failed:', e)),
@@ -257,6 +265,11 @@ async function loadAll(page) {
 }
 
 function setSectionSlowState(target, message) {
+  if (!target) return
+  target.innerHTML = `<div class="stat-card"><div class="stat-card-meta">${escapeHtml(message)}</div></div>`
+}
+
+function markSectionBooting(target, message) {
   if (!target) return
   target.innerHTML = `<div class="stat-card"><div class="stat-card-meta">${escapeHtml(message)}</div></div>`
 }
