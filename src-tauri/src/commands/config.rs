@@ -6736,7 +6736,10 @@ pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> 
             _ => return Err("不支持的包管理器".to_string()),
         };
 
-        let _ = app.emit("upgrade-log", format!("执行: {} {}", cmd_name, args.join(" ")));
+        let _ = app.emit(
+            "upgrade-log",
+            format!("执行: {} {}", cmd_name, args.join(" ")),
+        );
         let mut child = Command::new(cmd_name)
             .args(&args)
             .stdout(Stdio::piped())
