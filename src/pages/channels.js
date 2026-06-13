@@ -1111,16 +1111,24 @@ function getManualCommandSpecs(pid, reg) {
     ]
   }
 
-  if (!['qqbot', 'feishu', 'dingtalk'].includes(pid) || !reg.pluginRequired) {
-    return []
+  const commandSpecs = []
+  if (reg.pluginRequired) {
+    commandSpecs.push({
+      id: 'install',
+      title: t('channels.manualInstallCommand'),
+      hint: t('channels.manualInstallHint', { platform: reg.label }),
+      command: `openclaw plugins install ${reg.pluginRequired}`,
+    })
   }
 
-  return [{
-    id: 'install',
-    title: t('channels.manualInstallCommand'),
-    hint: t('channels.manualInstallHint', { platform: reg.label }),
-    command: `openclaw plugins install ${reg.pluginRequired}`,
-  }]
+  commandSpecs.push({
+    id: 'login',
+    title: t('channels.manualLoginCommand'),
+    hint: t('channels.manualLoginHint'),
+    command: `openclaw channels login --channel ${getChannelBindingKey(pid)}`,
+  })
+
+  return commandSpecs
 }
 
 function buildManualCommandPanel(commandSpecs) {
@@ -1187,6 +1195,198 @@ function bindManualCommandCopy(root, commandSpecs) {
       }
     })
   })
+}
+
+async function ensurePlatformPluginInstalled(pid, reg, renderTargetEl) {
+  if (!reg?.pluginRequired) return { installed: false, skipped: true }
+
+  const pluginPackage = reg.pluginRequired
+  const pluginId = reg.pluginId || pid
+  const pluginStatus = await api.getChannelPluginStatus(pluginId)
+  if (pluginStatus?.installed || pluginStatus?.builtin) {
+    return { installed: true, skipped: true, pluginStatus }
+  }
+
+  if (!renderTargetEl) {
+    throw new Error(`插件未安装：${pluginPackage}`)
+  }
+
+  renderTargetEl.innerHTML = renderTerminalPanel(t('channels.installPlugin'), {
+    progressTextId: 'plugin-progress-text',
+    progressBarId: 'plugin-progress-bar',
+    statusId: 'plugin-status',
+    lastOutputId: 'plugin-last-output',
+    logBoxId: 'plugin-log-box',
+    copyBtnId: 'plugin-copy-btn',
+  })
+  const panel = bindTerminalPanel(renderTargetEl, {
+    progressTextId: 'plugin-progress-text',
+    progressBarId: 'plugin-progress-bar',
+    statusId: 'plugin-status',
+    lastOutputId: 'plugin-last-output',
+    logBoxId: 'plugin-log-box',
+    copyBtnId: 'plugin-copy-btn',
+  })
+
+  let unlistenLog = null
+  let unlistenProgress = null
+  try {
+    const { listen } = await import('@tauri-apps/api/event')
+    unlistenLog = await listen('plugin-log', (e) => {
+      panel.appendLog(e.payload)
+    })
+    unlistenProgress = await listen('plugin-progress', (e) => {
+      panel.setProgress(e.payload)
+    })
+  } catch {}
+
+  try {
+    let pluginVersion = null
+    if (pluginPackage && pluginPackage.startsWith('@openclaw/')) {
+      try {
+        const vInfo = await api.getVersionInfo()
+        if (vInfo?.current) pluginVersion = vInfo.current.split('-')[0]
+      } catch {}
+    }
+
+    if (pid === 'qqbot') {
+      await api.installQqbotPlugin(null)
+    } else {
+      await api.installChannelPlugin(pluginPackage, pluginId, pluginVersion)
+    }
+    panel.finish('已完成')
+    return { installed: true, skipped: false }
+  } catch (e) {
+    panel.finish('失败')
+    throw e
+  } finally {
+    try { unlistenLog?.() } catch {}
+    try { unlistenProgress?.() } catch {}
+  }
+}
+
+async function runPlatformLoginAction(pid, actionId, reg, renderTargetEl) {
+  if (!renderTargetEl) {
+    return api.runChannelAction(pid, actionId, null)
+  }
+
+  renderTargetEl.innerHTML = renderTerminalPanel(t('channels.executing'), {
+    progressTextId: 'channel-action-progress-text',
+    progressBarId: 'channel-action-progress-bar',
+    statusId: 'channel-action-status',
+    lastOutputId: 'channel-action-last-output',
+    logBoxId: 'channel-action-log-box',
+    copyBtnId: 'channel-action-copy-btn',
+  })
+
+  const panel = bindTerminalPanel(renderTargetEl, {
+    progressTextId: 'channel-action-progress-text',
+    progressBarId: 'channel-action-progress-bar',
+    statusId: 'channel-action-status',
+    lastOutputId: 'channel-action-last-output',
+    logBoxId: 'channel-action-log-box',
+    copyBtnId: 'channel-action-copy-btn',
+  })
+  const { logBox, progressBar, progressText } = panel.refs
+  const { listen } = await import('@tauri-apps/api/event')
+  let unlistenLog = null, unlistenProgress = null
+  let _qrTimer = null
+  const cleanup = () => { unlistenLog?.(); unlistenProgress?.(); clearTimeout(_qrTimer); panel.dispose() }
+
+  try {
+    if (logBox) {
+      const hint = document.createElement('div')
+      hint.style.cssText = 'color:var(--text-tertiary);font-style:italic'
+      hint.id = 'action-loading-hint'
+      hint.textContent = t('channels.downloadingPlugin')
+      logBox.appendChild(hint)
+    }
+    const _qrBuf = []
+    let _qrDone = false
+    const _flushQr = () => {
+      if (!_qrBuf.length || _qrDone) return
+      _qrDone = true
+      const hasHalf = _qrBuf.some(l => /[\u2580\u2584]/.test(l))
+      const matrix = []
+      for (const line of _qrBuf) {
+        if (hasHalf) {
+          const top = [], bot = []
+          for (const ch of line) {
+            if (ch === '\u2588') { top.push(1); bot.push(1) }
+            else if (ch === '\u2580') { top.push(1); bot.push(0) }
+            else if (ch === '\u2584') { top.push(0); bot.push(1) }
+            else { top.push(0); bot.push(0) }
+          }
+          matrix.push(top, bot)
+        } else {
+          matrix.push([...line].map(ch => ch === '\u2588' ? 1 : 0))
+        }
+      }
+      if (!matrix.length) return
+      const mod = 4, w = Math.max(...matrix.map(r => r.length)), h = matrix.length
+      const cvs = document.createElement('canvas')
+      cvs.width = w * mod; cvs.height = h * mod
+      const ctx = cvs.getContext('2d')
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cvs.width, cvs.height)
+      ctx.fillStyle = '#000'
+      for (let y = 0; y < h; y++) for (let x = 0; x < (matrix[y]?.length || 0); x++) {
+        if (matrix[y][x]) ctx.fillRect(x * mod, y * mod, mod, mod)
+      }
+      const wrap = document.createElement('div')
+      wrap.style.cssText = 'text-align:center;margin:12px 0;padding:16px;background:#fff;border-radius:var(--radius-md);border:1px solid var(--border-primary)'
+      wrap.innerHTML = `<div style="font-size:var(--font-size-sm);font-weight:600;color:#000;margin-bottom:8px">${t('channels.weixinScanQr')}</div>`
+      const img = document.createElement('img')
+      img.src = cvs.toDataURL()
+      img.style.cssText = 'display:block;margin:0 auto;image-rendering:pixelated;max-width:280px'
+      wrap.appendChild(img)
+      logBox.appendChild(wrap)
+    }
+    unlistenLog = await listen('channel-action-log', (e) => {
+      if (e.payload?.platform !== pid || e.payload?.action !== actionId) return
+      if (!logBox) return
+      const msg = e.payload?.message || ''
+      const isQrLine = /[\u2580\u2584\u2588]/.test(msg)
+      if (isQrLine && (actionId === 'login' || actionId === 'install')) {
+        _qrBuf.push(msg)
+        clearTimeout(_qrTimer)
+        _qrTimer = setTimeout(_flushQr, 500)
+      } else if (!isQrLine) {
+        if (_qrBuf.length && !_qrDone) _flushQr()
+        const weixinUrlMatch = msg.match(/(https:\/\/liteapp\.weixin\.qq\.com\/q\/[^\s]+)/)
+        if (weixinUrlMatch && !_qrDone) {
+          _qrDone = true
+          const qrUrl = weixinUrlMatch[1]
+          const wrap = document.createElement('div')
+          wrap.style.cssText = 'text-align:center;margin:12px 0;padding:16px;background:#fff;border-radius:var(--radius-md);border:1px solid var(--border-primary)'
+          wrap.innerHTML = `
+            <div style="font-size:var(--font-size-sm);font-weight:600;color:#000;margin-bottom:8px">${t('channels.weixinScanQr')}</div>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}" alt="WeChat QR" style="width:200px;height:200px;image-rendering:pixelated;border-radius:4px;margin:0 auto;display:block" loading="eager">
+            <div style="margin-top:8px"><a href="${escapeAttr(qrUrl)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:var(--font-size-xs);word-break:break-all">${t('channels.weixinOpenInBrowser')}</a></div>
+          `
+          logBox.appendChild(wrap)
+        } else if (msg.trim()) {
+          const loadingHint = logBox.querySelector('#action-loading-hint')
+          if (loadingHint) loadingHint.remove()
+          panel.appendLog(msg)
+        }
+      }
+      logBox.scrollTop = logBox.scrollHeight
+    })
+    unlistenProgress = await listen('channel-action-progress', (e) => {
+      if (e.payload?.platform !== pid || e.payload?.action !== actionId) return
+      const pct = Number(e.payload?.progress || 0)
+      if (progressBar) progressBar.style.width = `${pct}%`
+      if (progressText) progressText.textContent = `${pct}%`
+    })
+
+    const output = await api.runChannelAction(pid, actionId, null)
+    _flushQr()
+    if (progressBar) progressBar.style.width = '100%'
+    if (progressText) progressText.textContent = '100%'
+    return output
+  } finally {
+    cleanup()
+  }
 }
 
 /** QQ：展示后端完整诊断（凭证 + Gateway + 插件 + chatCompletions）；可选一键修复插件 */
@@ -1540,98 +1740,14 @@ async function openConfigDialog(pid, page, state, accountId) {
         try {
           btn.disabled = true
           btn.textContent = t('channels.executingShort')
-          if (logBox) {
-            const hint = document.createElement('div')
-            hint.style.cssText = 'color:var(--text-tertiary);font-style:italic'
-            hint.id = 'action-loading-hint'
-            hint.textContent = t('channels.downloadingPlugin')
-            logBox.appendChild(hint)
-          }
-          const _qrBuf = []
-          let _qrDone = false
-          const _flushQr = () => {
-            if (!_qrBuf.length || _qrDone) return
-            _qrDone = true
-            // 解析 Unicode 半块字符为二值矩阵
-            const hasHalf = _qrBuf.some(l => /[\u2580\u2584]/.test(l))
-            const matrix = []
-            for (const line of _qrBuf) {
-              if (hasHalf) {
-                const top = [], bot = []
-                for (const ch of line) {
-                  if (ch === '\u2588') { top.push(1); bot.push(1) }
-                  else if (ch === '\u2580') { top.push(1); bot.push(0) }
-                  else if (ch === '\u2584') { top.push(0); bot.push(1) }
-                  else { top.push(0); bot.push(0) }
-                }
-                matrix.push(top, bot)
-              } else {
-                matrix.push([...line].map(ch => ch === '\u2588' ? 1 : 0))
-              }
-            }
-            if (!matrix.length) return
-            const mod = 4, w = Math.max(...matrix.map(r => r.length)), h = matrix.length
-            const cvs = document.createElement('canvas')
-            cvs.width = w * mod; cvs.height = h * mod
-            const ctx = cvs.getContext('2d')
-            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cvs.width, cvs.height)
-            ctx.fillStyle = '#000'
-            for (let y = 0; y < h; y++) for (let x = 0; x < (matrix[y]?.length || 0); x++) {
-              if (matrix[y][x]) ctx.fillRect(x * mod, y * mod, mod, mod)
-            }
-            const wrap = document.createElement('div')
-            wrap.style.cssText = 'text-align:center;margin:12px 0;padding:16px;background:#fff;border-radius:var(--radius-md);border:1px solid var(--border-primary)'
-            wrap.innerHTML = `<div style="font-size:var(--font-size-sm);font-weight:600;color:#000;margin-bottom:8px">${t('channels.weixinScanQr')}</div>`
-            const img = document.createElement('img')
-            img.src = cvs.toDataURL()
-            img.style.cssText = 'display:block;margin:0 auto;image-rendering:pixelated;max-width:280px'
-            wrap.appendChild(img)
-            logBox.appendChild(wrap)
-          }
-          unlistenLog = await listen('channel-action-log', (e) => {
-            if (e.payload?.platform !== pid || e.payload?.action !== actionId) return
-            if (!logBox) return
-            const msg = e.payload?.message || ''
-            const isQrLine = /[\u2580\u2584\u2588]/.test(msg)
-            if (isQrLine && (actionId === 'login' || actionId === 'install')) {
-              _qrBuf.push(msg)
-              clearTimeout(_qrTimer)
-              _qrTimer = setTimeout(_flushQr, 500)
-            } else if (!isQrLine) {
-              if (_qrBuf.length && !_qrDone) _flushQr()
-              // 检测微信扫码 URL 并渲染为可扫描的二维码
-              const weixinUrlMatch = msg.match(/(https:\/\/liteapp\.weixin\.qq\.com\/q\/[^\s]+)/)
-              if (weixinUrlMatch && !_qrDone) {
-                _qrDone = true
-                const qrUrl = weixinUrlMatch[1]
-                const wrap = document.createElement('div')
-                wrap.style.cssText = 'text-align:center;margin:12px 0;padding:16px;background:#fff;border-radius:var(--radius-md);border:1px solid var(--border-primary)'
-                wrap.innerHTML = `
-                  <div style="font-size:var(--font-size-sm);font-weight:600;color:#000;margin-bottom:8px">${t('channels.weixinScanQr')}</div>
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}" alt="WeChat QR" style="width:200px;height:200px;image-rendering:pixelated;border-radius:4px;margin:0 auto;display:block" loading="eager">
-                  <div style="margin-top:8px"><a href="${escapeAttr(qrUrl)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:var(--font-size-xs);word-break:break-all">${t('channels.weixinOpenInBrowser')}</a></div>
-                `
-                logBox.appendChild(wrap)
-              } else if (msg.trim()) {
-                const loadingHint = logBox.querySelector('#action-loading-hint')
-                if (loadingHint) loadingHint.remove()
-                panel.appendLog(msg)
-              }
-            }
-            logBox.scrollTop = logBox.scrollHeight
-          })
-          unlistenProgress = await listen('channel-action-progress', (e) => {
-            if (e.payload?.platform !== pid || e.payload?.action !== actionId) return
-            const pct = Number(e.payload?.progress || 0)
-            if (progressBar) progressBar.style.width = `${pct}%`
-            if (progressText) progressText.textContent = `${pct}%`
-          })
 
-          // runChannelAction 的版本由后端自动检测（微信/QQ 版本号独立于 OpenClaw）
-          const output = await api.runChannelAction(pid, actionId, null)
-          _flushQr() // 命令结束后刷新残留 QR 缓冲
-          if (progressBar) progressBar.style.width = '100%'
-          if (progressText) progressText.textContent = '100%'
+          if (actionId === 'install' && reg.pluginRequired) {
+            await ensurePlatformPluginInstalled(pid, reg, actionResultEl)
+            toast(t('channels.executionDone'), 'success')
+            return
+          }
+
+          const output = await runPlatformLoginAction(pid, actionId, reg, actionResultEl)
           toast(t('channels.executionDone'), 'success')
           // 安装完成后刷新插件状态
           if (pid === 'weixin' && actionId === 'install') {
@@ -1650,8 +1766,8 @@ async function openConfigDialog(pid, page, state, accountId) {
               }).catch(() => {})
             }
           }
-          // 登录成功后：显示成功提示 + 刷新渠道列表 + 自动关闭弹窗
           if (actionId === 'login') {
+            const logBox = actionResultEl.querySelector('#channel-action-log-box')
             if (logBox) {
               const banner = document.createElement('div')
               banner.style.cssText = 'margin-top:12px;padding:12px 16px;background:var(--success-bg, #e8f5e9);border:1px solid var(--success, #4caf50);border-radius:var(--radius-md);color:var(--success, #2e7d32);font-weight:600;text-align:center'
@@ -1659,15 +1775,13 @@ async function openConfigDialog(pid, page, state, accountId) {
               logBox.appendChild(banner)
               logBox.scrollTop = logBox.scrollHeight
             }
-            // 刷新渠道列表（先清缓存）
             invalidate('list_configured_platforms')
             loadPlatforms(page, state).then(() => renderConfigured(page, state)).catch(() => {})
-            // 2 秒后自动关闭弹窗
             setTimeout(() => { modal.close?.() || modal.remove?.() }, 2000)
           }
         } catch (e) {
-          _flushQr()
           toast(t('channels.executionFailed') + ': ' + e, 'error')
+          const logBox = actionResultEl.querySelector('#channel-action-log-box')
           if (logBox) {
             const div = document.createElement('div')
             div.style.color = 'var(--error)'
@@ -1675,7 +1789,6 @@ async function openConfigDialog(pid, page, state, accountId) {
             logBox.appendChild(div)
           }
         } finally {
-          cleanup()
           btn.disabled = false
           btn.textContent = reg.actions.find(a => a.id === actionId)?.label || t('channels.execute')
         }
@@ -2086,71 +2199,9 @@ async function openConfigDialog(pid, page, state, accountId) {
     try {
       // 如果需要安装插件，先安装并显示日志
       if (reg.pluginRequired) {
-        const pluginPackage = reg.pluginRequired
-        const pluginId = reg.pluginId || pid
-        const pluginStatus = await api.getChannelPluginStatus(pluginId)
-        // 跳过安装：插件已安装或已内置
-        if (!pluginStatus?.installed && !pluginStatus?.builtin) {
-          btnSave.textContent = t('channels.installingPlugin')
-          resultEl.innerHTML = renderTerminalPanel(t('channels.installPlugin'), {
-            progressTextId: 'plugin-progress-text',
-            progressBarId: 'plugin-progress-bar',
-            statusId: 'plugin-status',
-            lastOutputId: 'plugin-last-output',
-            logBoxId: 'plugin-log-box',
-            copyBtnId: 'plugin-copy-btn',
-          })
-          const panel = bindTerminalPanel(resultEl, {
-            progressTextId: 'plugin-progress-text',
-            progressBarId: 'plugin-progress-bar',
-            statusId: 'plugin-status',
-            lastOutputId: 'plugin-last-output',
-            logBoxId: 'plugin-log-box',
-            copyBtnId: 'plugin-copy-btn',
-          })
-          const { logBox, progressBar, progressText } = panel.refs
-          let unlistenLog, unlistenProgress
-          try {
-            const { listen } = await import('@tauri-apps/api/event')
-            unlistenLog = await listen('plugin-log', (e) => {
-              panel.appendLog(e.payload)
-            })
-            unlistenProgress = await listen('plugin-progress', (e) => {
-              const pct = e.payload
-              progressBar.style.width = pct + '%'
-              progressText.textContent = pct + '%'
-            })
-          } catch {}
-
-          try {
-            // 自动 pin 插件版本：仅 @openclaw/ 前缀的包与 OpenClaw 版本号同步，其他包（微信 CLI、QQ Bot）版本号独立
-            let pluginVersion = null
-            if (pluginPackage && pluginPackage.startsWith('@openclaw/')) {
-              try {
-                const vInfo = await api.getVersionInfo()
-                if (vInfo?.current) pluginVersion = vInfo.current.split('-')[0]
-              } catch {}
-            }
-            // QQ 必须用专用安装命令：官方包目录为 openclaw-qqbot，与 install_channel_plugin(…, "qqbot") 的备份路径不一致
-            if (pid === 'qqbot') {
-              await api.installQqbotPlugin(null)
-            } else {
-              await api.installChannelPlugin(pluginPackage, pluginId, pluginVersion)
-            }
-          } catch (e) {
-            toast(t('channels.pluginInstallFailed') + ': ' + e, 'error')
-            panel.finish('失败')
-            btnSave.disabled = false
-            btnVerify.disabled = false
-            btnSave.textContent = isEdit ? t('channels.save') : t('channels.connectAndSave')
-            if (unlistenLog) unlistenLog()
-            if (unlistenProgress) unlistenProgress()
-            return
-          }
-          panel.finish('已完成')
-          if (unlistenLog) unlistenLog()
-          if (unlistenProgress) unlistenProgress()
-        } else {
+        btnSave.textContent = t('channels.installingPlugin')
+        const pluginResult = await ensurePlatformPluginInstalled(pid, reg, resultEl)
+        if (pluginResult?.installed) {
           resultEl.innerHTML = `
             <div style="background:var(--accent-muted);color:var(--accent);padding:10px 14px;border-radius:var(--radius-md);font-size:var(--font-size-sm)">
               ${icon('check', 14)} ${t('channels.pluginDetected')}

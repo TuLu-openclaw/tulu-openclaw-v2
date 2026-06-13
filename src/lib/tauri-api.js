@@ -256,7 +256,7 @@ export async function invoke(cmd, args = {}, extraTimeout = 0) {
   const start = Date.now()
   const tauriInvoke = WEB_ONLY_CMDS.has(cmd) ? null : await getTauriInvoke()
 
-  const baseTimeout = 10000 // 10s default
+  const baseTimeout = 300000 // 5min default for long-running UI actions
   const cmdTimeout = extraTimeout || baseTimeout
   const timeoutMs = Math.max(1000, cmdTimeout)
 
