@@ -28,6 +28,19 @@ const GUARDIAN_RESTART_COOLDOWN: Duration = Duration::from_secs(60);
 const GUARDIAN_STABLE_WINDOW: Duration = Duration::from_secs(120);
 const GUARDIAN_MAX_AUTO_RESTART: u32 = 3;
 const GUARDIAN_FAILURE_THRESHOLD: u32 = 3;
+const SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(5);
+
+#[derive(Clone)]
+struct CachedServicesStatus {
+    created_at: Instant,
+    items: Vec<ServiceStatus>,
+}
+
+static SERVICES_STATUS_CACHE: OnceLock<Mutex<Option<CachedServicesStatus>>> = OnceLock::new();
+
+fn services_status_cache() -> &'static Mutex<Option<CachedServicesStatus>> {
+    SERVICES_STATUS_CACHE.get_or_init(|| Mutex::new(None))
+}
 
 #[derive(Debug, Default)]
 struct GuardianRuntimeState {
@@ -1708,6 +1721,14 @@ fn check_tcp_service_status(_uid: u32, _label: &str) -> (bool, Option<u32>) {
 
 #[tauri::command]
 pub async fn get_services_status() -> Result<Vec<ServiceStatus>, String> {
+    if let Ok(cache) = services_status_cache().lock() {
+        if let Some(snapshot) = cache.as_ref() {
+            if snapshot.created_at.elapsed() < SERVICE_STATUS_CACHE_TTL {
+                return Ok(snapshot.items.clone());
+            }
+        }
+    }
+
     let _uid = platform::current_uid()?;
     let labels = platform::scan_service_labels();
     let desc_map = description_map();
@@ -1725,8 +1746,6 @@ pub async fn get_services_status() -> Result<Vec<ServiceStatus>, String> {
                 }
             }
         }
-        // 重要：运行中的无 owner Gateway 不自动认领。
-        // 只有 start_service / wait_for_gateway_running 在本实例启动成功后才写 owner，避免多个售卖版实例互相误接管。
         let ownership = if !running {
             Some("stopped".to_string())
         } else if owned_by_current_instance {
@@ -1742,6 +1761,13 @@ pub async fn get_services_status() -> Result<Vec<ServiceStatus>, String> {
             cli_installed,
             ownership,
             owned_by_current_instance: Some(owned_by_current_instance),
+        });
+    }
+
+    if let Ok(mut cache) = services_status_cache().lock() {
+        *cache = Some(CachedServicesStatus {
+            created_at: Instant::now(),
+            items: results.clone(),
         });
     }
 

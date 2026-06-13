@@ -2490,7 +2490,6 @@ pub async fn get_version_info_local() -> Result<VersionInfo, String> {
     let cli_source = cli_path
         .as_ref()
         .map(|p| crate::utils::classify_cli_source(p));
-    let all_installations = scan_all_installations(&cli_path);
 
     Ok(VersionInfo {
         current,
@@ -2504,7 +2503,7 @@ pub async fn get_version_info_local() -> Result<VersionInfo, String> {
         source,
         cli_path,
         cli_source,
-        all_installations: Some(all_installations),
+        all_installations: Some(vec![]),
     })
 }
 
