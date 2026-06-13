@@ -282,11 +282,14 @@ let lastVersionInfo = null
 
 async function loadVersion(page) {
   const bar = page.querySelector('#version-bar')
+  if (!bar) return
+  const stopSlowHint = startSlowHint(bar, '版本信息加载较慢，仍在继续读取本地版本与更新信息…', 8000)
   try {
     const [info, panelConfig] = await Promise.all([
       api.getVersionInfo(),
       api.readPanelConfig().catch(() => ({})),
     ])
+    stopSlowHint()
     lastVersionInfo = info
     detectedSource = info.source || 'chinese'
     const ver = info.current || t('common.unknown')
@@ -343,7 +346,8 @@ async function loadVersion(page) {
       `
     }
   } catch (e) {
-    bar.innerHTML = `<div class="stat-card" style="margin-bottom:var(--space-lg)"><div class="stat-card-label">${t('services.versionLoadFailed')}</div></div>`
+    stopSlowHint()
+    bar.innerHTML = `<div class="stat-card" style="margin-bottom:var(--space-lg)"><div class="stat-card-label">${t('services.versionLoadFailed')}</div><div class="stat-card-meta" style="margin-top:8px">${escapeHtml(e?.message || e || '')}</div></div>`
   }
 }
 
@@ -493,10 +497,13 @@ function renderServiceLoadFallback(container, error) {
 
 async function loadServices(page) {
   const container = page.querySelector('#services-list')
+  if (!container) return
+  const stopSlowHint = startSlowHint(container, '服务状态加载较慢，仍在继续检测 Gateway 与服务进程状态…', 8000)
   try {
     await refreshGatewayStatus().catch(() => {})
     await ensureServicesWebSocket().catch(() => {})
     const services = await api.getServicesStatus()
+    stopSlowHint()
     renderServices(container, services)
     const gw = services?.find?.(s => s.label === 'ai.openclaw.gateway') || services?.[0] || null
     if (gw) {
@@ -506,6 +513,7 @@ async function loadServices(page) {
       }).catch(() => {})
     }
   } catch (e) {
+    stopSlowHint()
     await refreshGatewayStatus().catch(() => {})
     renderServiceLoadFallback(container, e)
   }
