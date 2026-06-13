@@ -256,6 +256,24 @@ async function loadAll(page) {
   }, 0)
 }
 
+function setSectionSlowState(target, message) {
+  if (!target) return
+  target.innerHTML = `<div class="stat-card"><div class="stat-card-meta">${escapeHtml(message)}</div></div>`
+}
+
+function startSlowHint(target, message, delay = 8000) {
+  if (!target) return () => {}
+  let done = false
+  const timer = setTimeout(() => {
+    if (done) return
+    setSectionSlowState(target, message)
+  }, delay)
+  return () => {
+    done = true
+    clearTimeout(timer)
+  }
+}
+
 // ===== 版本检测 =====
 
 // 后端检测到的当前安装源
@@ -368,12 +386,11 @@ async function hasDockerManagerBackend() {
 async function loadDockerManager(page) {
   const bar = page.querySelector('#docker-manager-bar')
   if (!bar) return
+  const stopSlowHint = startSlowHint(bar, 'Docker 管理加载较慢，仍在继续检测后端与节点状态…', 8000)
   try {
-    const backendReady = await Promise.race([
-      hasDockerManagerBackend(),
-      new Promise(resolve => setTimeout(() => resolve(false), 5000)),
-    ])
+    const backendReady = await hasDockerManagerBackend()
     if (!backendReady) {
+      stopSlowHint()
       bar.innerHTML = `<div class="stat-card"><div class="stat-card-meta">${t('services.dockerManagerUnavailable')}</div></div>`
       return
     }
@@ -381,6 +398,7 @@ async function loadDockerManager(page) {
       api.dockerClusterOverview(),
       api.readPanelConfig().catch(() => ({})),
     ])
+    stopSlowHint()
     const totalNodes = overview.length
     const onlineNodes = overview.filter(node => node.online).length
     const totalContainers = overview.reduce((sum, node) => sum + (node.containers?.length || 0), 0)
@@ -446,6 +464,7 @@ async function loadDockerManager(page) {
       <div class="form-hint" style="margin-top:var(--space-sm)">${t('services.dockerDefaultImageHint')} <code>${escapeHtml(configuredDockerImage(panelConfig))}</code></div>
     `
   } catch (e) {
+    stopSlowHint()
     bar.innerHTML = `<div class="stat-card"><div class="stat-card-meta" style="color:var(--error)">${t('services.dockerManagerLoadFailed')}: ${escapeHtml(e?.message || e)}</div></div>`
   }
 }
@@ -722,10 +741,13 @@ function renderServices(container, services) {
 async function loadBackups(page) {
   const list = page.querySelector('#backup-list')
   if (!list) return
+  const stopSlowHint = startSlowHint(list, '备份列表加载较慢，仍在继续读取本地备份信息…', 8000)
   try {
     const backups = await api.listBackups()
+    stopSlowHint()
     renderBackups(list, backups)
   } catch (e) {
+    stopSlowHint()
     list.innerHTML = `<div style="color:var(--error)">${t('services.backupLoadFailed')}: ${escapeHtml(e?.message || e)}</div>`
   }
 }
@@ -1088,9 +1110,12 @@ async function loadConfigEditor(page) {
   const btnSaveOnly = page.querySelector('[data-action="save-config-only"]')
   if (!section || !area || !status || !btnSave || !btnSaveOnly) return
 
+  const stopSlowHint = startSlowHint(status, '配置编辑器加载较慢，仍在继续读取 openclaw.json …', 8000)
   try {
     const config = await api.readOpenclawConfig()
     const json = JSON.stringify(config, null, 2)
++    stopSlowHint()
+     _configOriginal = json
     _configOriginal = json
     area.value = json
     area.disabled = false
@@ -1116,6 +1141,7 @@ async function loadConfigEditor(page) {
       }
     }
   } catch (e) {
+    stopSlowHint()
     // openclaw.json 不存在，隐藏编辑器
     console.warn('[services] loadConfigEditor failed:', e)
     section.style.display = 'none'
