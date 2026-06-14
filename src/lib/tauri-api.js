@@ -407,6 +407,10 @@ export const api = {
   getVersionInfo: () => getVersionInfoViaJs(),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
+  getBundledRuntimeStatus: () => invoke('get_bundled_runtime_status'),
+  deployBundledNode: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_node', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
+  deployBundledGit: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_git', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
+  deployBundledRuntime: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_runtime', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   calibrateOpenclawConfig: (mode = 'inherit') => { invalidateInstallationCaches(); return invoke('calibrate_openclaw_config', { mode }).then(r => { invalidateInstallationCaches(); _debouncedReloadGateway(); return r }) },
   writeOpenclawConfig: (config, options = {}) => {
     invalidateGatewayCaches()

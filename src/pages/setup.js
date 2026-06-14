@@ -149,6 +149,14 @@ function buildStatusMeta(...parts) {
     .join(' · ')
 }
 
+function runtimeSourceLabel(source) {
+  const value = String(source || '').toLowerCase()
+  if (value === 'bundled') return t('setup.bundledRuntimeSource')
+  if (value === 'custom') return t('setup.customRuntimeSource')
+  if (value === 'system' || value === 'path' || value === 'registry' || value === 'github_desktop' || value === 'vscode') return t('setup.systemRuntimeSource')
+  return ''
+}
+
 function renderDetectionHint(pathValue, sourceLabel = '') {
   const normalizedPath = String(pathValue || '').trim()
   const normalizedSource = String(sourceLabel || '').trim()
@@ -157,6 +165,24 @@ function renderDetectionHint(pathValue, sourceLabel = '') {
     <div class="setup-inline-note" style="margin-top:8px;line-height:1.6">
       ${normalizedPath ? `<div><span style="color:var(--text-secondary)">${t('setup.detectedPathLabel')}:</span> <code class="setup-path-code" title="${escapeHtml(normalizedPath)}">${escapeHtml(normalizedPath)}</code></div>` : ''}
       ${normalizedSource ? `<div${normalizedPath ? ' style="margin-top:4px"' : ''}><span style="color:var(--text-secondary)">${t('setup.detectedFromLabel')}:</span> ${escapeHtml(normalizedSource)}</div>` : ''}
+    </div>
+  `
+}
+
+function renderBundledMeta(title, runtime, bundled) {
+  const manifest = bundled?.manifest || {}
+  const item = manifest?.[runtime] || {}
+  const lines = []
+  const version = runtime === 'node' ? (bundled?.node?.version || item?.bundledVersion) : (bundled?.git?.version || item?.bundledVersion)
+  const sha256 = runtime === 'node' ? (bundled?.node?.sha256 || item?.sha256) : (bundled?.git?.sha256 || item?.sha256)
+  if (version) lines.push(`<div><span style="color:var(--text-secondary)">${t('setup.bundledRuntimeVersionLabel')}:</span> <code class="setup-path-code">${escapeHtml(version)}</code></div>`)
+  if (sha256) lines.push(`<div style="margin-top:4px"><span style="color:var(--text-secondary)">${t('setup.bundledRuntimeShaLabel')}:</span> <code class="setup-path-code" title="${escapeHtml(sha256)}">${escapeHtml(sha256)}</code></div>`)
+  if (bundled?.vendorRoot) lines.push(`<div style="margin-top:4px"><span style="color:var(--text-secondary)">${t('setup.bundledRuntimeVendorLabel')}:</span> <code class="setup-path-code">${escapeHtml(bundled.vendorRoot)}</code></div>`)
+  if (!lines.length) return `<div class="setup-inline-note" style="margin-top:8px">${t('setup.bundledRuntimeNotReady')}</div>`
+  return `
+    <div class="setup-inline-note" style="margin-top:8px;line-height:1.6">
+      <div style="font-weight:600;margin-bottom:4px">${escapeHtml(title)}</div>
+      ${lines.join('')}
     </div>
   `
 }
@@ -222,12 +248,13 @@ async function runDetect(page) {
   // 清除缓存，确保拿到最新检测结果
   await refreshInstallDetectionCaches()
   // 并行检测 Node.js、Git、OpenClaw CLI、配置文件
-  const [nodeRes, gitRes, clawRes, configRes, versionRes] = await Promise.allSettled([
+  const [nodeRes, gitRes, clawRes, configRes, versionRes, bundledRes] = await Promise.allSettled([
     api.checkNode(),
     api.checkGit(),
     api.getServicesStatus(),
     api.checkInstallation(),
     api.getVersionInfo(),
+    api.getBundledRuntimeStatus(),
   ])
 
   const node = nodeRes.status === 'fulfilled' ? nodeRes.value : { installed: false }
@@ -237,13 +264,14 @@ async function runDetect(page) {
     && clawRes.value[0]?.cli_installed !== false
   let config = configRes.status === 'fulfilled' ? configRes.value : { installed: false }
   const version = versionRes.status === 'fulfilled' ? versionRes.value : null
+  const bundled = bundledRes.status === 'fulfilled' ? bundledRes.value : { supported: false }
 
   // Git 已安装时，自动配置 HTTPS 替代 SSH（静默执行）
   if (git.installed) {
     api.configureGitHttps().catch(() => {})
   }
 
-  renderSteps(page, { node, git, cliOk, config, version })
+  renderSteps(page, { node, git, cliOk, config, version, bundled })
 }
 
 function stepIcon(ok) {
@@ -251,16 +279,16 @@ function stepIcon(ok) {
   return `<span style="color:${color};font-weight:700;width:18px;display:inline-block">${ok ? '✓' : '✗'}</span>`
 }
 
-function renderSteps(page, { node, git, cliOk, config, version }) {
+function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
   const stepsEl = page.querySelector('#setup-steps')
   const nodeOk = node.installed
   const gitOk = git?.installed || false
   const allOk = nodeOk && cliOk && config.installed
   const nodeStatusMeta = nodeOk
-    ? buildStatusMeta(node.version || t('setup.statusReady'), node.path)
+    ? buildStatusMeta(node.version || t('setup.statusReady'), runtimeSourceLabel(node?.detectedFrom), node.path)
     : t('setup.statusActionNeeded')
   const gitStatusMeta = gitOk
-    ? buildStatusMeta(git.version || t('setup.statusReady'), git.path)
+    ? buildStatusMeta(git.version || t('setup.statusReady'), runtimeSourceLabel(git?.source || (git?.isCustom ? 'custom' : 'system')), git.path)
     : t('setup.statusActionNeeded')
   const cliPrimaryMeta = cliOk
     ? buildStatusMeta(version?.cli_source ? openclawSourceLabel(version.cli_source) : '', version?.current ? `v${version.current}` : t('setup.statusReady'))
@@ -295,8 +323,11 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
         <p style="color:var(--text-secondary);font-size:var(--font-size-sm);margin-bottom:var(--space-sm)">
           ${t('setup.stepNodeHint')}
         </p>
-        <button class="btn btn-primary btn-sm" id="btn-auto-install-node">${t('setup.autoInstallNodeBtn')}</button>
+        <button class="btn btn-primary btn-sm" id="btn-deploy-bundled-runtime">${t('setup.deployBundledRuntimeBtn')}</button>
+        <button class="btn btn-secondary btn-sm" id="btn-deploy-bundled-node">${t('setup.deployBundledNodeBtn')}</button>
+        <button class="btn btn-secondary btn-sm" id="btn-auto-install-node">${t('setup.autoInstallNodeBtn')}</button>
         <a class="btn btn-secondary btn-sm" href="https://nodejs.org/" target="_blank" rel="noopener">${t('setup.downloadNode')}</a>
+        ${bundled?.supported ? `<div class="setup-inline-note" style="margin-top:8px">${t('setup.bundledRuntimeSource')}</div>${renderBundledMeta('Node.js', 'node', bundled)}` : ''}
         <span class="form-hint" style="margin-left:8px">${t('setup.recheckAfterInstall')}</span>
         <div style="margin-top:var(--space-sm);padding:10px 12px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.6">
           <strong>${t('setup.nodeInstalledButNotDetected')}</strong>
@@ -331,7 +362,8 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
           ${t('setup.stepGitHint')}
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
+          <button class="btn btn-primary btn-sm" id="btn-deploy-bundled-git">${t('setup.deployBundledGitBtn')}</button>
+          <button class="btn btn-secondary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
           <button class="btn btn-secondary btn-sm" id="btn-scan-git">${t('settings.gitScan')}</button>
           <a class="btn btn-secondary btn-sm" href="https://git-scm.com/downloads" target="_blank" rel="noopener">${t('setup.manualDownload')}</a>
           <a class="btn btn-secondary btn-sm" href="http://221.0.81.162:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">${t('setup.backupDownload')}</a>
@@ -340,6 +372,7 @@ function renderSteps(page, { node, git, cliOk, config, version }) {
         <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5">
           ${t('setup.gitOptionalHint')}
         </div>
+        ${bundled?.supported ? renderBundledMeta('Git', 'git', bundled) : ''}
       </div>
     `
   }
@@ -662,6 +695,61 @@ function bindEvents(page, nodeOk, detectState) {
     window.location.hash = '/channels'
   })
 
+  page.querySelector('#btn-deploy-bundled-runtime')?.addEventListener('click', async () => {
+    const btn = page.querySelector('#btn-deploy-bundled-runtime')
+    const nodeResultEl = page.querySelector('#scan-result')
+    const gitResultEl = page.querySelector('#git-install-result')
+    if (!btn || !nodeResultEl) return
+    btn.disabled = true
+    btn.textContent = t('setup.deployingBundledRuntime')
+    nodeResultEl.style.display = 'block'
+    nodeResultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.bundledRuntimeDeployHint')}</span>`
+    if (gitResultEl) {
+      gitResultEl.style.display = 'block'
+      gitResultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.bundledRuntimeDeployHint')}</span>`
+    }
+    try {
+      const result = await api.deployBundledRuntime()
+      nodeResultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(result?.node || t('setup.bundledRuntimeDeploySuccess'))}</span>`
+      if (gitResultEl) {
+        gitResultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(result?.git || t('setup.bundledRuntimeDeploySuccess'))}</span>`
+      }
+      api.configureGitHttps().catch(() => {})
+      toast(t('setup.bundledRuntimeDeploySuccess'), 'success')
+      setTimeout(() => runDetect(page), 500)
+    } catch (e) {
+      const msg = escapeHtml(e?.message || e || t('setup.deployingUnsupported'))
+      nodeResultEl.innerHTML = `<span style="color:var(--danger)">${msg}</span>`
+      if (gitResultEl) gitResultEl.innerHTML = `<span style="color:var(--danger)">${msg}</span>`
+      toast(String(e?.message || t('setup.deployingUnsupported')), 'warning')
+    } finally {
+      btn.disabled = false
+      btn.textContent = t('setup.deployBundledRuntimeBtn')
+    }
+  })
+
+  page.querySelector('#btn-deploy-bundled-node')?.addEventListener('click', async () => {
+    const btn = page.querySelector('#btn-deploy-bundled-node')
+    const resultEl = page.querySelector('#scan-result')
+    if (!btn || !resultEl) return
+    btn.disabled = true
+    btn.textContent = t('setup.deployingBundledNode')
+    resultEl.style.display = 'block'
+    resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.bundledRuntimeDeployHint')}</span>`
+    try {
+      const msg = await api.deployBundledNode()
+      resultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(msg)}</span>`
+      toast(t('setup.bundledNodeDeploySuccess'), 'success')
+      setTimeout(() => runDetect(page), 500)
+    } catch (e) {
+      resultEl.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e?.message || e || t('setup.deployingUnsupported'))}</span>`
+      toast(String(e?.message || t('setup.deployingUnsupported')), 'warning')
+    } finally {
+      btn.disabled = false
+      btn.textContent = t('setup.deployBundledNodeBtn')
+    }
+  })
+
   // 一键安装 Node.js
   page.querySelector('#btn-auto-install-node')?.addEventListener('click', async () => {
     const btn = page.querySelector('#btn-auto-install-node')
@@ -709,6 +797,29 @@ function bindEvents(page, nodeOk, detectState) {
     } finally {
       btn.disabled = false
       btn.textContent = t('setup.autoInstallNodeBtn')
+    }
+  })
+
+  page.querySelector('#btn-deploy-bundled-git')?.addEventListener('click', async () => {
+    const btn = page.querySelector('#btn-deploy-bundled-git')
+    const resultEl = page.querySelector('#git-install-result')
+    if (!btn || !resultEl) return
+    btn.disabled = true
+    btn.textContent = t('setup.deployingBundledGit')
+    resultEl.style.display = 'block'
+    resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.bundledRuntimeDeployHint')}</span>`
+    try {
+      const msg = await api.deployBundledGit()
+      resultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(msg)}</span>`
+      toast(t('setup.bundledGitDeploySuccess'), 'success')
+      api.configureGitHttps().catch(() => {})
+      setTimeout(() => runDetect(page), 500)
+    } catch (e) {
+      resultEl.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e?.message || e || t('setup.deployingUnsupported'))}</span>`
+      toast(String(e?.message || t('setup.deployingUnsupported')), 'warning')
+    } finally {
+      btn.disabled = false
+      btn.textContent = t('setup.deployBundledGitBtn')
     }
   })
 

@@ -43,7 +43,8 @@
     ],
     "resources": [
       "resources/Star-Office-UI-master/**/*",
-      "resources/codex提示词/**/*"
+      "resources/codex提示词/**/*",
+      "resources/runtime/**/*"
     ],
     "windows": {
       "webviewInstallMode": {

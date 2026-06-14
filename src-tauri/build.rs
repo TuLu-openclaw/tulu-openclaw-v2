@@ -2,6 +2,7 @@ fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     sync_resource_dir(&manifest_dir, "Star-Office-UI-master");
     sync_resource_dir(&manifest_dir, "codex提示词");
+    sync_resource_dir(&manifest_dir, "runtime");
 
     tauri_build::build()
 }
@@ -29,13 +30,9 @@ fn sync_resource_dir(manifest_dir: &str, name: &str) {
     );
 
     if src.exists() {
-        if !dst.exists() {
-            match copy_dir_recursive(&src, &dst) {
-                Ok(()) => println!("cargo:warning={} copied OK", name),
-                Err(e) => println!("cargo:warning={} copy FAILED: {}", name, e),
-            }
-        } else {
-            println!("cargo:warning={} dst already exists, skipping copy", name);
+        match copy_dir_recursive(&src, &dst) {
+            Ok(()) => println!("cargo:warning={} synced OK", name),
+            Err(e) => println!("cargo:warning={} copy FAILED: {}", name, e),
         }
     } else {
         println!("cargo:warning={} src NOT FOUND", name);

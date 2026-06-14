@@ -11,6 +11,8 @@ use std::fs;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(target_os = "windows")]
+use tauri::Manager;
 
 use crate::models::types::VersionInfo;
 
@@ -4602,6 +4604,9 @@ fn collect_windows_registry_node_dirs() -> Vec<PathBuf> {
 /// 根据 node 路径推断其来源
 fn detect_node_source(node_path: &str) -> String {
     let path_lower = node_path.to_lowercase();
+    if path_lower.contains("\\星枢openclaw\\runtime\\node") {
+        return "bundled".to_string();
+    }
     let path_obj = std::path::Path::new(node_path);
 
     // 检查父目录
@@ -6255,6 +6260,318 @@ pub fn write_panel_config(mut config: Value) -> Result<(), String> {
     fs::write(&path, json).map_err(|e| format!("写入失败: {e}"))
 }
 
+#[cfg(target_os = "windows")]
+const BUNDLED_RUNTIME_VENDOR_ROOT: &str = "runtime\\windows-x64";
+
+#[cfg(target_os = "windows")]
+fn windows_runtime_root() -> PathBuf {
+    std::env::var("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| super::default_openclaw_dir())
+        .join("星枢OpenClaw")
+        .join("runtime")
+}
+
+#[cfg(target_os = "windows")]
+fn bundled_runtime_status_value(
+    source_name: &str,
+    available: bool,
+    deployed: bool,
+    version: Option<String>,
+    path: Option<String>,
+    source: &str,
+    sha256: Option<String>,
+) -> Value {
+    json!({
+        "name": source_name,
+        "available": available,
+        "deployed": deployed,
+        "version": version,
+        "path": path,
+        "source": source,
+        "sha256": sha256,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    if !src.exists() {
+        return Err(format!("资源目录不存在: {}", src.to_string_lossy()));
+    }
+    fs::create_dir_all(dst).map_err(|e| format!("创建目录失败: {e}"))?;
+    for entry in fs::read_dir(src).map_err(|e| format!("读取目录失败: {e}"))? {
+        let entry = entry.map_err(|e| format!("读取目录项失败: {e}"))?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &target)?;
+        } else {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+            }
+            fs::copy(&path, &target).map_err(|e| format!("复制文件失败: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn runtime_resource_dir(app: &tauri::AppHandle, component: &str) -> Result<PathBuf, String> {
+    let resolver = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("获取资源目录失败: {e}"))?;
+    let base = resolver
+        .join("resources")
+        .join("runtime")
+        .join("windows-x64")
+        .join(component);
+    if base.exists() {
+        Ok(base)
+    } else {
+        Err(format!(
+            "未找到内置 {} 资源目录: {}",
+            component,
+            base.to_string_lossy()
+        ))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn runtime_manifest_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let resolver = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("获取资源目录失败: {e}"))?;
+    Ok(resolver
+        .join("resources")
+        .join("runtime")
+        .join("windows-x64")
+        .join("manifest.json"))
+}
+
+#[cfg(target_os = "windows")]
+fn read_runtime_manifest(app: &tauri::AppHandle) -> Result<Value, String> {
+    let path = runtime_manifest_path(app)?;
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("读取运行时清单失败 {}: {e}", path.to_string_lossy()))?;
+    serde_json::from_str(&content).map_err(|e| format!("解析运行时清单失败: {e}"))
+}
+
+#[cfg(target_os = "windows")]
+fn update_panel_runtime_binding(
+    key_path: &str,
+    path_value: &str,
+    source_key: &str,
+) -> Result<(), String> {
+    let mut config = read_panel_config()?;
+    if !config.is_object() {
+        config = json!({});
+    }
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert(key_path.to_string(), Value::String(path_value.to_string()));
+        obj.insert(source_key.to_string(), Value::String("bundled".to_string()));
+    }
+    write_panel_config(config)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_git_source(git_path: &str, is_custom: bool) -> String {
+    let path_lower = git_path.to_lowercase();
+    if path_lower.contains("\\星枢openclaw\\runtime\\git\\") {
+        return "bundled".to_string();
+    }
+    if is_custom {
+        return "custom".to_string();
+    }
+    if path_lower.contains("githubdesktop") {
+        return "github_desktop".to_string();
+    }
+    if path_lower.contains("vscode") {
+        return "vscode".to_string();
+    }
+    if path_lower.contains("program files") || path_lower.contains("\\git\\cmd\\git.exe") {
+        return "system".to_string();
+    }
+    "path".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn manifest_component_field(manifest: &Value, component: &str, field: &str) -> Option<String> {
+    manifest
+        .get(component)
+        .and_then(|v| v.get(field))
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn detect_bundled_node_status(app: &tauri::AppHandle, manifest: Option<&Value>) -> Value {
+    let target_dir = windows_runtime_root().join("node");
+    let node_exe = target_dir.join("node.exe");
+    let manifest_version = manifest.and_then(|m| manifest_component_field(m, "node", "bundledVersion"));
+    let manifest_sha256 = manifest.and_then(|m| manifest_component_field(m, "node", "sha256"));
+    let version = verify_node_executable(&node_exe).and_then(|path| {
+        let mut cmd = Command::new(path);
+        cmd.arg("--version");
+        cmd.creation_flags(0x08000000);
+        cmd.output().ok().and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+    });
+    bundled_runtime_status_value(
+        "node",
+        runtime_resource_dir(app, "node").is_ok(),
+        node_exe.exists(),
+        version.or(manifest_version),
+        if node_exe.exists() {
+            Some(target_dir.to_string_lossy().to_string())
+        } else {
+            None
+        },
+        "bundled",
+        manifest_sha256,
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn detect_bundled_git_status(app: &tauri::AppHandle, manifest: Option<&Value>) -> Value {
+    let target_dir = windows_runtime_root().join("git");
+    let git_exe = target_dir.join("cmd").join("git.exe");
+    let manifest_version = manifest.and_then(|m| manifest_component_field(m, "git", "bundledVersion"));
+    let manifest_sha256 = manifest.and_then(|m| manifest_component_field(m, "git", "sha256"));
+    let version = verify_git_executable(&git_exe).and_then(|path| {
+        let mut cmd = Command::new(path);
+        cmd.arg("--version");
+        cmd.creation_flags(0x08000000);
+        cmd.output().ok().and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+    });
+    bundled_runtime_status_value(
+        "git",
+        runtime_resource_dir(app, "git").is_ok(),
+        git_exe.exists(),
+        version.or(manifest_version),
+        if git_exe.exists() {
+            Some(git_exe.to_string_lossy().to_string())
+        } else {
+            None
+        },
+        "bundled",
+        manifest_sha256,
+    )
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn get_bundled_runtime_status() -> Result<Value, String> {
+    Ok(json!({
+        "supported": false,
+        "node": { "available": false, "deployed": false },
+        "git": { "available": false, "deployed": false }
+    }))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn get_bundled_runtime_status(app: tauri::AppHandle) -> Result<Value, String> {
+    let manifest = read_runtime_manifest(&app).ok();
+    Ok(json!({
+        "supported": true,
+        "vendorRoot": BUNDLED_RUNTIME_VENDOR_ROOT,
+        "manifest": manifest,
+        "node": detect_bundled_node_status(&app, manifest.as_ref()),
+        "git": detect_bundled_git_status(&app, manifest.as_ref())
+    }))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn deploy_bundled_node(_app: tauri::AppHandle) -> Result<String, String> {
+    Err("当前仅支持 Windows 内置 Node.js 部署".to_string())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn deploy_bundled_node(app: tauri::AppHandle) -> Result<String, String> {
+    let _manifest = read_runtime_manifest(&app)?;
+    let src = runtime_resource_dir(&app, "node")?;
+    let target_root = windows_runtime_root();
+    fs::create_dir_all(&target_root).map_err(|e| format!("创建 runtime 根目录失败: {e}"))?;
+    let target = target_root.join("node");
+    let temp = target_root.join("node.tmp");
+    if temp.exists() {
+        let _ = fs::remove_dir_all(&temp);
+    }
+    if target.exists() {
+        let _ = fs::remove_dir_all(&target);
+    }
+    copy_dir_recursive(&src, &temp)?;
+    let node_exe = temp.join("node.exe");
+    let verified = verify_node_executable(&node_exe).ok_or("内置 Node.js 校验失败")?;
+    fs::rename(&temp, &target).map_err(|e| format!("部署 Node.js 失败: {e}"))?;
+    update_panel_runtime_binding("nodePath", &target.to_string_lossy(), "nodeSource")?;
+    super::refresh_enhanced_path();
+    crate::commands::service::invalidate_cli_detection_cache();
+    Ok(format!("已部署内置 Node.js: {}", verified))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn deploy_bundled_git(_app: tauri::AppHandle) -> Result<String, String> {
+    Err("当前仅支持 Windows 内置 Git 部署".to_string())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn deploy_bundled_git(app: tauri::AppHandle) -> Result<String, String> {
+    let _manifest = read_runtime_manifest(&app)?;
+    let src = runtime_resource_dir(&app, "git")?;
+    let target_root = windows_runtime_root();
+    fs::create_dir_all(&target_root).map_err(|e| format!("创建 runtime 根目录失败: {e}"))?;
+    let target = target_root.join("git");
+    let temp = target_root.join("git.tmp");
+    if temp.exists() {
+        let _ = fs::remove_dir_all(&temp);
+    }
+    if target.exists() {
+        let _ = fs::remove_dir_all(&target);
+    }
+    copy_dir_recursive(&src, &temp)?;
+    let git_exe = temp.join("cmd").join("git.exe");
+    let verified = verify_git_executable(&git_exe).ok_or("内置 Git 校验失败")?;
+    fs::rename(&temp, &target).map_err(|e| format!("部署 Git 失败: {e}"))?;
+    update_panel_runtime_binding(
+        "gitPath",
+        &target.join("cmd").join("git.exe").to_string_lossy(),
+        "gitSource",
+    )?;
+    Ok(format!("已部署内置 Git: {}", verified))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn deploy_bundled_runtime(_app: tauri::AppHandle) -> Result<Value, String> {
+    Err("当前仅支持 Windows 内置运行时部署".to_string())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn deploy_bundled_runtime(app: tauri::AppHandle) -> Result<Value, String> {
+    let node = deploy_bundled_node(app.clone())?;
+    let git = deploy_bundled_git(app)?;
+    Ok(json!({ "node": node, "git": git }))
+}
+
 /// 重启应用（用于设置变更后自动重启）
 #[tauri::command]
 pub async fn relaunch_app(app: tauri::AppHandle) -> Result<(), String> {
@@ -6327,8 +6644,13 @@ pub fn check_git() -> Result<Value, String> {
     let mut result = serde_json::Map::new();
     let configured = configured_git_path();
     let git = configured.clone().unwrap_or_else(|| "git".into());
-    let is_custom = configured.is_some();
-    let git_path = if is_custom {
+    let panel_cfg = read_panel_config().unwrap_or_else(|_| json!({}));
+    let declared_source = panel_cfg
+        .get("gitSource")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    let is_custom = configured.is_some() && declared_source.as_deref() != Some("bundled");
+    let git_path = if configured.is_some() {
         Some(git.clone())
     } else {
         find_git_path()
@@ -6340,19 +6662,36 @@ pub fn check_git() -> Result<Value, String> {
     match cmd.output() {
         Ok(o) if o.status.success() => {
             let ver = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            let git_path_value = git_path.clone();
             result.insert("installed".into(), Value::Bool(true));
             result.insert("version".into(), Value::String(ver));
             result.insert(
                 "path".into(),
-                git_path.map(Value::String).unwrap_or(Value::Null),
+                git_path_value.map(Value::String).unwrap_or(Value::Null),
             );
             result.insert("isCustom".into(), Value::Bool(is_custom));
+            result.insert(
+                "source".into(),
+                Value::String(
+                    git_path
+                        .as_deref()
+                        .map(|path| detect_git_source(path, is_custom))
+                        .unwrap_or_else(|| {
+                            declared_source
+                                .clone()
+                                .unwrap_or_else(|| "path".to_string())
+                        }),
+                ),
+            );
         }
         _ => {
             result.insert("installed".into(), Value::Bool(false));
             result.insert("version".into(), Value::Null);
             result.insert("path".into(), Value::Null);
             result.insert("isCustom".into(), Value::Bool(is_custom));
+            if let Some(source) = declared_source {
+                result.insert("source".into(), Value::String(source));
+            }
         }
     }
     Ok(Value::Object(result))
