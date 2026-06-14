@@ -6718,10 +6718,7 @@ pub async fn auto_install_git(app: tauri::AppHandle) -> Result<String, String> {
             let _ = app.emit("upgrade-log", "Git 安装成功！");
             return Ok("Git 已安装".to_string());
         }
-        Err(
-            "Git 安装失败，请手动执行: sudo apt install git"
-                .to_string(),
-        )
+        Err("Git 安装失败，请手动执行: sudo apt install git".to_string())
     }
 }
 
