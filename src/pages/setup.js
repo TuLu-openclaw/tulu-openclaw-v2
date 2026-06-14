@@ -287,9 +287,10 @@ function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
   const nodeStatusMeta = nodeOk
     ? buildStatusMeta(node.version || t('setup.statusReady'), runtimeSourceLabel(node?.detectedFrom), node.path)
     : t('setup.statusActionNeeded')
+  const gitBundledStrategy = bundled?.manifest?.git?.strategy || 'bundled'
   const gitStatusMeta = gitOk
     ? buildStatusMeta(git.version || t('setup.statusReady'), runtimeSourceLabel(git?.source || (git?.isCustom ? 'custom' : 'system')), git.path)
-    : t('setup.statusActionNeeded')
+    : (gitBundledStrategy === 'system' ? t('setup.systemRuntimeSource') : t('setup.statusActionNeeded'))
   const cliPrimaryMeta = cliOk
     ? buildStatusMeta(version?.cli_source ? openclawSourceLabel(version.cli_source) : '', version?.current ? `v${version.current}` : t('setup.statusReady'))
     : ''
@@ -362,7 +363,7 @@ function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
           ${t('setup.stepGitHint')}
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" id="btn-deploy-bundled-git">${t('setup.deployBundledGitBtn')}</button>
+          ${gitBundledStrategy === 'system' ? '' : `<button class="btn btn-primary btn-sm" id="btn-deploy-bundled-git">${t('setup.deployBundledGitBtn')}</button>`}
           <button class="btn btn-secondary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
           <button class="btn btn-secondary btn-sm" id="btn-scan-git">${t('settings.gitScan')}</button>
           <a class="btn btn-secondary btn-sm" href="https://git-scm.com/downloads" target="_blank" rel="noopener">${t('setup.manualDownload')}</a>
@@ -370,7 +371,7 @@ function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
         </div>
         <div id="git-install-result" style="margin-top:var(--space-sm);display:none"></div>
         <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5">
-          ${t('setup.gitOptionalHint')}
+          ${gitBundledStrategy === 'system' ? t('setup.gitManualHint') : t('setup.gitOptionalHint')}
         </div>
         ${bundled?.supported ? renderBundledMeta('Git', 'git', bundled) : ''}
       </div>
@@ -712,7 +713,9 @@ function bindEvents(page, nodeOk, detectState) {
       const result = await api.deployBundledRuntime()
       nodeResultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(result?.node || t('setup.bundledRuntimeDeploySuccess'))}</span>`
       if (gitResultEl) {
-        gitResultEl.innerHTML = `<span style="color:var(--success)">✓ ${escapeHtml(result?.git || t('setup.bundledRuntimeDeploySuccess'))}</span>`
+        gitResultEl.innerHTML = result?.git
+          ? `<span style="color:var(--success)">✓ ${escapeHtml(result.git)}</span>`
+          : `<span style="color:var(--text-tertiary)">${t('setup.systemRuntimeSource')}</span>`
       }
       api.configureGitHttps().catch(() => {})
       toast(t('setup.bundledRuntimeDeploySuccess'), 'success')

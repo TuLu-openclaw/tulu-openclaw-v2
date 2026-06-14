@@ -2,9 +2,73 @@ fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     sync_resource_dir(&manifest_dir, "Star-Office-UI-master");
     sync_resource_dir(&manifest_dir, "codex提示词");
-    sync_resource_dir(&manifest_dir, "runtime");
+    sync_runtime_dir(&manifest_dir);
 
     tauri_build::build()
+}
+
+fn sync_runtime_dir(manifest_dir: &str) {
+    let src_root = std::path::Path::new(&manifest_dir)
+        .join("..")
+        .join("_vendor")
+        .join("runtime");
+    let dst_root = std::path::Path::new(&manifest_dir)
+        .join("resources")
+        .join("runtime");
+    let target_key = detect_runtime_target_key();
+    let src = src_root.join(&target_key);
+    let dst = dst_root.join(&target_key);
+
+    println!(
+        "cargo:warning=runtime target: {} src: {} (exists: {})",
+        target_key,
+        src.display(),
+        src.exists()
+    );
+    println!(
+        "cargo:warning=runtime dst: {} (exists: {})",
+        dst.display(),
+        dst.exists()
+    );
+
+    if src.exists() {
+        if dst_root.exists() {
+            let _ = std::fs::remove_dir_all(&dst_root);
+        }
+        std::fs::create_dir_all(&dst_root).ok();
+        match copy_dir_recursive(&src, &dst) {
+            Ok(()) => println!("cargo:warning=runtime synced OK for {}", target_key),
+            Err(e) => println!(
+                "cargo:warning=runtime copy FAILED for {}: {}",
+                target_key, e
+            ),
+        }
+    } else {
+        println!("cargo:warning=runtime src NOT FOUND for {}", target_key);
+    }
+}
+
+fn detect_runtime_target_key() -> String {
+    let target = std::env::var("TARGET").unwrap_or_default();
+    if target.contains("windows") && target.starts_with("x86_64") {
+        return "windows-x64".to_string();
+    }
+    if target.contains("windows") && target.starts_with("aarch64") {
+        return "windows-arm64".to_string();
+    }
+    if target.contains("apple-darwin") && target.starts_with("x86_64") {
+        return "macos-x64".to_string();
+    }
+    if target.contains("apple-darwin") && target.starts_with("aarch64") {
+        return "macos-arm64".to_string();
+    }
+    if target.contains("linux") && target.starts_with("x86_64") {
+        return "linux-x64".to_string();
+    }
+    if target.contains("linux") && target.starts_with("aarch64") {
+        return "linux-arm64".to_string();
+    }
+    "windows-x64".to_string()
 }
 
 fn sync_resource_dir(manifest_dir: &str, name: &str) {

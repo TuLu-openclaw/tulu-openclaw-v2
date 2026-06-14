@@ -11,6 +11,8 @@ node_modules/
 dist/
 dist-ssr/
 src-tauri/target/
+src-tauri/resources/runtime/
+_vendor/runtime-build/
 
 # IDE
 .vscode/

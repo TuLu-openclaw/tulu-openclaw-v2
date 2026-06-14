@@ -31,7 +31,8 @@
     "serve": "node scripts/serve.js",
     "chat-server": "node server/xingshu-chat-server.js",
     "version:sync": "node scripts/sync-version.js",
-    "version:set": "node scripts/sync-version.js"
+    "version:set": "node scripts/sync-version.js",
+    "runtime:prepare": "node scripts/prepare-runtime.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",

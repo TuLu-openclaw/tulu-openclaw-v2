@@ -77,10 +77,13 @@ jobs:
         platform:
           - name: Linux (x64)
             os: ubuntu-latest
+            runtimeTarget: linux-x64
           - name: macOS (ARM64)
             os: macos-latest
+            runtimeTarget: macos-arm64
           - name: Windows (x64)
             os: windows-latest
+            runtimeTarget: windows-x64
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -104,6 +107,9 @@ jobs:
             libssl-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev
+
+      - name: Prepare bundled runtime
+        run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Rust compile check
         working-directory: src-tauri
@@ -292,6 +298,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      - name: Prepare bundled runtime
+        run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Frontend build
         run: npm run build
