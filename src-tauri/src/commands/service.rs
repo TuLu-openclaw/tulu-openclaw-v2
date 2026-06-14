@@ -200,21 +200,28 @@ fn ensure_owned_gateway_or_err(pid: Option<u32>) -> Result<(), String> {
 async fn current_gateway_runtime(label: &str) -> (bool, Option<u32>) {
     #[cfg(target_os = "windows")]
     {
-        timeout(SERVICE_PROBE_TIMEOUT, async move { platform::check_service_status(0, label) })
-            .await
-            .unwrap_or((false, None))
+        timeout(SERVICE_PROBE_TIMEOUT, async move {
+            platform::check_service_status(0, label)
+        })
+        .await
+        .unwrap_or((false, None))
     }
     #[cfg(target_os = "macos")]
     {
-        timeout(SERVICE_PROBE_TIMEOUT, async move { platform::check_service_status(0, label) })
-            .await
-            .unwrap_or((false, None))
+        timeout(SERVICE_PROBE_TIMEOUT, async move {
+            platform::check_service_status(0, label)
+        })
+        .await
+        .unwrap_or((false, None))
     }
     #[cfg(target_os = "linux")]
     {
-        timeout(SERVICE_PROBE_TIMEOUT, platform::check_service_status(0, label))
-            .await
-            .unwrap_or((false, None))
+        timeout(
+            SERVICE_PROBE_TIMEOUT,
+            platform::check_service_status(0, label),
+        )
+        .await
+        .unwrap_or((false, None))
     }
 }
 
