@@ -3,7 +3,9 @@ use crate::utils::openclaw_command;
 /// 配置读写命令
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+#[cfg(target_os = "windows")]
+use std::collections::HashSet;
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
