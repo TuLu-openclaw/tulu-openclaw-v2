@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use crate::models::types::ServiceStatus;
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
+use tokio::time::timeout;
 
 /// OpenClaw 官方服务的友好名称映射
 fn description_map() -> HashMap<&'static str, &'static str> {
@@ -29,6 +30,7 @@ const GUARDIAN_STABLE_WINDOW: Duration = Duration::from_secs(120);
 const GUARDIAN_MAX_AUTO_RESTART: u32 = 3;
 const GUARDIAN_FAILURE_THRESHOLD: u32 = 3;
 const SERVICE_STATUS_CACHE_TTL: Duration = Duration::from_secs(5);
+const SERVICE_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Clone)]
 struct CachedServicesStatus {
@@ -198,15 +200,21 @@ fn ensure_owned_gateway_or_err(pid: Option<u32>) -> Result<(), String> {
 async fn current_gateway_runtime(label: &str) -> (bool, Option<u32>) {
     #[cfg(target_os = "windows")]
     {
-        platform::check_service_status(0, label)
+        timeout(SERVICE_PROBE_TIMEOUT, async move { platform::check_service_status(0, label) })
+            .await
+            .unwrap_or((false, None))
     }
     #[cfg(target_os = "macos")]
     {
-        platform::check_service_status(0, label)
+        timeout(SERVICE_PROBE_TIMEOUT, async move { platform::check_service_status(0, label) })
+            .await
+            .unwrap_or((false, None))
     }
     #[cfg(target_os = "linux")]
     {
-        platform::check_service_status(0, label).await
+        timeout(SERVICE_PROBE_TIMEOUT, platform::check_service_status(0, label))
+            .await
+            .unwrap_or((false, None))
     }
 }
 

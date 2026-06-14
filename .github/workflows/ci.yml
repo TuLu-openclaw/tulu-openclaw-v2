@@ -96,6 +96,15 @@ jobs:
       - name: Rust version
         run: rustc --version && cargo --version
 
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install runtime prepare dependencies
+        run: npm install
+
       - name: Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -109,6 +118,8 @@ jobs:
             libayatana-appindicator3-dev
 
       - name: Prepare bundled runtime
+        env:
+          RUNTIME_BASE_URL: http://221.0.81.162:9002/runtime
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Rust compile check

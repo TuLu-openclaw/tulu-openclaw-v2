@@ -7,6 +7,14 @@ import http from 'http'
 import { fileURLToPath } from 'url'
 import { execFileSync } from 'child_process'
 
+const DEFAULT_RUNTIME_BASE_URL = 'http://221.0.81.162:9002/runtime'
+const OFFICIAL_HOSTS = new Set([
+  'nodejs.org',
+  'github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+])
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const repoRoot = path.resolve(__dirname, '..')
@@ -38,8 +46,9 @@ for (const component of Object.keys(manifest.components)) {
     }
     continue
   }
+  const resolvedSource = resolveRuntimeSource(spec)
   const archivePath = path.join(buildRoot, spec.archive)
-  await download(spec.source, archivePath)
+  await downloadWithFallback(resolvedSource, spec.source, archivePath)
   if (spec.archiveSha256) {
     const actual = sha256File(archivePath)
     if (actual !== spec.archiveSha256.toLowerCase()) {
@@ -52,6 +61,8 @@ for (const component of Object.keys(manifest.components)) {
   materializeComponent(component, target, extractDir, outPlatformRoot)
   prepared[component] = {
     ...spec,
+    source: resolvedSource,
+    officialSource: spec.source,
     prepared: true
   }
 }
@@ -81,6 +92,41 @@ function sha256File(filePath) {
   const hash = crypto.createHash('sha256')
   hash.update(fs.readFileSync(filePath))
   return hash.digest('hex')
+}
+
+function resolveRuntimeSource(spec) {
+  const overrideBase = String(process.env.RUNTIME_BASE_URL || process.env.OPENCLAW_RUNTIME_BASE_URL || '').trim()
+  const mirrorBase = overrideBase || DEFAULT_RUNTIME_BASE_URL
+  if (!mirrorBase) return spec.source
+  try {
+    const sourceUrl = new URL(spec.source)
+    if (!OFFICIAL_HOSTS.has(sourceUrl.hostname)) return spec.source
+    return new URL(spec.archive, ensureTrailingSlash(mirrorBase)).toString()
+  } catch {
+    return spec.source
+  }
+}
+
+function ensureTrailingSlash(value) {
+  return value.endsWith('/') ? value : `${value}/`
+}
+
+async function downloadWithFallback(primaryUrl, fallbackUrl, dest) {
+  const tried = []
+  if (primaryUrl) {
+    tried.push(primaryUrl)
+    try {
+      await download(primaryUrl, dest)
+      return
+    } catch (error) {
+      console.warn(`[runtime] primary download failed: ${primaryUrl} -> ${error.message || error}`)
+      if (!fallbackUrl || fallbackUrl === primaryUrl) throw error
+    }
+  }
+  if (!fallbackUrl || tried.includes(fallbackUrl)) {
+    throw new Error(`Download failed for ${tried.join(' , ')}`)
+  }
+  await download(fallbackUrl, dest)
 }
 
 function download(url, dest) {
