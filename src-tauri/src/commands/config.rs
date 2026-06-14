@@ -3,7 +3,7 @@ use crate::utils::openclaw_command;
 /// 配置读写命令
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -362,7 +362,7 @@ fn verify_git_executable(path: &Path) -> Option<String> {
 #[cfg(target_os = "windows")]
 fn maybe_add_git_exe(
     candidates: &mut Vec<(String, String)>,
-    seen: &mut HashSet<String>,
+    seen: &mut std::collections::HashSet<String>,
     path: PathBuf,
     source: &str,
 ) {
@@ -4508,7 +4508,7 @@ fn verify_node_executable(path: &Path) -> Option<String> {
 #[cfg(target_os = "windows")]
 fn maybe_add_node_dir(
     candidates: &mut Vec<(String, String)>,
-    seen: &mut HashSet<String>,
+    seen: &mut std::collections::HashSet<String>,
     dir: PathBuf,
     source: &str,
 ) {
@@ -4710,7 +4710,7 @@ pub fn scan_node_paths() -> Result<Value, String> {
 
     let mut candidates: Vec<(String, String)> = vec![]; // (path, source)
     #[cfg(target_os = "windows")]
-    let mut discovered_dirs: HashSet<String> = HashSet::new();
+    let mut discovered_dirs: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     #[cfg(target_os = "windows")]
     {
@@ -6755,7 +6755,7 @@ pub fn scan_git_paths() -> Result<Value, String> {
     let mut found: Vec<Value> = vec![];
     let mut candidates: Vec<(String, String)> = vec![]; // (path, source)
     #[cfg(target_os = "windows")]
-    let mut discovered: HashSet<String> = HashSet::new();
+    let mut discovered: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     #[cfg(target_os = "windows")]
     {
