@@ -6425,7 +6425,6 @@ fn update_panel_runtime_binding(
     write_panel_config(config)
 }
 
-#[cfg(target_os = "windows")]
 fn detect_git_source(git_path: &str, is_custom: bool) -> String {
     let path_lower = git_path.to_lowercase();
     if path_lower.contains("\\星枢openclaw\\runtime\\git\\") {
@@ -7129,7 +7128,6 @@ pub async fn auto_install_git(app: tauri::AppHandle) -> Result<String, String> {
 /// 尝试自动安装 Node.js（Windows: winget; macOS: brew/pkg; Linux: apt/yum）
 #[tauri::command]
 pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> {
-    use std::process::Stdio;
     use tauri::Emitter;
 
     let _ = app.emit("upgrade-log", "正在尝试自动安装 Node.js...");
@@ -7137,6 +7135,7 @@ pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> 
     #[cfg(target_os = "windows")]
     {
         use std::io::{BufRead, BufReader};
+        use std::process::Stdio;
         let candidates: [(&str, [&str; 7]); 2] = [
             (
                 "OpenJS.NodeJS.LTS",
