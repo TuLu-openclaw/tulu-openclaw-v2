@@ -420,7 +420,11 @@ fn collect_windows_registry_git_paths() -> Vec<PathBuf> {
                             continue;
                         }
                         let path = PathBuf::from(&value);
-                        if path.extension().map(|ext| ext.eq_ignore_ascii_case("exe")).unwrap_or(false) {
+                        if path
+                            .extension()
+                            .map(|ext| ext.eq_ignore_ascii_case("exe"))
+                            .unwrap_or(false)
+                        {
                             paths.push(path);
                         } else {
                             let git_cmd = path.join(r"cmd\git.exe");
@@ -4699,7 +4703,12 @@ pub fn scan_node_paths() -> Result<Value, String> {
         let appdata = std::env::var("APPDATA").unwrap_or_default();
 
         if let Some(custom_dir) = configured_node_dir() {
-            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(custom_dir), "CUSTOM");
+            maybe_add_node_dir(
+                &mut candidates,
+                &mut discovered_dirs,
+                PathBuf::from(custom_dir),
+                "CUSTOM",
+            );
         }
 
         if let Ok(path_env) = std::env::var("PATH") {
@@ -4715,7 +4724,12 @@ pub fn scan_node_paths() -> Result<Value, String> {
 
         if let Ok(nvm_symlink) = std::env::var("NVM_SYMLINK") {
             if std::path::Path::new(&nvm_symlink).is_dir() {
-                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(nvm_symlink), "NVM_SYMLINK");
+                maybe_add_node_dir(
+                    &mut candidates,
+                    &mut discovered_dirs,
+                    PathBuf::from(nvm_symlink),
+                    "NVM_SYMLINK",
+                );
             }
         }
 
@@ -4741,7 +4755,8 @@ pub fn scan_node_paths() -> Result<Value, String> {
                     for entry in entries.flatten() {
                         let p = entry.path();
                         if p.is_dir() && p.join("node.exe").exists() {
-                            let is_active = is_nvm_active_version(nvm_dir.to_string_lossy().as_ref(), &p);
+                            let is_active =
+                                is_nvm_active_version(nvm_dir.to_string_lossy().as_ref(), &p);
                             let source = if is_active { "NVM_ACTIVE" } else { "NVM" };
                             maybe_add_node_dir(&mut candidates, &mut discovered_dirs, p, source);
                         }
@@ -4750,16 +4765,31 @@ pub fn scan_node_paths() -> Result<Value, String> {
             }
         }
 
-        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\.volta\bin", home.display())), "VOLTA");
+        maybe_add_node_dir(
+            &mut candidates,
+            &mut discovered_dirs,
+            PathBuf::from(format!(r"{}\.volta\bin", home.display())),
+            "VOLTA",
+        );
         if let Ok(volta_home) = std::env::var("VOLTA_HOME") {
             let volta_current = std::path::Path::new(&volta_home).join("current/bin");
             if volta_current.exists() {
-                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, volta_current, "VOLTA_ACTIVE");
+                maybe_add_node_dir(
+                    &mut candidates,
+                    &mut discovered_dirs,
+                    volta_current,
+                    "VOLTA_ACTIVE",
+                );
             }
         }
 
         if !localappdata.is_empty() {
-            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\fnm_multishells", localappdata)), "FNM_TEMP");
+            maybe_add_node_dir(
+                &mut candidates,
+                &mut discovered_dirs,
+                PathBuf::from(format!(r"{}\fnm_multishells", localappdata)),
+                "FNM_TEMP",
+            );
         }
         let fnm_base = std::env::var("FNM_DIR")
             .ok()
@@ -4767,7 +4797,12 @@ pub fn scan_node_paths() -> Result<Value, String> {
             .unwrap_or_else(|| std::path::Path::new(&appdata).join("fnm"));
         let fnm_current = fnm_base.join("current/installation");
         if fnm_current.is_dir() && fnm_current.join("node.exe").exists() {
-            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, fnm_current.clone(), "FNM_ACTIVE");
+            maybe_add_node_dir(
+                &mut candidates,
+                &mut discovered_dirs,
+                fnm_current.clone(),
+                "FNM_ACTIVE",
+            );
         }
         let fnm_versions = fnm_base.join("node-versions");
         if fnm_versions.is_dir() {
@@ -4775,7 +4810,11 @@ pub fn scan_node_paths() -> Result<Value, String> {
                 for entry in entries.flatten() {
                     let inst = entry.path().join("installation");
                     if inst.is_dir() && inst.join("node.exe").exists() {
-                        let source = if inst == fnm_current { "FNM_ACTIVE" } else { "FNM" };
+                        let source = if inst == fnm_current {
+                            "FNM_ACTIVE"
+                        } else {
+                            "FNM"
+                        };
                         maybe_add_node_dir(&mut candidates, &mut discovered_dirs, inst, source);
                     }
                 }
@@ -4783,16 +4822,41 @@ pub fn scan_node_paths() -> Result<Value, String> {
         }
 
         if !appdata.is_empty() {
-            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\npm", appdata)), "NPM_GLOBAL");
+            maybe_add_node_dir(
+                &mut candidates,
+                &mut discovered_dirs,
+                PathBuf::from(format!(r"{}\npm", appdata)),
+                "NPM_GLOBAL",
+            );
         }
         if let Some(prefix) = super::windows_npm_global_prefix() {
-            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(prefix), "NPM_GLOBAL");
+            maybe_add_node_dir(
+                &mut candidates,
+                &mut discovered_dirs,
+                PathBuf::from(prefix),
+                "NPM_GLOBAL",
+            );
         }
 
-        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\nodejs", pf)), "SYSTEM");
-        maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\nodejs", pf86)), "SYSTEM");
+        maybe_add_node_dir(
+            &mut candidates,
+            &mut discovered_dirs,
+            PathBuf::from(format!(r"{}\nodejs", pf)),
+            "SYSTEM",
+        );
+        maybe_add_node_dir(
+            &mut candidates,
+            &mut discovered_dirs,
+            PathBuf::from(format!(r"{}\nodejs", pf86)),
+            "SYSTEM",
+        );
         if !localappdata.is_empty() {
-            maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}\Programs\nodejs", localappdata)), "SYSTEM");
+            maybe_add_node_dir(
+                &mut candidates,
+                &mut discovered_dirs,
+                PathBuf::from(format!(r"{}\Programs\nodejs", localappdata)),
+                "SYSTEM",
+            );
         }
 
         for drive in &["C", "D", "E", "F", "G"] {
@@ -4814,7 +4878,12 @@ pub fn scan_node_paths() -> Result<Value, String> {
                 "DevTools\\Node",
                 "DevTools\\nodejs",
             ] {
-                maybe_add_node_dir(&mut candidates, &mut discovered_dirs, PathBuf::from(format!(r"{}:\{}", drive, relative)), "MANUAL");
+                maybe_add_node_dir(
+                    &mut candidates,
+                    &mut discovered_dirs,
+                    PathBuf::from(format!(r"{}:\{}", drive, relative)),
+                    "MANUAL",
+                );
             }
         }
     }
@@ -4870,7 +4939,8 @@ pub fn scan_node_paths() -> Result<Value, String> {
                     entry.insert("path".into(), Value::String(node_path_str));
                     entry.insert("version".into(), Value::String(ver));
                     entry.insert("source".into(), Value::String(source.clone()));
-                    let is_active = source.contains("ACTIVE") || *source == "PATH" || *source == "CUSTOM";
+                    let is_active =
+                        source.contains("ACTIVE") || *source == "PATH" || *source == "CUSTOM";
                     entry.insert("active".into(), Value::Bool(is_active));
                     found.push(Value::Object(entry));
                 }
@@ -6292,7 +6362,12 @@ pub fn scan_git_paths() -> Result<Value, String> {
         let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
 
         if let Some(custom_git) = configured_git_path() {
-            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(custom_git), "CUSTOM");
+            maybe_add_git_exe(
+                &mut candidates,
+                &mut discovered,
+                PathBuf::from(custom_git),
+                "CUSTOM",
+            );
         }
 
         if let Ok(path_env) = std::env::var("PATH") {
@@ -6310,13 +6385,35 @@ pub fn scan_git_paths() -> Result<Value, String> {
             maybe_add_git_exe(&mut candidates, &mut discovered, path, "REGISTRY");
         }
 
-        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\Git", pf)), "SYSTEM");
-        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\Git", pf86)), "SYSTEM");
+        maybe_add_git_exe(
+            &mut candidates,
+            &mut discovered,
+            PathBuf::from(format!(r"{}\Git", pf)),
+            "SYSTEM",
+        );
+        maybe_add_git_exe(
+            &mut candidates,
+            &mut discovered,
+            PathBuf::from(format!(r"{}\Git", pf86)),
+            "SYSTEM",
+        );
 
         for drive in &["C", "D", "E", "F", "G"] {
-            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\Git", drive)), "MANUAL");
-            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\Program Files\Git", drive)), "SYSTEM");
-            for sub in &["Tools", "Dev", "AI", "Apps", "Software", "Portable", "DevTools"] {
+            maybe_add_git_exe(
+                &mut candidates,
+                &mut discovered,
+                PathBuf::from(format!(r"{}:\Git", drive)),
+                "MANUAL",
+            );
+            maybe_add_git_exe(
+                &mut candidates,
+                &mut discovered,
+                PathBuf::from(format!(r"{}:\Program Files\Git", drive)),
+                "SYSTEM",
+            );
+            for sub in &[
+                "Tools", "Dev", "AI", "Apps", "Software", "Portable", "DevTools",
+            ] {
                 maybe_add_git_exe(
                     &mut candidates,
                     &mut discovered,
@@ -6343,7 +6440,12 @@ pub fn scan_git_paths() -> Result<Value, String> {
                         let p = entry.path();
                         if p.is_dir() {
                             let git_dir = p.join("resources").join("app").join("git");
-                            maybe_add_git_exe(&mut candidates, &mut discovered, git_dir, "GITHUB_DESKTOP");
+                            maybe_add_git_exe(
+                                &mut candidates,
+                                &mut discovered,
+                                git_dir,
+                                "GITHUB_DESKTOP",
+                            );
                         }
                     }
                 }
@@ -6356,19 +6458,49 @@ pub fn scan_git_paths() -> Result<Value, String> {
             maybe_add_git_exe(&mut candidates, &mut discovered, vscode_git, "VSCODE");
         }
 
-        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\Git\mingw64\bin", pf)), "MINGW");
+        maybe_add_git_exe(
+            &mut candidates,
+            &mut discovered,
+            PathBuf::from(format!(r"{}\Git\mingw64\bin", pf)),
+            "MINGW",
+        );
         for drive in &["C", "D"] {
-            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\msys64\usr\bin", drive)), "MSYS2");
-            maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}:\msys2\usr\bin", drive)), "MSYS2");
+            maybe_add_git_exe(
+                &mut candidates,
+                &mut discovered,
+                PathBuf::from(format!(r"{}:\msys64\usr\bin", drive)),
+                "MSYS2",
+            );
+            maybe_add_git_exe(
+                &mut candidates,
+                &mut discovered,
+                PathBuf::from(format!(r"{}:\msys2\usr\bin", drive)),
+                "MSYS2",
+            );
         }
 
         let home = dirs::home_dir().unwrap_or_default();
-        maybe_add_git_exe(&mut candidates, &mut discovered, home.join(r"scoop\apps\git\current"), "SCOOP");
-        maybe_add_git_exe(&mut candidates, &mut discovered, home.join(r"scoop\shims"), "SCOOP");
+        maybe_add_git_exe(
+            &mut candidates,
+            &mut discovered,
+            home.join(r"scoop\apps\git\current"),
+            "SCOOP",
+        );
+        maybe_add_git_exe(
+            &mut candidates,
+            &mut discovered,
+            home.join(r"scoop\shims"),
+            "SCOOP",
+        );
 
         let choco_dir = std::env::var("ChocolateyInstall")
             .unwrap_or_else(|_| r"C:\ProgramData\chocolatey".into());
-        maybe_add_git_exe(&mut candidates, &mut discovered, PathBuf::from(format!(r"{}\bin", choco_dir)), "CHOCOLATEY");
+        maybe_add_git_exe(
+            &mut candidates,
+            &mut discovered,
+            PathBuf::from(format!(r"{}\bin", choco_dir)),
+            "CHOCOLATEY",
+        );
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -6386,8 +6518,14 @@ pub fn scan_git_paths() -> Result<Value, String> {
         ));
         candidates.push(("/snap/bin/git".into(), "SNAP".into()));
         let home = dirs::home_dir().unwrap_or_default();
-        candidates.push((format!("{}/.nix-profile/bin/git", home.display()), "NIX".into()));
-        candidates.push((format!("{}/.linuxbrew/bin/git", home.display()), "BREW".into()));
+        candidates.push((
+            format!("{}/.nix-profile/bin/git", home.display()),
+            "NIX".into(),
+        ));
+        candidates.push((
+            format!("{}/.linuxbrew/bin/git", home.display()),
+            "BREW".into(),
+        ));
         candidates.push(("/home/linuxbrew/.linuxbrew/bin/git".into(), "BREW".into()));
     }
 
@@ -6627,7 +6765,10 @@ pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> 
 
         let mut last_err = String::new();
         for (pkg_id, args) in candidates {
-            let _ = app.emit("upgrade-log", format!("尝试使用 winget 安装 Node.js: {pkg_id}"));
+            let _ = app.emit(
+                "upgrade-log",
+                format!("尝试使用 winget 安装 Node.js: {pkg_id}"),
+            );
             let mut cmd = Command::new("winget");
             cmd.args(args)
                 .arg("--accept-source-agreements")
