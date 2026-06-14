@@ -314,6 +314,7 @@ fn configured_git_path() -> Option<String> {
         .filter(|custom| !custom.is_empty())
 }
 
+#[cfg(target_os = "windows")]
 fn normalize_git_candidate(path: &Path) -> PathBuf {
     if path.is_file() {
         return path.to_path_buf();
@@ -336,6 +337,7 @@ fn normalize_git_candidate(path: &Path) -> PathBuf {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn verify_git_executable(path: &Path) -> Option<String> {
     if !path.exists() {
         return None;
@@ -350,6 +352,7 @@ fn verify_git_executable(path: &Path) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn maybe_add_git_exe(
     candidates: &mut Vec<(String, String)>,
     seen: &mut HashSet<String>,
@@ -366,6 +369,7 @@ fn maybe_add_git_exe(
     }
 }
 
+#[cfg(target_os = "windows")]
 fn collect_windows_registry_git_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -4458,6 +4462,7 @@ fn find_node_path(enhanced_path: &str) -> Option<String> {
     None
 }
 
+#[cfg(target_os = "windows")]
 fn configured_node_dir() -> Option<String> {
     super::read_panel_config_value()
         .and_then(|v| v.get("nodePath")?.as_str().map(String::from))
@@ -4479,6 +4484,7 @@ fn normalize_node_candidate(path: &Path) -> PathBuf {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn verify_node_executable(path: &Path) -> Option<String> {
     if !path.exists() {
         return None;
@@ -4493,6 +4499,7 @@ fn verify_node_executable(path: &Path) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn maybe_add_node_dir(
     candidates: &mut Vec<(String, String)>,
     seen: &mut HashSet<String>,
@@ -4509,6 +4516,7 @@ fn maybe_add_node_dir(
     }
 }
 
+#[cfg(target_os = "windows")]
 fn collect_windows_registry_node_dirs() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
@@ -4692,6 +4700,7 @@ pub fn scan_node_paths() -> Result<Value, String> {
     let home = dirs::home_dir().unwrap_or_default();
 
     let mut candidates: Vec<(String, String)> = vec![]; // (path, source)
+    #[cfg(target_os = "windows")]
     let mut discovered_dirs: HashSet<String> = HashSet::new();
 
     #[cfg(target_os = "windows")]
@@ -6352,6 +6361,7 @@ pub fn check_git() -> Result<Value, String> {
 pub fn scan_git_paths() -> Result<Value, String> {
     let mut found: Vec<Value> = vec![];
     let mut candidates: Vec<(String, String)> = vec![]; // (path, source)
+    #[cfg(target_os = "windows")]
     let mut discovered: HashSet<String> = HashSet::new();
 
     #[cfg(target_os = "windows")]

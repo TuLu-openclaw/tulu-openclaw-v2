@@ -1529,6 +1529,7 @@ pub async fn run_channel_action(
                 }
             },
         )?;
+        let _ = handle.join();
         let text = lines_vec.join("\n");
         let _ = app.emit(
             "channel-action-progress",
@@ -1670,6 +1671,7 @@ pub async fn run_channel_action(
             }
         },
     )?;
+    let _ = handle.join();
     let message = if collected_lines.is_empty() {
         lines
             .lock()

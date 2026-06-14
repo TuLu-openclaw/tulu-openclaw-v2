@@ -558,7 +558,7 @@ async fn get_port_process(port: u16) -> String {
                 if line.is_empty() {
                     return String::new();
                 }
-                return format!("\n占用信息: {}", line);
+                format!("\n占用信息: {}", line)
             }
             #[cfg(not(target_os = "windows"))]
             if s.is_empty() {
