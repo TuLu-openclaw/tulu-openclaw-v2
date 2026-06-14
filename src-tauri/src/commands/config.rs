@@ -7250,6 +7250,7 @@ pub async fn auto_install_node(app: tauri::AppHandle) -> Result<String, String> 
     #[cfg(target_os = "linux")]
     {
         use std::io::{BufRead, BufReader};
+        use std::process::Stdio;
         let pkg_mgr = if Command::new("apt-get")
             .arg("--version")
             .output()
