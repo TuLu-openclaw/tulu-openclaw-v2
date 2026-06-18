@@ -268,12 +268,15 @@ jobs:
           - name: Windows (x64)
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            runtimeTarget: windows-x64
           - name: macOS (ARM64)
             os: macos-latest
             target: aarch64-apple-darwin
+            runtimeTarget: macos-arm64
           - name: Linux (x64)
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            runtimeTarget: linux-x64
 
     steps:
       - name: Checkout code
@@ -311,6 +314,8 @@ jobs:
         run: npm install
 
       - name: Prepare bundled runtime
+        env:
+          RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Frontend build
