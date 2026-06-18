@@ -232,7 +232,41 @@
   border-color: var(--border-focus);
 }
 
-/* 渠道绑定卡片 */
+/* 电商专属区 */
+.agent-ecom-section {
+  border: 1px solid var(--warning-muted);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warning-muted) 45%, transparent), transparent);
+}
+
+.agent-ecom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.agent-ecom-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.agent-ecom-item-full {
+  grid-column: 1 / -1;
+}
+
+.agent-ecom-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.agent-ecom-value {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  line-height: 1.65;
+}
+
 .agent-binding-card {
   display: flex;
   justify-content: space-between;

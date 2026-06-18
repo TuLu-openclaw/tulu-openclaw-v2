@@ -8,6 +8,31 @@ import { showModal, showConfirm } from '../components/modal.js'
 import { CHANNEL_LABELS } from '../lib/channel-labels.js'
 import { t } from '../lib/i18n.js'
 
+const ECOM_AGENT_PRESET = {
+  id: 'ecom-mover',
+  name: '全自动店铺搬运',
+  emoji: '🛒',
+}
+
+const ECOM_AGENT_BOOTSTRAP_FILES = [
+  {
+    name: 'SOUL.md',
+    content: `# SOUL.md - 全自动店铺搬运\n\n## 使命\n- 专注于电商商品搬运、选品、归档、上架与多平台同步。\n- 以 SPU 为主，SKU 作为子层。\n- 每轮选品结束后必须刷新平台数据。\n\n## 工作原则\n- 先确认再执行，遇到阻塞主动询问。\n- 允许多线路并行与子 Agent 拆分，但质量优先。\n- 不默认执行未授权、违规或有明显风险的搬运动作。\n\n## 内置能力\n- 平台技能池：1688、阿里、淘宝、天猫、抖音、小红书、京东、拼多多、闲鱼、转转、58同城、跨境。\n- 眼睛能力：页面观察、视觉分析、网页读取。\n- 默认提供首次自介绍与专属工作台。\n`,
+  },
+  {
+    name: 'IDENTITY.md',
+    content: `# IDENTITY.md - 全自动店铺搬运\n\n- Name: 全自动店铺搬运\n- Vibe: SPU-first、强制刷新、并行执行、质量优先\n- Emoji: 🛒\n- Eye: enabled\n- Domains: 1688 / 阿里 / 淘宝 / 天猫 / 抖音 / 小红书 / 京东 / 拼多多 / 闲鱼 / 转转 / 58同城 / 跨境\n`,
+  },
+  {
+    name: 'TOOLS.md',
+    content: `# TOOLS.md - 全自动店铺搬运\n\n## 默认工作台\n- 进货清单：SPU 主档、SKU 子项、供应商、价格、库存、图片、刷新时间。\n- 售卖清单：目标平台、目标店铺、售价、利润率、标题与详情页状态。\n- 眼睛能力：页面观察、视觉分析、网页阅读。\n\n## 默认策略\n- SPU-first，SKU only as child records。\n- 每轮选品后强制刷新。\n- 支持多线路并行与子 Agent 调度。\n- 凭据建议只记录用途与保存方式，不建议在这里裸写真实密码。\n`,
+  },
+]
+
+const ECOM_SKILL_KEYWORDS = [
+  'browser', 'web', 'scraping', 'obsidian', 'playwright', 'vision', 'fetch', 'shop', 'store', 'storyboard'
+]
+
 function escapeHtml(value = '') {
   return String(value).replace(/[&<>'"]/g, c => ({
     '&': '&amp;',
@@ -16,6 +41,16 @@ function escapeHtml(value = '') {
     "'": '&#39;',
     '"': '&quot;',
   }[c]))
+}
+
+function pickEcomSkills(skills = []) {
+  return (skills || [])
+    .filter(skill => skill && skill.eligible !== false && skill.disabled !== true)
+    .filter(skill => {
+      const hay = `${skill.name || ''} ${skill.description || ''}`.toLowerCase()
+      return ECOM_SKILL_KEYWORDS.some(keyword => hay.includes(keyword))
+    })
+    .map(skill => skill.name)
 }
 
 export async function render() {
@@ -30,6 +65,7 @@ export async function render() {
         <p class="page-subhint">${t('agents.detailHint')}</p>
       </div>
       <div class="page-actions">
+        <button class="btn btn-secondary" id="btn-add-ecom-agent">${t('agents.addEcomAgent')}</button>
         <button class="btn btn-primary" id="btn-add-agent">${t('agents.addAgent')}</button>
       </div>
     </div>
@@ -43,6 +79,7 @@ export async function render() {
   loadAgents(page, state)
 
   page.querySelector('#btn-add-agent').addEventListener('click', () => showAddAgentDialog(page, state))
+  page.querySelector('#btn-add-ecom-agent').addEventListener('click', () => createEcomAgent(page, state))
 
   return page
 }
@@ -265,6 +302,73 @@ async function showAddAgentDialog(page, state) {
       }
     }
   })
+}
+
+async function createEcomAgent(page, state) {
+  const exists = (state.agents || []).some(a => a.id === ECOM_AGENT_PRESET.id)
+  if (exists) {
+    toast(t('agents.ecomAgentExists'), 'info')
+    location.hash = `#/agent-detail?id=${encodeURIComponent(ECOM_AGENT_PRESET.id)}`
+    return
+  }
+
+  try {
+    const config = await api.readOpenclawConfig()
+    const providers = config?.models?.providers || {}
+    let model = ''
+    for (const [pk, pv] of Object.entries(providers)) {
+      const first = Array.isArray(pv.models) ? pv.models[0] : null
+      const mid = typeof first === 'string' ? first : first?.id
+      if (mid) {
+        model = `${pk}/${mid}`
+        break
+      }
+    }
+    if (!model) {
+      toast(t('agents.addModelsFirst'), 'warning')
+      return
+    }
+
+    const skillsResp = await api.skillsList().catch(() => ({ skills: [] }))
+    const enabledSkills = pickEcomSkills(skillsResp?.skills || [])
+
+    await api.addAgent(ECOM_AGENT_PRESET.id, model, null)
+    await api.updateAgentIdentity(ECOM_AGENT_PRESET.id, ECOM_AGENT_PRESET.name, ECOM_AGENT_PRESET.emoji)
+    await api.updateAgentConfig(ECOM_AGENT_PRESET.id, {
+      identity: {
+        name: ECOM_AGENT_PRESET.name,
+        emoji: ECOM_AGENT_PRESET.emoji,
+      },
+      skills: enabledSkills,
+      tools: {
+        profile: 'full',
+      },
+      profile: 'ecommerce',
+      metadata: {
+        preset: 'ecom-mover',
+        domain: 'ecommerce',
+        spuMode: 'spu-first',
+        workbench: {
+          enabled: true,
+          sourcingList: true,
+          sellingList: true,
+          parallelRoutes: true,
+          subAgents: true,
+          forceRefreshEachRound: true,
+        },
+      },
+    })
+    for (const file of ECOM_AGENT_BOOTSTRAP_FILES) {
+      await api.writeAgentFile(ECOM_AGENT_PRESET.id, file.name, file.content)
+    }
+
+    invalidate('list_agents', 'get_agent_detail')
+    await loadAgents(page, state)
+    toast(t('agents.ecomAgentCreated'), 'success')
+    location.hash = `#/agent-detail?id=${encodeURIComponent(ECOM_AGENT_PRESET.id)}`
+  } catch (e) {
+    toast(t('agents.createFailed') + ': ' + e, 'error')
+  }
 }
 
 async function showEditAgentDialog(page, state, id) {

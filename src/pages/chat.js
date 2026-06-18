@@ -28,6 +28,10 @@ const ACTIVE_GROUP_KEY = '星枢OpenClaw-active-group-v1'
 const GROUP_SESSION_CHANNEL_PREFIX = 'group-'
 const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
+const ECOM_INTRO_SEEN_KEY = '星枢OpenClaw-ecom-intro-seen-v1'
+const ECOM_WORKBENCH_SETTINGS_KEY = '星枢OpenClaw-ecom-workbench-settings-v1'
+const ECOM_TOOLS_SECTION_START = '<!-- ECOM_WORKBENCH_SETTINGS:START -->'
+const ECOM_TOOLS_SECTION_END = '<!-- ECOM_WORKBENCH_SETTINGS:END -->'
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -189,6 +193,10 @@ let _workspaceInfo = null, _workspaceCoreFiles = [], _workspaceTreeCache = new M
 let _workspaceCurrentAgentId = 'main', _workspaceCurrentFile = null, _workspacePreviewMode = false, _workspaceDirty = false
 let _workspaceLoadedContent = '', _workspaceLoading = false
 let _workspaceLoadSeq = 0, _workspaceOpenSeq = 0
+let _ecomWorkbenchEl = null
+let _ecomWorkbenchSettings = loadEcomWorkbenchSettings()
+let _ecomWorkbenchLoadedAgentId = ''
+let _ecomWorkbenchLoading = false
 
 export async function render() {
   const page = document.createElement('div')
@@ -327,6 +335,53 @@ export async function render() {
           </div>
         </div>
       </div>
+      <div class="chat-ecom-workbench" id="chat-ecom-workbench" style="display:none">
+        <div class="chat-ecom-header">
+          <div>
+            <div class="chat-ecom-title">全自动店铺搬运工作清单</div>
+            <div class="chat-ecom-subtitle">SPU 主档优先 · 每轮选品强制刷新 · 支持多线路并行与子Agent调度</div>
+          </div>
+          <div class="chat-ecom-badges">
+            <span class="chat-ecom-badge">SPU First</span>
+            <span class="chat-ecom-badge">实时刷新</span>
+            <span class="chat-ecom-badge">并行执行</span>
+          </div>
+        </div>
+        <div class="chat-ecom-toolbar">
+          <button class="btn btn-sm btn-ghost" id="btn-ecom-settings">配置凭据/策略</button>
+          <button class="btn btn-sm btn-ghost" id="btn-ecom-intro">查看首次说明</button>
+        </div>
+        <div class="chat-ecom-grid">
+          <section class="chat-ecom-card">
+            <div class="chat-ecom-card-title">进货清单</div>
+            <ul class="chat-ecom-list">
+              <li>SPU 主档 / 平台来源 / 供应商店铺 / 起批量 / 采购价 / 运费 / 库存状态</li>
+              <li>SKU 规格明细 / 图片素材状态 / 最近刷新时间 / 异常备注</li>
+              <li>每轮选品结束后强制刷新数据，防止继续在旧数据中决策</li>
+            </ul>
+          </section>
+          <section class="chat-ecom-card">
+            <div class="chat-ecom-card-title">售卖清单</div>
+            <ul class="chat-ecom-list">
+              <li>SPU 上架目标 / 目标平台 / 目标店铺 / 售价 / 利润率 / 标题优化状态</li>
+              <li>SKU 挂载关系 / 主图与详情页状态 / 库存同步状态 / 风险提示</li>
+              <li>关键动作需经过质量闸门，异常时第一时间询问用户</li>
+            </ul>
+          </section>
+          <section class="chat-ecom-card">
+            <div class="chat-ecom-card-title">执行策略</div>
+            <ul class="chat-ecom-list">
+              <li>默认允许多线路同步并行，优先保证质量再追求速度</li>
+              <li>遇到复杂任务可主动调度子Agent拆分处理后统一回收结果</li>
+              <li>支持主动补技能、凭据管理、平台地址管理与人工接管</li>
+            </ul>
+          </section>
+          <section class="chat-ecom-card chat-ecom-card-full">
+            <div class="chat-ecom-card-title">当前策略</div>
+            <div class="chat-ecom-settings-summary" id="chat-ecom-settings-summary"></div>
+          </section>
+        </div>
+      </div>
       <div class="chat-messages" id="chat-messages">
         <div class="typing-indicator" id="typing-indicator" style="display:none">
           <span></span><span></span><span></span>
@@ -455,7 +510,11 @@ export async function render() {
   _workspaceSaveBtn = page.querySelector('#chat-workspace-save')
   _workspaceReloadBtn = page.querySelector('#chat-workspace-reload')
   _workspacePreviewBtn = page.querySelector('#chat-workspace-preview-toggle')
+  _ecomWorkbenchEl = page.querySelector('#chat-ecom-workbench')
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
+  page.querySelector('#btn-ecom-settings')?.addEventListener('click', showEcomWorkbenchSettings)
+  page.querySelector('#btn-ecom-intro')?.addEventListener('click', () => appendEcomIntroMessage({ force: true }))
+  renderEcomWorkbenchSummary()
 
   bindEvents(page)
   bindConnectOverlay(page)
@@ -2096,6 +2155,182 @@ function updateSessionTitle() {
     el.textContent = group ? t('chat.groupChatTitle', { name: group.name }) : getDisplayLabel(_sessionKey)
   }
   syncWorkspaceContext(false)
+  updateEcomWorkbenchVisibility()
+}
+
+function updateEcomWorkbenchVisibility() {
+  if (!_ecomWorkbenchEl) return
+  const agentId = parseSessionAgent(_sessionKey) || 'main'
+  const visible = agentId === 'ecom-mover'
+  _ecomWorkbenchEl.style.display = visible ? '' : 'none'
+  if (visible) {
+    void loadEcomWorkbenchSettingsForAgent(agentId)
+    renderEcomWorkbenchSummary()
+    appendEcomIntroMessage()
+  }
+}
+
+function loadEcomWorkbenchSettings() {
+  try {
+    return {
+      platforms: '1688,淘宝,抖音',
+      credentialsNote: '',
+      forceRefreshEachRound: true,
+      enableParallelRoutes: true,
+      enableSubAgents: true,
+      enableVision: true,
+      skillPool: '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境',
+      ...(JSON.parse(localStorage.getItem(ECOM_WORKBENCH_SETTINGS_KEY) || '{}') || {}),
+    }
+  } catch {
+    return {
+      platforms: '1688,淘宝,抖音',
+      credentialsNote: '',
+      forceRefreshEachRound: true,
+      enableParallelRoutes: true,
+      enableSubAgents: true,
+      enableVision: true,
+      skillPool: '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境',
+    }
+  }
+}
+
+function saveEcomWorkbenchSettings() {
+  try { localStorage.setItem(ECOM_WORKBENCH_SETTINGS_KEY, JSON.stringify(_ecomWorkbenchSettings || {})) } catch {}
+}
+
+function renderEcomWorkbenchSummary() {
+  const el = _page?.querySelector('#chat-ecom-settings-summary')
+  if (!el) return
+  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  const rows = [
+    ['平台范围', settings.platforms || '未设置'],
+    ['凭据备注', settings.credentialsNote || '未填写（建议仅记录说明，不直接裸写真实密码）'],
+    ['每轮强制刷新', settings.forceRefreshEachRound ? '已开启' : '已关闭'],
+    ['多线路并行', settings.enableParallelRoutes ? '已开启' : '已关闭'],
+    ['子Agent调度', settings.enableSubAgents ? '已开启' : '已关闭'],
+    ['眼睛能力', settings.enableVision ? '已启用（页面观察/视觉分析）' : '未启用'],
+    ['技能池', settings.skillPool || '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境'],
+  ]
+  el.innerHTML = rows.map(([label, value]) => `<div class="chat-ecom-summary-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`).join('')
+}
+
+function encodeEcomWorkbenchSettings(settings) {
+  return `${ECOM_TOOLS_SECTION_START}\n\
+
+ecom_workbench:\n  platforms: ${JSON.stringify(settings.platforms || '')}\n  credentialsNote: ${JSON.stringify(settings.credentialsNote || '')}\n  forceRefreshEachRound: ${settings.forceRefreshEachRound ? 'true' : 'false'}\n  enableParallelRoutes: ${settings.enableParallelRoutes ? 'true' : 'false'}\n  enableSubAgents: ${settings.enableSubAgents ? 'true' : 'false'}\n  enableVision: ${settings.enableVision ? 'true' : 'false'}\n  skillPool: ${JSON.stringify(settings.skillPool || '')}\n${ECOM_TOOLS_SECTION_END}`
+}
+
+function parseEcomWorkbenchSettingsFromTools(content) {
+  const start = content.indexOf(ECOM_TOOLS_SECTION_START)
+  const end = content.indexOf(ECOM_TOOLS_SECTION_END)
+  if (start === -1 || end === -1 || end <= start) return null
+  const block = content.slice(start, end)
+  const parseQuoted = (key) => {
+    const m = block.match(new RegExp(`${key}:\\s+("(?:[^"\\\\]|\\\\.)*")`))
+    if (!m) return ''
+    try { return JSON.parse(m[1]) } catch { return '' }
+  }
+  const parseBool = (key, fallback = false) => {
+    const m = block.match(new RegExp(`${key}:\\s+(true|false)`))
+    return m ? m[1] === 'true' : fallback
+  }
+  return {
+    platforms: parseQuoted('platforms'),
+    credentialsNote: parseQuoted('credentialsNote'),
+    forceRefreshEachRound: parseBool('forceRefreshEachRound', true),
+    enableParallelRoutes: parseBool('enableParallelRoutes', true),
+    enableSubAgents: parseBool('enableSubAgents', true),
+    enableVision: parseBool('enableVision', true),
+    skillPool: parseQuoted('skillPool'),
+  }
+}
+
+async function loadEcomWorkbenchSettingsForAgent(agentId) {
+  if (!agentId || agentId !== 'ecom-mover' || _ecomWorkbenchLoading) return
+  if (_ecomWorkbenchLoadedAgentId === agentId) return
+  _ecomWorkbenchLoading = true
+  try {
+    const res = await api.readAgentFile(agentId, 'TOOLS.md')
+    const parsed = parseEcomWorkbenchSettingsFromTools(res?.content || '')
+    if (parsed) {
+      _ecomWorkbenchSettings = { ...loadEcomWorkbenchSettings(), ...parsed }
+      saveEcomWorkbenchSettings()
+      renderEcomWorkbenchSummary()
+    }
+    _ecomWorkbenchLoadedAgentId = agentId
+  } catch {
+  } finally {
+    _ecomWorkbenchLoading = false
+  }
+}
+
+async function persistEcomWorkbenchSettingsForAgent(agentId) {
+  if (!agentId || agentId !== 'ecom-mover') return
+  let current = ''
+  try {
+    const res = await api.readAgentFile(agentId, 'TOOLS.md')
+    current = res?.content || ''
+  } catch {}
+  const block = encodeEcomWorkbenchSettings(_ecomWorkbenchSettings)
+  let next = current || '# TOOLS.md\n\n'
+  if (next.includes(ECOM_TOOLS_SECTION_START) && next.includes(ECOM_TOOLS_SECTION_END)) {
+    next = next.replace(new RegExp(`${ECOM_TOOLS_SECTION_START}[\\s\\S]*?${ECOM_TOOLS_SECTION_END}`), block)
+  } else {
+    next = `${next.trimEnd()}\n\n${block}\n`
+  }
+  await api.writeAgentFile(agentId, 'TOOLS.md', next)
+  _ecomWorkbenchLoadedAgentId = agentId
+}
+
+
+function appendEcomIntroMessage(options = {}) {
+  const { force = false } = options
+  if (!_messagesEl || (parseSessionAgent(_sessionKey) || 'main') !== 'ecom-mover') return
+  const seenKey = `${ECOM_INTRO_SEEN_KEY}:${_sessionKey}`
+  if (!force) {
+    try {
+      if (localStorage.getItem(seenKey) === '1') return
+    } catch {}
+    if (_messagesEl.querySelector('.msg')) return
+  }
+  appendSystemMessage('你好，我是“全自动店铺搬运”。我会先按 SPU 主档组织商品，再挂 SKU 子规格；每轮选品结束后强制刷新平台数据；复杂任务会优先并行拆分并在关键节点向你确认。需要你提供的平台范围、店铺/账号信息、凭据保存方式、目标利润率，我不会默认执行未经确认的高风险搬运动作。')
+  try { localStorage.setItem(seenKey, '1') } catch {}
+}
+
+function showEcomWorkbenchSettings() {
+  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  showModal({
+    title: '全自动店铺搬运配置',
+    fields: [
+      { name: 'platforms', label: '平台范围', value: settings.platforms || '', placeholder: '如：1688,淘宝,抖音,小红书' },
+      { name: 'skillPool', label: '技能池', value: settings.skillPool || '', placeholder: '如：1688,阿里,淘宝,天猫,抖音...' },
+      { name: 'credentialsNote', label: '凭据备注', value: settings.credentialsNote || '', placeholder: '记录保存方式/账号说明，不建议直接裸写真实密码' },
+      { name: 'forceRefreshEachRound', label: '每轮选品后强制刷新', type: 'select', value: settings.forceRefreshEachRound ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
+      { name: 'enableParallelRoutes', label: '多线路并行', type: 'select', value: settings.enableParallelRoutes ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
+      { name: 'enableSubAgents', label: '子Agent调度', type: 'select', value: settings.enableSubAgents ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
+      { name: 'enableVision', label: '眼睛能力', type: 'select', value: settings.enableVision ? 'true' : 'false', options: [ { value: 'true', label: '启用页面观察/视觉分析' }, { value: 'false', label: '关闭' } ] },
+    ],
+    onConfirm: async (result) => {
+      _ecomWorkbenchSettings = {
+        platforms: (result.platforms || '').trim(),
+        skillPool: (result.skillPool || '').trim(),
+        credentialsNote: (result.credentialsNote || '').trim(),
+        forceRefreshEachRound: String(result.forceRefreshEachRound) !== 'false',
+        enableParallelRoutes: String(result.enableParallelRoutes) !== 'false',
+        enableSubAgents: String(result.enableSubAgents) !== 'false',
+        enableVision: String(result.enableVision) !== 'false',
+      }
+      saveEcomWorkbenchSettings()
+      renderEcomWorkbenchSummary()
+      try {
+        await persistEcomWorkbenchSettingsForAgent(parseSessionAgent(_sessionKey) || '')
+        toast('专属工作台配置已保存并同步到 Agent 工作区', 'success')
+      } catch (e) {
+        toast(`配置已保存到本地，但同步到 Agent 工作区失败: ${e?.message || e}`, 'warning')
+      }
+    }
+  })
 }
 
 function renameSession(key, labelEl) {

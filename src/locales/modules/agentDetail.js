@@ -79,4 +79,13 @@ export default {
   noSkills: _('未获取到可用 Skills', 'No Skills available'),
   skillDisabled: _('已禁用', 'Disabled'),
   skillUnavailable: _('环境未满足', 'Unavailable'),
+  ecommerceTitle: _('专属电商工作台', 'Dedicated Ecommerce Workbench'),
+  ecommerceDesc: _('为“全自动店铺搬运”提供专属说明、平台技能池、SPU 主档策略与并行执行约束。', 'Dedicated guidance, platform skill pool, SPU-first strategy, and parallel execution rules for the Automated Store Mover.'),
+  ecommerceIntro: _('首次使用时应主动介绍自身能力、工作内容、凭据管理入口，并在遇到阻塞时第一时间询问用户。', 'On first use, the agent should introduce its capabilities, work scope, credential entry points, and ask the user immediately when blocked.'),
+  ecommercePlatforms: _('平台技能池', 'Platform Skill Pool'),
+  ecommercePlatformsValue: _('1688 / 阿里 / 淘宝 / 天猫 / 抖音 / 小红书 / 京东 / 拼多多 / 闲鱼 / 转转 / 58同城 / 跨境', '1688 / Alibaba / Taobao / Tmall / Douyin / Xiaohongshu / JD / Pinduoduo / Xianyu / Zhuanzhuan / 58 / Cross-border'),
+  ecommerceDataMode: _('数据主策略', 'Primary Data Strategy'),
+  ecommerceDataModeValue: _('SPU 优先，SKU 作为子层；每轮选品后强制刷新最新平台数据。', 'SPU-first, SKU as child records; force refresh latest platform data after every sourcing round.'),
+  ecommerceExecution: _('执行策略', 'Execution Strategy'),
+  ecommerceExecutionValue: _('默认支持多线路并行、子 Agent 调度、质量闸门、异常上报与人工确认。', 'Defaults to parallel routes, sub-agent orchestration, quality gates, exception reporting, and human confirmation.'),
 }

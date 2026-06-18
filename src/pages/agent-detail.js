@@ -132,6 +132,8 @@ function renderOverview(container, state) {
   const d = state.detail
   if (!d) { container.innerHTML = ''; return }
 
+  const isEcomMover = d.id === 'ecom-mover'
+
   // 解析模型配置
   let primaryModel = ''
   let fallbacks = []
@@ -192,6 +194,8 @@ function renderOverview(container, state) {
         </div>
       </section>
 
+      ${isEcomMover ? renderEcomOverviewCard() : ''}
+
       <div class="agent-save-bar">
         <button class="btn btn-primary" id="btn-save-overview">${t('agentDetail.saveOverview')}</button>
       </div>
@@ -214,6 +218,33 @@ function renderOverview(container, state) {
 
   // 保存
   container.querySelector('#btn-save-overview').addEventListener('click', () => saveOverview(container, state))
+}
+
+function renderEcomOverviewCard() {
+  return `
+    <section class="agent-section agent-ecom-section">
+      <h3 class="agent-section-title">${t('agentDetail.ecommerceTitle')}</h3>
+      <p class="agent-section-desc">${t('agentDetail.ecommerceDesc')}</p>
+      <div class="agent-ecom-grid">
+        <div class="agent-ecom-item">
+          <div class="agent-ecom-label">${t('agentDetail.ecommercePlatforms')}</div>
+          <div class="agent-ecom-value">${t('agentDetail.ecommercePlatformsValue')}</div>
+        </div>
+        <div class="agent-ecom-item">
+          <div class="agent-ecom-label">${t('agentDetail.ecommerceDataMode')}</div>
+          <div class="agent-ecom-value">${t('agentDetail.ecommerceDataModeValue')}</div>
+        </div>
+        <div class="agent-ecom-item">
+          <div class="agent-ecom-label">${t('agentDetail.ecommerceExecution')}</div>
+          <div class="agent-ecom-value">${t('agentDetail.ecommerceExecutionValue')}</div>
+        </div>
+        <div class="agent-ecom-item agent-ecom-item-full">
+          <div class="agent-ecom-label">${t('agentDetail.name')}</div>
+          <div class="agent-ecom-value">${t('agentDetail.ecommerceIntro')}</div>
+        </div>
+      </div>
+    </section>
+  `
 }
 
 function renderModelSelect(id, selected, models) {

@@ -391,6 +391,117 @@
   z-index: var(--z-popover, 1000);
 }
 
+.chat-ecom-workbench {
+  margin: 12px 16px 0;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 26%, var(--border-primary));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--warning-muted) 34%, transparent), color-mix(in srgb, var(--bg-card) 96%, var(--bg-primary)));
+}
+
+.chat-ecom-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.chat-ecom-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.chat-ecom-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.chat-ecom-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-ecom-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chat-ecom-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-tertiary));
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chat-ecom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.chat-ecom-card {
+  background: color-mix(in srgb, var(--bg-secondary) 92%, var(--bg-card));
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.chat-ecom-card-full {
+  grid-column: 1 / -1;
+}
+
+.chat-ecom-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.chat-ecom-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  font-size: 12px;
+}
+
+.chat-ecom-settings-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.chat-ecom-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-primary) 70%, var(--bg-secondary));
+  border: 1px solid var(--border-primary);
+  font-size: 12px;
+}
+
+.chat-ecom-summary-row span {
+  color: var(--text-secondary);
+}
+
+.chat-ecom-summary-row strong {
+  color: var(--text-primary);
+  text-align: right;
+}
+
 .chat-workspace-header {
   display: flex;
   align-items: flex-start;
