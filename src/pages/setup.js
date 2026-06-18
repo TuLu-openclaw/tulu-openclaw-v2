@@ -367,7 +367,7 @@ function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
           <button class="btn btn-secondary btn-sm" id="btn-auto-install-git">${t('setup.autoInstallGitBtn')}</button>
           <button class="btn btn-secondary btn-sm" id="btn-scan-git">${t('settings.gitScan')}</button>
           <a class="btn btn-secondary btn-sm" href="https://git-scm.com/downloads" target="_blank" rel="noopener">${t('setup.manualDownload')}</a>
-          <a class="btn btn-secondary btn-sm" href="http://221.0.81.162:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">${t('setup.backupDownload')}</a>
+          <a class="btn btn-secondary btn-sm" href="http://124.220.22.11:9002/1772156650257000000/Git-2.53.0-64-bit.exe" target="_blank" rel="noopener">${t('setup.backupDownload')}</a>
         </div>
         <div id="git-install-result" style="margin-top:var(--space-sm);display:none"></div>
         <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5">

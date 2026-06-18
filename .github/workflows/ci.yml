@@ -119,7 +119,7 @@ jobs:
 
       - name: Prepare bundled runtime
         env:
-          RUNTIME_BASE_URL: http://221.0.81.162:9002/runtime
+          RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Rust compile check

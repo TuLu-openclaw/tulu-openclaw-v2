@@ -17,7 +17,7 @@ const GITHUB_RELEASE_API: &str =
 
 /// 全量客户端更新：走屠戮自定义更新清单。
 const FULL_UPDATE_MANIFEST_URL: &str =
-    "http://221.0.81.162:9002/1772156650257000000//屠戮龙虾更新.txt";
+    "http://124.220.22.11:9002/1772156650257000000//屠戮龙虾更新.txt";
 
 fn platform_key() -> &'static str {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]

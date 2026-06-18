@@ -7,13 +7,14 @@ import http from 'http'
 import { fileURLToPath } from 'url'
 import { execFileSync } from 'child_process'
 
-const DEFAULT_RUNTIME_BASE_URL = 'http://221.0.81.162:9002/runtime'
+const DEFAULT_RUNTIME_BASE_URL = 'http://124.220.22.11:9002/runtime'
 const OFFICIAL_HOSTS = new Set([
   'nodejs.org',
   'github.com',
   'objects.githubusercontent.com',
   'release-assets.githubusercontent.com',
 ])
+const IS_CI = ['1', 'true', 'yes'].includes(String(process.env.CI || '').toLowerCase())
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -96,7 +97,7 @@ function sha256File(filePath) {
 
 function resolveRuntimeSource(spec) {
   const overrideBase = String(process.env.RUNTIME_BASE_URL || process.env.OPENCLAW_RUNTIME_BASE_URL || '').trim()
-  const mirrorBase = overrideBase || DEFAULT_RUNTIME_BASE_URL
+  const mirrorBase = overrideBase || (!IS_CI ? DEFAULT_RUNTIME_BASE_URL : '')
   if (!mirrorBase) return spec.source
   try {
     const sourceUrl = new URL(spec.source)
