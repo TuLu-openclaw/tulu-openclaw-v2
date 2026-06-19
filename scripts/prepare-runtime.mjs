@@ -15,6 +15,9 @@ const OFFICIAL_HOSTS = new Set([
   'release-assets.githubusercontent.com',
 ])
 const IS_CI = ['1', 'true', 'yes'].includes(String(process.env.CI || '').toLowerCase())
+const DOWNLOAD_TIMEOUT_MS = Number(process.env.RUNTIME_DOWNLOAD_TIMEOUT_MS || 90_000)
+const DOWNLOAD_RETRIES = Math.max(1, Number(process.env.RUNTIME_DOWNLOAD_RETRIES || 3))
+const RETRY_DELAY_MS = Number(process.env.RUNTIME_RETRY_DELAY_MS || 2_000)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -117,25 +120,54 @@ async function downloadWithFallback(primaryUrl, fallbackUrl, dest) {
   if (primaryUrl) {
     tried.push(primaryUrl)
     try {
-      await download(primaryUrl, dest)
+      await downloadWithRetries(primaryUrl, dest)
       return
     } catch (error) {
       console.warn(`[runtime] primary download failed: ${primaryUrl} -> ${error.message || error}`)
+      fs.rmSync(dest, { force: true })
       if (!fallbackUrl || fallbackUrl === primaryUrl) throw error
     }
   }
   if (!fallbackUrl || tried.includes(fallbackUrl)) {
     throw new Error(`Download failed for ${tried.join(' , ')}`)
   }
-  await download(fallbackUrl, dest)
+  try {
+    await downloadWithRetries(fallbackUrl, dest)
+  } catch (error) {
+    fs.rmSync(dest, { force: true })
+    throw error
+  }
+}
+
+async function downloadWithRetries(url, dest) {
+  let lastError
+  for (let attempt = 1; attempt <= DOWNLOAD_RETRIES; attempt += 1) {
+    try {
+      await download(url, dest)
+      return
+    } catch (error) {
+      lastError = error
+      fs.rmSync(dest, { force: true })
+      if (attempt < DOWNLOAD_RETRIES) {
+        console.warn(`[runtime] download retry ${attempt}/${DOWNLOAD_RETRIES} failed: ${url} -> ${error.message || error}`)
+        await delay(RETRY_DELAY_MS * attempt)
+      }
+    }
+  }
+  throw lastError
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https:') ? https : http
-    client.get(url, (res) => {
+    const request = client.get(url, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return resolve(download(res.headers.location, dest))
+        request.destroy()
+        return resolve(download(new URL(res.headers.location, url).toString(), dest))
       }
       if (res.statusCode !== 200) {
         reject(new Error(`Download failed ${res.statusCode} for ${url}`))
@@ -145,7 +177,11 @@ function download(url, dest) {
       res.pipe(file)
       file.on('finish', () => file.close(resolve))
       file.on('error', reject)
-    }).on('error', reject)
+    })
+    request.setTimeout(DOWNLOAD_TIMEOUT_MS, () => {
+      request.destroy(new Error(`Download timed out after ${DOWNLOAD_TIMEOUT_MS}ms for ${url}`))
+    })
+    request.on('error', reject)
   })
 }
 
