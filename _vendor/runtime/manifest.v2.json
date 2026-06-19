@@ -16,28 +16,32 @@
         "bundledVersion": "v22.22.3",
         "archive": "node-v22.22.3-win-arm64.zip",
         "source": "https://nodejs.org/dist/v22.22.3/node-v22.22.3-win-arm64.zip",
-        "expectedEntry": "node/node.exe"
+        "expectedEntry": "node/node.exe",
+        "archiveSha256": "00be129a09e8872cd52d3bb8bba12412c5733d2224123a482a2dca4a6fbf2586"
       },
       "macos-x64": {
         "displayName": "Bundled Node.js",
         "bundledVersion": "v22.22.3",
         "archive": "node-v22.22.3-darwin-x64.tar.gz",
         "source": "https://nodejs.org/dist/v22.22.3/node-v22.22.3-darwin-x64.tar.gz",
-        "expectedEntry": "node/bin/node"
+        "expectedEntry": "node/bin/node",
+        "archiveSha256": "45830ba752fa0d892c6dcd640946669801293cac820a33591ded40ac075198ec"
       },
       "macos-arm64": {
         "displayName": "Bundled Node.js",
         "bundledVersion": "v22.22.3",
         "archive": "node-v22.22.3-darwin-arm64.tar.gz",
         "source": "https://nodejs.org/dist/v22.22.3/node-v22.22.3-darwin-arm64.tar.gz",
-        "expectedEntry": "node/bin/node"
+        "expectedEntry": "node/bin/node",
+        "archiveSha256": "0da7ff74ef8611328c8212f17943368713a2ad953fb7d89a8c8a0eae87c23207"
       },
       "linux-x64": {
         "displayName": "Bundled Node.js",
         "bundledVersion": "v22.22.3",
         "archive": "node-v22.22.3-linux-x64.tar.xz",
         "source": "https://nodejs.org/dist/v22.22.3/node-v22.22.3-linux-x64.tar.xz",
-        "expectedEntry": "node/bin/node"
+        "expectedEntry": "node/bin/node",
+        "archiveSha256": "2e5d13569282d016861fae7c8f935e741693c269101a5bebcf761a5376d1f99f"
       },
       "linux-arm64": {
         "displayName": "Bundled Node.js",

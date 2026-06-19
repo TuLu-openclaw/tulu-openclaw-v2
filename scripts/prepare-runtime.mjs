@@ -15,7 +15,7 @@ const OFFICIAL_HOSTS = new Set([
   'release-assets.githubusercontent.com',
 ])
 const IS_CI = ['1', 'true', 'yes'].includes(String(process.env.CI || '').toLowerCase())
-const DOWNLOAD_TIMEOUT_MS = Number(process.env.RUNTIME_DOWNLOAD_TIMEOUT_MS || 90_000)
+const DOWNLOAD_TIMEOUT_MS = Number(process.env.RUNTIME_DOWNLOAD_TIMEOUT_MS || 300_000)
 const DOWNLOAD_RETRIES = Math.max(1, Number(process.env.RUNTIME_DOWNLOAD_RETRIES || 3))
 const RETRY_DELAY_MS = Number(process.env.RUNTIME_RETRY_DELAY_MS || 2_000)
 
@@ -33,52 +33,60 @@ if (!target) {
   process.exit(1)
 }
 
-fs.mkdirSync(buildRoot, { recursive: true })
-const outPlatformRoot = path.join(outRoot, target)
-fs.rmSync(outPlatformRoot, { recursive: true, force: true })
-fs.mkdirSync(outPlatformRoot, { recursive: true })
+async function main() {
+  fs.mkdirSync(buildRoot, { recursive: true })
+  const outPlatformRoot = path.join(outRoot, target)
+  fs.rmSync(outPlatformRoot, { recursive: true, force: true })
+  fs.mkdirSync(outPlatformRoot, { recursive: true })
 
-const prepared = {}
-for (const component of Object.keys(manifest.components)) {
-  const spec = manifest.components[component]?.[target]
-  if (!spec) continue
-  if (spec.strategy === 'system') {
+  const prepared = {}
+  for (const component of Object.keys(manifest.components)) {
+    const spec = manifest.components[component]?.[target]
+    if (!spec) continue
+    if (spec.strategy === 'system') {
+      prepared[component] = {
+        ...spec,
+        prepared: false,
+        reason: 'system dependency'
+      }
+      continue
+    }
+    const resolvedSource = resolveRuntimeSource(spec)
+    const archivePath = path.join(buildRoot, spec.archive)
+    await downloadWithFallback(resolvedSource, spec.source, archivePath)
+    if (spec.archiveSha256) {
+      const actual = sha256File(archivePath)
+      if (actual !== spec.archiveSha256.toLowerCase()) {
+        throw new Error(`${component} archive sha256 mismatch: expected ${spec.archiveSha256}, got ${actual}`)
+      }
+    }
+    const extractDir = path.join(buildRoot, `${component}-extract`)
+    fs.mkdirSync(extractDir, { recursive: true })
+    extractArchive(archivePath, extractDir)
+    materializeComponent(component, target, extractDir, outPlatformRoot)
     prepared[component] = {
       ...spec,
-      prepared: false,
-      reason: 'system dependency'
-    }
-    continue
-  }
-  const resolvedSource = resolveRuntimeSource(spec)
-  const archivePath = path.join(buildRoot, spec.archive)
-  await downloadWithFallback(resolvedSource, spec.source, archivePath)
-  if (spec.archiveSha256) {
-    const actual = sha256File(archivePath)
-    if (actual !== spec.archiveSha256.toLowerCase()) {
-      throw new Error(`${component} archive sha256 mismatch: expected ${spec.archiveSha256}, got ${actual}`)
+      source: resolvedSource,
+      officialSource: spec.source,
+      prepared: true
     }
   }
-  const extractDir = path.join(buildRoot, `${component}-extract`)
-  fs.mkdirSync(extractDir, { recursive: true })
-  extractArchive(archivePath, extractDir)
-  materializeComponent(component, target, extractDir, outPlatformRoot)
-  prepared[component] = {
-    ...spec,
-    source: resolvedSource,
-    officialSource: spec.source,
-    prepared: true
+
+  const platformManifest = {
+    platform: target,
+    version: manifest.schemaVersion || 1,
+    ...Object.fromEntries(Object.entries(prepared)),
   }
+  fs.writeFileSync(path.join(outPlatformRoot, 'manifest.json'), JSON.stringify(platformManifest, null, 2))
+  fs.rmSync(buildRoot, { recursive: true, force: true })
+  console.log(`Prepared runtime for ${target}`)
 }
 
-const platformManifest = {
-  platform: target,
-  version: manifest.schemaVersion || 1,
-  ...Object.fromEntries(Object.entries(prepared)),
-}
-fs.writeFileSync(path.join(outPlatformRoot, 'manifest.json'), JSON.stringify(platformManifest, null, 2))
-fs.rmSync(buildRoot, { recursive: true, force: true })
-console.log(`Prepared runtime for ${target}`)
+main().catch(error => {
+  fs.rmSync(buildRoot, { recursive: true, force: true })
+  console.error(error?.stack || error?.message || error)
+  process.exit(1)
+})
 
 function detectTarget() {
   const platform = process.platform
