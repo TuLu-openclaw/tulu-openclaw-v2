@@ -225,7 +225,8 @@ function materializeComponent(component, target, extractDir, outPlatformRoot) {
 
   if (component === 'git') {
     if (target.startsWith('windows-')) {
-      copyDir(extractDir, targetDir)
+      const root = pickSingleDir(extractDir)
+      copyDir(root, targetDir)
       return
     }
   }

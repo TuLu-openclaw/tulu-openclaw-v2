@@ -59,6 +59,10 @@ jobs:
           RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: node scripts/prepare-runtime.mjs windows-x64
 
+      - name: Verify bundled runtime
+        shell: bash
+        run: test -f _vendor/runtime/windows-x64/node/node.exe && test -f _vendor/runtime/windows-x64/git/cmd/git.exe
+
       - name: Build Tauri app
         run: |
           choco install mingw -y --no-progress --ignore-checksums
@@ -116,6 +120,10 @@ jobs:
         env:
           RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: node scripts/prepare-runtime.mjs windows-arm64
+
+      - name: Verify bundled runtime
+        shell: bash
+        run: test -f _vendor/runtime/windows-arm64/node/node.exe && test -f _vendor/runtime/windows-arm64/git/cmd/git.exe
 
       - name: Build Tauri app (ARM64)
         env:
@@ -181,6 +189,9 @@ jobs:
           RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: node scripts/prepare-runtime.mjs macos-arm64
 
+      - name: Verify bundled runtime
+        run: test -f _vendor/runtime/macos-arm64/node/bin/node
+
       - name: Build Tauri app
         env:
           CARGO_BUILD_JOBS: 2
@@ -245,6 +256,9 @@ jobs:
         env:
           RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: node scripts/prepare-runtime.mjs macos-x64
+
+      - name: Verify bundled runtime
+        run: test -f _vendor/runtime/macos-x64/node/bin/node
 
       - name: Build Tauri app
         env:
@@ -320,6 +334,9 @@ jobs:
         env:
           RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
         run: node scripts/prepare-runtime.mjs linux-x64
+
+      - name: Verify bundled runtime
+        run: test -f _vendor/runtime/linux-x64/node/bin/node
 
       - name: Build Tauri app
         env:
