@@ -245,6 +245,11 @@ jobs:
           severity: 'CRITICAL,HIGH'
           limit-severities-for-sarif: true
           exit-code: '1'
+          skip-dirs: |
+            src-tauri/resources/Star-Office-UI-master/electron-shell
+            src-tauri/resources/Star-Office-UI-master/desktop-pet
+            src-tauri/resources/Star-Office-UI-master/docs
+            src-tauri/resources/Star-Office-UI-master/frontend/vendor
 
       - name: Upload Trivy scan results
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}

@@ -37,16 +37,33 @@ fn sync_runtime_dir(manifest_dir: &str) {
         }
         std::fs::create_dir_all(&dst_root).ok();
         match copy_dir_recursive(&src, &dst) {
-            Ok(()) => println!("cargo:warning=runtime synced OK for {}", target_key),
-            Err(e) => println!(
-                "cargo:warning=runtime copy FAILED for {}: {}",
-                target_key, e
-            ),
+            Ok(()) => {
+                if !dir_has_files(&dst) {
+                    panic!("runtime copy produced no files for {}", target_key);
+                }
+                let sentinel = dst_root.join(".runtime-ready");
+                std::fs::write(&sentinel, target_key.as_bytes())
+                    .expect("failed to write runtime resource sentinel");
+                println!("cargo:warning=runtime synced OK for {}", target_key);
+            }
+            Err(e) => panic!("runtime copy FAILED for {}: {}", target_key, e),
         }
     } else {
-        println!("cargo:warning=runtime src NOT FOUND for {}", target_key);
+        panic!("runtime src NOT FOUND for {}", target_key);
     }
 }
+
+fn dir_has_files(path: &std::path::Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        if entry_path.is_file() || (entry_path.is_dir() && dir_has_files(&entry_path)) {
+            return true;
+        }
+    }
+    false
 
 fn detect_runtime_target_key() -> String {
     let target = std::env::var("TARGET").unwrap_or_default();
