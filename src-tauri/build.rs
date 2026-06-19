@@ -48,9 +48,27 @@ fn sync_runtime_dir(manifest_dir: &str) {
             }
             Err(e) => panic!("runtime copy FAILED for {}: {}", target_key, e),
         }
+    } else if allow_runtime_placeholder() {
+        std::fs::create_dir_all(&dst).expect("failed to create runtime placeholder dir");
+        let placeholder = dst.join(".runtime-placeholder");
+        std::fs::write(&placeholder, target_key.as_bytes())
+            .expect("failed to write runtime placeholder");
+        let sentinel = dst_root.join(".runtime-ready");
+        std::fs::write(&sentinel, target_key.as_bytes())
+            .expect("failed to write runtime resource sentinel");
+        println!(
+            "cargo:warning=runtime src NOT FOUND for {}; wrote placeholder for check-only build",
+            target_key
+        );
     } else {
         panic!("runtime src NOT FOUND for {}", target_key);
     }
+}
+
+fn allow_runtime_placeholder() -> bool {
+    std::env::var("OPENCLAW_ALLOW_RUNTIME_PLACEHOLDER")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false)
 }
 
 fn dir_has_files(path: &std::path::Path) -> bool {

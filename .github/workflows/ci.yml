@@ -63,6 +63,8 @@ jobs:
 
       - name: Rust Clippy check
         working-directory: src-tauri
+        env:
+          OPENCLAW_ALLOW_RUNTIME_PLACEHOLDER: "1"
         run: cargo clippy --all-targets -- -D warnings
 
   # ─────────────────────────────────────────────────────────────
