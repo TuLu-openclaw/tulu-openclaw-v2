@@ -350,6 +350,7 @@ export async function render() {
         <div class="chat-ecom-toolbar">
           <button class="btn btn-sm btn-ghost" id="btn-ecom-settings">配置凭据/策略</button>
           <button class="btn btn-sm btn-ghost" id="btn-ecom-intro">查看首次说明</button>
+          <button class="btn btn-sm btn-primary" id="btn-ecom-start-chat">开始对话</button>
         </div>
         <div class="chat-ecom-grid">
           <section class="chat-ecom-card">
@@ -391,6 +392,9 @@ export async function render() {
       <button class="chat-scroll-btn" id="chat-scroll-btn" style="display:none">↓</button>
       <div class="chat-cmd-panel" id="chat-cmd-panel" style="display:none"></div>
       <div class="chat-attachments-preview" id="chat-attachments-preview" style="display:none"></div>
+      <div class="chat-ecom-hint" id="chat-ecom-hint" style="display:none">
+        这是电商专属工作台。请直接在下方输入框里下达任务；也可以先点“开始对话”，我会帮你填入一个任务模板。
+      </div>
       <div class="chat-input-area">
         <input type="file" id="chat-file-input" accept="image/*" multiple style="display:none">
         <button class="chat-attach-btn" id="chat-attach-btn" title="${t('chat.uploadImage')}">
@@ -514,6 +518,7 @@ export async function render() {
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
   page.querySelector('#btn-ecom-settings')?.addEventListener('click', showEcomWorkbenchSettings)
   page.querySelector('#btn-ecom-intro')?.addEventListener('click', () => appendEcomIntroMessage({ force: true }))
+  page.querySelector('#btn-ecom-start-chat')?.addEventListener('click', startEcomChatTemplate)
   renderEcomWorkbenchSummary()
 
   bindEvents(page)
@@ -2163,6 +2168,8 @@ function updateEcomWorkbenchVisibility() {
   const agentId = parseSessionAgent(_sessionKey) || 'main'
   const visible = agentId === 'ecom-mover'
   _ecomWorkbenchEl.style.display = visible ? '' : 'none'
+  const hint = _page?.querySelector('#chat-ecom-hint')
+  if (hint) hint.style.display = visible ? '' : 'none'
   if (visible) {
     void loadEcomWorkbenchSettingsForAgent(agentId)
     renderEcomWorkbenchSummary()
@@ -2294,8 +2301,18 @@ function appendEcomIntroMessage(options = {}) {
     } catch {}
     if (_messagesEl.querySelector('.msg')) return
   }
-  appendSystemMessage('你好，我是“全自动店铺搬运”。我会先按 SPU 主档组织商品，再挂 SKU 子规格；每轮选品结束后强制刷新平台数据；复杂任务会优先并行拆分并在关键节点向你确认。需要你提供的平台范围、店铺/账号信息、凭据保存方式、目标利润率，我不会默认执行未经确认的高风险搬运动作。')
+  appendSystemMessage('你好，我是“全自动店铺搬运”。我会先按 SPU 主档组织商品，再挂 SKU 子规格；每轮选品结束后强制刷新平台数据；复杂任务会优先并行拆分并在关键节点向你确认。需要你提供的平台范围、店铺/账号信息、凭据保存方式、目标利润率，我不会默认执行未经确认的高风险搬运动作。你可以直接在下方输入框发任务，也可以点“开始对话”快速填入任务模板。')
   try { localStorage.setItem(seenKey, '1') } catch {}
+}
+
+function startEcomChatTemplate() {
+  if (!_textarea) return
+  const template = '帮我先从 1688 找 10 个适合搬到淘宝的商品 SPU，目标利润率 25%，先不要自动上架，先给我候选清单和风险提示。'
+  if (!_textarea.value.trim()) _textarea.value = template
+  _textarea.focus()
+  const pos = _textarea.value.length
+  _textarea.setSelectionRange(pos, pos)
+  _textarea.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 function showEcomWorkbenchSettings() {

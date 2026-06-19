@@ -313,6 +313,17 @@ async function createEcomAgent(page, state) {
   }
 
   try {
+    const existingDetail = await api.getAgentDetail(ECOM_AGENT_PRESET.id)
+    if (existingDetail?.id === ECOM_AGENT_PRESET.id) {
+      invalidate('list_agents', 'get_agent_detail')
+      await loadAgents(page, state)
+      toast(t('agents.ecomAgentExists'), 'info')
+      location.hash = `#/agent-detail?id=${encodeURIComponent(ECOM_AGENT_PRESET.id)}`
+      return
+    }
+  } catch {}
+
+  try {
     const config = await api.readOpenclawConfig()
     const providers = config?.models?.providers || {}
     let model = ''
@@ -365,8 +376,16 @@ async function createEcomAgent(page, state) {
     invalidate('list_agents', 'get_agent_detail')
     await loadAgents(page, state)
     toast(t('agents.ecomAgentCreated'), 'success')
-    location.hash = `#/agent-detail?id=${encodeURIComponent(ECOM_AGENT_PRESET.id)}`
+    location.hash = `#/chat?session=${encodeURIComponent(`agent:${ECOM_AGENT_PRESET.id}`)}`
   } catch (e) {
+    const message = String(e?.message || e || '')
+    if (message.includes('已存在') || message.includes('already exists') || message.includes('Agent「ecom-mover」已存在')) {
+      invalidate('list_agents', 'get_agent_detail')
+      await loadAgents(page, state)
+      toast(t('agents.ecomAgentExists'), 'info')
+      location.hash = `#/chat?session=${encodeURIComponent(`agent:${ECOM_AGENT_PRESET.id}`)}`
+      return
+    }
     toast(t('agents.createFailed') + ': ' + e, 'error')
   }
 }
