@@ -36,8 +36,9 @@ if (!target) {
 async function main() {
   fs.mkdirSync(buildRoot, { recursive: true })
   const outPlatformRoot = path.join(outRoot, target)
-  fs.rmSync(outPlatformRoot, { recursive: true, force: true })
-  fs.mkdirSync(outPlatformRoot, { recursive: true })
+  const stagedPlatformRoot = path.join(buildRoot, `${target}-stage`)
+  fs.rmSync(stagedPlatformRoot, { recursive: true, force: true })
+  fs.mkdirSync(stagedPlatformRoot, { recursive: true })
 
   const prepared = {}
   for (const component of Object.keys(manifest.components)) {
@@ -63,7 +64,8 @@ async function main() {
     const extractDir = path.join(buildRoot, `${component}-extract`)
     fs.mkdirSync(extractDir, { recursive: true })
     extractArchive(archivePath, extractDir)
-    materializeComponent(component, target, extractDir, outPlatformRoot)
+    materializeComponent(component, target, extractDir, stagedPlatformRoot)
+    validateExpectedEntry(component, spec, stagedPlatformRoot)
     prepared[component] = {
       ...spec,
       source: resolvedSource,
@@ -77,7 +79,12 @@ async function main() {
     version: manifest.schemaVersion || 1,
     ...Object.fromEntries(Object.entries(prepared)),
   }
-  fs.writeFileSync(path.join(outPlatformRoot, 'manifest.json'), JSON.stringify(platformManifest, null, 2))
+  fs.writeFileSync(path.join(stagedPlatformRoot, 'manifest.json'), JSON.stringify(platformManifest, null, 2))
+  if (!dirHasFiles(stagedPlatformRoot)) {
+    throw new Error(`Prepared runtime for ${target} contains no files`)
+  }
+  fs.rmSync(outPlatformRoot, { recursive: true, force: true })
+  fs.renameSync(stagedPlatformRoot, outPlatformRoot)
   fs.rmSync(buildRoot, { recursive: true, force: true })
   console.log(`Prepared runtime for ${target}`)
 }
@@ -224,6 +231,23 @@ function materializeComponent(component, target, extractDir, outPlatformRoot) {
   }
 
   throw new Error(`No materializer for ${component} on ${target}`)
+}
+
+function validateExpectedEntry(component, spec, outPlatformRoot) {
+  if (!spec.expectedEntry) return
+  const entryPath = path.join(outPlatformRoot, spec.expectedEntry)
+  if (!fs.existsSync(entryPath)) {
+    throw new Error(`${component} expected entry missing after prepare: ${spec.expectedEntry}`)
+  }
+}
+
+function dirHasFiles(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = path.join(dir, entry.name)
+    if (entry.isFile()) return true
+    if (entry.isDirectory() && dirHasFiles(entryPath)) return true
+  }
+  return false
 }
 
 function pickSingleDir(dir) {
