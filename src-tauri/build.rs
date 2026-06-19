@@ -64,6 +64,7 @@ fn dir_has_files(path: &std::path::Path) -> bool {
         }
     }
     false
+}
 
 fn detect_runtime_target_key() -> String {
     let target = std::env::var("TARGET").unwrap_or_default();
