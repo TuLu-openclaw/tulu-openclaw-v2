@@ -1,4 +1,48 @@
 /* Agent 管理页面样式 */
+.agents-page-header {
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.agents-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.agents-hero-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.agents-hero-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}
+
+.agents-hero-btn-ecom {
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border-primary));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--warning-muted) 60%, var(--bg-primary)), color-mix(in srgb, var(--accent) 8%, var(--bg-primary)));
+  color: var(--text-primary);
+}
+
+.agents-hero-btn-primary {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #8b5cf6));
+  border-color: transparent;
+}
+
+.agents-hero-btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-hover), color-mix(in srgb, var(--accent-hover) 74%, #7c3aed));
+}
+
 .agent-card {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
@@ -366,6 +410,16 @@
 }
 
 @media (max-width: 800px) {
+  .agents-page-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .agents-hero-btn {
+    flex: 1 1 220px;
+    justify-content: center;
+  }
+
   .agent-skills-list {
     grid-template-columns: 1fr;
   }

@@ -55,18 +55,18 @@ function pickEcomSkills(skills = []) {
 
 export async function render() {
   const page = document.createElement('div')
-  page.className = 'page'
+  page.className = 'page agents-page'
 
   page.innerHTML = `
-    <div class="page-header">
+    <div class="page-header agents-page-header">
       <div>
         <h1 class="page-title">${t('agents.title')}</h1>
         <p class="page-desc">${t('agents.desc')}</p>
         <p class="page-subhint">${t('agents.detailHint')}</p>
       </div>
-      <div class="page-actions">
-        <button class="btn btn-secondary" id="btn-add-ecom-agent">${t('agents.addEcomAgent')}</button>
-        <button class="btn btn-primary" id="btn-add-agent">${t('agents.addAgent')}</button>
+      <div class="page-actions agents-page-actions">
+        <button class="btn btn-secondary agents-hero-btn agents-hero-btn-ecom" id="btn-add-ecom-agent">${t('agents.addEcomAgent')}</button>
+        <button class="btn btn-primary agents-hero-btn agents-hero-btn-primary" id="btn-add-agent">${t('agents.addAgent')}</button>
       </div>
     </div>
     <div class="page-content">
@@ -305,23 +305,35 @@ async function showAddAgentDialog(page, state) {
 }
 
 async function createEcomAgent(page, state) {
-  const exists = (state.agents || []).some(a => a.id === ECOM_AGENT_PRESET.id)
-  if (exists) {
+  const targetId = ECOM_AGENT_PRESET.id
+  const openExisting = async (mode = 'detail') => {
+    invalidate('list_agents', 'get_agent_detail')
+    await loadAgents(page, state)
     toast(t('agents.ecomAgentExists'), 'info')
-    location.hash = `#/agent-detail?id=${encodeURIComponent(ECOM_AGENT_PRESET.id)}`
-    return
+    location.hash = mode === 'chat'
+      ? `#/chat?session=${encodeURIComponent(`agent:${targetId}`)}`
+      : `#/agent-detail?id=${encodeURIComponent(targetId)}`
   }
 
-  try {
-    const existingDetail = await api.getAgentDetail(ECOM_AGENT_PRESET.id)
-    if (existingDetail?.id === ECOM_AGENT_PRESET.id) {
-      invalidate('list_agents', 'get_agent_detail')
-      await loadAgents(page, state)
-      toast(t('agents.ecomAgentExists'), 'info')
-      location.hash = `#/agent-detail?id=${encodeURIComponent(ECOM_AGENT_PRESET.id)}`
-      return
+  const checkExists = async () => {
+    try {
+      const freshAgents = await api.listAgents()
+      state.agents = freshAgents
+      if ((freshAgents || []).some(agent => agent.id === targetId)) return true
+    } catch {}
+
+    try {
+      const detail = await api.getAgentDetail(targetId)
+      return detail?.id === targetId
+    } catch {
+      return false
     }
-  } catch {}
+  }
+
+  if (await checkExists()) {
+    await openExisting('detail')
+    return
+  }
 
   try {
     const config = await api.readOpenclawConfig()
@@ -343,9 +355,9 @@ async function createEcomAgent(page, state) {
     const skillsResp = await api.skillsList().catch(() => ({ skills: [] }))
     const enabledSkills = pickEcomSkills(skillsResp?.skills || [])
 
-    await api.addAgent(ECOM_AGENT_PRESET.id, model, null)
-    await api.updateAgentIdentity(ECOM_AGENT_PRESET.id, ECOM_AGENT_PRESET.name, ECOM_AGENT_PRESET.emoji)
-    await api.updateAgentConfig(ECOM_AGENT_PRESET.id, {
+    await api.addAgent(targetId, model, null)
+    await api.updateAgentIdentity(targetId, ECOM_AGENT_PRESET.name, ECOM_AGENT_PRESET.emoji)
+    await api.updateAgentConfig(targetId, {
       identity: {
         name: ECOM_AGENT_PRESET.name,
         emoji: ECOM_AGENT_PRESET.emoji,
@@ -370,20 +382,17 @@ async function createEcomAgent(page, state) {
       },
     })
     for (const file of ECOM_AGENT_BOOTSTRAP_FILES) {
-      await api.writeAgentFile(ECOM_AGENT_PRESET.id, file.name, file.content)
+      await api.writeAgentFile(targetId, file.name, file.content)
     }
 
     invalidate('list_agents', 'get_agent_detail')
     await loadAgents(page, state)
     toast(t('agents.ecomAgentCreated'), 'success')
-    location.hash = `#/chat?session=${encodeURIComponent(`agent:${ECOM_AGENT_PRESET.id}`)}`
+    location.hash = `#/chat?session=${encodeURIComponent(`agent:${targetId}`)}`
   } catch (e) {
     const message = String(e?.message || e || '')
     if (message.includes('已存在') || message.includes('already exists') || message.includes('Agent「ecom-mover」已存在')) {
-      invalidate('list_agents', 'get_agent_detail')
-      await loadAgents(page, state)
-      toast(t('agents.ecomAgentExists'), 'info')
-      location.hash = `#/chat?session=${encodeURIComponent(`agent:${ECOM_AGENT_PRESET.id}`)}`
+      await openExisting('chat')
       return
     }
     toast(t('agents.createFailed') + ': ' + e, 'error')

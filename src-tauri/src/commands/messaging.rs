@@ -1424,6 +1424,19 @@ pub async fn run_channel_action(
                     changed = true;
                 }
             }
+            if let Some(bindings) = cfg.get_mut("bindings").and_then(|b| b.as_array_mut()) {
+                let before = bindings.len();
+                bindings.retain(|binding| {
+                    binding
+                        .get("match")
+                        .and_then(|m| m.get("channel"))
+                        .and_then(|v| v.as_str())
+                        != Some("openclaw-weixin")
+                });
+                if bindings.len() != before {
+                    changed = true;
+                }
+            }
             if let Some(plugins) = cfg.get_mut("plugins").and_then(|p| p.as_object_mut()) {
                 if let Some(allow) = plugins.get_mut("allow").and_then(|a| a.as_array_mut()) {
                     let before = allow.len();
@@ -1442,7 +1455,7 @@ pub async fn run_channel_action(
                 let _ = super::config::save_openclaw_json(&cfg);
                 let _ = app.emit(
                     "channel-action-log",
-                    json!({ "platform": &platform, "action": &action, "kind": "info", "message": "已清理 openclaw.json 中的微信插件残留配置" }),
+                    json!({ "platform": &platform, "action": &action, "kind": "info", "message": "已清理 openclaw.json 中的微信残留配置与绑定" }),
                 );
             }
         }
@@ -2105,8 +2118,42 @@ pub async fn list_configured_platforms() -> Result<Value, String> {
     let cfg = super::config::load_openclaw_json()?;
     let mut result: Vec<Value> = vec![];
 
+    let weixin_plugin_installed = super::openclaw_dir()
+        .join("extensions")
+        .join("openclaw-weixin")
+        .join("package.json")
+        .is_file();
+
     if let Some(channels) = cfg.get("channels").and_then(|c| c.as_object()) {
         for (name, val) in channels {
+            if name == "openclaw-weixin" {
+                let enabled = val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                let has_real_config = val
+                    .as_object()
+                    .map(|obj| obj.keys().any(|k| k != "enabled"))
+                    .unwrap_or(false);
+                let has_binding = cfg
+                    .get("bindings")
+                    .and_then(|b| b.as_array())
+                    .map(|bindings| {
+                        bindings.iter().any(|binding| {
+                            binding
+                                .get("match")
+                                .and_then(|m| m.get("channel"))
+                                .and_then(|v| v.as_str())
+                                == Some("openclaw-weixin")
+                        })
+                    })
+                    .unwrap_or(false);
+
+                if !enabled && !has_real_config && !has_binding {
+                    continue;
+                }
+                if !weixin_plugin_installed && !has_real_config {
+                    continue;
+                }
+            }
+
             let enabled = val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
             let mut accounts: Vec<Value> = vec![];
 
