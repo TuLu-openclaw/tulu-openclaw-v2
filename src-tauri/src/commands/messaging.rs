@@ -1723,6 +1723,10 @@ pub async fn run_channel_action(
                     let _ = super::config::save_openclaw_json(&cfg);
                 }
             }
+            match super::config::do_reload_gateway(&app).await {
+                Ok(msg) => emit_payload("info", format!("微信登录成功，已重载 Gateway：{}", msg)),
+                Err(err) => emit_payload("info", format!("微信登录成功，但自动重载 Gateway 失败，请手动重启 Gateway：{}", err)),
+            }
         }
 
         progress_payload(100);

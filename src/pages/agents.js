@@ -316,18 +316,9 @@ async function createEcomAgent(page, state) {
   }
 
   const checkExists = async () => {
-    try {
-      const freshAgents = await api.listAgents()
-      state.agents = freshAgents
-      if ((freshAgents || []).some(agent => agent.id === targetId)) return true
-    } catch {}
-
-    try {
-      const detail = await api.getAgentDetail(targetId)
-      return detail?.id === targetId
-    } catch {
-      return false
-    }
+    const freshAgents = await api.listAgents().catch(() => [])
+    state.agents = Array.isArray(freshAgents) ? freshAgents : []
+    return state.agents.some(agent => agent.id === targetId)
   }
 
   if (await checkExists()) {
@@ -392,8 +383,11 @@ async function createEcomAgent(page, state) {
   } catch (e) {
     const message = String(e?.message || e || '')
     if (message.includes('已存在') || message.includes('already exists') || message.includes('Agent「ecom-mover」已存在')) {
-      await openExisting('chat')
-      return
+      const existsNow = await checkExists()
+      if (existsNow) {
+        await openExisting('chat')
+        return
+      }
     }
     toast(t('agents.createFailed') + ': ' + e, 'error')
   }
