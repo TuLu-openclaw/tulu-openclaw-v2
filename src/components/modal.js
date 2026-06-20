@@ -107,6 +107,15 @@ export function showModal({ title, fields, onConfirm }) {
           ${hint}
         </div>`
     }
+    if (f.type === 'textarea') {
+      const rows = Number(f.rows) > 0 ? Number(f.rows) : 4
+      return `
+        <div class="form-group">
+          <label class="form-label">${label}</label>
+          <textarea class="form-input" data-name="${fieldName}" rows="${rows}" placeholder="${escapeAttr(f.placeholder)}"${f.readonly ? ' readonly style="opacity:0.6;cursor:not-allowed;resize:vertical"' : ' style="resize:vertical"'}>${escapeHtml(f.value)}</textarea>
+          ${hint}
+        </div>`
+    }
     return `
       <div class="form-group">
         <label class="form-label">${label}</label>
@@ -144,15 +153,16 @@ export function showModal({ title, fields, onConfirm }) {
         result[el.dataset.name] = el.value
       }
     })
-    // 先调用回调，再移除 overlay，避免嵌套对话框时序问题
     const callback = onConfirm
     setTimeout(() => overlay.remove(), 0)
     callback(result)
   }
 
-  // 键盘事件：Enter 确认，Escape 关闭
+  // 键盘事件：Enter 确认，Escape 关闭；textarea 内 Enter 不抢提交
   const handleKey = (e) => {
+    const targetTag = e.target?.tagName?.toLowerCase()
     if (e.key === 'Enter') {
+      if (targetTag === 'textarea') return
       e.preventDefault()
       overlay.querySelector('[data-action="confirm"]')?.click()
     } else if (e.key === 'Escape') {
@@ -162,7 +172,7 @@ export function showModal({ title, fields, onConfirm }) {
   overlay.addEventListener('keydown', handleKey)
 
   // 自动聚焦第一个输入框
-  const firstInput = overlay.querySelector('input, select')
+  const firstInput = overlay.querySelector('input, textarea, select')
   if (firstInput) firstInput.focus()
 }
 

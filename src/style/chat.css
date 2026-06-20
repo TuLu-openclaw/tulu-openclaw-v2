@@ -407,6 +407,14 @@
   margin-bottom: 12px;
 }
 
+.chat-ecom-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .chat-ecom-title {
   font-size: 15px;
   font-weight: 700;
@@ -431,6 +439,39 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.chat-ecom-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-ecom-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-primary);
+  background: color-mix(in srgb, var(--bg-primary) 82%, var(--bg-secondary));
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chat-ecom-collapse-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chat-ecom-workbench.collapsed .chat-ecom-body {
+  display: none;
+}
+
+.chat-ecom-workbench.collapsed {
+  padding-bottom: 10px;
 }
 
 .chat-ecom-badge {
@@ -474,6 +515,71 @@
   color: var(--text-secondary);
   line-height: 1.65;
   font-size: 12px;
+}
+
+.chat-ecom-progress {
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, var(--bg-card));
+  padding: 12px;
+}
+
+.chat-ecom-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.chat-ecom-progress-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.chat-ecom-progress-phase {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chat-ecom-progress-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.chat-ecom-progress-list {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.chat-ecom-progress-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-primary) 70%, var(--bg-secondary));
+  border: 1px solid var(--border-primary);
+  font-size: 12px;
+}
+
+.chat-ecom-progress-item span {
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-ecom-progress-item strong {
+  color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 .chat-ecom-settings-summary {

@@ -30,8 +30,18 @@ const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
 const ECOM_INTRO_SEEN_KEY = '星枢OpenClaw-ecom-intro-seen-v1'
 const ECOM_WORKBENCH_SETTINGS_KEY = '星枢OpenClaw-ecom-workbench-settings-v1'
+const ECOM_WORKBENCH_COLLAPSED_KEY = '星枢OpenClaw-ecom-workbench-collapsed-v1'
 const ECOM_TOOLS_SECTION_START = '<!-- ECOM_WORKBENCH_SETTINGS:START -->'
 const ECOM_TOOLS_SECTION_END = '<!-- ECOM_WORKBENCH_SETTINGS:END -->'
+const ECOM_VAULT_FILENAME = 'ECOM_VAULT.md'
+const ECOM_SKILL_SUGGESTIONS = [
+  { keywords: ['1688', '阿里巴巴', '采集', '货源', '采购'], query: '1688 ecommerce scraping', targets: ['openclaw', 'hermes'] },
+  { keywords: ['淘宝', '天猫', '上架', '店铺', '商品'], query: 'taobao ecommerce browser', targets: ['openclaw', 'hermes'] },
+  { keywords: ['抖音', '小店', '短视频', '直播'], query: 'douyin ecommerce automation', targets: ['openclaw', 'hermes'] },
+  { keywords: ['小红书', '笔记', '种草'], query: 'xiaohongshu ecommerce automation', targets: ['openclaw', 'hermes'] },
+  { keywords: ['截图', '页面', '浏览器', '登录', '打开网页'], query: 'auto-browser', targets: ['openclaw'] },
+]
+const ECOM_ORCH_MEMBER_LIMIT = 6
 
 const COMMANDS = [
   { title: 'chat.cmdSession', commands: [
@@ -197,6 +207,13 @@ let _ecomWorkbenchEl = null
 let _ecomWorkbenchSettings = loadEcomWorkbenchSettings()
 let _ecomWorkbenchLoadedAgentId = ''
 let _ecomWorkbenchLoading = false
+let _ecomWorkbenchCollapsed = false
+let _ecomSkillCatalogCache = null
+let _ecomSkillCatalogTs = 0
+let _ecomOrchestrationState = { groupId: '', members: [], lastPrompt: '', lastDispatchAt: 0 }
+let _ecomRunState = { active: false, phase: 'idle', detail: '', tasks: [], startedAt: 0, updatedAt: 0 }
+let _ecomProgressMessageEl = null
+let _ecomProgressListEl = null
 
 export async function render() {
   const page = document.createElement('div')
@@ -341,46 +358,62 @@ export async function render() {
             <div class="chat-ecom-title">全自动店铺搬运工作清单</div>
             <div class="chat-ecom-subtitle">SPU 主档优先 · 每轮选品强制刷新 · 支持多线路并行与子Agent调度</div>
           </div>
-          <div class="chat-ecom-badges">
-            <span class="chat-ecom-badge">SPU First</span>
-            <span class="chat-ecom-badge">实时刷新</span>
-            <span class="chat-ecom-badge">并行执行</span>
+          <div class="chat-ecom-header-right">
+            <div class="chat-ecom-badges">
+              <span class="chat-ecom-badge">SPU First</span>
+              <span class="chat-ecom-badge">实时刷新</span>
+              <span class="chat-ecom-badge">并行执行</span>
+            </div>
+            <button class="chat-ecom-collapse-btn" id="btn-ecom-toggle" title="折叠/展开工作台">收起</button>
           </div>
         </div>
-        <div class="chat-ecom-toolbar">
-          <button class="btn btn-sm btn-ghost" id="btn-ecom-settings">配置凭据/策略</button>
-          <button class="btn btn-sm btn-ghost" id="btn-ecom-intro">查看首次说明</button>
-          <button class="btn btn-sm btn-primary" id="btn-ecom-start-chat">开始对话</button>
-        </div>
-        <div class="chat-ecom-grid">
-          <section class="chat-ecom-card">
-            <div class="chat-ecom-card-title">进货清单</div>
-            <ul class="chat-ecom-list">
-              <li>SPU 主档 / 平台来源 / 供应商店铺 / 起批量 / 采购价 / 运费 / 库存状态</li>
-              <li>SKU 规格明细 / 图片素材状态 / 最近刷新时间 / 异常备注</li>
-              <li>每轮选品结束后强制刷新数据，防止继续在旧数据中决策</li>
-            </ul>
-          </section>
-          <section class="chat-ecom-card">
-            <div class="chat-ecom-card-title">售卖清单</div>
-            <ul class="chat-ecom-list">
-              <li>SPU 上架目标 / 目标平台 / 目标店铺 / 售价 / 利润率 / 标题优化状态</li>
-              <li>SKU 挂载关系 / 主图与详情页状态 / 库存同步状态 / 风险提示</li>
-              <li>关键动作需经过质量闸门，异常时第一时间询问用户</li>
-            </ul>
-          </section>
-          <section class="chat-ecom-card">
-            <div class="chat-ecom-card-title">执行策略</div>
-            <ul class="chat-ecom-list">
-              <li>默认允许多线路同步并行，优先保证质量再追求速度</li>
-              <li>遇到复杂任务可主动调度子Agent拆分处理后统一回收结果</li>
-              <li>支持主动补技能、凭据管理、平台地址管理与人工接管</li>
-            </ul>
-          </section>
-          <section class="chat-ecom-card chat-ecom-card-full">
-            <div class="chat-ecom-card-title">当前策略</div>
-            <div class="chat-ecom-settings-summary" id="chat-ecom-settings-summary"></div>
-          </section>
+        <div class="chat-ecom-body" id="chat-ecom-body">
+          <div class="chat-ecom-toolbar">
+            <button class="btn btn-sm btn-ghost" id="btn-ecom-settings">配置凭据/策略</button>
+            <button class="btn btn-sm btn-ghost" id="btn-ecom-vault">密码保险箱</button>
+            <button class="btn btn-sm btn-ghost" id="btn-ecom-skills">自动补技能</button>
+            <button class="btn btn-sm btn-ghost" id="btn-ecom-orch">协同面板</button>
+            <button class="btn btn-sm btn-ghost" id="btn-ecom-intro">查看首次说明</button>
+            <button class="btn btn-sm btn-primary" id="btn-ecom-start-chat">开始对话</button>
+          </div>
+          <div class="chat-ecom-progress" id="chat-ecom-progress">
+            <div class="chat-ecom-progress-head">
+              <div class="chat-ecom-progress-title">实时任务进度</div>
+              <div class="chat-ecom-progress-phase" id="chat-ecom-progress-phase">待机</div>
+            </div>
+            <div class="chat-ecom-progress-message" id="chat-ecom-progress-message">还没有正在执行的电商任务。</div>
+            <div class="chat-ecom-progress-list" id="chat-ecom-progress-list"></div>
+          </div>
+          <div class="chat-ecom-grid">
+            <section class="chat-ecom-card">
+              <div class="chat-ecom-card-title">进货清单</div>
+              <ul class="chat-ecom-list">
+                <li>SPU 主档 / 平台来源 / 供应商店铺 / 起批量 / 采购价 / 运费 / 库存状态</li>
+                <li>SKU 规格明细 / 图片素材状态 / 最近刷新时间 / 异常备注</li>
+                <li>每轮选品结束后强制刷新数据，防止继续在旧数据中决策</li>
+              </ul>
+            </section>
+            <section class="chat-ecom-card">
+              <div class="chat-ecom-card-title">售卖清单</div>
+              <ul class="chat-ecom-list">
+                <li>SPU 上架目标 / 目标平台 / 目标店铺 / 售价 / 利润率 / 标题优化状态</li>
+                <li>SKU 挂载关系 / 主图与详情页状态 / 库存同步状态 / 风险提示</li>
+                <li>关键动作需经过质量闸门，异常时第一时间询问用户</li>
+              </ul>
+            </section>
+            <section class="chat-ecom-card">
+              <div class="chat-ecom-card-title">执行策略</div>
+              <ul class="chat-ecom-list">
+                <li>默认允许多线路同步并行，优先保证质量再追求速度</li>
+                <li>遇到复杂任务可主动调度子Agent拆分处理后统一回收结果</li>
+                <li>支持主动补技能、凭据管理、平台地址管理与人工接管</li>
+              </ul>
+            </section>
+            <section class="chat-ecom-card chat-ecom-card-full">
+              <div class="chat-ecom-card-title">当前策略</div>
+              <div class="chat-ecom-settings-summary" id="chat-ecom-settings-summary"></div>
+            </section>
+          </div>
         </div>
       </div>
       <div class="chat-messages" id="chat-messages">
@@ -515,11 +548,19 @@ export async function render() {
   _workspaceReloadBtn = page.querySelector('#chat-workspace-reload')
   _workspacePreviewBtn = page.querySelector('#chat-workspace-preview-toggle')
   _ecomWorkbenchEl = page.querySelector('#chat-ecom-workbench')
+  _ecomProgressMessageEl = page.querySelector('#chat-ecom-progress-message')
+  _ecomProgressListEl = page.querySelector('#chat-ecom-progress-list')
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
   page.querySelector('#btn-ecom-settings')?.addEventListener('click', showEcomWorkbenchSettings)
+  page.querySelector('#btn-ecom-vault')?.addEventListener('click', () => showEcomVaultEditor())
+  page.querySelector('#btn-ecom-skills')?.addEventListener('click', () => showEcomSkillAssistant())
+  page.querySelector('#btn-ecom-orch')?.addEventListener('click', () => showEcomOrchestrationPanel())
   page.querySelector('#btn-ecom-intro')?.addEventListener('click', () => appendEcomIntroMessage({ force: true }))
   page.querySelector('#btn-ecom-start-chat')?.addEventListener('click', startEcomChatTemplate)
+  page.querySelector('#btn-ecom-toggle')?.addEventListener('click', toggleEcomWorkbenchCollapse)
+  applyEcomWorkbenchCollapseState(getEcomWorkbenchCollapsed())
   renderEcomWorkbenchSummary()
+  renderEcomProgressState()
 
   bindEvents(page)
   bindConnectOverlay(page)
@@ -2182,10 +2223,14 @@ function loadEcomWorkbenchSettings() {
     return {
       platforms: '1688,淘宝,抖音',
       credentialsNote: '',
+      vaultSummary: '',
       forceRefreshEachRound: true,
       enableParallelRoutes: true,
       enableSubAgents: true,
       enableVision: true,
+      autoSkillDetect: true,
+      autoEnableInstalledSkills: false,
+      orchestrationAutoDispatch: false,
       skillPool: '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境',
       ...(JSON.parse(localStorage.getItem(ECOM_WORKBENCH_SETTINGS_KEY) || '{}') || {}),
     }
@@ -2193,10 +2238,14 @@ function loadEcomWorkbenchSettings() {
     return {
       platforms: '1688,淘宝,抖音',
       credentialsNote: '',
+      vaultSummary: '',
       forceRefreshEachRound: true,
       enableParallelRoutes: true,
       enableSubAgents: true,
       enableVision: true,
+      autoSkillDetect: true,
+      autoEnableInstalledSkills: false,
+      orchestrationAutoDispatch: false,
       skillPool: '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境',
     }
   }
@@ -2206,6 +2255,56 @@ function saveEcomWorkbenchSettings() {
   try { localStorage.setItem(ECOM_WORKBENCH_SETTINGS_KEY, JSON.stringify(_ecomWorkbenchSettings || {})) } catch {}
 }
 
+function getEcomWorkbenchCollapsed() {
+  try {
+    if (_ecomWorkbenchCollapsed) return true
+    return localStorage.getItem(ECOM_WORKBENCH_COLLAPSED_KEY) === '1'
+  } catch {
+    return !!_ecomWorkbenchCollapsed
+  }
+}
+
+function applyEcomWorkbenchCollapseState(collapsed) {
+  _ecomWorkbenchCollapsed = !!collapsed
+  if (!_ecomWorkbenchEl) return
+  _ecomWorkbenchEl.classList.toggle('collapsed', _ecomWorkbenchCollapsed)
+  const toggleBtn = _page?.querySelector('#btn-ecom-toggle')
+  if (toggleBtn) toggleBtn.textContent = _ecomWorkbenchCollapsed ? '展开' : '收起'
+}
+
+function setEcomWorkbenchCollapsed(collapsed) {
+  _ecomWorkbenchCollapsed = !!collapsed
+  try { localStorage.setItem(ECOM_WORKBENCH_COLLAPSED_KEY, _ecomWorkbenchCollapsed ? '1' : '0') } catch {}
+  applyEcomWorkbenchCollapseState(_ecomWorkbenchCollapsed)
+}
+
+function toggleEcomWorkbenchCollapse() {
+  setEcomWorkbenchCollapsed(!getEcomWorkbenchCollapsed())
+}
+
+function setEcomRunState(patch = {}) {
+  _ecomRunState = {
+    ..._ecomRunState,
+    ...patch,
+    updatedAt: Date.now(),
+  }
+  renderEcomProgressState()
+}
+
+function renderEcomProgressState() {
+  const phaseEl = _page?.querySelector('#chat-ecom-progress-phase')
+  if (phaseEl) phaseEl.textContent = _ecomRunState.active ? (_ecomRunState.phase || '执行中') : '待机'
+  if (_ecomProgressMessageEl) {
+    _ecomProgressMessageEl.textContent = _ecomRunState.detail || '还没有正在执行的电商任务。'
+  }
+  if (_ecomProgressListEl) {
+    const tasks = Array.isArray(_ecomRunState.tasks) ? _ecomRunState.tasks : []
+    _ecomProgressListEl.innerHTML = tasks.length
+      ? tasks.map(task => `<div class="chat-ecom-progress-item"><span>${escapeHtml(task.title || task.name || '子任务')}</span><strong>${escapeHtml(task.status || '等待中')}</strong></div>`).join('')
+      : ''
+  }
+}
+
 function renderEcomWorkbenchSummary() {
   const el = _page?.querySelector('#chat-ecom-settings-summary')
   if (!el) return
@@ -2213,10 +2312,14 @@ function renderEcomWorkbenchSummary() {
   const rows = [
     ['平台范围', settings.platforms || '未设置'],
     ['凭据备注', settings.credentialsNote || '未填写（建议仅记录说明，不直接裸写真实密码）'],
+    ['密码保险箱', settings.vaultSummary || '未维护摘要'],
     ['每轮强制刷新', settings.forceRefreshEachRound ? '已开启' : '已关闭'],
-    ['多线路并行', settings.enableParallelRoutes ? '已开启' : '已关闭'],
-    ['子Agent调度', settings.enableSubAgents ? '已开启' : '已关闭'],
+    ['多线路并行', settings.enableParallelRoutes ? '已开启（允许自动并行）' : '已关闭'],
+    ['子Agent调度', settings.enableSubAgents ? '已开启（允许自动派发）' : '已关闭'],
     ['眼睛能力', settings.enableVision ? '已启用（页面观察/视觉分析）' : '未启用'],
+    ['自动补技能', settings.autoSkillDetect ? '已启用（按任务识别并给出安装/启用流程）' : '已关闭'],
+    ['技能自动启用', settings.autoEnableInstalledSkills ? '已启用（安装后自动写入 Agent）' : '手动启用'],
+    ['协同自动派发', settings.orchestrationAutoDispatch ? '已启用（会按成员分发子任务）' : '手动派发'],
     ['技能池', settings.skillPool || '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境'],
   ]
   el.innerHTML = rows.map(([label, value]) => `<div class="chat-ecom-summary-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`).join('')
@@ -2225,7 +2328,7 @@ function renderEcomWorkbenchSummary() {
 function encodeEcomWorkbenchSettings(settings) {
   return `${ECOM_TOOLS_SECTION_START}\n\
 
-ecom_workbench:\n  platforms: ${JSON.stringify(settings.platforms || '')}\n  credentialsNote: ${JSON.stringify(settings.credentialsNote || '')}\n  forceRefreshEachRound: ${settings.forceRefreshEachRound ? 'true' : 'false'}\n  enableParallelRoutes: ${settings.enableParallelRoutes ? 'true' : 'false'}\n  enableSubAgents: ${settings.enableSubAgents ? 'true' : 'false'}\n  enableVision: ${settings.enableVision ? 'true' : 'false'}\n  skillPool: ${JSON.stringify(settings.skillPool || '')}\n${ECOM_TOOLS_SECTION_END}`
+ecom_workbench:\n  platforms: ${JSON.stringify(settings.platforms || '')}\n  credentialsNote: ${JSON.stringify(settings.credentialsNote || '')}\n  vaultSummary: ${JSON.stringify(settings.vaultSummary || '')}\n  forceRefreshEachRound: ${settings.forceRefreshEachRound ? 'true' : 'false'}\n  enableParallelRoutes: ${settings.enableParallelRoutes ? 'true' : 'false'}\n  enableSubAgents: ${settings.enableSubAgents ? 'true' : 'false'}\n  enableVision: ${settings.enableVision ? 'true' : 'false'}\n  autoSkillDetect: ${settings.autoSkillDetect ? 'true' : 'false'}\n  autoEnableInstalledSkills: ${settings.autoEnableInstalledSkills ? 'true' : 'false'}\n  orchestrationAutoDispatch: ${settings.orchestrationAutoDispatch ? 'true' : 'false'}\n  skillPool: ${JSON.stringify(settings.skillPool || '')}\n${ECOM_TOOLS_SECTION_END}`
 }
 
 function parseEcomWorkbenchSettingsFromTools(content) {
@@ -2245,10 +2348,14 @@ function parseEcomWorkbenchSettingsFromTools(content) {
   return {
     platforms: parseQuoted('platforms'),
     credentialsNote: parseQuoted('credentialsNote'),
+    vaultSummary: parseQuoted('vaultSummary'),
     forceRefreshEachRound: parseBool('forceRefreshEachRound', true),
     enableParallelRoutes: parseBool('enableParallelRoutes', true),
     enableSubAgents: parseBool('enableSubAgents', true),
     enableVision: parseBool('enableVision', true),
+    autoSkillDetect: parseBool('autoSkillDetect', true),
+    autoEnableInstalledSkills: parseBool('autoEnableInstalledSkills', false),
+    orchestrationAutoDispatch: parseBool('orchestrationAutoDispatch', false),
     skillPool: parseQuoted('skillPool'),
   }
 }
@@ -2309,10 +2416,42 @@ function startEcomChatTemplate() {
   if (!_textarea) return
   const template = '帮我先从 1688 找 10 个适合搬到淘宝的商品 SPU，目标利润率 25%，先不要自动上架，先给我候选清单和风险提示。'
   if (!_textarea.value.trim()) _textarea.value = template
+  setEcomWorkbenchCollapsed(true)
   _textarea.focus()
   const pos = _textarea.value.length
   _textarea.setSelectionRange(pos, pos)
   _textarea.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+async function showEcomVaultEditor() {
+  const agentId = parseSessionAgent(_sessionKey) || ''
+  if (agentId !== 'ecom-mover') {
+    toast('只有 ecom-mover 会话支持密码保险箱', 'warning')
+    return
+  }
+  let initial = '# ECOM_VAULT.md\n\n- 平台地址：\n- 账号标识：\n- secretRef：\n- 备注：\n'
+  try {
+    const res = await api.readAgentFile(agentId, ECOM_VAULT_FILENAME)
+    if (res?.content) initial = res.content
+  } catch {}
+  showModal({
+    title: '密码保险箱',
+    fields: [
+      { name: 'content', label: '保险箱内容', type: 'textarea', rows: 16, value: initial, placeholder: '建议保存平台地址、账号标识、secretRef、备注，不建议明文密码。' },
+    ],
+    onConfirm: async (result) => {
+      await api.writeAgentFile(agentId, ECOM_VAULT_FILENAME, result.content || '')
+      const lines = String(result.content || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+      _ecomWorkbenchSettings = {
+        ...(_ecomWorkbenchSettings || loadEcomWorkbenchSettings()),
+        vaultSummary: lines.slice(0, 3).join(' / ').slice(0, 120),
+      }
+      saveEcomWorkbenchSettings()
+      renderEcomWorkbenchSummary()
+      await persistEcomWorkbenchSettingsForAgent(agentId)
+      toast('密码保险箱已保存', 'success')
+    }
+  })
 }
 
 function showEcomWorkbenchSettings() {
@@ -2323,9 +2462,13 @@ function showEcomWorkbenchSettings() {
       { name: 'platforms', label: '平台范围', value: settings.platforms || '', placeholder: '如：1688,淘宝,抖音,小红书' },
       { name: 'skillPool', label: '技能池', value: settings.skillPool || '', placeholder: '如：1688,阿里,淘宝,天猫,抖音...' },
       { name: 'credentialsNote', label: '凭据备注', value: settings.credentialsNote || '', placeholder: '记录保存方式/账号说明，不建议直接裸写真实密码' },
+      { name: 'vaultSummary', label: '密码保险箱摘要', value: settings.vaultSummary || '', placeholder: '如：淘宝主店 / 抖音小店 / secretRef 已配置', hint: '摘要仅用于工作台展示，详细内容请点“密码保险箱”维护。' },
       { name: 'forceRefreshEachRound', label: '每轮选品后强制刷新', type: 'select', value: settings.forceRefreshEachRound ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
-      { name: 'enableParallelRoutes', label: '多线路并行', type: 'select', value: settings.enableParallelRoutes ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
-      { name: 'enableSubAgents', label: '子Agent调度', type: 'select', value: settings.enableSubAgents ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
+      { name: 'enableParallelRoutes', label: '多线路并行偏好', type: 'select', value: settings.enableParallelRoutes ? 'true' : 'false', options: [ { value: 'true', label: '开启（仅表示允许并行策略）' }, { value: 'false', label: '关闭' } ] },
+      { name: 'enableSubAgents', label: '子Agent调度偏好', type: 'select', value: settings.enableSubAgents ? 'true' : 'false', options: [ { value: 'true', label: '开启（需真实调度成功）' }, { value: 'false', label: '关闭' } ] },
+      { name: 'autoSkillDetect', label: '自动补技能', type: 'select', value: settings.autoSkillDetect ? 'true' : 'false', options: [ { value: 'true', label: '启用任务识别与安装建议' }, { value: 'false', label: '关闭' } ] },
+      { name: 'autoEnableInstalledSkills', label: '自动启用已装技能', type: 'select', value: settings.autoEnableInstalledSkills ? 'true' : 'false', options: [ { value: 'true', label: '安装后自动写入 Agent skills' }, { value: 'false', label: '只安装，不自动启用' } ] },
+      { name: 'orchestrationAutoDispatch', label: '协同自动派发', type: 'select', value: settings.orchestrationAutoDispatch ? 'true' : 'false', options: [ { value: 'true', label: '开启（按成员分发子任务）' }, { value: 'false', label: '关闭，手动派发' } ] },
       { name: 'enableVision', label: '眼睛能力', type: 'select', value: settings.enableVision ? 'true' : 'false', options: [ { value: 'true', label: '启用页面观察/视觉分析' }, { value: 'false', label: '关闭' } ] },
     ],
     onConfirm: async (result) => {
@@ -2333,10 +2476,14 @@ function showEcomWorkbenchSettings() {
         platforms: (result.platforms || '').trim(),
         skillPool: (result.skillPool || '').trim(),
         credentialsNote: (result.credentialsNote || '').trim(),
+        vaultSummary: (result.vaultSummary || '').trim(),
         forceRefreshEachRound: String(result.forceRefreshEachRound) !== 'false',
         enableParallelRoutes: String(result.enableParallelRoutes) !== 'false',
         enableSubAgents: String(result.enableSubAgents) !== 'false',
         enableVision: String(result.enableVision) !== 'false',
+        autoSkillDetect: String(result.autoSkillDetect) !== 'false',
+        autoEnableInstalledSkills: String(result.autoEnableInstalledSkills) !== 'false',
+        orchestrationAutoDispatch: String(result.orchestrationAutoDispatch) === 'true',
       }
       saveEcomWorkbenchSettings()
       renderEcomWorkbenchSummary()
@@ -2348,6 +2495,301 @@ function showEcomWorkbenchSettings() {
       }
     }
   })
+}
+
+async function loadEcomSkillCatalog(force = false) {
+  const freshEnough = _ecomSkillCatalogCache && (Date.now() - _ecomSkillCatalogTs < 60 * 1000)
+  if (!force && freshEnough) return _ecomSkillCatalogCache
+  const [skillsResp, hermesResp, storeResp] = await Promise.all([
+    api.skillsList().catch(() => ({ skills: [] })),
+    api.hermesSkillsList().catch(() => []),
+    api.skillhubIndex().catch(() => ({ skills: [], items: [] })),
+  ])
+  const installed = Array.isArray(skillsResp?.skills) ? skillsResp.skills : []
+  const hermes = Array.isArray(hermesResp) ? hermesResp : (Array.isArray(hermesResp?.skills) ? hermesResp.skills : [])
+  const store = Array.isArray(storeResp?.skills) ? storeResp.skills : (Array.isArray(storeResp?.items) ? storeResp.items : [])
+  _ecomSkillCatalogCache = { installed, hermes, store }
+  _ecomSkillCatalogTs = Date.now()
+  return _ecomSkillCatalogCache
+}
+
+function detectEcomSkillNeeds(taskText = '') {
+  const text = String(taskText || '').toLowerCase()
+  const matches = []
+  for (const rule of ECOM_SKILL_SUGGESTIONS) {
+    const hit = rule.keywords.some(keyword => text.includes(String(keyword).toLowerCase()))
+    if (hit) matches.push(rule)
+  }
+  return matches
+}
+
+function normalizeSkillStoreSlug(item) {
+  return item?.slug || item?.name || item?.id || ''
+}
+
+function pickStoreCandidates(store = [], rule) {
+  const query = String(rule?.query || '').toLowerCase()
+  const tokens = query.split(/\s+/).filter(Boolean)
+  const scored = []
+  for (const item of store) {
+    const hay = `${item?.name || ''} ${item?.description || ''} ${item?.category || ''} ${item?.slug || ''}`.toLowerCase()
+    let score = 0
+    for (const token of tokens) {
+      if (hay.includes(token)) score += 1
+    }
+    if (score > 0) scored.push({ item, score })
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, 5).map(entry => entry.item)
+}
+
+async function enableSkillsForEcomAgent(skillNames = []) {
+  const agentId = parseSessionAgent(_sessionKey) || ''
+  if (agentId !== 'ecom-mover' || !skillNames.length) return
+  let detail = null
+  try {
+    detail = await api.getAgentDetail(agentId)
+  } catch {}
+  const current = new Set(Array.isArray(detail?.skills) ? detail.skills : [])
+  skillNames.forEach(name => current.add(name))
+  await api.updateAgentConfig(agentId, { skills: [...current] })
+}
+
+async function installEcomSkillsFromRules(rules = []) {
+  if (!rules.length) return { installed: [], enabled: [], failed: [] }
+  const catalog = await loadEcomSkillCatalog(true)
+  const installedNames = new Set((catalog.installed || []).map(item => item?.name).filter(Boolean))
+  const hermesNames = new Set((catalog.hermes || []).map(item => item?.slug || item?.name).filter(Boolean))
+  const installed = []
+  const enabled = []
+  const failed = []
+
+  for (const rule of rules) {
+    const candidates = pickStoreCandidates(catalog.store || [], rule)
+    for (const item of candidates) {
+      const slug = normalizeSkillStoreSlug(item)
+      if (!slug) continue
+      try {
+        if (rule.targets?.includes('openclaw') && !installedNames.has(slug)) {
+          await api.skillhubInstall(slug)
+          installed.push(`OpenClaw:${slug}`)
+          installedNames.add(slug)
+        }
+        if (rule.targets?.includes('hermes') && !hermesNames.has(slug)) {
+          await api.hermesSkillhubInstall(slug)
+          installed.push(`Hermes:${slug}`)
+          hermesNames.add(slug)
+          try { await api.hermesSkillToggle(slug, true) } catch {}
+        }
+        if (_ecomWorkbenchSettings?.autoEnableInstalledSkills) enabled.push(slug)
+      } catch (e) {
+        failed.push(`${slug}: ${e?.message || e}`)
+      }
+    }
+  }
+
+  if (enabled.length && _ecomWorkbenchSettings?.autoEnableInstalledSkills) {
+    await enableSkillsForEcomAgent(enabled)
+  }
+  _ecomSkillCatalogCache = null
+  return { installed, enabled, failed }
+}
+
+async function maybeAutoInstallEcomSkills(taskText, options = {}) {
+  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  if (!settings.autoSkillDetect) return false
+  const rules = detectEcomSkillNeeds(taskText)
+  if (!rules.length) return false
+  const labels = rules.map(rule => rule.query).join(' / ')
+  const shouldProceed = options.force === true
+    ? true
+    : await showConfirm(`检测到该任务可能需要补充技能：${labels}\n\n是否现在自动搜索、安装并按配置启用？`)
+  if (!shouldProceed) return false
+  setEcomRunState({ active: true, phase: '补技能中', detail: `正在自动补充技能：${labels}`, tasks: rules.map(rule => ({ title: rule.query, status: '待安装' })) })
+  setReplyStatus('tool', '正在自动补充电商技能', { activity: '技能检测与安装中' })
+  const result = await installEcomSkillsFromRules(rules)
+  const summary = []
+  if (result.installed.length) summary.push(`安装成功 ${result.installed.length} 项`)
+  if (result.enabled.length) summary.push(`已启用 ${result.enabled.length} 项`)
+  if (result.failed.length) summary.push(`失败 ${result.failed.length} 项`)
+  const detail = summary.join('，') || '没有找到可安装技能'
+  setEcomRunState({ active: false, phase: '待机', detail, tasks: [] })
+  toast(detail, result.failed.length ? 'warning' : 'success')
+  appendSystemMessage(`技能补充结果：${detail}${result.failed.length ? `\n失败详情：${result.failed.join('； ')}` : ''}`)
+  renderEcomWorkbenchSummary()
+  return true
+}
+
+async function showEcomSkillAssistant() {
+  const text = _textarea?.value?.trim() || ''
+  const seed = text || (_ecomWorkbenchSettings?.skillPool || '')
+  if (!seed) {
+    toast('先输入任务，或在配置里补充技能池关键词，再使用自动补技能', 'warning')
+    return
+  }
+  await maybeAutoInstallEcomSkills(seed, { force: false })
+}
+
+function buildEcomOrchestrationCandidates() {
+  const sessions = (_lastSessionList || []).filter(session => session.sessionKey !== _sessionKey)
+  return sessions
+    .filter(session => !session.group)
+    .filter(session => !!parseSessionAgent(session.sessionKey || session.key || ''))
+    .slice(0, ECOM_ORCH_MEMBER_LIMIT)
+    .map(session => ({
+      sessionKey: session.sessionKey || session.key || '',
+      agentId: parseSessionAgent(session.sessionKey || session.key || '') || '',
+      label: getDisplayLabel(session.sessionKey || session.key || ''),
+      model: getSessionDisplayModel(session.sessionKey || session.key || '', session),
+    }))
+}
+
+function renderEcomOrchestrationMembers(candidates = [], selected = new Set()) {
+  if (!candidates.length) return '<div class="form-hint">当前没有可用于协同的 Agent 会话。请先创建或打开其他 Agent 会话。</div>'
+  return candidates.map(item => `
+    <label class="agent-skill-card">
+      <input type="checkbox" class="agent-skill-checkbox" data-ecom-member="${escapeAttr(item.sessionKey)}" ${selected.has(item.sessionKey) ? 'checked' : ''}>
+      <div class="agent-skill-main">
+        <div class="agent-skill-head">
+          <span class="agent-skill-name">${escapeHtml(item.label)}</span>
+        </div>
+        <div class="agent-skill-desc">${escapeHtml(item.agentId || 'agent')} · ${escapeHtml(shortModelName(item.model) || 'default')}</div>
+      </div>
+    </label>
+  `).join('')
+}
+
+async function dispatchEcomOrchestration(prompt, members = []) {
+  if (!members.length) {
+    toast('请至少选择一个协同成员', 'warning')
+    return false
+  }
+  const groupId = `ecom-orch-${Date.now()}`
+  setEcomRunState({
+    active: true,
+    phase: '并行派发中',
+    detail: `正在向 ${members.length} 个子Agent派发任务`,
+    tasks: members.map(member => ({ title: member.label || member.agentId || member.sessionKey, status: '待派发' })),
+  })
+  setReplyStatus('tool', '正在并行派发电商子任务', { activity: `已选择 ${members.length} 个协同成员` })
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index]
+    setEcomRunState({
+      active: true,
+      phase: '并行派发中',
+      detail: `正在派发给 ${member.label || member.agentId || member.sessionKey}`,
+      tasks: members.map((item, itemIndex) => ({ title: item.label || item.agentId || item.sessionKey, status: itemIndex < index ? '已派发' : itemIndex === index ? '派发中' : '等待中' })),
+    })
+    try {
+      const task = createTaskRecord({ sessionKey: member.sessionKey, agentId: member.agentId, model: member.model, prompt, source: 'ecom-orchestration', groupId, title: prompt.slice(0, 48) })
+      await wsClient.chatSend(member.sessionKey, prompt)
+      updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
+    } catch (e) {
+      appendSystemMessage(`协同成员派发失败：${member.label || member.sessionKey} - ${e?.message || e}`, { severity: 'error' })
+    }
+  }
+  _ecomOrchestrationState = { groupId, members, lastPrompt: prompt, lastDispatchAt: Date.now() }
+  syncEcomProgressFromTaskBoard()
+  setEcomRunState({ active: true, phase: '结果回收中', detail: '子任务已派发，正在等待各成员回传结果', tasks: members.map(member => ({ title: member.label || member.agentId || member.sessionKey, status: '执行中' })) })
+  return true
+}
+
+async function showEcomOrchestrationPanel() {
+  const candidates = buildEcomOrchestrationCandidates()
+  const selected = new Set((_ecomOrchestrationState.members || []).map(item => item.sessionKey))
+  const overlay = showContentModal({
+    title: '电商协同面板',
+    width: 720,
+    content: `
+      <div class="chat-task-editor">
+        <div class="form-group">
+          <label class="form-label">协同任务</label>
+          <textarea class="form-input" id="ecom-orch-prompt" rows="6" placeholder="输入需要并行拆分的任务，例如：分别在 1688 / 淘宝 / 抖音收集候选 SPU，并统一回收风险和利润率。">${escapeHtml(_textarea?.value?.trim() || _ecomOrchestrationState.lastPrompt || '')}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">协同成员</label>
+          <div class="agent-skills-list" id="ecom-orch-members">${renderEcomOrchestrationMembers(candidates, selected)}</div>
+        </div>
+        <div class="form-hint">这里只展示真实可派发的 Agent 会话。派发后会进入现有任务板和主对话实时进度。</div>
+      </div>
+    `,
+    buttons: [
+      { label: '保存成员', className: 'btn btn-secondary btn-sm', id: 'ecom-orch-save' },
+      { label: '立即派发', className: 'btn btn-primary btn-sm', id: 'ecom-orch-dispatch' },
+    ]
+  })
+  overlay.querySelector('#ecom-orch-save')?.setAttribute('data-ecom-action', 'save')
+  overlay.querySelector('#ecom-orch-dispatch')?.setAttribute('data-ecom-action', 'dispatch')
+
+  overlay.querySelectorAll('[data-ecom-action]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = btn.dataset.ecomAction || 'cancel'
+      if (action === 'cancel') {
+        overlay.close?.()
+        return
+      }
+      const prompt = overlay.querySelector('#ecom-orch-prompt')?.value?.trim() || ''
+      const members = [...overlay.querySelectorAll('[data-ecom-member]:checked')].map(el => {
+        const sessionKey = el.dataset.ecomMember
+        return candidates.find(item => item.sessionKey === sessionKey)
+      }).filter(Boolean)
+      _ecomOrchestrationState = {
+        groupId: _ecomOrchestrationState.groupId || `ecom-orch-${Date.now()}`,
+        members,
+        lastPrompt: prompt,
+        lastDispatchAt: _ecomOrchestrationState.lastDispatchAt || 0,
+      }
+      if (action === 'save') {
+        overlay.close?.()
+        toast('协同成员已保存', 'success')
+        renderEcomWorkbenchSummary()
+        return
+      }
+      if (!prompt) {
+        toast('请先填写协同任务', 'warning')
+        return
+      }
+      overlay.close?.()
+      await dispatchEcomOrchestration(prompt, members)
+    })
+  })
+}
+
+function analyzeEcomTask(text = '') {
+  const raw = String(text || '').trim()
+  if (!raw) return { isEcom: false, shouldParallel: false, shouldDispatch: false, members: [] }
+  const hits = detectEcomSkillNeeds(raw)
+  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  const shouldParallel = !!settings.enableParallelRoutes && /(同时|并行|分别|多平台|多个平台|1688.*淘宝|淘宝.*抖音|抖音.*小红书|采集.*对比|对比.*利润)/i.test(raw)
+  const shouldDispatch = !!settings.enableSubAgents && !!settings.orchestrationAutoDispatch && shouldParallel
+  const candidates = shouldDispatch ? buildEcomOrchestrationCandidates().slice(0, 3) : []
+  return { isEcom: hits.length > 0 || (parseSessionAgent(_sessionKey) === 'ecom-mover'), shouldParallel, shouldDispatch, members: candidates, hits }
+}
+
+async function maybeAutoOrchestrateEcomTask(text = '') {
+  const analysis = analyzeEcomTask(text)
+  if (!analysis.isEcom) return false
+  if (analysis.shouldDispatch && analysis.members.length) {
+    appendSystemMessage(`已自动进入并行编排：准备把任务分派给 ${analysis.members.length} 个子Agent，并在主对话持续回报进度。`)
+    await dispatchEcomOrchestration(text, analysis.members)
+    return true
+  }
+  if (analysis.shouldParallel) {
+    setEcomRunState({ active: true, phase: '并行准备中', detail: '该任务适合并行执行，正在优先走快速链路', tasks: [] })
+    setReplyStatus('tool', '正在准备并行执行链路', { activity: '电商任务并行预热中' })
+  }
+  return false
+}
+function maybeFinalizeEcomRunState(status = 'done', detail = '') {
+  if (parseSessionAgent(_sessionKey) !== 'ecom-mover') return
+  const message = detail || (status === 'done'
+    ? '当前任务已完成，可以继续发下一条电商指令。'
+    : status === 'aborted'
+      ? '当前任务已中止。'
+      : '当前任务执行失败，请检查报错或重试。')
+  const nextTasks = Array.isArray(_ecomRunState.tasks)
+    ? _ecomRunState.tasks.map(task => ({ ...task, status: status === 'done' ? '已完成' : status === 'aborted' ? '已中止' : '失败' }))
+    : []
+  setEcomRunState({ active: false, phase: status === 'done' ? '待机' : status === 'aborted' ? '已中止' : '失败', detail: message, tasks: nextTasks })
 }
 
 function renameSession(key, labelEl) {
@@ -2577,9 +3019,61 @@ function updateTask(taskId, patch = {}) {
   const task = _taskBoard.find(t => t.id === taskId)
   if (!task) return null
   Object.assign(task, patch, { updatedAt: Date.now() })
+  syncEcomProgressFromTaskBoard(task)
   saveTaskBoard()
   updateOpenTaskBoardModal()
   return task
+}
+
+function syncEcomProgressFromTaskBoard(task = null) {
+  if (!_ecomOrchestrationState?.groupId) return
+  const members = Array.isArray(_ecomOrchestrationState.members) ? _ecomOrchestrationState.members : []
+  if (!members.length) return
+  const relatedTasks = _taskBoard.filter(item => item.groupId === _ecomOrchestrationState.groupId)
+  if (!relatedTasks.length && !task) return
+  const nextItems = members.map(member => {
+    const related = relatedTasks.find(item => item.sessionKey === member.sessionKey) || (task && task.sessionKey === member.sessionKey ? task : null)
+    const rawStatus = related?.status || 'waiting'
+    const statusMap = {
+      sending: '已派发',
+      queued: '排队中',
+      thinking: '执行中',
+      streaming: '回传中',
+      tool: '调用工具中',
+      finalizing: '收尾中',
+      done: '已完成',
+      error: '失败',
+      aborted: '已中止',
+      waiting: '等待中',
+      running: '执行中',
+    }
+    return {
+      title: member.label || member.agentId || member.sessionKey,
+      status: statusMap[rawStatus] || rawStatus,
+      sessionKey: member.sessionKey,
+      runId: related?.runId || '',
+    }
+  })
+  const doneCount = nextItems.filter(item => item.status === '已完成').length
+  const failCount = nextItems.filter(item => item.status === '失败').length
+  const activeCount = nextItems.filter(item => ['已派发', '排队中', '执行中', '回传中', '调用工具中', '收尾中'].includes(item.status)).length
+  const phase = failCount ? '部分失败' : activeCount ? '结果回收中' : doneCount ? '已完成' : '待机'
+  const detail = failCount
+    ? `协同成员已完成 ${doneCount} 个，失败 ${failCount} 个。`
+    : activeCount
+      ? `协同成员执行中：已完成 ${doneCount} / ${nextItems.length}。`
+      : doneCount
+        ? `协同成员已全部完成，共 ${doneCount} 个。`
+        : (_ecomRunState.detail || '还没有正在执行的电商任务。')
+  _ecomRunState = {
+    ..._ecomRunState,
+    active: activeCount > 0,
+    phase,
+    detail,
+    tasks: nextItems,
+    updatedAt: Date.now(),
+  }
+  renderEcomProgressState()
 }
 
 function updateTaskByRunOrSession(runId, sessionKey, patch = {}) {
@@ -3009,7 +3503,7 @@ function rerunTask(taskId) {
 
 // ── 消息发送 ──
 
-function sendMessage() {
+async function sendMessage() {
   const text = _textarea.value.trim()
   if (!text && !_attachments.length) return
   emitLobsterPhase('ack', text ? t('chat.lobsterTaskReceived', { task: text.slice(0, 32) }) : t('chat.lobsterTaskReceivedFallback'))
@@ -3021,6 +3515,14 @@ function sendMessage() {
   if (activeGroup && _isSending) {
     toast(t('chat.groupSendBusy'), 'warning')
     return
+  }
+  if (!activeGroup && parseSessionAgent(_sessionKey) === 'ecom-mover') {
+    try {
+      await maybeAutoInstallEcomSkills(text, { force: false })
+      await maybeAutoOrchestrateEcomTask(text)
+    } catch (e) {
+      appendSystemMessage(`电商自动编排预处理失败：${e?.message || e}`, { severity: 'error' })
+    }
   }
   hideCmdPanel()
   _textarea.value = ''
@@ -3034,6 +3536,10 @@ function sendMessage() {
     return
   }
   if (_isSending || _isStreaming) { _messageQueue.push({ text, attachments }); return }
+  if (parseSessionAgent(_sessionKey) === 'ecom-mover') {
+    setEcomRunState({ active: true, phase: '主任务执行中', detail: `正在执行：${text.slice(0, 64)}`, tasks: _ecomRunState.tasks || [] })
+    setReplyStatus('thinking', `正在处理电商任务：${text.slice(0, 48)}`, { activity: '电商工作流执行中' })
+  }
   doSend(text, attachments)
 }
 
@@ -3135,6 +3641,7 @@ async function doSend(text, attachments = []) {
     const errText = translateGatewayError(err.message)
     appendSystemMessage(`${t('chat.sendFailed')}${errText}`)
     setReplyStatus('error', `${t('chat.sendFailed')}${errText}`, { runId: _currentRunId || '', activity: t('chat.sendFailedBeforeModel') })
+    maybeFinalizeEcomRunState('error', errText)
     updateTask(currentTask.id, { status: 'error', progress: 100, error: errText })
   } finally {
     _isSending = false
@@ -3162,6 +3669,7 @@ function stopGeneration() {
   wsClient.chatAbort(_sessionKey, _currentRunId || undefined).catch(() => {})
   showTyping(false)
   setReplyStatus('aborted', replyStatusText('aborted'), { runId: _currentRunId || '', activity: t('chat.replyActivityAborted') })
+  maybeFinalizeEcomRunState('aborted')
 }
 
 // ── 事件处理（参照 clawapp 实现） ──
@@ -3436,6 +3944,7 @@ async function syncReplyStatusWithRuntime(reason = '') {
         await loadHistory()
       }
       setReplyStatus('done', replyStatusText('done'), { runId: doneRunId, activity: reason ? t('chat.replyActivityRuntimeSyncedWithReason', { reason }) : t('chat.replyActivityRuntimeSynced') })
+      maybeFinalizeEcomRunState('done')
       processMessageQueue()
     }
     return true
@@ -3492,6 +4001,7 @@ function scheduleStreamSafetyTimeout() {
             _lastHistoryHash = ''
             await loadHistory()
             setReplyStatus('done', replyStatusText('done'), { runId, activity: t('chat.replyActivityDone') })
+            maybeFinalizeEcomRunState('done')
             refreshSessionList()
             processMessageQueue()
           }
@@ -3779,6 +4289,7 @@ function handleChatEvent(payload) {
     const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
     completeTaskRound(doneTask)
     setReplyStatus('done', replyStatusText('done'), { runId: runId || _currentRunId, activity: t('chat.replyActivityDone') })
+    maybeFinalizeEcomRunState('done')
     refreshSessionList()
     if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length) {
       saveMessage({
@@ -3819,6 +4330,7 @@ function handleChatEvent(payload) {
     appendSystemMessage(t('chat.generationStopped'))
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'aborted', progress: 100 })
     setReplyStatus('aborted', replyStatusText('aborted'), { runId: _currentRunId, activity: t('chat.replyActivityAborted') })
+    maybeFinalizeEcomRunState('aborted')
     resetStreamState()
     processMessageQueue()
     return
@@ -3867,6 +4379,7 @@ function handleChatEvent(payload) {
       appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
       updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
       setReplyStatus('error', `${t('chat.errorPrefix') || ''}${errMsg}`, { runId: runId || _currentRunId, activity: t('chat.checkErrorOrRetryTask') })
+      maybeFinalizeEcomRunState('error', errMsg)
       resetStreamState()
       processMessageQueue()
       return
@@ -3876,6 +4389,7 @@ function handleChatEvent(payload) {
     appendSystemMessage(`${t('chat.errorPrefix')}${errMsg}`)
     updateTaskByRunOrSession(_currentRunId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
     setReplyStatus('error', `${t('chat.errorPrefix') || ''}${errMsg}`, { runId: _currentRunId, activity: t('chat.checkErrorOrRetryTask') })
+    maybeFinalizeEcomRunState('error', errMsg)
     resetStreamState()
     processMessageQueue()
     return
