@@ -85,6 +85,7 @@ async function main() {
   }
   fs.rmSync(outPlatformRoot, { recursive: true, force: true })
   fs.renameSync(stagedPlatformRoot, outPlatformRoot)
+  validatePreparedRuntime(prepared, outPlatformRoot)
   fs.rmSync(buildRoot, { recursive: true, force: true })
   console.log(`Prepared runtime for ${target}`)
 }
@@ -239,6 +240,13 @@ function validateExpectedEntry(component, spec, outPlatformRoot) {
   const entryPath = path.join(outPlatformRoot, spec.expectedEntry)
   if (!fs.existsSync(entryPath)) {
     throw new Error(`${component} expected entry missing after prepare: ${spec.expectedEntry}`)
+  }
+}
+
+function validatePreparedRuntime(prepared, outPlatformRoot) {
+  for (const [component, spec] of Object.entries(prepared)) {
+    if (!spec?.prepared) continue
+    validateExpectedEntry(component, spec, outPlatformRoot)
   }
 }
 
