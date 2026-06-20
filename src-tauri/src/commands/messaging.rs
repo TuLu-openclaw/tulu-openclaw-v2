@@ -1227,6 +1227,50 @@ pub async fn verify_bot_token(platform: String, form: Value) -> Result<Value, St
     }
 }
 
+fn file_time_rfc3339(path: &Path, created: bool) -> Option<String> {
+    let meta = fs::metadata(path).ok()?;
+    let time = if created {
+        meta.created().or_else(|_| meta.modified()).ok()?
+    } else {
+        meta.modified().ok()?
+    };
+    let dt: chrono::DateTime<chrono::Utc> = time.into();
+    Some(dt.to_rfc3339())
+}
+
+fn ensure_weixin_runtime_config(cfg: &mut Value) -> Result<(), String> {
+    ensure_plugin_allowed(cfg, "openclaw-weixin")?;
+
+    let root = cfg.as_object_mut().ok_or("配置格式错误")?;
+    let channels = root.entry("channels").or_insert_with(|| json!({}));
+    let channels_map = channels.as_object_mut().ok_or("channels 节点格式错误")?;
+    let channel = channels_map
+        .entry("openclaw-weixin".to_string())
+        .or_insert_with(|| json!({}));
+    let channel_obj = channel
+        .as_object_mut()
+        .ok_or("channels.openclaw-weixin 节点格式错误")?;
+    channel_obj.insert("enabled".into(), json!(true));
+
+    let bindings = root.entry("bindings").or_insert_with(|| json!([]));
+    let bindings_arr = bindings.as_array_mut().ok_or("bindings 节点格式错误")?;
+    let has_weixin_binding = bindings_arr.iter().any(|binding| {
+        binding
+            .get("match")
+            .and_then(|m| m.get("channel"))
+            .and_then(|v| v.as_str())
+            == Some("openclaw-weixin")
+    });
+    if !has_weixin_binding {
+        bindings_arr.push(json!({
+            "match": { "channel": "openclaw-weixin" },
+            "agentId": "main"
+        }));
+    }
+
+    Ok(())
+}
+
 /// 检测微信插件安装状态与版本
 #[tauri::command]
 pub async fn check_weixin_plugin_status() -> Result<Value, String> {
@@ -1235,11 +1279,15 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
         .join("openclaw-weixin");
     let mut installed = false;
     let mut installed_version: Option<String> = None;
+    let mut installed_at: Option<String> = None;
+    let mut updated_at: Option<String> = None;
 
     // 检查本地安装
     let pkg_json = ext_dir.join("package.json");
     if pkg_json.is_file() {
         installed = true;
+        installed_at = file_time_rfc3339(&pkg_json, true);
+        updated_at = file_time_rfc3339(&pkg_json, false);
         if let Ok(content) = std::fs::read_to_string(&pkg_json) {
             if let Ok(pkg) = serde_json::from_str::<Value>(&content) {
                 installed_version = pkg
@@ -1370,6 +1418,8 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
     Ok(json!({
         "installed": installed,
         "installedVersion": installed_version,
+        "installedAt": installed_at,
+        "updatedAt": updated_at,
         "latestVersion": latest_version,
         "updateAvailable": update_available,
         "extensionDir": ext_dir.to_string_lossy(),
@@ -1773,19 +1823,15 @@ pub async fn run_channel_action(
     };
 
     if status.success() {
-        // 微信登录成功后写入 channels.openclaw-weixin.enabled 以便 list_configured_platforms 检测
+        // 微信登录成功后写入 channels/plugins/bindings，确保 Gateway 能实际启动并路由微信 channel
         if platform == "weixin" && action == "login" {
             if let Ok(mut cfg) = super::config::load_openclaw_json() {
-                let channels = cfg
-                    .as_object_mut()
-                    .map(|r| r.entry("channels").or_insert_with(|| json!({})))
-                    .and_then(|c| c.as_object_mut());
-                if let Some(ch) = channels {
-                    let entry = ch.entry("openclaw-weixin").or_insert_with(|| json!({}));
-                    if let Some(obj) = entry.as_object_mut() {
-                        obj.insert("enabled".into(), json!(true));
+                match ensure_weixin_runtime_config(&mut cfg) {
+                    Ok(()) => {
+                        let _ = super::config::save_openclaw_json(&cfg);
+                        emit_payload("info", "已补齐 plugins.allow / plugins.entries / channels.openclaw-weixin / 默认 main 绑定".to_string());
                     }
-                    let _ = super::config::save_openclaw_json(&cfg);
+                    Err(err) => emit_payload("info", format!("微信运行时配置补齐失败：{}", err)),
                 }
             }
             match super::config::do_reload_gateway(&app).await {

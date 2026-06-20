@@ -10,7 +10,7 @@ import { t } from '../lib/i18n.js'
 
 const ECOM_AGENT_PRESET = {
   id: 'ecom-mover',
-  name: '电商工作流',
+  name: '电商专属工作流',
   emoji: '🛒',
 }
 
@@ -146,7 +146,8 @@ function renderAgents(page, state) {
 
   container.innerHTML = state.agents.map(a => {
     const isDefault = a.isDefault || a.id === 'main'
-    const name = a.identityName ? a.identityName.split(',')[0].trim() : t('agents.noDesc')
+    const fallbackName = a.id === ECOM_AGENT_PRESET.id ? ECOM_AGENT_PRESET.name : t('agents.noDesc')
+    const name = a.identityName ? a.identityName.split(',')[0].trim() : fallbackName
     const safeId = escapeHtml(a.id)
     const safeName = escapeHtml(name)
     const rawModel = typeof a.model === 'object' ? (a.model?.primary || a.model?.id || JSON.stringify(a.model)) : (a.model || t('agents.notSet'))
@@ -306,7 +307,23 @@ async function showAddAgentDialog(page, state) {
 
 async function createEcomAgent(page, state) {
   const targetId = ECOM_AGENT_PRESET.id
+  const ensureEcomIdentity = async () => {
+    try {
+      await api.updateAgentIdentity(targetId, ECOM_AGENT_PRESET.name, ECOM_AGENT_PRESET.emoji)
+      await api.updateAgentConfig(targetId, {
+        identity: {
+          name: ECOM_AGENT_PRESET.name,
+          emoji: ECOM_AGENT_PRESET.emoji,
+        },
+      })
+      invalidate('list_agents', 'get_agent_detail')
+    } catch (e) {
+      console.warn('[Agent] 电商专属 Agent 身份补写失败:', e)
+    }
+  }
+
   const openExisting = async (mode = 'detail') => {
+    await ensureEcomIdentity()
     invalidate('list_agents', 'get_agent_detail')
     await loadAgents(page, state)
     toast(t('agents.ecomAgentExists'), 'info')

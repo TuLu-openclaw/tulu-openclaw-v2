@@ -10,6 +10,27 @@ import { CHANNEL_LABELS } from '../lib/channel-labels.js'
 import { t } from '../lib/i18n.js'
 import { wsClient } from '../lib/ws-client.js'
 
+function formatPluginTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function renderWeixinPluginDetails(s) {
+  const rows = []
+  if (s.installedVersion) rows.push([t('channels.version'), s.installedVersion])
+  if (s.latestVersion) rows.push([t('channels.latestVersion'), s.latestVersion])
+  const installedAt = formatPluginTime(s.installedAt)
+  const updatedAt = formatPluginTime(s.updatedAt)
+  if (installedAt) rows.push([t('channels.installDate') || '安装日期', installedAt])
+  if (updatedAt) rows.push([t('channels.updateDate') || '更新日期', updatedAt])
+  if (!rows.length) return ''
+  return `<div style="margin-top:8px;display:grid;gap:4px;font-size:var(--font-size-xs);color:var(--text-secondary)">
+    ${rows.map(([k, v]) => `<div style="display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px"><span style="color:var(--text-tertiary)">${escapeHtml(k)}</span><strong style="color:var(--text-primary);font-weight:600;word-break:break-all">${escapeHtml(v)}</strong></div>`).join('')}
+  </div>`
+}
+
 // ── 渠道注册表：面板内置向导，覆盖 OpenClaw 官方渠道 + 国内扩展渠道 ──
 
 const PLATFORM_REGISTRY = {
@@ -1683,7 +1704,7 @@ async function openConfigDialog(pid, page, state, accountId) {
           const installBtn = modal.querySelector('[data-channel-action="install"]')
           if (s.installed && s.compatible === false) {
             parts.push(`<span style="color:var(--error);font-weight:600">⚠ ${t('channels.pluginIncompatible')}</span>`)
-            parts.push(`${t('channels.version')} <strong>${s.installedVersion || '?'}</strong>`)
+            parts.push(renderWeixinPluginDetails(s))
             parts.push(`<br><span style="color:var(--error);font-size:var(--font-size-xs)">${s.compatError || t('channels.pluginCompatErrorHint')}</span>`)
             if (installBtn) {
               installBtn.textContent = t('channels.reinstallCompatible')
@@ -1691,7 +1712,7 @@ async function openConfigDialog(pid, page, state, accountId) {
             }
           } else if (s.connected) {
             parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
-            parts.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
+            parts.push(renderWeixinPluginDetails(s))
             parts.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
             if (s.updateAvailable && s.latestVersion) {
               parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
@@ -1699,7 +1720,7 @@ async function openConfigDialog(pid, page, state, accountId) {
             }
           } else if (s.installed) {
             parts.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
-            parts.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
+            parts.push(renderWeixinPluginDetails(s))
             parts.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || t('channels.pluginInstalled'))}</span>`)
             if (!s.hasBinding) parts.push(`<br><span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('channels.bindAgentHint')}</span>`)
             if (s.updateAvailable && s.latestVersion) {

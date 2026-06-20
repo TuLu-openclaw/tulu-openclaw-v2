@@ -256,6 +256,8 @@ export default {
   upToDate: _('已是最新', 'Up to date'),
   pluginNotInstalled: _('未安装', 'Not installed', '未安裝', 'プラグイン未インストール'),
   latestVersion: _('最新版', 'Latest version'),
+  installDate: _('安装日期', 'Install date', '安裝日期'),
+  updateDate: _('更新日期', 'Update date', '更新日期'),
   clickInstallBelow: _('点击下方「一键安装插件」开始', 'Click "Install Plugin" below to get started', '点擊下方「一鍵安裝外掛」開始'),
   pluginCompatErrorHint: _('请点击「一键安装插件」重新安装兼容版本', 'Click "Install Plugin" to reinstall a compatible version', '請點擊「一鍵安裝外掛」重新安裝相容版本'),
   executing: _('正在执行', 'Executing', '正在執行'),
