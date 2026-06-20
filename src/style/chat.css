@@ -10,6 +10,7 @@
   height: 100%;
   overflow: hidden;
   padding: 0 !important;
+  padding-bottom: env(safe-area-inset-bottom, 0) !important;
   max-width: none !important;
   width: 100%;
 }
@@ -20,6 +21,7 @@
   flex-direction: column;
   min-width: 0;
   position: relative;
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
 }
 
 /* 会话侧边栏 */

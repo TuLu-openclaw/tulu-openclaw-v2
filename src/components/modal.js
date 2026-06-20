@@ -127,7 +127,7 @@ export function showModal({ title, fields, onConfirm }) {
   overlay.innerHTML = `
     <div class="modal">
       <div class="modal-title">${escapeHtml(title)}</div>
-      ${fieldHtml}
+      <div class="modal-body">${fieldHtml}</div>
       <div class="modal-actions">
         <button class="btn btn-secondary btn-sm" data-action="cancel">${t('common.cancel')}</button>
         <button class="btn btn-primary btn-sm" data-action="confirm">${t('common.confirm')}</button>

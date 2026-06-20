@@ -2459,10 +2459,10 @@ function showEcomWorkbenchSettings() {
   showModal({
     title: '全自动店铺搬运配置',
     fields: [
-      { name: 'platforms', label: '平台范围', value: settings.platforms || '', placeholder: '如：1688,淘宝,抖音,小红书' },
-      { name: 'skillPool', label: '技能池', value: settings.skillPool || '', placeholder: '如：1688,阿里,淘宝,天猫,抖音...' },
-      { name: 'credentialsNote', label: '凭据备注', value: settings.credentialsNote || '', placeholder: '记录保存方式/账号说明，不建议直接裸写真实密码' },
-      { name: 'vaultSummary', label: '密码保险箱摘要', value: settings.vaultSummary || '', placeholder: '如：淘宝主店 / 抖音小店 / secretRef 已配置', hint: '摘要仅用于工作台展示，详细内容请点“密码保险箱”维护。' },
+      { name: 'platforms', label: '平台范围', type: 'textarea', rows: 2, value: settings.platforms || '', placeholder: '如：1688,淘宝,抖音,小红书' },
+      { name: 'skillPool', label: '技能池', type: 'textarea', rows: 2, value: settings.skillPool || '', placeholder: '如：1688,阿里,淘宝,天猫,抖音...' },
+      { name: 'credentialsNote', label: '凭据备注', type: 'textarea', rows: 2, value: settings.credentialsNote || '', placeholder: '记录保存方式/账号说明，不建议直接裸写真实密码' },
+      { name: 'vaultSummary', label: '密码保险箱摘要', type: 'textarea', rows: 2, value: settings.vaultSummary || '', placeholder: '如：淘宝主店 / 抖音小店 / secretRef 已配置', hint: '摘要仅用于工作台展示，详细内容请点“密码保险箱”维护。' },
       { name: 'forceRefreshEachRound', label: '每轮选品后强制刷新', type: 'select', value: settings.forceRefreshEachRound ? 'true' : 'false', options: [ { value: 'true', label: '开启' }, { value: 'false', label: '关闭' } ] },
       { name: 'enableParallelRoutes', label: '多线路并行偏好', type: 'select', value: settings.enableParallelRoutes ? 'true' : 'false', options: [ { value: 'true', label: '开启（仅表示允许并行策略）' }, { value: 'false', label: '关闭' } ] },
       { name: 'enableSubAgents', label: '子Agent调度偏好', type: 'select', value: settings.enableSubAgents ? 'true' : 'false', options: [ { value: 'true', label: '开启（需真实调度成功）' }, { value: 'false', label: '关闭' } ] },

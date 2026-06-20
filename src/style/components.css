@@ -287,6 +287,8 @@ mark {
   justify-content: center;
   z-index: var(--z-modal, 9000);
   animation: fadeInModal 150ms ease;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
 }
 
 .modal {
@@ -294,18 +296,21 @@ mark {
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-xl);
   padding: var(--space-xl);
-  min-width: 360px;
-  max-width: 500px;
-  max-height: calc(100vh - 60px);
+  min-width: min(360px, calc(100vw - 32px));
+  max-width: min(500px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px - env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 .modal-body,
 .modal-content-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  padding-right: 2px;
 }
 
 .modal-title {
@@ -319,6 +324,8 @@ mark {
   justify-content: flex-end;
   gap: var(--space-sm);
   margin-top: var(--space-xl);
+  flex-shrink: 0;
+  background: var(--bg-secondary);
 }
 
 @keyframes fadeInModal {
