@@ -35,11 +35,11 @@ const ECOM_TOOLS_SECTION_START = '<!-- ECOM_WORKBENCH_SETTINGS:START -->'
 const ECOM_TOOLS_SECTION_END = '<!-- ECOM_WORKBENCH_SETTINGS:END -->'
 const ECOM_VAULT_FILENAME = 'ECOM_VAULT.md'
 const ECOM_SKILL_SUGGESTIONS = [
-  { keywords: ['1688', '阿里巴巴', '采集', '货源', '采购'], query: '1688 ecommerce scraping', targets: ['openclaw', 'hermes'] },
-  { keywords: ['淘宝', '天猫', '上架', '店铺', '商品'], query: 'taobao ecommerce browser', targets: ['openclaw', 'hermes'] },
-  { keywords: ['抖音', '小店', '短视频', '直播'], query: 'douyin ecommerce automation', targets: ['openclaw', 'hermes'] },
-  { keywords: ['小红书', '笔记', '种草'], query: 'xiaohongshu ecommerce automation', targets: ['openclaw', 'hermes'] },
-  { keywords: ['截图', '页面', '浏览器', '登录', '打开网页'], query: 'auto-browser', targets: ['openclaw'] },
+  { label: '1688货源/采集', keywords: ['1688', '阿里巴巴', '采集', '货源', '采购'], queries: ['1688', '1688 sourcing', '1688 product search', '电商 1688'], targets: ['openclaw', 'hermes'] },
+  { label: '淘宝/天猫上架运营', keywords: ['淘宝', '天猫', '上架', '店铺', '商品'], queries: ['taobao', '淘宝', '淘宝 电商', '电商 上架'], targets: ['openclaw', 'hermes'] },
+  { label: '抖音电商运营', keywords: ['抖音', '小店', '短视频', '直播'], queries: ['抖音', 'douyin', 'douyin operations', '电商 短视频'], targets: ['openclaw', 'hermes'] },
+  { label: '小红书内容/电商运营', keywords: ['小红书', '笔记', '种草'], queries: ['小红书', 'xiaohongshu', 'xhs', '小红书 电商'], targets: ['openclaw', 'hermes'] },
+  { label: '浏览器自动化', keywords: ['截图', '页面', '浏览器', '登录', '打开网页'], queries: ['browser automation', 'auto browser', '浏览器 自动化'], targets: ['openclaw'] },
 ]
 const ECOM_ORCH_MEMBER_LIMIT = 6
 
@@ -2523,23 +2523,76 @@ function detectEcomSkillNeeds(taskText = '') {
   return matches
 }
 
-function normalizeSkillStoreSlug(item) {
-  return item?.slug || item?.name || item?.id || ''
+function getEcomRuleQueries(rule = {}) {
+  const queries = Array.isArray(rule.queries) ? rule.queries : [rule.query]
+  return [...new Set(queries.map(q => String(q || '').trim()).filter(Boolean))]
 }
 
-function pickStoreCandidates(store = [], rule) {
-  const query = String(rule?.query || '').toLowerCase()
-  const tokens = query.split(/\s+/).filter(Boolean)
-  const scored = []
-  for (const item of store) {
-    const hay = `${item?.name || ''} ${item?.description || ''} ${item?.category || ''} ${item?.slug || ''}`.toLowerCase()
-    let score = 0
-    for (const token of tokens) {
-      if (hay.includes(token)) score += 1
-    }
-    if (score > 0) scored.push({ item, score })
+function getSkillStoreSlug(item) {
+  return item?.slug || item?.id || item?.name || ''
+}
+
+function getSkillDisplayName(item) {
+  return item?.displayName || item?.display_name || item?.title || item?.name || item?.slug || item?.id || '未知技能'
+}
+
+function getSkillSearchText(item) {
+  const tags = Array.isArray(item?.tags) ? item.tags.join(' ') : ''
+  const categories = Array.isArray(item?.categories) ? item.categories.join(' ') : ''
+  return [
+    item?.slug,
+    item?.id,
+    item?.name,
+    item?.displayName,
+    item?.display_name,
+    item?.title,
+    item?.summary,
+    item?.description,
+    item?.category,
+    tags,
+    categories,
+  ].filter(Boolean).join(' ').toLowerCase()
+}
+
+function uniqSkillItems(items = []) {
+  const seen = new Set()
+  const out = []
+  for (const item of items) {
+    const slug = getSkillStoreSlug(item)
+    if (!slug || seen.has(slug)) continue
+    seen.add(slug)
+    out.push(item)
   }
-  return scored.sort((a, b) => b.score - a.score).slice(0, 5).map(entry => entry.item)
+  return out
+}
+
+async function searchEcomSkillCandidates(rule, store = []) {
+  const results = []
+  const queries = getEcomRuleQueries(rule)
+  for (const query of queries) {
+    try {
+      const resp = await api.skillhubSearch(query, 8)
+      const items = Array.isArray(resp) ? resp : (Array.isArray(resp?.results) ? resp.results : (Array.isArray(resp?.items) ? resp.items : (Array.isArray(resp?.skills) ? resp.skills : [])))
+      results.push(...items)
+    } catch {}
+  }
+  if (!results.length && store.length) {
+    for (const query of queries) {
+      const tokens = query.toLowerCase().split(/[\s,，/]+/).filter(Boolean)
+      for (const item of store) {
+        const hay = getSkillSearchText(item)
+        const score = tokens.reduce((sum, token) => sum + (hay.includes(token) ? 1 : 0), 0)
+        if (score > 0) results.push({ ...item, score })
+      }
+    }
+  }
+  return uniqSkillItems(results)
+}
+
+function formatEcomSkillTask(item, status) {
+  const name = getSkillDisplayName(item)
+  const slug = getSkillStoreSlug(item)
+  return { title: slug && slug !== name ? `${name}（${slug}）` : name, status }
 }
 
 async function enableSkillsForEcomAgent(skillNames = []) {
@@ -2555,34 +2608,56 @@ async function enableSkillsForEcomAgent(skillNames = []) {
 }
 
 async function installEcomSkillsFromRules(rules = []) {
-  if (!rules.length) return { installed: [], enabled: [], failed: [] }
+  if (!rules.length) return { installed: [], enabled: [], failed: [], matched: [] }
   const catalog = await loadEcomSkillCatalog(true)
-  const installedNames = new Set((catalog.installed || []).map(item => item?.name).filter(Boolean))
+  const installedNames = new Set((catalog.installed || []).map(item => item?.name || item?.slug).filter(Boolean))
   const hermesNames = new Set((catalog.hermes || []).map(item => item?.slug || item?.name).filter(Boolean))
   const installed = []
   const enabled = []
   const failed = []
+  const matched = []
+  const tasks = []
 
   for (const rule of rules) {
-    const candidates = pickStoreCandidates(catalog.store || [], rule)
-    for (const item of candidates) {
-      const slug = normalizeSkillStoreSlug(item)
+    const candidates = await searchEcomSkillCandidates(rule, catalog.store || [])
+    if (!candidates.length) {
+      const title = rule.label || getEcomRuleQueries(rule)[0] || '电商技能'
+      tasks.push({ title, status: '未找到' })
+      failed.push(`${title}: 未找到匹配的 SkillHub 技能`)
+      setEcomRunState({ tasks: [...tasks] })
+      continue
+    }
+
+    for (const item of candidates.slice(0, 3)) {
+      const slug = getSkillStoreSlug(item)
       if (!slug) continue
+      matched.push(slug)
+      tasks.push(formatEcomSkillTask(item, '安装中'))
+      setEcomRunState({ tasks: [...tasks] })
+      const taskIndex = tasks.length - 1
       try {
+        let changed = false
         if (rule.targets?.includes('openclaw') && !installedNames.has(slug)) {
           await api.skillhubInstall(slug)
           installed.push(`OpenClaw:${slug}`)
           installedNames.add(slug)
+          changed = true
         }
         if (rule.targets?.includes('hermes') && !hermesNames.has(slug)) {
           await api.hermesSkillhubInstall(slug)
           installed.push(`Hermes:${slug}`)
           hermesNames.add(slug)
+          changed = true
           try { await api.hermesSkillToggle(slug, true) } catch {}
         }
         if (_ecomWorkbenchSettings?.autoEnableInstalledSkills) enabled.push(slug)
+        tasks[taskIndex] = formatEcomSkillTask(item, changed ? '已安装' : '已存在')
+        setEcomRunState({ tasks: [...tasks] })
       } catch (e) {
-        failed.push(`${slug}: ${e?.message || e}`)
+        const msg = e?.message || e
+        failed.push(`${slug}: ${msg}`)
+        tasks[taskIndex] = formatEcomSkillTask(item, '失败')
+        setEcomRunState({ tasks: [...tasks] })
       }
     }
   }
@@ -2591,7 +2666,7 @@ async function installEcomSkillsFromRules(rules = []) {
     await enableSkillsForEcomAgent(enabled)
   }
   _ecomSkillCatalogCache = null
-  return { installed, enabled, failed }
+  return { installed, enabled, failed, matched, tasks }
 }
 
 async function maybeAutoInstallEcomSkills(taskText, options = {}) {
@@ -2599,20 +2674,21 @@ async function maybeAutoInstallEcomSkills(taskText, options = {}) {
   if (!settings.autoSkillDetect) return false
   const rules = detectEcomSkillNeeds(taskText)
   if (!rules.length) return false
-  const labels = rules.map(rule => rule.query).join(' / ')
+  const labels = rules.map(rule => rule.label || getEcomRuleQueries(rule)[0]).join(' / ')
   const shouldProceed = options.force === true
     ? true
-    : await showConfirm(`检测到该任务可能需要补充技能：${labels}\n\n是否现在自动搜索、安装并按配置启用？`)
+    : await showConfirm(`检测到该任务可能需要补充技能：${labels}\n\n是否现在从 ClawHub 搜索真实技能、安装并按配置启用？`)
   if (!shouldProceed) return false
-  setEcomRunState({ active: true, phase: '补技能中', detail: `正在自动补充技能：${labels}`, tasks: rules.map(rule => ({ title: rule.query, status: '待安装' })) })
-  setReplyStatus('tool', '正在自动补充电商技能', { activity: '技能检测与安装中' })
+  setEcomRunState({ active: true, phase: '补技能中', detail: `正在从 ClawHub 搜索并安装：${labels}`, tasks: rules.map(rule => ({ title: rule.label || getEcomRuleQueries(rule)[0], status: '检索中' })) })
+  setReplyStatus('tool', '正在自动补充电商技能', { activity: 'ClawHub 搜索与安装中' })
   const result = await installEcomSkillsFromRules(rules)
   const summary = []
-  if (result.installed.length) summary.push(`安装成功 ${result.installed.length} 项`)
+  if (result.matched.length) summary.push(`匹配到 ${result.matched.length} 个真实技能`)
+  if (result.installed.length) summary.push(`安装/同步 ${result.installed.length} 项`)
   if (result.enabled.length) summary.push(`已启用 ${result.enabled.length} 项`)
-  if (result.failed.length) summary.push(`失败 ${result.failed.length} 项`)
-  const detail = summary.join('，') || '没有找到可安装技能'
-  setEcomRunState({ active: false, phase: '待机', detail, tasks: [] })
+  if (result.failed.length) summary.push(`异常 ${result.failed.length} 项`)
+  const detail = summary.join('，') || '没有匹配到可安装技能'
+  setEcomRunState({ active: false, phase: '待机', detail, tasks: result.tasks || [] })
   toast(detail, result.failed.length ? 'warning' : 'success')
   appendSystemMessage(`技能补充结果：${detail}${result.failed.length ? `\n失败详情：${result.failed.join('； ')}` : ''}`)
   renderEcomWorkbenchSummary()
