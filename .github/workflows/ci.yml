@@ -126,6 +126,8 @@ jobs:
 
       - name: Rust compile check
         working-directory: src-tauri
+        env:
+          OPENCLAW_ALLOW_RUNTIME_PLACEHOLDER: "1"
         run: cargo check --all-targets
 
   # ─────────────────────────────────────────────────────────────
