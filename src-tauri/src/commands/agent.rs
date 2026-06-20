@@ -53,6 +53,7 @@ const AGENT_FILE_ALLOWLIST: &[&str] = &[
     "HEARTBEAT.md",
     "BOOTSTRAP.md",
     "MEMORY.md",
+    "ECOM_VAULT.md",
 ];
 
 const WORKSPACE_TEXT_EXTENSIONS: &[&str] = &[
@@ -648,6 +649,15 @@ pub async fn update_agent_config(
             agent.remove("tools");
         } else {
             agent.insert("tools".to_string(), tools.clone());
+        }
+    }
+    for key in ["profile", "metadata", "description", "instructions"] {
+        if let Some(value) = config.get(key) {
+            if value.is_null() {
+                agent.remove(key);
+            } else {
+                agent.insert(key.to_string(), value.clone());
+            }
         }
     }
 

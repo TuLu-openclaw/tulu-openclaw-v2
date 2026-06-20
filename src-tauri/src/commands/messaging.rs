@@ -1309,6 +1309,56 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
         }
     }
 
+    let cfg = super::config::load_openclaw_json().unwrap_or_else(|_| json!({}));
+    let channel_cfg = cfg.get("channels").and_then(|c| c.get("openclaw-weixin"));
+    let channel_enabled = channel_cfg
+        .and_then(|c| c.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let has_channel_config = channel_cfg
+        .and_then(|c| c.as_object())
+        .map(|obj| obj.keys().any(|k| k != "enabled"))
+        .unwrap_or(false);
+    let has_binding = cfg
+        .get("bindings")
+        .and_then(|b| b.as_array())
+        .map(|bindings| {
+            bindings.iter().any(|binding| {
+                binding
+                    .get("match")
+                    .and_then(|m| m.get("channel"))
+                    .and_then(|v| v.as_str())
+                    == Some("openclaw-weixin")
+            })
+        })
+        .unwrap_or(false);
+    let port = cfg
+        .get("gateway")
+        .and_then(|g| g.get("port"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(18789);
+    let gateway_url = format!("http://127.0.0.1:{}/health", port);
+    let gateway_reachable = match client.get(&gateway_url).send().await {
+        Ok(resp) => resp.status().is_success(),
+        Err(_) => false,
+    };
+    let connected = installed && compatible && channel_enabled && has_channel_config && has_binding && gateway_reachable;
+    let status_hint = if connected {
+        "微信插件、渠道配置、绑定和本机 Gateway 均已就绪".to_string()
+    } else if !installed {
+        "微信插件未安装".to_string()
+    } else if !compatible {
+        compat_error.clone()
+    } else if !channel_enabled || !has_channel_config {
+        "微信插件已安装，但 channels.openclaw-weixin 尚未完成登录配置".to_string()
+    } else if !has_binding {
+        "微信渠道已配置，但还没有绑定到任何 Agent，会导致微信侧提示暂无法连接 OpenClaw".to_string()
+    } else if !gateway_reachable {
+        format!("微信渠道已配置，但本机 Gateway 健康检查不可达：{}", gateway_url)
+    } else {
+        "微信渠道状态未知，请重新登录或查看 Gateway 日志".to_string()
+    };
+
     Ok(json!({
         "installed": installed,
         "installedVersion": installed_version,
@@ -1317,6 +1367,13 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
         "extensionDir": ext_dir.to_string_lossy(),
         "compatible": compatible,
         "compatError": compat_error,
+        "channelEnabled": channel_enabled,
+        "hasChannelConfig": has_channel_config,
+        "hasBinding": has_binding,
+        "gatewayReachable": gateway_reachable,
+        "gatewayUrl": gateway_url,
+        "connected": connected,
+        "statusHint": status_hint,
     }))
 }
 

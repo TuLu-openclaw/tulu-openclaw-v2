@@ -2423,34 +2423,113 @@ function startEcomChatTemplate() {
   _textarea.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+function parseEcomVaultAccounts(content = '') {
+  const text = String(content || '')
+  const blocks = text.split(/\n(?=##\s+)/).filter(Boolean)
+  const accounts = []
+  for (const block of blocks) {
+    const title = (block.match(/^##\s+(.+)$/m)?.[1] || '').trim()
+    if (!title || title.includes('使用说明')) continue
+    const get = (label) => (block.match(new RegExp(`^-\\s*${label}：\\s*(.*)$`, 'm'))?.[1] || '').trim()
+    accounts.push({ platform: get('平台'), url: get('平台地址'), account: get('账号'), password: get('密码/密钥'), extra: get('其他关键信息'), note: get('备注') })
+  }
+  return accounts.length ? accounts : [{ platform: '', url: '', account: '', password: '', extra: '', note: '' }]
+}
+
+function buildEcomVaultContent(accounts = []) {
+  const cleanAccounts = (accounts || []).map(item => ({
+    platform: String(item.platform || '').trim(),
+    url: String(item.url || '').trim(),
+    account: String(item.account || '').trim(),
+    password: String(item.password || '').trim(),
+    extra: String(item.extra || '').trim(),
+    note: String(item.note || '').trim(),
+  })).filter(item => item.platform || item.url || item.account || item.password || item.extra || item.note)
+  const lines = [
+    '# ECOM_VAULT.md', '', '## 使用说明',
+    '- 每个平台/店铺保存一组账号信息，平台地址用于登录入口，账号/密码用于执行前确认。',
+    '- 其他关键信息可填写手机号、验证码接收方式、店铺名、API Key、Cookie 保存位置、二级密码提示等。',
+    '- 这里属于 Agent 专属工作区文件；请只保存你允许该电商 Agent 使用的信息。', '',
+  ]
+  if (!cleanAccounts.length) {
+    lines.push('## 账号 1', '- 平台：', '- 平台地址：', '- 账号：', '- 密码/密钥：', '- 其他关键信息：', '- 备注：', '')
+    return lines.join('\n')
+  }
+  cleanAccounts.forEach((item, index) => {
+    lines.push(`## 账号 ${index + 1}${item.platform ? ` - ${item.platform}` : ''}`, `- 平台：${item.platform}`, `- 平台地址：${item.url}`, `- 账号：${item.account}`, `- 密码/密钥：${item.password}`, `- 其他关键信息：${item.extra}`, `- 备注：${item.note}`, '')
+  })
+  return lines.join('\n')
+}
+
+function renderEcomVaultAccountFields(accounts = []) {
+  return accounts.map((item, index) => `
+    <div class="chat-ecom-vault-account" data-vault-account="${index}">
+      <div class="chat-ecom-vault-account-head"><strong>账号 ${index + 1}</strong><button type="button" class="btn btn-sm btn-secondary" data-vault-remove="${index}">删除</button></div>
+      <div class="chat-ecom-vault-grid">
+        <label><span>平台/店铺名</span><input class="form-input" data-vault-field="platform" value="${escapeAttr(item.platform || '')}" placeholder="如：淘宝主店 / 1688供应商"></label>
+        <label><span>平台地址</span><input class="form-input" data-vault-field="url" value="${escapeAttr(item.url || '')}" placeholder="https://..."></label>
+        <label><span>账号</span><input class="form-input" data-vault-field="account" value="${escapeAttr(item.account || '')}" placeholder="手机号 / 邮箱 / 登录名"></label>
+        <label><span>密码/密钥</span><input class="form-input" data-vault-field="password" value="${escapeAttr(item.password || '')}" placeholder="密码、API Key 或 secretRef"></label>
+      </div>
+      <label class="chat-ecom-vault-wide"><span>其他关键信息</span><textarea class="form-input" data-vault-field="extra" rows="2" placeholder="验证码接收方式、店铺 ID、Cookie 路径、二级密码提示等">${escapeHtml(item.extra || '')}</textarea></label>
+      <label class="chat-ecom-vault-wide"><span>备注</span><textarea class="form-input" data-vault-field="note" rows="2" placeholder="使用限制、风险提示、是否允许自动登录等">${escapeHtml(item.note || '')}</textarea></label>
+    </div>
+  `).join('')
+}
+
 async function showEcomVaultEditor() {
   const agentId = parseSessionAgent(_sessionKey) || ''
   if (agentId !== 'ecom-mover') {
     toast('只有 ecom-mover 会话支持密码保险箱', 'warning')
     return
   }
-  let initial = '# ECOM_VAULT.md\n\n- 平台地址：\n- 账号标识：\n- secretRef：\n- 备注：\n'
+  let initial = buildEcomVaultContent([])
   try {
     const res = await api.readAgentFile(agentId, ECOM_VAULT_FILENAME)
     if (res?.content) initial = res.content
   } catch {}
-  showModal({
+  let accounts = parseEcomVaultAccounts(initial)
+  const overlay = showContentModal({
     title: '密码保险箱',
-    fields: [
-      { name: 'content', label: '保险箱内容', type: 'textarea', rows: 16, value: initial, placeholder: '建议保存平台地址、账号标识、secretRef、备注，不建议明文密码。' },
-    ],
-    onConfirm: async (result) => {
-      await api.writeAgentFile(agentId, ECOM_VAULT_FILENAME, result.content || '')
-      const lines = String(result.content || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-      _ecomWorkbenchSettings = {
-        ...(_ecomWorkbenchSettings || loadEcomWorkbenchSettings()),
-        vaultSummary: lines.slice(0, 3).join(' / ').slice(0, 120),
-      }
-      saveEcomWorkbenchSettings()
-      renderEcomWorkbenchSummary()
-      await persistEcomWorkbenchSettingsForAgent(agentId)
-      toast('密码保险箱已保存', 'success')
-    }
+    width: 820,
+    content: `
+      <div class="chat-ecom-vault-help"><strong>怎么用：</strong>把每个平台的登录入口、账号、密码/密钥和其他关键信息分组填写。Agent 执行搬运任务前会优先读取这里的账号上下文；涉及登录、下单、上架等高风险动作仍应先确认。</div>
+      <div id="ecom-vault-accounts">${renderEcomVaultAccountFields(accounts)}</div>
+      <button type="button" class="btn btn-secondary btn-sm" id="ecom-vault-add">添加账号</button>
+    `,
+    buttons: [{ label: '保存保险箱', className: 'btn btn-primary btn-sm', id: 'ecom-vault-save' }],
+  })
+  const readAccounts = () => [...overlay.querySelectorAll('[data-vault-account]')].map(card => {
+    const item = {}
+    card.querySelectorAll('[data-vault-field]').forEach(el => { item[el.dataset.vaultField] = el.value || '' })
+    return item
+  })
+  const rerender = () => {
+    const wrap = overlay.querySelector('#ecom-vault-accounts')
+    if (wrap) wrap.innerHTML = renderEcomVaultAccountFields(accounts)
+  }
+  overlay.querySelector('#ecom-vault-add')?.addEventListener('click', () => {
+    accounts = readAccounts()
+    accounts.push({ platform: '', url: '', account: '', password: '', extra: '', note: '' })
+    rerender()
+  })
+  overlay.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-vault-remove]')
+    if (!btn) return
+    accounts = readAccounts().filter((_, index) => index !== Number(btn.dataset.vaultRemove))
+    if (!accounts.length) accounts.push({ platform: '', url: '', account: '', password: '', extra: '', note: '' })
+    rerender()
+  })
+  overlay.querySelector('#ecom-vault-save')?.addEventListener('click', async () => {
+    const content = buildEcomVaultContent(readAccounts())
+    await api.writeAgentFile(agentId, ECOM_VAULT_FILENAME, content)
+    const saved = parseEcomVaultAccounts(content).filter(item => item.platform || item.account || item.url)
+    _ecomWorkbenchSettings = { ...(_ecomWorkbenchSettings || loadEcomWorkbenchSettings()), vaultSummary: saved.length ? `${saved.length} 组账号：${saved.map(item => item.platform || item.account || item.url).slice(0, 3).join(' / ')}` : '未配置账号' }
+    saveEcomWorkbenchSettings()
+    renderEcomWorkbenchSummary()
+    await persistEcomWorkbenchSettingsForAgent(agentId)
+    overlay.close?.()
+    toast('密码保险箱已保存', 'success')
   })
 }
 
@@ -2705,32 +2784,84 @@ async function showEcomSkillAssistant() {
   await maybeAutoInstallEcomSkills(seed, { force: false })
 }
 
-function buildEcomOrchestrationCandidates() {
-  const sessions = (_lastSessionList || []).filter(session => session.sessionKey !== _sessionKey)
-  return sessions
-    .filter(session => !session.group)
-    .filter(session => !!parseSessionAgent(session.sessionKey || session.key || ''))
-    .slice(0, ECOM_ORCH_MEMBER_LIMIT)
-    .map(session => ({
-      sessionKey: session.sessionKey || session.key || '',
-      agentId: parseSessionAgent(session.sessionKey || session.key || '') || '',
-      label: getDisplayLabel(session.sessionKey || session.key || ''),
-      model: getSessionDisplayModel(session.sessionKey || session.key || '', session),
-    }))
+function inferEcomSubAgentRoles(prompt = '') {
+  const text = String(prompt || '')
+  const roles = []
+  const add = (id, name, focus) => { if (!roles.some(role => role.id === id)) roles.push({ id, name, focus }) }
+  if (/1688|阿里|货源|供应商|采购/i.test(text)) add('ecom-source-agent', '电商货源采集员', '负责 1688/阿里/供应商货源采集、价格库存刷新、源链接记录')
+  if (/淘宝|天猫|上架|标题|详情|店铺/i.test(text)) add('ecom-listing-agent', '电商上架运营员', '负责淘宝/天猫标题、类目、详情页、售价和上架风险检查')
+  if (/抖音|小红书|内容|直播|短视频|种草/i.test(text)) add('ecom-content-agent', '电商内容运营员', '负责抖音/小红书内容卖点、短视频脚本、种草笔记和直播话术')
+  if (/利润|对比|风控|风险|合规|复核|质检/i.test(text)) add('ecom-risk-agent', '电商风控复核员', '负责利润率、合规风险、平台规则、重复商品和最终质检')
+  if (!roles.length) {
+    add('ecom-source-agent', '电商货源采集员', '负责货源采集、SPU 主档整理和刷新时间记录')
+    add('ecom-risk-agent', '电商风控复核员', '负责利润率、合规风险和最终交付复核')
+  }
+  return roles.slice(0, ECOM_ORCH_MEMBER_LIMIT)
 }
 
-function renderEcomOrchestrationMembers(candidates = [], selected = new Set()) {
-  if (!candidates.length) return '<div class="form-hint">当前没有可用于协同的 Agent 会话。请先创建或打开其他 Agent 会话。</div>'
+async function resolveDefaultAgentModel() {
+  try {
+    const config = await api.readOpenclawConfig()
+    const providers = config?.models?.providers || {}
+    for (const [pk, pv] of Object.entries(providers)) {
+      const first = Array.isArray(pv.models) ? pv.models[0] : null
+      const mid = typeof first === 'string' ? first : first?.id
+      if (mid) return `${pk}/${mid}`
+    }
+  } catch {}
+  return _selectedModel || _primaryModel || ''
+}
+
+async function ensureEcomSubAgent(role) {
+  const existing = await api.listAgents().catch(() => [])
+  const found = Array.isArray(existing) && existing.some(agent => agent.id === role.id)
+  if (!found) {
+    const model = await resolveDefaultAgentModel()
+    if (!model) throw new Error('未找到可用于创建子Agent的模型')
+    await api.addAgent(role.id, model, null)
+  }
+  await api.updateAgentIdentity(role.id, role.name, '🛒').catch(() => {})
+  await api.updateAgentConfig(role.id, {
+    identity: { name: role.name, emoji: '🛒' },
+    profile: 'ecommerce-subagent',
+    metadata: { preset: 'ecom-mover-subagent', parent: 'ecom-mover', focus: role.focus },
+  }).catch(() => {})
+  const soul = `# SOUL.md - ${role.name}\n\n## 职责\n${role.focus}。\n\n## 协同规则\n- 只完成主 Agent 派发的子任务，不向用户索要无关信息。\n- 输出必须包含：结论、证据/链接、风险、下一步建议。\n- 涉及登录、下单、上架、付款等高风险动作必须等待主 Agent 或用户确认。\n`
+  await api.writeAgentFile(role.id, 'SOUL.md', soul).catch(() => {})
+  return {
+    sessionKey: `agent:${role.id}:ecom-orchestration`,
+    agentId: role.id,
+    label: role.name,
+    model: getSessionDisplayModel(`agent:${role.id}:ecom-orchestration`),
+    focus: role.focus,
+  }
+}
+
+async function buildEcomOrchestrationCandidates(prompt = '') {
+  const roles = inferEcomSubAgentRoles(prompt)
+  const members = []
+  for (const role of roles) {
+    try {
+      members.push(await ensureEcomSubAgent(role))
+    } catch (e) {
+      appendSystemMessage(`自动创建协同子Agent失败：${role.name} - ${e?.message || e}`, { severity: 'error' })
+    }
+  }
+  return members
+}
+
+function renderEcomOrchestrationMembers(candidates = []) {
+  if (!candidates.length) return '<div class="form-hint">输入任务后系统会自动创建/复用电商子Agent，不需要手动勾选成员。</div>'
   return candidates.map(item => `
-    <label class="agent-skill-card">
-      <input type="checkbox" class="agent-skill-checkbox" data-ecom-member="${escapeAttr(item.sessionKey)}" ${selected.has(item.sessionKey) ? 'checked' : ''}>
+    <div class="agent-skill-card">
       <div class="agent-skill-main">
         <div class="agent-skill-head">
           <span class="agent-skill-name">${escapeHtml(item.label)}</span>
+          <span class="agent-skill-badge">自动</span>
         </div>
-        <div class="agent-skill-desc">${escapeHtml(item.agentId || 'agent')} · ${escapeHtml(shortModelName(item.model) || 'default')}</div>
+        <div class="agent-skill-desc">${escapeHtml(item.agentId || 'agent')} · ${escapeHtml(item.focus || '按任务自动分工')}</div>
       </div>
-    </label>
+    </div>
   `).join('')
 }
 
@@ -2770,8 +2901,7 @@ async function dispatchEcomOrchestration(prompt, members = []) {
 }
 
 async function showEcomOrchestrationPanel() {
-  const candidates = buildEcomOrchestrationCandidates()
-  const selected = new Set((_ecomOrchestrationState.members || []).map(item => item.sessionKey))
+  const initialPrompt = _textarea?.value?.trim() || _ecomOrchestrationState.lastPrompt || ''
   const overlay = showContentModal({
     title: '电商协同面板',
     width: 720,
@@ -2779,75 +2909,70 @@ async function showEcomOrchestrationPanel() {
       <div class="chat-task-editor">
         <div class="form-group">
           <label class="form-label">协同任务</label>
-          <textarea class="form-input" id="ecom-orch-prompt" rows="6" placeholder="输入需要并行拆分的任务，例如：分别在 1688 / 淘宝 / 抖音收集候选 SPU，并统一回收风险和利润率。">${escapeHtml(_textarea?.value?.trim() || _ecomOrchestrationState.lastPrompt || '')}</textarea>
+          <textarea class="form-input" id="ecom-orch-prompt" rows="6" placeholder="输入需要并行拆分的任务，例如：分别在 1688 / 淘宝 / 抖音收集候选 SPU，并统一回收风险和利润率。">${escapeHtml(initialPrompt)}</textarea>
         </div>
         <div class="form-group">
-          <label class="form-label">协同成员</label>
-          <div class="agent-skills-list" id="ecom-orch-members">${renderEcomOrchestrationMembers(candidates, selected)}</div>
+          <label class="form-label">自动子Agent</label>
+          <div class="agent-skills-list" id="ecom-orch-members">${renderEcomOrchestrationMembers([])}</div>
         </div>
-        <div class="form-hint">这里只展示真实可派发的 Agent 会话。派发后会进入现有任务板和主对话实时进度。</div>
+        <div class="form-hint">开启协同后，主 Agent 会按任务自动创建/复用子 Agent、写入职责，并自动派发子任务；用户不需要手动指定成员。</div>
       </div>
     `,
     buttons: [
-      { label: '保存成员', className: 'btn btn-secondary btn-sm', id: 'ecom-orch-save' },
-      { label: '立即派发', className: 'btn btn-primary btn-sm', id: 'ecom-orch-dispatch' },
+      { label: '预览自动分工', className: 'btn btn-secondary btn-sm', id: 'ecom-orch-preview' },
+      { label: '立即自动派发', className: 'btn btn-primary btn-sm', id: 'ecom-orch-dispatch' },
     ]
   })
-  overlay.querySelector('#ecom-orch-save')?.setAttribute('data-ecom-action', 'save')
-  overlay.querySelector('#ecom-orch-dispatch')?.setAttribute('data-ecom-action', 'dispatch')
-
-  overlay.querySelectorAll('[data-ecom-action]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const action = btn.dataset.ecomAction || 'cancel'
-      if (action === 'cancel') {
-        overlay.close?.()
-        return
-      }
-      const prompt = overlay.querySelector('#ecom-orch-prompt')?.value?.trim() || ''
-      const members = [...overlay.querySelectorAll('[data-ecom-member]:checked')].map(el => {
-        const sessionKey = el.dataset.ecomMember
-        return candidates.find(item => item.sessionKey === sessionKey)
-      }).filter(Boolean)
-      _ecomOrchestrationState = {
-        groupId: _ecomOrchestrationState.groupId || `ecom-orch-${Date.now()}`,
-        members,
-        lastPrompt: prompt,
-        lastDispatchAt: _ecomOrchestrationState.lastDispatchAt || 0,
-      }
-      if (action === 'save') {
-        overlay.close?.()
-        toast('协同成员已保存', 'success')
-        renderEcomWorkbenchSummary()
-        return
-      }
-      if (!prompt) {
-        toast('请先填写协同任务', 'warning')
-        return
-      }
-      overlay.close?.()
-      await dispatchEcomOrchestration(prompt, members)
-    })
+  const prepareMembers = async () => {
+    const prompt = overlay.querySelector('#ecom-orch-prompt')?.value?.trim() || ''
+    if (!prompt) { toast('请先填写协同任务', 'warning'); return [] }
+    const list = overlay.querySelector('#ecom-orch-members')
+    if (list) list.innerHTML = '<div class="form-hint">正在自动创建/复用子Agent...</div>'
+    const members = await buildEcomOrchestrationCandidates(prompt)
+    if (list) list.innerHTML = renderEcomOrchestrationMembers(members)
+    _ecomOrchestrationState = {
+      groupId: _ecomOrchestrationState.groupId || `ecom-orch-${Date.now()}`,
+      members,
+      lastPrompt: prompt,
+      lastDispatchAt: _ecomOrchestrationState.lastDispatchAt || 0,
+    }
+    renderEcomWorkbenchSummary()
+    return members
+  }
+  overlay.querySelector('#ecom-orch-preview')?.addEventListener('click', async () => {
+    const members = await prepareMembers()
+    if (members.length) toast(`已准备 ${members.length} 个自动协同子Agent`, 'success')
+  })
+  overlay.querySelector('#ecom-orch-dispatch')?.addEventListener('click', async () => {
+    const prompt = overlay.querySelector('#ecom-orch-prompt')?.value?.trim() || ''
+    const members = await prepareMembers()
+    if (!members.length) return
+    overlay.close?.()
+    await dispatchEcomOrchestration(prompt, members)
   })
 }
 
 function analyzeEcomTask(text = '') {
   const raw = String(text || '').trim()
-  if (!raw) return { isEcom: false, shouldParallel: false, shouldDispatch: false, members: [] }
+  if (!raw) return { isEcom: false, shouldParallel: false, shouldDispatch: false, hits: [] }
   const hits = detectEcomSkillNeeds(raw)
   const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
   const shouldParallel = !!settings.enableParallelRoutes && /(同时|并行|分别|多平台|多个平台|1688.*淘宝|淘宝.*抖音|抖音.*小红书|采集.*对比|对比.*利润)/i.test(raw)
   const shouldDispatch = !!settings.enableSubAgents && !!settings.orchestrationAutoDispatch && shouldParallel
-  const candidates = shouldDispatch ? buildEcomOrchestrationCandidates().slice(0, 3) : []
-  return { isEcom: hits.length > 0 || (parseSessionAgent(_sessionKey) === 'ecom-mover'), shouldParallel, shouldDispatch, members: candidates, hits }
+  return { isEcom: hits.length > 0 || (parseSessionAgent(_sessionKey) === 'ecom-mover'), shouldParallel, shouldDispatch, hits }
 }
 
 async function maybeAutoOrchestrateEcomTask(text = '') {
   const analysis = analyzeEcomTask(text)
   if (!analysis.isEcom) return false
-  if (analysis.shouldDispatch && analysis.members.length) {
-    appendSystemMessage(`已自动进入并行编排：准备把任务分派给 ${analysis.members.length} 个子Agent，并在主对话持续回报进度。`)
-    await dispatchEcomOrchestration(text, analysis.members)
-    return true
+  if (analysis.shouldDispatch) {
+    setEcomRunState({ active: true, phase: '自动协同准备中', detail: '正在按任务创建/复用电商子Agent', tasks: inferEcomSubAgentRoles(text).map(role => ({ title: role.name, status: '准备中' })) })
+    const members = await buildEcomOrchestrationCandidates(text)
+    if (members.length) {
+      appendSystemMessage(`已自动进入并行编排：系统准备了 ${members.length} 个子Agent，并将在主对话持续回报进度。`)
+      await dispatchEcomOrchestration(text, members)
+      return true
+    }
   }
   if (analysis.shouldParallel) {
     setEcomRunState({ active: true, phase: '并行准备中', detail: '该任务适合并行执行，正在优先走快速链路', tasks: [] })

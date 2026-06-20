@@ -470,3 +470,26 @@ mark {
     grid-template-columns: 1fr;
   }
 }
+
+
+.skill-full-desc {
+  white-space: normal;
+  overflow: visible;
+  display: block;
+  line-height: 1.6;
+  max-height: none;
+}
+
+.skill-agent-enable-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.skill-agent-enable-row .input,
+.skill-agent-enable-row select {
+  min-width: min(260px, 100%);
+  flex: 1 1 220px;
+}

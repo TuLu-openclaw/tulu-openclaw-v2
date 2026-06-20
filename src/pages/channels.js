@@ -1689,9 +1689,19 @@ async function openConfigDialog(pid, page, state, accountId) {
               installBtn.textContent = t('channels.reinstallCompatible')
               installBtn.style.background = 'var(--error)'
             }
-          } else if (s.installed) {
-            parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
+          } else if (s.connected) {
+            parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
             parts.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
+            parts.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
+            if (s.updateAvailable && s.latestVersion) {
+              parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
+              if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
+            }
+          } else if (s.installed) {
+            parts.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
+            parts.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
+            parts.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || t('channels.pluginInstalled'))}</span>`)
+            if (!s.hasBinding) parts.push(`<br><span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('channels.bindAgentHint')}</span>`)
             if (s.updateAvailable && s.latestVersion) {
               parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
               if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
@@ -1757,10 +1767,14 @@ async function openConfigDialog(pid, page, state, accountId) {
               api.checkWeixinPluginStatus().then(s => {
                 if (!s) return
                 const p = []
-                if (s.installed) {
-                  p.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
+                if (s.connected) {
+                  p.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
                   p.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
-                  if (s.latestVersion) p.push(`<span style="color:var(--text-tertiary)">(${t('channels.upToDate')})</span>`)
+                  p.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
+                } else if (s.installed) {
+                  p.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
+                  p.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
+                  p.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
                 }
                 statusEl.innerHTML = p.join(' ') || t('channels.pluginInstalled')
               }).catch(() => {})

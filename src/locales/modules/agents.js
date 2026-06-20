@@ -41,7 +41,7 @@ export default {
   idRequired: _('请输入 Agent ID', 'Please enter an Agent ID', '請輸入 Agent ID', 'Agent ID を入力してください', 'Agent ID를 입력하세요'),
   idInvalid: _('Agent ID 只能包含小写字母、数字、下划线和连字符', 'Agent ID can only contain lowercase letters, digits, underscores and hyphens', 'Agent ID 只能包含小写字母、數字、下劃線和連字符', 'Agent ID は小文字、数字、アンダースコア、ハイフンのみ使用可能です', 'Agent ID는 소문자, 숫자, 밑줄, 하이픈만 사용 가능합니다'),
   created: _('Agent 已创建', 'Agent created', 'Agent 已建立', 'Agent 作成済み', 'Agent 생성됨', 'Agent đã tạo', 'Agent creado', 'Agent criado', 'Агент создан', 'Agent créé', 'Agent erstellt'),
-  ecomAgentCreated: _('专属 Agent「全自动店铺搬运」已创建', 'Dedicated agent "Automated Store Mover" created', '專屬 Agent「全自動店鋪搬運」已建立', '専用 Agent「全自動店舗搬送」を作成しました', '전용 Agent 「전자동 상품 이관」이 생성되었습니다'),
+  ecomAgentCreated: _('专属 Agent「电商工作流」已创建', 'Dedicated agent "E-commerce Workflow" created', '專屬 Agent「全自動店鋪搬運」已建立', '専用 Agent「全自動店舗搬送」を作成しました', '전용 Agent 「전자동 상품 이관」이 생성되었습니다'),
   ecomAgentExists: _('专属 Agent 已存在，正在打开详情页', 'Dedicated agent already exists, opening detail page', '專屬 Agent 已存在，正在打開詳情頁', '専用 Agent は既に存在します。詳細を開きます', '전용 Agent가 이미 존재하여 상세 페이지를 엽니다'),
   createdNameFailed: _('Agent 已创建，但名称设置失败，可稍后编辑', 'Agent created, but name setting failed. You can edit it later.', 'Agent 已建立，但名稱設定失敗，可稍后編輯', 'Agent は作成されましたが名前の設定に失敗しました。後で編集できます。'),
   createFailed: _('创建失败', 'Creation failed', '建立失敗', '作成失敗', '생성 실패', 'Tạo thất bại', 'Error al crear', 'Falha ao criar', 'Ошибка создания', 'Échec de la création', 'Erstellen fehlgeschlagen'),

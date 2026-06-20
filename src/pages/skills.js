@@ -2,12 +2,58 @@
  * Skills 页面
  * 本地扫描已安装 Skills + SkillHub SDK 技能商店
  */
-import { api } from '../lib/tauri-api.js'
+import { api, invalidate } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
 import { t } from '../lib/i18n.js'
 
 let _loadSeq = 0
 let _activePage = null
+
+
+function skillKey(value = '') {
+  return String(value || '').trim().toLowerCase().replace(/^@[^/]+\//, '')
+}
+
+function getStoreSlug(item = {}) {
+  return item.slug || item.name || item.id || item.display_name || item.displayName || ''
+}
+
+function getInstalledSkillKeys(skills = []) {
+  const keys = new Set()
+  ;(skills || []).forEach(skill => {
+    ;[skill.name, skill.slug, skill.id, skill.display_name, skill.displayName].forEach(value => {
+      const key = skillKey(value)
+      if (key) keys.add(key)
+    })
+  })
+  return keys
+}
+
+async function loadSkillAgentUsage() {
+  try {
+    const [agents, config] = await Promise.all([api.listAgents(), api.readOpenclawConfig().catch(() => null)])
+    const usage = new Map()
+    const list = Array.isArray(agents) ? agents : []
+    const cfgAgents = config?.agents?.list || []
+    list.forEach(agent => {
+      const cfg = cfgAgents.find(item => item.id === agent.id) || {}
+      const skills = Array.isArray(agent.skills) ? agent.skills : Array.isArray(cfg.skills) ? cfg.skills : []
+      skills.forEach(name => {
+        const key = skillKey(name)
+        if (!key) return
+        if (!usage.has(key)) usage.set(key, [])
+        usage.get(key).push({ id: agent.id, name: agent.identityName || cfg.identity?.name || agent.id })
+      })
+    })
+    return { agents: list, usage }
+  } catch {
+    return { agents: [], usage: new Map() }
+  }
+}
+
+function agentOptionsHtml(agents = []) {
+  return (agents || []).map(agent => `<option value="${esc(agent.id)}">${esc(agent.identityName || agent.id)}（${esc(agent.id)}）</option>`).join('')
+}
 
 function esc(str) {
   if (!str) return ''
@@ -64,9 +110,9 @@ async function loadSkills(page) {
   </div>`
 
   try {
-    const data = await api.skillsList()
+    const [data, agentUsage] = await Promise.all([api.skillsList(), loadSkillAgentUsage()])
     if (seq !== _loadSeq || page !== _activePage || !page.isConnected) return
-    renderSkills(el, data)
+    renderSkills(el, data, agentUsage)
   } catch (e) {
     if (seq !== _loadSeq || page !== _activePage || !page.isConnected) return
     el.innerHTML = `<div class="skills-load-error">
@@ -77,7 +123,7 @@ async function loadSkills(page) {
   }
 }
 
-function renderSkills(el, data) {
+function renderSkills(el, data, agentUsage = { agents: [], usage: new Map() }) {
   const skills = data?.skills || []
   const cliAvailable = data?.cliAvailable !== false
   const source = data?.source || ''
@@ -103,7 +149,7 @@ function renderSkills(el, data) {
     <div class="clawhub-panel" style="margin-bottom:var(--space-lg)">
       <div class="clawhub-panel-title" style="color:var(--success)">${t('skills.eligibleGroup')} (${eligible.length})</div>
       <div class="clawhub-list skills-scroll-area skills-trending-scroll" id="skills-eligible">
-        ${eligible.map(s => renderSkillCard(s, 'eligible')).join('')}
+        ${eligible.map(s => renderSkillCard(s, 'eligible', agentUsage)).join('')}
       </div>
     </div>` : ''}
 
@@ -114,7 +160,7 @@ function renderSkills(el, data) {
         <button class="btn btn-secondary btn-sm" data-action="skill-ai-fix" style="font-size:var(--font-size-xs);padding:2px 8px">${t('skills.aiFixBtn')}</button>
       </div>
       <div class="clawhub-list skills-scroll-area skills-installed-scroll" id="skills-missing">
-        ${missing.map(s => renderSkillCard(s, 'missing')).join('')}
+        ${missing.map(s => renderSkillCard(s, 'missing', agentUsage)).join('')}
       </div>
     </div>` : ''}
 
@@ -122,7 +168,7 @@ function renderSkills(el, data) {
     <div class="clawhub-panel" style="margin-bottom:var(--space-lg)">
       <div class="clawhub-panel-title" style="color:var(--text-tertiary)">${t('skills.disabledGroup')} (${disabled.length})</div>
       <div class="clawhub-list skills-scroll-area skills-search-scroll" id="skills-disabled">
-        ${disabled.map(s => renderSkillCard(s, 'disabled')).join('')}
+        ${disabled.map(s => renderSkillCard(s, 'disabled', agentUsage)).join('')}
       </div>
     </div>` : ''}
 
@@ -130,7 +176,7 @@ function renderSkills(el, data) {
     <div class="clawhub-panel" style="margin-bottom:var(--space-lg)">
       <div class="clawhub-panel-title" style="color:var(--text-tertiary)">${t('skills.blockedGroup')} (${blocked.length})</div>
       <div class="clawhub-list">
-        ${blocked.map(s => renderSkillCard(s, 'blocked')).join('')}
+        ${blocked.map(s => renderSkillCard(s, 'blocked', agentUsage)).join('')}
       </div>
     </div>` : ''}
 
@@ -159,7 +205,7 @@ function renderSkills(el, data) {
   }
 }
 
-function renderSkillCard(skill, status) {
+function renderSkillCard(skill, status, agentUsage = { agents: [], usage: new Map() }) {
   const emoji = skill.emoji || '📦'
   const name = skill.name || ''
   const desc = skill.description || ''
@@ -168,6 +214,9 @@ function renderSkillCard(skill, status) {
   const missingEnv = skill.missing?.env || []
   const missingConfig = skill.missing?.config || []
   const installOpts = skill.install || []
+  const usage = agentUsage.usage?.get(skillKey(name)) || []
+  const usageText = usage.length ? usage.map(agent => agent.name || agent.id).join('、') : t('skills.noAgentUsage')
+  const agentOptions = agentOptionsHtml(agentUsage.agents || [])
 
   let statusBadge = ''
   if (status === 'eligible') statusBadge = `<span class="clawhub-badge installed">${t('skills.eligible')}</span>`
@@ -196,7 +245,9 @@ function renderSkillCard(skill, status) {
       <div class="clawhub-item-main">
         <div class="clawhub-item-title">${emoji} ${esc(name)}</div>
         <div class="clawhub-item-meta">${esc(source)}${skill.homepage ? ` · <a href="${esc(skill.homepage)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(skill.homepage)}</a>` : ''}</div>
-        <div class="clawhub-item-desc">${esc(desc)}</div>
+        <div class="clawhub-item-desc skill-full-desc">${esc(desc || t('skills.noDescription'))}</div>
+        <div class="clawhub-item-meta">${t('skills.usedByAgents')}: ${esc(usageText)}</div>
+        ${agentOptions ? `<div class="skill-agent-enable-row"><select class="input input-sm" data-skill-agent-select="${esc(name)}"><option value="">${t('skills.selectAgent')}</option>${agentOptions}</select><button class="btn btn-secondary btn-sm" data-action="skill-enable-agent" data-name="${esc(name)}">${t('skills.enableForAgent')}</button></div>` : ''}
         ${missingHtml}
         ${installHtml}
       </div>
@@ -290,7 +341,7 @@ async function loadStore(page) {
     try {
       const data = await api.skillsList()
       if (page !== _activePage || !page.isConnected || !results.isConnected) return
-      _installedNames = new Set((data?.skills || []).map(s => s.name))
+      _installedNames = getInstalledSkillKeys(data?.skills || [])
     } catch { _installedNames = new Set() }
     if (page !== _activePage || !page.isConnected || !results.isConnected) return
     renderStoreItems(results, _storeIndex)
@@ -309,7 +360,7 @@ function renderStoreItems(el, items) {
     const slug = item.slug || ''
     const name = item.display_name || item.displayName || item.name || slug
     const desc = item.summary || item.description || ''
-    const installed = _installedNames.has(slug)
+    const installed = _installedNames.has(skillKey(slug)) || _installedNames.has(skillKey(name))
     return `
       <div class="clawhub-item store-item" data-slug="${esc(slug)}" data-name="${esc(name)}" data-desc="${esc(desc)}">
         <div class="clawhub-item-main">
@@ -390,13 +441,36 @@ async function handleStoreInstall(page, btn) {
     btn.textContent = t('skills.installed')
     btn.classList.remove('btn-primary')
     btn.classList.add('btn-secondary')
-    _installedNames.add(slug)
+    _installedNames.add(skillKey(slug))
     loadSkills(page).catch(() => {})
   } catch (e) {
     if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(`${t('skills.installFailed')}: ${e?.message || e}`, 'error')
     btn.disabled = false
     btn.textContent = t('skills.install')
+  }
+}
+
+async function handleEnableForAgent(page, btn) {
+  const name = btn.dataset.name || ''
+  const select = page.querySelector(`[data-skill-agent-select="${CSS.escape(name)}"]`)
+  const agentId = select?.value || ''
+  if (!name || !agentId) { toast(t('skills.selectAgentFirst'), 'warning'); return }
+  btn.disabled = true
+  btn.textContent = t('skills.enabling')
+  try {
+    const detail = await api.getAgentDetail(agentId).catch(() => ({}))
+    const current = Array.isArray(detail?.skills) ? detail.skills : []
+    const exists = current.some(item => skillKey(item) === skillKey(name))
+    const next = exists ? current : [...current, name]
+    await api.updateAgentConfig(agentId, { skills: next })
+    invalidate('get_agent_detail', 'list_agents')
+    toast(exists ? t('skills.alreadyEnabledForAgent') : t('skills.enabledForAgent'), 'success')
+    await loadSkills(page)
+  } catch (e) {
+    toast(`${t('skills.enableForAgentFailed')}: ${e?.message || e}`, 'error')
+  } finally {
+    if (btn.isConnected) { btn.disabled = false; btn.textContent = t('skills.enableForAgent') }
   }
 }
 
@@ -451,6 +525,9 @@ function bindEvents(page) {
         break
       case 'store-install':
         await handleStoreInstall(page, btn)
+        break
+      case 'skill-enable-agent':
+        await handleEnableForAgent(page, btn)
         break
       case 'skill-uninstall':
         await handleSkillUninstall(page, btn)

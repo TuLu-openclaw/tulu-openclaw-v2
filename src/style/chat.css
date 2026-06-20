@@ -2710,3 +2710,46 @@
   background: rgba(239, 68, 68, .08) !important;
   border-color: #ef4444 !important;
 }
+
+
+.chat-ecom-vault-help {
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-primary));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-muted) 36%, var(--bg-secondary));
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+.chat-ecom-vault-account {
+  padding: 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: var(--bg-card);
+  margin-bottom: 12px;
+}
+
+.chat-ecom-vault-account-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chat-ecom-vault-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.chat-ecom-vault-grid label,
+.chat-ecom-vault-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 8px;
+}
