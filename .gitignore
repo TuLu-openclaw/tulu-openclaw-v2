@@ -13,6 +13,8 @@ dist-ssr/
 src-tauri/target/
 src-tauri/resources/runtime/
 _vendor/runtime-build/
+_vendor/runtime/*/
+!_vendor/runtime/manifest.v2.json
 
 # IDE
 .vscode/

@@ -84,10 +84,14 @@ async function main() {
     throw new Error(`Prepared runtime for ${target} contains no files`)
   }
   fs.rmSync(outPlatformRoot, { recursive: true, force: true })
+  fs.mkdirSync(outRoot, { recursive: true })
   fs.renameSync(stagedPlatformRoot, outPlatformRoot)
+  if (!fs.existsSync(outPlatformRoot)) {
+    throw new Error(`Prepared runtime output missing after move: ${outPlatformRoot}`)
+  }
   validatePreparedRuntime(prepared, outPlatformRoot)
   fs.rmSync(buildRoot, { recursive: true, force: true })
-  console.log(`Prepared runtime for ${target}`)
+  console.log(`Prepared runtime for ${target} at ${path.relative(repoRoot, outPlatformRoot)}`)
 }
 
 main().catch(error => {
@@ -239,7 +243,8 @@ function validateExpectedEntry(component, spec, outPlatformRoot) {
   if (!spec.expectedEntry) return
   const entryPath = path.join(outPlatformRoot, spec.expectedEntry)
   if (!fs.existsSync(entryPath)) {
-    throw new Error(`${component} expected entry missing after prepare: ${spec.expectedEntry}`)
+    const listing = listTree(outPlatformRoot, 4).join('\n')
+    throw new Error(`${component} expected entry missing after prepare: ${spec.expectedEntry}\nRuntime output: ${outPlatformRoot}\n${listing}`)
   }
 }
 
@@ -268,6 +273,7 @@ function pickSingleDir(dir) {
 }
 
 function copyDir(src, dst) {
+  fs.mkdirSync(dst, { recursive: true })
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const from = path.join(src, entry.name)
     const to = path.join(dst, entry.name)
@@ -278,4 +284,16 @@ function copyDir(src, dst) {
       fs.copyFileSync(from, to)
     }
   }
+}
+
+function listTree(root, maxDepth, depth = 0) {
+  if (!fs.existsSync(root)) return [`[missing] ${root}`]
+  if (depth >= maxDepth) return []
+  const rows = []
+  for (const entry of fs.readdirSync(root, { withFileTypes: true }).slice(0, 80)) {
+    const entryPath = path.join(root, entry.name)
+    rows.push(`${'  '.repeat(depth)}${entry.isDirectory() ? '[d]' : '[f]'} ${path.relative(root, entryPath) || entry.name}`)
+    if (entry.isDirectory()) rows.push(...listTree(entryPath, maxDepth, depth + 1))
+  }
+  return rows
 }
