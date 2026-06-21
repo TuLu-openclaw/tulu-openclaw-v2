@@ -241,6 +241,8 @@ function renderSkillCard(skill, status, agentUsage = { agents: [], usage: new Ma
   const usage = agentUsage.usage?.get(skillKey(name)) || []
   const usageText = usage.length ? usage.map(agent => agent.name || agent.id).join('、') : t('skills.noAgentUsage')
   const agentOptions = agentOptionsHtml(agentUsage.agents || [])
+  const canSelect = !skill.disabled && !skill.blockedByAllowlist
+  const canUninstall = skill.uninstallable === true && !skill.bundled
 
   let statusBadge = ''
   if (status === 'eligible') statusBadge = `<span class="clawhub-badge installed">${t('skills.eligible')}</span>`
@@ -268,7 +270,7 @@ function renderSkillCard(skill, status, agentUsage = { agents: [], usage: new Ma
     <div class="clawhub-item skill-card-item" data-name="${esc(name)}" data-desc="${esc(desc)}">
       <div class="clawhub-item-main">
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--font-size-xs);color:var(--text-tertiary)">
-          <input type="checkbox" data-skill-select="${esc(name)}" ${skill.disabled || skill.blockedByAllowlist ? 'disabled' : ''}> ${t('skills.selectForBulk')}
+          <input type="checkbox" data-skill-select="${esc(name)}" ${canSelect ? '' : 'disabled'}> ${t('skills.selectForBulk')}
         </label>
         <div class="clawhub-item-title">${emoji} ${esc(name)}</div>
         <div class="clawhub-item-meta">${esc(source)}${skill.homepage ? ` · <a href="${esc(skill.homepage)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(skill.homepage)}</a>` : ''}</div>
@@ -280,7 +282,7 @@ function renderSkillCard(skill, status, agentUsage = { agents: [], usage: new Ma
       </div>
       <div class="clawhub-item-actions">
         <button class="btn btn-secondary btn-sm" data-action="skill-info" data-name="${esc(name)}">${t('skills.detail')}</button>
-        ${!skill.bundled ? `<button class="btn btn-sm" style="color:var(--error);border:1px solid var(--error);background:transparent;font-size:var(--font-size-xs)" data-action="skill-uninstall" data-name="${esc(name)}">${t('skills.uninstall')}</button>` : ''}
+        ${!canUninstall ? '' : `<button class="btn btn-sm" style="color:var(--error);border:1px solid var(--error);background:transparent;font-size:var(--font-size-xs)" data-action="skill-uninstall" data-name="${esc(name)}">${t('skills.uninstall')}</button>`}
         ${statusBadge}
       </div>
     </div>
@@ -562,7 +564,7 @@ async function handleBulkUninstall(page, btn) {
   const installedByKey = new Map((_lastSkillsData || []).map(skill => [skillKey(skill.name || skill.slug || skill.id || ''), skill]))
   const uninstallable = selected.filter(name => {
     const skill = installedByKey.get(skillKey(name))
-    return skill && !skill.bundled
+    return skill && skill.uninstallable === true && !skill.bundled
   })
   if (!uninstallable.length) { toast(t('skills.noUninstallableSelected'), 'warning'); return }
   if (!confirm(t('skills.confirmBulkUninstall', { count: uninstallable.length, names: uninstallable.join(', ') }))) return

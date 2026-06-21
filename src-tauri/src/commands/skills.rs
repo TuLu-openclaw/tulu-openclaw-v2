@@ -227,7 +227,7 @@ pub async fn skills_scan_diagnostics() -> Result<Value, String> {
     let skills = scan_local_skill_entries()?;
     let root_items: Vec<Value> = roots
         .into_iter()
-        .map(|(dir, label)| {
+        .map(|(dir, label, bundled)| {
             let exists = dir.exists();
             let count = if exists {
                 std::fs::read_dir(&dir)
@@ -247,7 +247,9 @@ pub async fn skills_scan_diagnostics() -> Result<Value, String> {
                 "path": dir.to_string_lossy(),
                 "exists": exists,
                 "skillMdCount": count,
-                "supported": exists || label.contains("OpenClaw 自定义") || label.contains("Claude 自定义"),
+                "bundled": bundled,
+                "uninstallable": !bundled,
+                "supported": true,
             })
         })
         .collect();
@@ -277,14 +279,22 @@ pub async fn hermes_skillhub_install(slug: String) -> Result<Value, String> {
     }))
 }
 
-/// 卸载 Skill（删除 ~/.openclaw/skills/<name>/ 目录）
+fn resolve_uninstallable_skill_dir(name: &str) -> Option<std::path::PathBuf> {
+    custom_skill_roots()
+        .into_iter()
+        .filter(|(_, _, bundled)| !*bundled)
+        .map(|(root, _, _)| root.join(name))
+        .find(|path| path.exists())
+}
+
+/// 卸载 Skill（只允许删除自定义 skills 目录，内置 skills 禁止卸载）
 #[tauri::command]
 pub async fn skills_uninstall(name: String) -> Result<Value, String> {
     if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
         return Err("无效的 Skill 名称".to_string());
     }
-    let skills_dir =
-        resolve_custom_skill_dir(&name).ok_or_else(|| format!("Skill「{name}」不存在"))?;
+    let skills_dir = resolve_uninstallable_skill_dir(&name)
+        .ok_or_else(|| format!("Skill「{name}」不存在，或属于内置技能不允许卸载"))?;
     if !skills_dir.exists() {
         return Err(format!("Skill「{name}」不存在"));
     }
@@ -588,12 +598,16 @@ fn clean_cli_output(text: &str) -> String {
         .join("\n")
 }
 
-fn custom_skill_roots() -> Vec<(std::path::PathBuf, &'static str)> {
-    let mut roots = vec![(super::openclaw_dir().join("skills"), "OpenClaw 自定义")];
+fn custom_skill_roots() -> Vec<(std::path::PathBuf, &'static str, bool)> {
+    let mut roots = vec![(
+        super::openclaw_dir().join("skills"),
+        "OpenClaw 自定义",
+        false,
+    )];
     if let Some(home) = dirs::home_dir() {
         let claude_skills = home.join(".claude").join("skills");
-        if !roots.iter().any(|(dir, _)| dir == &claude_skills) {
-            roots.push((claude_skills, "Claude 自定义"));
+        if !roots.iter().any(|(dir, _, _)| dir == &claude_skills) {
+            roots.push((claude_skills, "Claude 自定义", false));
         }
     }
     // 从已解析的 CLI 路径推导 npm 包内的 bundled skills 目录
@@ -609,8 +623,8 @@ fn custom_skill_roots() -> Vec<(std::path::PathBuf, &'static str)> {
             .flatten()
         {
             let bundled = pkg_root.join("skills");
-            if bundled.is_dir() && !roots.iter().any(|(dir, _)| dir == &bundled) {
-                roots.push((bundled, "OpenClaw 内置"));
+            if bundled.is_dir() && !roots.iter().any(|(dir, _, _)| dir == &bundled) {
+                roots.push((bundled, "OpenClaw 内置", true));
                 break;
             }
         }
@@ -622,8 +636,8 @@ fn custom_skill_roots() -> Vec<(std::path::PathBuf, &'static str)> {
                 .join("node_modules")
                 .join(pkg)
                 .join("skills");
-            if bundled.is_dir() && !roots.iter().any(|(dir, _)| dir == &bundled) {
-                roots.push((bundled, "OpenClaw 内置"));
+            if bundled.is_dir() && !roots.iter().any(|(dir, _, _)| dir == &bundled) {
+                roots.push((bundled, "OpenClaw 内置", true));
             }
         }
     }
@@ -633,12 +647,12 @@ fn custom_skill_roots() -> Vec<(std::path::PathBuf, &'static str)> {
 fn resolve_custom_skill_dir(name: &str) -> Option<std::path::PathBuf> {
     custom_skill_roots()
         .into_iter()
-        .map(|(root, _)| root.join(name))
+        .map(|(root, _, _)| root.join(name))
         .find(|path| path.exists())
 }
 
 fn scan_custom_skill_detail(name: &str) -> Option<Value> {
-    for (root, source_label) in custom_skill_roots() {
+    for (root, source_label, bundled) in custom_skill_roots() {
         let skill_path = root.join(name);
         if !skill_path.exists() {
             continue;
@@ -660,7 +674,8 @@ fn scan_custom_skill_detail(name: &str) -> Option<Value> {
             "disabled": false,
             "blockedByAllowlist": false,
             "source": source_label,
-            "bundled": false,
+            "bundled": bundled,
+            "uninstallable": !bundled,
             "filePath": skill_path.to_string_lossy().to_string(),
             "homepage": base.get("homepage").cloned().unwrap_or(Value::Null),
             "version": base.get("version").cloned().unwrap_or(Value::Null),
@@ -694,7 +709,7 @@ fn scan_custom_skill_detail(name: &str) -> Option<Value> {
 fn scan_local_skill_entries() -> Result<Vec<Value>, String> {
     let mut skills = Vec::new();
 
-    for (skills_dir, source_label) in custom_skill_roots() {
+    for (skills_dir, source_label, bundled) in custom_skill_roots() {
         if !skills_dir.exists() {
             continue;
         }
@@ -725,7 +740,8 @@ fn scan_local_skill_entries() -> Result<Vec<Value>, String> {
                 "disabled": false,
                 "blockedByAllowlist": false,
                 "source": source_label,
-                "bundled": false,
+                "bundled": bundled,
+                "uninstallable": !bundled,
                 "filePath": entry.path().to_string_lossy().to_string(),
                 "homepage": base.get("homepage").cloned().unwrap_or(Value::Null),
                 "missing": {
@@ -761,7 +777,7 @@ fn scan_local_skills(cli_diagnostic: Option<Value>) -> Result<Value, String> {
     let roots = custom_skill_roots();
     let scanned_roots: Vec<String> = roots
         .iter()
-        .map(|(dir, label)| format!("{}: {}", label, dir.to_string_lossy()))
+        .map(|(dir, label, _)| format!("{}: {}", label, dir.to_string_lossy()))
         .collect();
     let skills = scan_local_skill_entries()?;
     let cli_available = cli_diagnostic
