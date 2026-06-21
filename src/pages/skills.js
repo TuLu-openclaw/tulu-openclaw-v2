@@ -8,6 +8,8 @@ import { t } from '../lib/i18n.js'
 
 let _loadSeq = 0
 let _activePage = null
+let _lastSkillsData = []
+let _lastAgents = []
 
 
 function skillKey(value = '') {
@@ -71,6 +73,8 @@ export async function render() {
     <div class="tab-bar" id="skills-main-tabs">
       <div class="tab active" data-main-tab="installed">${t('skills.tabInstalled')}</div>
       <div class="tab" data-main-tab="store">${t('skills.tabStore')}</div>
+      <div class="tab" data-main-tab="xingshu-center">${t('skills.xingshuCenter')}</div>
+      <div class="tab" data-main-tab="xingshu-security">${t('skills.xingshuSecurity')}</div>
     </div>
     <div id="skills-tab-installed" class="config-section">
       <div class="stat-card loading-placeholder" style="height:96px"></div>
@@ -79,10 +83,24 @@ export async function render() {
       <div class="clawhub-toolbar" style="margin-bottom:var(--space-sm)">
         <input class="input clawhub-search-input" id="skill-store-search" placeholder="${t('skills.searchPlaceholder')}" type="text" style="flex:1">
         <button class="btn btn-primary btn-sm" data-action="store-search">${t('skills.search')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://skillhub.cloud.tencent.com/" target="_blank" rel="noopener">${t('skills.browse')}</a>
+        <button class="btn btn-secondary btn-sm" data-action="open-xingshu-center">${t('skills.xingshuCenter')}</button>
       </div>
       <div id="store-results" class="clawhub-list" style="max-height:calc(100vh - 300px);overflow-y:auto">
         <div class="form-hint" style="padding:var(--space-xl);text-align:center">${t('skills.storeLoading')}</div>
+      </div>
+    </div>
+    <div id="skills-tab-xingshu-center" class="config-section" style="display:none">
+      <div class="stat-card" style="padding:var(--space-lg);display:grid;gap:10px">
+        <h3 style="margin:0">${t('skills.xingshuCenter')}</h3>
+        <p class="form-hint" style="margin:0">${t('skills.xingshuCenterDesc')}</p>
+        <button class="btn btn-primary" data-action="open-xingshu-center">${t('skills.openInAppWindow')}</button>
+      </div>
+    </div>
+    <div id="skills-tab-xingshu-security" class="config-section" style="display:none">
+      <div class="stat-card" style="padding:var(--space-lg);display:grid;gap:10px">
+        <h3 style="margin:0">${t('skills.xingshuSecurity')}</h3>
+        <p class="form-hint" style="margin:0">${t('skills.xingshuSecurityDesc')}</p>
+        <button class="btn btn-primary" data-action="open-xingshu-security">${t('skills.openInAppWindow')}</button>
       </div>
     </div>
   `
@@ -125,6 +143,8 @@ async function loadSkills(page) {
 
 function renderSkills(el, data, agentUsage = { agents: [], usage: new Map() }) {
   const skills = data?.skills || []
+  _lastSkillsData = skills
+  _lastAgents = agentUsage.agents || []
   const cliAvailable = data?.cliAvailable !== false
   const source = data?.source || ''
   const cliDiag = data?.diagnostic?.cli || null
@@ -138,6 +158,9 @@ function renderSkills(el, data, agentUsage = { agents: [], usage: new Map() }) {
   el.innerHTML = `
     <div class="clawhub-toolbar">
       <input class="input clawhub-search-input" id="skill-filter-input" placeholder="${t('skills.filterPlaceholder')}" type="text">
+      <select class="input input-sm" id="skills-bulk-agent" style="max-width:260px"><option value="">${t('skills.selectAgent')}</option>${agentOptionsHtml(_lastAgents)}</select>
+      <button class="btn btn-primary btn-sm" data-action="skills-bulk-enable">${t('skills.bulkEnableForAgent')}</button>
+      <button class="btn btn-secondary btn-sm" data-action="skills-scan-diagnostics">${t('skills.scanDiagnostics')}</button>
       <button class="btn btn-secondary btn-sm" data-action="skill-retry">${t('skills.refresh')}</button>
     </div>
 
@@ -243,6 +266,9 @@ function renderSkillCard(skill, status, agentUsage = { agents: [], usage: new Ma
   return `
     <div class="clawhub-item skill-card-item" data-name="${esc(name)}" data-desc="${esc(desc)}">
       <div class="clawhub-item-main">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--font-size-xs);color:var(--text-tertiary)">
+          <input type="checkbox" data-skill-select="${esc(name)}" ${skill.disabled || skill.blockedByAllowlist ? 'disabled' : ''}> ${t('skills.selectForBulk')}
+        </label>
         <div class="clawhub-item-title">${emoji} ${esc(name)}</div>
         <div class="clawhub-item-meta">${esc(source)}${skill.homepage ? ` · <a href="${esc(skill.homepage)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(skill.homepage)}</a>` : ''}</div>
         <div class="clawhub-item-desc skill-full-desc">${esc(desc || t('skills.noDescription'))}</div>
@@ -436,6 +462,9 @@ async function handleStoreInstall(page, btn) {
   btn.textContent = t('skills.installing')
   try {
     await api.skillhubInstall(slug)
+    const data = await api.skillsList()
+    const installedKeys = getInstalledSkillKeys(data?.skills || [])
+    if (!installedKeys.has(skillKey(slug))) throw new Error(t('skills.installVerifyFailed'))
     if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(t('skills.skillInstalled', { name: slug }), 'success')
     btn.textContent = t('skills.installed')
@@ -474,6 +503,58 @@ async function handleEnableForAgent(page, btn) {
   }
 }
 
+async function handleBulkEnableForAgent(page, btn) {
+  const agentId = page.querySelector('#skills-bulk-agent')?.value || ''
+  const selected = Array.from(page.querySelectorAll('[data-skill-select]:checked')).map(input => input.dataset.skillSelect).filter(Boolean)
+  if (!agentId) { toast(t('skills.selectAgentFirst'), 'warning'); return }
+  if (!selected.length) { toast(t('skills.selectSkillFirst'), 'warning'); return }
+  btn.disabled = true
+  btn.textContent = t('skills.enabling')
+  try {
+    const installedKeys = getInstalledSkillKeys(_lastSkillsData)
+    const validSelected = selected.filter(name => installedKeys.has(skillKey(name)))
+    if (validSelected.length !== selected.length) throw new Error(t('skills.bulkVerifyFailed'))
+    const detail = await api.getAgentDetail(agentId).catch(() => ({}))
+    const current = Array.isArray(detail?.skills) ? detail.skills : []
+    const next = [...current]
+    for (const name of validSelected) {
+      if (!next.some(item => skillKey(item) === skillKey(name))) next.push(name)
+    }
+    await api.updateAgentConfig(agentId, { skills: next })
+    invalidate('get_agent_detail', 'list_agents')
+    const verify = await api.getAgentDetail(agentId).catch(() => ({}))
+    const verified = Array.isArray(verify?.skills) ? verify.skills : []
+    const missing = validSelected.filter(name => !verified.some(item => skillKey(item) === skillKey(name)))
+    if (missing.length) throw new Error(t('skills.bulkAgentVerifyFailed', { names: missing.join(', ') }))
+    toast(t('skills.bulkEnabledForAgent', { count: validSelected.length }), 'success')
+    await loadSkills(page)
+  } catch (e) {
+    toast(`${t('skills.enableForAgentFailed')}: ${e?.message || e}`, 'error')
+  } finally {
+    if (btn.isConnected) { btn.disabled = false; btn.textContent = t('skills.bulkEnableForAgent') }
+  }
+}
+
+async function handleScanDiagnostics() {
+  try {
+    const data = await api.skillsScanDiagnostics()
+    const roots = (data.roots || []).map(root => `${root.supported ? '✓' : '!'} ${root.label}: ${root.path} (${root.exists ? '存在' : '未创建'}, SKILL.md=${root.skillMdCount || 0})`).join('\n')
+    alert(`${t('skills.scanDiagnostics')}\n\n${roots}\n\n${t('skills.scanCount')}: ${data.scanCount || 0}`)
+  } catch (e) {
+    toast(`${t('skills.scanDiagnosticsFailed')}: ${e?.message || e}`, 'error')
+  }
+}
+
+async function openXingshuSkillCenter() {
+  try { await api.openXingshuSkillCenterWindow(); toast(t('skills.openedInAppWindow'), 'success') }
+  catch (e) { toast(`${t('skills.openWindowFailed')}: ${e?.message || e}`, 'error') }
+}
+
+async function openXingshuSkillSecurity() {
+  try { await api.openXingshuSkillSecurityWindow(); toast(t('skills.openedInAppWindow'), 'success') }
+  catch (e) { toast(`${t('skills.openWindowFailed')}: ${e?.message || e}`, 'error') }
+}
+
 async function handleSkillUninstall(page, btn) {
   const name = btn.dataset.name
   if (!name) return
@@ -502,6 +583,8 @@ function bindEvents(page) {
       const key = tab.dataset.mainTab
       page.querySelector('#skills-tab-installed').style.display = key === 'installed' ? '' : 'none'
       page.querySelector('#skills-tab-store').style.display = key === 'store' ? '' : 'none'
+      page.querySelector('#skills-tab-xingshu-center').style.display = key === 'xingshu-center' ? '' : 'none'
+      page.querySelector('#skills-tab-xingshu-security').style.display = key === 'xingshu-security' ? '' : 'none'
       // 切到商店 tab 时加载全量索引
       if (key === 'store') loadStore(page)
     }
@@ -531,6 +614,18 @@ function bindEvents(page) {
         break
       case 'skill-uninstall':
         await handleSkillUninstall(page, btn)
+        break
+      case 'skills-bulk-enable':
+        await handleBulkEnableForAgent(page, btn)
+        break
+      case 'skills-scan-diagnostics':
+        await handleScanDiagnostics()
+        break
+      case 'open-xingshu-center':
+        await openXingshuSkillCenter()
+        break
+      case 'open-xingshu-security':
+        await openXingshuSkillSecurity()
         break
       case 'skill-ai-fix':
         window.location.hash = '#/assistant'

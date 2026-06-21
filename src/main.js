@@ -437,6 +437,8 @@ async function boot() {
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
   registerRoute('/music-player', () => import('./pages/music-player.js'))
   registerRoute('/xingshu-chat', () => import('./pages/xingshu-chat.js'))
+  registerRoute('/xingshu-skill-center', () => import('./pages/xingshu-skill-center.js'))
+  registerRoute('/xingshu-skill-security', () => import('./pages/xingshu-skill-security.js'))
 // ── 龙虾办公室状态同步 ─────────────────────────────────
 // 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
 const LOBSTER_PHASE_PRESETS = {

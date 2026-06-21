@@ -122,18 +122,141 @@ pub async fn skillhub_index() -> Result<Value, String> {
     Ok(serde_json::to_value(items).unwrap_or_default())
 }
 
-/// 从 SkillHub 安装 Skill（内置 HTTP 下载 + zip 解压）
+/// 从 SkillHub 安装 Skill（内置 HTTP 下载 + zip 解压 + 安装后强校验）
 #[tauri::command]
 pub async fn skillhub_install(slug: String) -> Result<Value, String> {
+    install_skillhub_skill_to_openclaw(slug).await
+}
+
+#[tauri::command]
+pub async fn xingshu_skill_install(slug: String) -> Result<Value, String> {
+    install_skillhub_skill_to_openclaw(slug).await
+}
+
+async fn install_skillhub_skill_to_openclaw(slug: String) -> Result<Value, String> {
     let skills_dir = super::openclaw_dir().join("skills");
     if !skills_dir.exists() {
         std::fs::create_dir_all(&skills_dir).map_err(|e| format!("创建 skills 目录失败: {e}"))?;
     }
     let installed_path = super::skillhub::install(&slug, &skills_dir).await?;
+    verify_installed_skill(&slug, &installed_path)?;
+    let validation = validate_skill_name(&slug)?;
+    let list = scan_local_skills(None)?;
+    let found = list
+        .get("skills")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items.iter().any(|item| {
+                item.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|name| skill_key(name) == skill_key(&slug))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false);
+    if !found {
+        return Err(format!(
+            "Skill 已写入目录但未被扫描到：{}",
+            installed_path.to_string_lossy()
+        ));
+    }
     Ok(serde_json::json!({
         "success": true,
         "slug": slug,
+        "name": slug,
         "path": installed_path.to_string_lossy(),
+        "skillsRoot": skills_dir.to_string_lossy(),
+        "validation": validation,
+        "scanVerified": true,
+    }))
+}
+
+fn verify_installed_skill(slug: &str, installed_path: &std::path::Path) -> Result<(), String> {
+    if !installed_path.exists() || !installed_path.is_dir() {
+        return Err(format!(
+            "Skill 安装目录不存在：{}",
+            installed_path.to_string_lossy()
+        ));
+    }
+    let skill_md = installed_path.join("SKILL.md");
+    if !skill_md.is_file() {
+        return Err(format!("Skill「{slug}」安装不完整：缺少 SKILL.md"));
+    }
+    Ok(())
+}
+
+fn validate_skill_name(name: &str) -> Result<Value, String> {
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err("无效的 Skill 名称".to_string());
+    }
+    let skill_dir =
+        resolve_custom_skill_dir(name).ok_or_else(|| format!("Skill「{name}」不存在"))?;
+    let skill_md = skill_dir.join("SKILL.md");
+    if !skill_md.exists() {
+        return Err("缺少 SKILL.md 文件".to_string());
+    }
+    let mut issues: Vec<Value> = Vec::new();
+    if parse_skill_frontmatter(&skill_md).is_none() {
+        issues.push(serde_json::json!({
+            "level": "error",
+            "code": "INVALID_FRONTMATTER",
+            "message": "SKILL.md frontmatter 格式不正确"
+        }));
+    }
+    Ok(serde_json::json!({
+        "valid": issues.is_empty(),
+        "issues": issues,
+        "path": skill_dir.to_string_lossy(),
+    }))
+}
+
+fn skill_key(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .trim_start_matches('@')
+        .split('/')
+        .last()
+        .unwrap_or(value)
+        .to_string()
+}
+
+#[tauri::command]
+pub async fn skills_scan_diagnostics() -> Result<Value, String> {
+    let roots = custom_skill_roots();
+    let skills = scan_local_skill_entries()?;
+    let root_items: Vec<Value> = roots
+        .into_iter()
+        .map(|(dir, label)| {
+            let exists = dir.exists();
+            let count = if exists {
+                std::fs::read_dir(&dir)
+                    .ok()
+                    .map(|entries| {
+                        entries
+                            .flatten()
+                            .filter(|entry| entry.path().join("SKILL.md").is_file())
+                            .count()
+                    })
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            serde_json::json!({
+                "label": label,
+                "path": dir.to_string_lossy(),
+                "exists": exists,
+                "skillMdCount": count,
+                "supported": exists || label.contains("OpenClaw 自定义") || label.contains("Claude 自定义"),
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "success": true,
+        "openclawSkillsDir": super::openclaw_dir().join("skills").to_string_lossy(),
+        "roots": root_items,
+        "scanCount": skills.len(),
+        "skills": skills,
     }))
 }
 

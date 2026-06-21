@@ -25,7 +25,7 @@ export default {
   memory: _('记忆文件', 'Memory', '記憶檔案', 'メモリ', '메모리', 'Bộ nhớ', 'Memoria', 'Memória', 'Память', 'Mémoire', 'Speicher'),
   cron: _('定时任务', 'Cron Jobs', '定時任務', 'スケジュールタスク', '예약 작업', 'Tác vụ định kỳ', 'Tareas', 'Tarefas', 'Планировщик', 'Tâches planifiées', 'Geplante Aufgaben'),
   usage: _('使用情况', 'Usage', '使用情況', '使用状況', '사용 현황', 'Sử dụng', 'Uso', 'Uso', 'Использование', 'Utilisation', 'Nutzung'),
-  skills: _('Skills', 'Skills'),
+  skills: _('星枢技能库', 'Xingshu Skills'),
   extensions: _('扩展中心', 'Extensions', '擴展中心'),
   settings: _('面板设置', 'Settings', '面板設定', 'パネル設定', '패널 설정', 'Cài đặt', 'Configuración', 'Configurações', 'Настройки', 'Paramètres', 'Einstellungen'),
   chatDebug: _('系统诊断', 'Diagnostics', '系統诊斷', 'システム診断', '시스템 진단', 'Chẩn đoán', 'Diagnóstico', 'Diagnóstico', 'Диагностика', 'Diagnostic', 'Diagnose'),

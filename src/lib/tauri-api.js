@@ -442,6 +442,8 @@ export const api = {
   openLobsterOffice: () => invoke('open_lobster_office'),
   openGlobalBuiltinWindow: () => invoke('open_global_builtin_window'),
   openXingshuChatWindow: () => invoke('open_xingshu_chat_window'),
+  openXingshuSkillCenterWindow: () => invoke('open_xingshu_skill_center_window'),
+  openXingshuSkillSecurityWindow: () => invoke('open_xingshu_skill_security_window'),
   fetchLiveSources: (url) => invoke('fetch_live_sources', { url }, 30000),
   openLivePlayer: (sources) => invoke('open_live_player', { sources }),
   fetchPageM3u8: (url) => api.fetchLiveSources(url),
@@ -589,6 +591,8 @@ export const api = {
   skillhubSearch: (query, limit) => invoke('skillhub_search', { query, limit }),
   skillhubIndex: () => invoke('skillhub_index'),
   skillhubInstall: (slug) => invoke('skillhub_install', { slug }),
+  xingshuSkillInstall: (slug) => invoke('xingshu_skill_install', { slug }),
+  skillsScanDiagnostics: () => invoke('skills_scan_diagnostics'),
   hermesSkillhubInstall: (slug) => invoke('hermes_skillhub_install', { slug }),
 
   // 实例管理

@@ -283,6 +283,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::open_lobster_office,
             assistant::open_xingshu_chat_window,
+            assistant::open_xingshu_skill_center_window,
+            assistant::open_xingshu_skill_security_window,
             #[cfg(target_os = "windows")]
             assistant::open_global_builtin_window,
             assistant::fetch_live_sources,
@@ -381,10 +383,12 @@ pub fn run() {
             skills::skills_install_dep,
             skills::skills_uninstall,
             skills::skills_validate,
+            skills::skills_scan_diagnostics,
             // SkillHub SDK（内置 HTTP，不依赖 CLI）
             skills::skillhub_search,
             skills::skillhub_index,
             skills::skillhub_install,
+            skills::xingshu_skill_install,
             skills::hermes_skillhub_install,
             hermes::check_hermes_update,
             // 前端热更新 + 全量客户端更新（只改这两项；OpenClaw CLI/Gateway、Hermes、Web部署更新不动）

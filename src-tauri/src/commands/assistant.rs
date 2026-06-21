@@ -1319,6 +1319,57 @@ pub async fn open_xingshu_chat_window(app: tauri::AppHandle) -> Result<String, S
     Ok("ok".into())
 }
 
+async fn open_xingshu_skill_window(
+    app: tauri::AppHandle,
+    route: &str,
+    title: &str,
+    label_prefix: &str,
+) -> Result<String, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let window_label = format!("{}_{}", label_prefix, ts);
+    let app_url = format!("/index.html#{}", route);
+
+    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(app_url.into()))
+        .title(title)
+        .inner_size(1280.0, 860.0)
+        .min_inner_size(980.0, 640.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建{}窗口失败: {}", title, e))?;
+
+    Ok("ok".into())
+}
+
+#[tauri::command]
+pub async fn open_xingshu_skill_center_window(app: tauri::AppHandle) -> Result<String, String> {
+    open_xingshu_skill_window(
+        app,
+        "/xingshu-skill-center",
+        "星枢技能中心",
+        "xingshu_skill_center",
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn open_xingshu_skill_security_window(app: tauri::AppHandle) -> Result<String, String> {
+    open_xingshu_skill_window(
+        app,
+        "/xingshu-skill-security",
+        "星枢安全检测",
+        "xingshu_skill_security",
+    )
+    .await
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {
