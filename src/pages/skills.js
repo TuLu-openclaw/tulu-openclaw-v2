@@ -160,6 +160,7 @@ function renderSkills(el, data, agentUsage = { agents: [], usage: new Map() }) {
       <input class="input clawhub-search-input" id="skill-filter-input" placeholder="${t('skills.filterPlaceholder')}" type="text">
       <select class="input input-sm" id="skills-bulk-agent" style="max-width:260px"><option value="">${t('skills.selectAgent')}</option>${agentOptionsHtml(_lastAgents)}</select>
       <button class="btn btn-primary btn-sm" data-action="skills-bulk-enable">${t('skills.bulkEnableForAgent')}</button>
+      <button class="btn btn-secondary btn-sm" data-action="skills-bulk-uninstall" style="color:var(--error);border-color:var(--error)">${t('skills.bulkUninstall')}</button>
       <button class="btn btn-secondary btn-sm" data-action="skills-scan-diagnostics">${t('skills.scanDiagnostics')}</button>
       <button class="btn btn-secondary btn-sm" data-action="skill-retry">${t('skills.refresh')}</button>
     </div>
@@ -555,6 +556,35 @@ async function openXingshuSkillSecurity() {
   catch (e) { toast(`${t('skills.openWindowFailed')}: ${e?.message || e}`, 'error') }
 }
 
+async function handleBulkUninstall(page, btn) {
+  const selected = Array.from(page.querySelectorAll('[data-skill-select]:checked')).map(input => input.dataset.skillSelect).filter(Boolean)
+  if (!selected.length) { toast(t('skills.selectSkillFirst'), 'warning'); return }
+  const installedByKey = new Map((_lastSkillsData || []).map(skill => [skillKey(skill.name || skill.slug || skill.id || ''), skill]))
+  const uninstallable = selected.filter(name => {
+    const skill = installedByKey.get(skillKey(name))
+    return skill && !skill.bundled
+  })
+  if (!uninstallable.length) { toast(t('skills.noUninstallableSelected'), 'warning'); return }
+  if (!confirm(t('skills.confirmBulkUninstall', { count: uninstallable.length, names: uninstallable.join(', ') }))) return
+  btn.disabled = true
+  btn.textContent = t('skills.uninstalling')
+  try {
+    for (const name of uninstallable) {
+      await api.skillsUninstall(name)
+    }
+    const data = await api.skillsList()
+    const remaining = getInstalledSkillKeys(data?.skills || [])
+    const failed = uninstallable.filter(name => remaining.has(skillKey(name)))
+    if (failed.length) throw new Error(t('skills.bulkUninstallVerifyFailed', { names: failed.join(', ') }))
+    toast(t('skills.bulkUninstalled', { count: uninstallable.length }), 'success')
+    await loadSkills(page)
+  } catch (e) {
+    toast(`${t('skills.uninstallFailed')}: ${e?.message || e}`, 'error')
+  } finally {
+    if (btn.isConnected) { btn.disabled = false; btn.textContent = t('skills.bulkUninstall') }
+  }
+}
+
 async function handleSkillUninstall(page, btn) {
   const name = btn.dataset.name
   if (!name) return
@@ -563,6 +593,9 @@ async function handleSkillUninstall(page, btn) {
   btn.textContent = t('skills.uninstalling')
   try {
     await api.skillsUninstall(name)
+    const data = await api.skillsList()
+    const remaining = getInstalledSkillKeys(data?.skills || [])
+    if (remaining.has(skillKey(name))) throw new Error(t('skills.uninstallVerifyFailed'))
     if (page !== _activePage || !page.isConnected || !btn.isConnected) return
     toast(t('skills.uninstalled', { name }), 'success')
     await loadSkills(page)
@@ -617,6 +650,9 @@ function bindEvents(page) {
         break
       case 'skills-bulk-enable':
         await handleBulkEnableForAgent(page, btn)
+        break
+      case 'skills-bulk-uninstall':
+        await handleBulkUninstall(page, btn)
         break
       case 'skills-scan-diagnostics':
         await handleScanDiagnostics()
