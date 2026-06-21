@@ -31,30 +31,58 @@ function renderWeixinPluginDetails(s) {
   </div>`
 }
 
-function renderWeixinPluginStatus(s, installBtn) {
+function renderWeixinPluginDiagnostics(s) {
+  const diagnostics = Array.isArray(s?.diagnostics) ? s.diagnostics : []
+  const rows = diagnostics.map(item => {
+    const ok = item?.ok === true
+    const color = ok ? 'var(--success)' : 'var(--warning)'
+    const mark = ok ? '✓' : '!' 
+    return `<div style="display:grid;grid-template-columns:20px 82px minmax(0,1fr);gap:6px;align-items:start;font-size:var(--font-size-xs);line-height:1.5">
+      <span style="color:${color};font-weight:700">${mark}</span>
+      <span style="color:var(--text-tertiary)">${escapeHtml(item?.label || item?.key || '')}</span>
+      <strong style="color:var(--text-primary);font-weight:600;word-break:break-all">${escapeHtml(item?.value ?? '')}</strong>
+    </div>`
+  }).join('')
+  if (!rows) return ''
+  return `<details open style="margin-top:10px;background:rgba(0,0,0,.03);border-radius:8px;padding:8px 10px">
+    <summary style="cursor:pointer;font-weight:600;color:var(--text-secondary);font-size:var(--font-size-xs)">${t('channels.keyDiagnostics')}</summary>
+    <div style="display:grid;gap:4px;margin-top:8px">${rows}</div>
+  </details>`
+}
+
+function renderWeixinStatusMessages(s) {
+  const errors = Array.isArray(s?.errors) ? s.errors : []
+  const warnings = Array.isArray(s?.warnings) ? s.warnings : []
+  const blocks = []
+  if (errors.length) {
+    blocks.push(`<div style="margin-top:8px;color:var(--error);font-size:var(--font-size-xs);line-height:1.6">${errors.map(escapeHtml).join('<br>')}</div>`)
+  }
+  if (warnings.length) {
+    blocks.push(`<div style="margin-top:8px;color:var(--warning);font-size:var(--font-size-xs);line-height:1.6">${warnings.map(escapeHtml).join('<br>')}</div>`)
+  }
+  return blocks.join('')
+}
+
+function renderWeixinPluginStatus(s, installBtn, rawError = null) {
   const parts = []
-  if (!s) return `<span style="color:var(--warning);font-weight:600">⚠ ${t('channels.pluginStatusFailed')}</span><br><span style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('channels.retryOrUseManualCommand') || '请点击一键安装插件修复，或使用下方手动命令。'}</span>`
+  if (!s) {
+    return `<span style="color:var(--warning);font-weight:600">⚠ ${t('channels.pluginStatusFailed')}</span>
+      <br><span style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${escapeHtml(rawError || t('channels.retryOrUseManualCommand'))}</span>`
+  }
   if (s.installed && s.compatible === false) {
     parts.push(`<span style="color:var(--error);font-weight:600">⚠ ${t('channels.pluginIncompatible')}</span>`)
-    parts.push(renderWeixinPluginDetails(s))
-    parts.push(`<br><span style="color:var(--error);font-size:var(--font-size-xs)">${escapeHtml(s.compatError || t('channels.pluginCompatErrorHint'))}</span>`)
     if (installBtn) {
       installBtn.textContent = t('channels.reinstallCompatible')
       installBtn.style.background = 'var(--error)'
     }
   } else if (s.connected) {
-    parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
-    parts.push(renderWeixinPluginDetails(s))
-    parts.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
+    parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.weixinStatusReady')}</span>`)
     if (s.updateAvailable && s.latestVersion) {
       parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
       if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
     }
   } else if (s.installed) {
-    parts.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
-    parts.push(renderWeixinPluginDetails(s))
-    parts.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || t('channels.pluginInstalled'))}</span>`)
-    if (!s.hasBinding) parts.push(`<br><span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('channels.bindAgentHint')}</span>`)
+    parts.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.weixinStatusPartial')}</span>`)
     if (s.updateAvailable && s.latestVersion) {
       parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
       if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
@@ -65,6 +93,13 @@ function renderWeixinPluginStatus(s, installBtn) {
     parts.push(`<span style="color:var(--text-tertiary)">○ ${t('channels.pluginNotInstalled')}</span>`)
     if (s.latestVersion) parts.push(`${t('channels.latestVersion')} ${escapeHtml(s.latestVersion)}`)
     parts.push(t('channels.clickInstallBelow'))
+  }
+  parts.push(renderWeixinPluginDetails(s))
+  parts.push(`<br><span style="color:${s.connected ? 'var(--success)' : 'var(--warning)'};font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
+  parts.push(renderWeixinStatusMessages(s))
+  parts.push(renderWeixinPluginDiagnostics(s))
+  if (s.extensionDir) {
+    parts.push(`<div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);word-break:break-all">${t('channels.pluginPath')}: ${escapeHtml(s.extensionDir)}</div>`)
   }
   return parts.join(' ')
 }
@@ -78,7 +113,7 @@ async function refreshWeixinPluginStatus(modal) {
     const status = await api.checkWeixinPluginStatus()
     statusEl.innerHTML = renderWeixinPluginStatus(status, installBtn)
   } catch (error) {
-    statusEl.innerHTML = renderWeixinPluginStatus(null, installBtn)
+    statusEl.innerHTML = renderWeixinPluginStatus(null, installBtn, String(error || t('channels.unknownError')))
   }
 }
 

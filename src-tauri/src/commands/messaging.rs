@@ -1238,22 +1238,26 @@ fn file_time_rfc3339(path: &Path, created: bool) -> Option<String> {
     Some(dt.to_rfc3339())
 }
 
-fn has_weixin_saved_account() -> bool {
+fn list_weixin_saved_accounts() -> Vec<String> {
     let accounts_dir = super::openclaw_dir()
         .join("openclaw-weixin")
         .join("accounts");
     if !accounts_dir.is_dir() {
-        return false;
+        return Vec::new();
     }
     let index = accounts_dir.join("accounts.json");
     if index.is_file() {
-        if let Ok(raw) = fs::read_to_string(index) {
+        if let Ok(raw) = fs::read_to_string(&index) {
             if let Ok(Value::Array(accounts)) = serde_json::from_str::<Value>(&raw) {
-                if accounts
+                let ids: Vec<String> = accounts
                     .iter()
-                    .any(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()))
-                {
-                    return true;
+                    .filter_map(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(ToString::to_string)
+                    .collect();
+                if !ids.is_empty() {
+                    return ids;
                 }
             }
         }
@@ -1263,14 +1267,66 @@ fn has_weixin_saved_account() -> bool {
         .into_iter()
         .flatten()
         .filter_map(Result::ok)
-        .any(|entry| {
+        .filter_map(|entry| {
             let path = entry.path();
-            path.extension().and_then(|v| v.to_str()) == Some("json")
-                && path
-                    .file_name()
-                    .and_then(|v| v.to_str())
-                    .is_some_and(|name| name != "accounts.json" && !name.ends_with(".sync.json"))
+            if path.extension().and_then(|v| v.to_str()) != Some("json") {
+                return None;
+            }
+            let name = path.file_name()?.to_str()?;
+            if name == "accounts.json" || name.ends_with(".sync.json") {
+                return None;
+            }
+            Some(name.trim_end_matches(".json").to_string())
         })
+        .collect()
+}
+
+fn weixin_accounts_dir() -> PathBuf {
+    super::openclaw_dir()
+        .join("openclaw-weixin")
+        .join("accounts")
+}
+
+fn read_weixin_manifest_info(plugin_dir: &Path) -> (bool, bool, bool, Option<String>) {
+    let manifest_path = plugin_dir.join("openclaw.plugin.json");
+    let Ok(raw) = fs::read_to_string(manifest_path) else {
+        return (false, false, false, None);
+    };
+    let Ok(manifest) = serde_json::from_str::<Value>(&raw) else {
+        return (true, false, false, None);
+    };
+    let on_startup = manifest
+        .get("activation")
+        .and_then(|v| v.get("onStartup"))
+        .and_then(|v| v.as_bool())
+        == Some(true);
+    let owns_channel = manifest
+        .get("channels")
+        .and_then(|v| v.as_array())
+        .map(|channels| {
+            channels
+                .iter()
+                .any(|v| v.as_str() == Some("openclaw-weixin"))
+        })
+        .unwrap_or(false);
+    let version = manifest
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(ToString::to_string);
+    (true, on_startup, owns_channel, version)
+}
+
+fn weixin_gateway_log_tail() -> String {
+    let log_path = super::openclaw_dir().join("logs").join("gateway.log");
+    let Ok(raw) = fs::read_to_string(log_path) else {
+        return String::new();
+    };
+    raw.lines().rev().take(200).collect::<Vec<_>>().join("\n")
+}
+
+fn has_weixin_monitor_started_in_recent_log() -> bool {
+    let tail = weixin_gateway_log_tail();
+    tail.contains("weixin monitor started") || tail.contains("starting weixin provider")
 }
 
 fn weixin_plugin_dirs() -> Vec<PathBuf> {
@@ -1422,95 +1478,155 @@ fn ensure_weixin_runtime_config(cfg: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// 检测微信插件安装状态与版本
+/// 检测微信插件安装状态、版本与关键运行时诊断。
+/// 产品级要求：此接口永不向前端抛错；所有失败都折叠进 diagnostics/errors，避免 UI 只能显示“无法获取插件状态”。
 #[tauri::command]
 pub async fn check_weixin_plugin_status() -> Result<Value, String> {
-    let mut installed = false;
-    let mut installed_version: Option<String> = None;
-    let mut installed_at: Option<String> = None;
-    let mut updated_at: Option<String> = None;
+    let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut diagnostics: Vec<Value> = Vec::new();
 
-    // 检查本地安装：兼容新版 npm 插件目录与旧版 extensions 目录
+    let candidate_dirs: Vec<Value> = weixin_plugin_dirs()
+        .into_iter()
+        .map(|dir| {
+            json!({
+                "path": dir.to_string_lossy(),
+                "exists": dir.is_dir(),
+                "hasInstallMarker": dir.is_dir() && plugin_install_marker_exists(&dir),
+            })
+        })
+        .collect();
     let ext_dir = find_weixin_plugin_dir().unwrap_or_else(|| {
         super::openclaw_dir()
             .join("extensions")
             .join("openclaw-weixin")
     });
     let pkg_json = ext_dir.join("package.json");
-    if pkg_json.is_file() {
-        installed = true;
+    let mut installed = pkg_json.is_file();
+    let mut installed_version: Option<String> = None;
+    let mut package_name: Option<String> = None;
+    let mut installed_at: Option<String> = None;
+    let mut updated_at: Option<String> = None;
+
+    if installed {
         installed_at = file_time_rfc3339(&pkg_json, true);
         updated_at = file_time_rfc3339(&pkg_json, false);
-        if let Ok(content) = std::fs::read_to_string(&pkg_json) {
-            if let Ok(pkg) = serde_json::from_str::<Value>(&content) {
+        match fs::read_to_string(&pkg_json)
+            .ok()
+            .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        {
+            Some(pkg) => {
                 installed_version = pkg
                     .get("version")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
+                    .map(ToString::to_string);
+                package_name = pkg
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
             }
+            None => warnings.push("插件 package.json 存在，但无法解析版本信息".to_string()),
         }
     }
 
-    // 从 npm registry 获取最新版本
+    let (manifest_exists, manifest_on_startup, manifest_owns_channel, manifest_version) =
+        read_weixin_manifest_info(&ext_dir);
+    if installed && !manifest_exists {
+        warnings.push("插件目录存在，但缺少 openclaw.plugin.json".to_string());
+    }
+    if installed && !manifest_on_startup {
+        warnings.push(
+            "插件 manifest 未声明 activation.onStartup=true，Gateway 冷启动可能不加载微信插件"
+                .to_string(),
+        );
+    }
+    if installed && !manifest_owns_channel {
+        warnings.push("插件 manifest 未声明 channels=[openclaw-weixin]".to_string());
+    }
+
+    let client = match super::build_http_client(std::time::Duration::from_secs(8), None) {
+        Ok(client) => client,
+        Err(err) => {
+            warnings.push(format!("创建 HTTP 客户端失败，已使用默认客户端：{err}"));
+            reqwest::Client::new()
+        }
+    };
+
     let mut latest_version: Option<String> = None;
-    let client = super::build_http_client(std::time::Duration::from_secs(180), None)
-        .unwrap_or_else(|_| reqwest::Client::new());
-    if let Ok(resp) = client
+    let mut registry_reachable = false;
+    match client
         .get("https://registry.npmjs.org/@tencent-weixin/openclaw-weixin/latest")
         .header("Accept", "application/json")
         .send()
         .await
     {
-        if let Ok(body) = resp.json::<Value>().await {
-            latest_version = body
-                .get("version")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+        Ok(resp) => {
+            registry_reachable = resp.status().is_success();
+            if registry_reachable {
+                match resp.json::<Value>().await {
+                    Ok(body) => {
+                        latest_version = body
+                            .get("version")
+                            .and_then(|v| v.as_str())
+                            .map(ToString::to_string);
+                    }
+                    Err(err) => warnings.push(format!("npm registry 返回内容无法解析：{err}")),
+                }
+            } else {
+                warnings.push("npm registry 可访问但返回非成功状态".to_string());
+            }
         }
+        Err(err) => warnings.push(format!("无法访问 npm registry 获取最新版：{err}")),
     }
 
     let update_available = match (&installed_version, &latest_version) {
         (Some(cur), Some(lat)) if cur != lat => {
-            // 简单 semver 比较：按 . 分割为数字段逐段比较
             let parse =
                 |s: &str| -> Vec<u32> { s.split('.').filter_map(|p| p.parse().ok()).collect() };
-            let cv = parse(cur);
-            let lv = parse(lat);
-            lv > cv
+            parse(lat) > parse(cur)
         }
         _ => false,
     };
 
-    // 兼容性检查：微信插件要求 OpenClaw >= 2026.3.22，通过版本号判断
+    let mut openclaw_version = String::new();
     let mut compatible = true;
     let mut compat_error = String::new();
+    match crate::utils::resolve_openclaw_cli_path().and_then(|_| {
+        let out = crate::utils::openclaw_command()
+            .arg("--version")
+            .output()
+            .ok()?;
+        let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        raw.split_whitespace()
+            .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            .map(String::from)
+    }) {
+        Some(ver) => openclaw_version = ver,
+        None => warnings.push("无法读取 OpenClaw CLI 版本".to_string()),
+    }
     if installed {
-        let oc_ver = crate::utils::resolve_openclaw_cli_path()
-            .and_then(|_| {
-                let out = crate::utils::openclaw_command()
-                    .arg("--version")
-                    .output()
-                    .ok()?;
-                let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                raw.split_whitespace()
-                    .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()))
-                    .map(String::from)
-            })
-            .unwrap_or_default();
-        let oc_nums: Vec<u32> = oc_ver
+        let oc_nums: Vec<u32> = openclaw_version
             .split(|c: char| !c.is_ascii_digit())
             .filter_map(|s| s.parse().ok())
             .collect();
-        if oc_nums < vec![2026, 3, 22] {
+        if !oc_nums.is_empty() && oc_nums < vec![2026, 3, 22] {
             compatible = false;
             compat_error = format!(
-                "插件版本与当前 OpenClaw {} 不兼容（要求 >= 2026.3.22），请先升级 OpenClaw 或在终端执行: npx -y @tencent-weixin/openclaw-weixin-cli@latest install",
-                oc_ver
+                "插件版本与当前 OpenClaw {} 不兼容（要求 >= 2026.3.22），请先升级 OpenClaw 或重新安装兼容插件",
+                openclaw_version
             );
+            errors.push(compat_error.clone());
         }
     }
 
-    let cfg = super::config::load_openclaw_json().unwrap_or_else(|_| json!({}));
+    let cfg_result = super::config::load_openclaw_json();
+    let cfg = match cfg_result {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            errors.push(format!("读取 openclaw.json 失败：{err}"));
+            json!({})
+        }
+    };
     let channel_cfg = cfg.get("channels").and_then(|c| c.get("openclaw-weixin"));
     let channel_enabled = channel_cfg
         .and_then(|c| c.get("enabled"))
@@ -1519,6 +1635,19 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
     let has_channel_config = channel_cfg
         .and_then(|c| c.as_object())
         .map(|obj| obj.keys().any(|k| k != "enabled"))
+        .unwrap_or(false);
+    let plugin_allowed = cfg
+        .get("plugins")
+        .and_then(|p| p.get("allow"))
+        .and_then(|v| v.as_array())
+        .map(|allow| allow.iter().any(|v| v.as_str() == Some("openclaw-weixin")))
+        .unwrap_or(false);
+    let plugin_entry_enabled = cfg
+        .get("plugins")
+        .and_then(|p| p.get("entries"))
+        .and_then(|e| e.get("openclaw-weixin"))
+        .and_then(|entry| entry.get("enabled"))
+        .and_then(|v| v.as_bool())
         .unwrap_or(false);
     let has_binding = cfg
         .get("bindings")
@@ -1541,20 +1670,64 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
     let gateway_url = format!("http://127.0.0.1:{}/health", port);
     let gateway_reachable = match client.get(&gateway_url).send().await {
         Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
+        Err(err) => {
+            warnings.push(format!("Gateway 健康检查失败：{err}"));
+            false
+        }
     };
-    let has_saved_account = has_weixin_saved_account();
+
+    let saved_accounts = list_weixin_saved_accounts();
+    let has_saved_account = !saved_accounts.is_empty();
+    let accounts_dir = weixin_accounts_dir();
     let logged_in = has_channel_config || has_saved_account;
-    let connected =
-        installed && compatible && channel_enabled && logged_in && has_binding && gateway_reachable;
+    let monitor_started = has_weixin_monitor_started_in_recent_log();
+
+    diagnostics.push(json!({"key":"pluginInstalled","label":"插件文件","ok":installed,"value": if installed {"已检测到"} else {"未检测到"}}));
+    diagnostics.push(json!({"key":"pluginVersion","label":"插件版本","ok":installed_version.is_some(),"value":installed_version.clone().unwrap_or_else(|| "未知".into())}));
+    diagnostics.push(json!({"key":"manifestStartup","label":"启动声明","ok":manifest_on_startup,"value": if manifest_on_startup {"activation.onStartup=true"} else {"缺失或未启用"}}));
+    diagnostics.push(json!({"key":"manifestChannel","label":"渠道声明","ok":manifest_owns_channel,"value": if manifest_owns_channel {"openclaw-weixin"} else {"缺失"}}));
+    diagnostics.push(json!({"key":"pluginAllowed","label":"插件 allow","ok":plugin_allowed,"value": if plugin_allowed {"已加入"} else {"未加入"}}));
+    diagnostics.push(json!({"key":"pluginEntry","label":"插件启用","ok":plugin_entry_enabled,"value": if plugin_entry_enabled {"enabled=true"} else {"未启用"}}));
+    diagnostics.push(json!({"key":"channelEnabled","label":"渠道启用","ok":channel_enabled,"value": if channel_enabled {"enabled=true"} else {"未启用"}}));
+    diagnostics.push(json!({"key":"savedAccount","label":"扫码账号","ok":has_saved_account,"value": if has_saved_account {saved_accounts.join(", ")} else {"未检测到账号".to_string()}}));
+    diagnostics.push(json!({"key":"binding","label":"Agent 绑定","ok":has_binding,"value": if has_binding {"已绑定"} else {"未绑定"}}));
+    diagnostics.push(json!({"key":"gateway","label":"Gateway","ok":gateway_reachable,"value": if gateway_reachable {gateway_url.clone()} else {format!("不可达：{}", gateway_url)}}));
+    diagnostics.push(json!({"key":"monitor","label":"微信 monitor","ok":monitor_started,"value": if monitor_started {"最近日志已启动"} else {"最近日志未确认"}}));
+
+    if installed && !plugin_allowed {
+        warnings.push("openclaw-weixin 未加入 plugins.allow".to_string());
+    }
+    if installed && !plugin_entry_enabled {
+        warnings.push("plugins.entries.openclaw-weixin.enabled 未启用".to_string());
+    }
+    if installed && !channel_enabled {
+        warnings.push("channels.openclaw-weixin.enabled 未启用".to_string());
+    }
+    if installed && !has_binding {
+        warnings.push("微信渠道未绑定 Agent".to_string());
+    }
+    if installed && logged_in && gateway_reachable && !monitor_started {
+        warnings.push("Gateway 可达，但最近日志未确认 weixin monitor started；如手机端不可用，请重新登录或重启 Gateway".to_string());
+    }
+
+    installed = installed || manifest_exists;
+    let connected = installed
+        && compatible
+        && plugin_allowed
+        && plugin_entry_enabled
+        && channel_enabled
+        && logged_in
+        && has_binding
+        && gateway_reachable
+        && monitor_started;
     let status_hint = if connected {
-        "微信插件、登录账号、渠道配置、绑定和本机 Gateway 均已就绪".to_string()
+        "微信插件、登录账号、渠道配置、绑定、Gateway 与 monitor 均已就绪".to_string()
     } else if !installed {
         "微信插件未安装".to_string()
     } else if !compatible {
         compat_error.clone()
-    } else if !channel_enabled {
-        "微信插件已安装，但 channels.openclaw-weixin 尚未启用".to_string()
+    } else if !plugin_allowed || !plugin_entry_enabled || !channel_enabled {
+        "微信插件已安装，但 OpenClaw 运行时配置未补齐".to_string()
     } else if !logged_in {
         "微信插件已安装，但尚未完成扫码登录或账号文件未保存".to_string()
     } else if !has_binding {
@@ -1564,29 +1737,48 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
             "微信渠道已配置，但本机 Gateway 健康检查不可达：{}",
             gateway_url
         )
+    } else if !monitor_started {
+        "微信配置基本就绪，但最近 Gateway 日志未确认微信 monitor 启动".to_string()
     } else {
         "微信渠道状态未知，请重新登录或查看 Gateway 日志".to_string()
     };
 
     Ok(json!({
+        "ok": errors.is_empty(),
         "installed": installed,
         "installedVersion": installed_version,
+        "packageName": package_name,
+        "manifestVersion": manifest_version,
         "installedAt": installed_at,
         "updatedAt": updated_at,
         "latestVersion": latest_version,
+        "registryReachable": registry_reachable,
         "updateAvailable": update_available,
         "extensionDir": ext_dir.to_string_lossy(),
+        "candidateDirs": candidate_dirs,
+        "manifestExists": manifest_exists,
+        "manifestOnStartup": manifest_on_startup,
+        "manifestOwnsChannel": manifest_owns_channel,
         "compatible": compatible,
         "compatError": compat_error,
+        "openclawVersion": openclaw_version,
+        "pluginAllowed": plugin_allowed,
+        "pluginEntryEnabled": plugin_entry_enabled,
         "channelEnabled": channel_enabled,
         "hasChannelConfig": has_channel_config,
+        "accountsDir": accounts_dir.to_string_lossy(),
+        "savedAccounts": saved_accounts,
         "hasSavedAccount": has_saved_account,
         "loggedIn": logged_in,
         "hasBinding": has_binding,
         "gatewayReachable": gateway_reachable,
         "gatewayUrl": gateway_url,
+        "monitorStarted": monitor_started,
         "connected": connected,
         "statusHint": status_hint,
+        "warnings": warnings,
+        "errors": errors,
+        "diagnostics": diagnostics,
     }))
 }
 
