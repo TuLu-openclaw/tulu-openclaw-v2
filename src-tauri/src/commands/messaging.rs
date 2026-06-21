@@ -1238,6 +1238,157 @@ fn file_time_rfc3339(path: &Path, created: bool) -> Option<String> {
     Some(dt.to_rfc3339())
 }
 
+fn has_weixin_saved_account() -> bool {
+    let accounts_dir = super::openclaw_dir()
+        .join("openclaw-weixin")
+        .join("accounts");
+    if !accounts_dir.is_dir() {
+        return false;
+    }
+    let index = accounts_dir.join("accounts.json");
+    if index.is_file() {
+        if let Ok(raw) = fs::read_to_string(index) {
+            if let Ok(Value::Array(accounts)) = serde_json::from_str::<Value>(&raw) {
+                if accounts
+                    .iter()
+                    .any(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    fs::read_dir(accounts_dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .any(|entry| {
+            let path = entry.path();
+            path.extension().and_then(|v| v.to_str()) == Some("json")
+                && path
+                    .file_name()
+                    .and_then(|v| v.to_str())
+                    .is_some_and(|name| name != "accounts.json" && !name.ends_with(".sync.json"))
+        })
+}
+
+fn weixin_plugin_dirs() -> Vec<PathBuf> {
+    let home = super::openclaw_dir();
+    vec![
+        home.join("extensions").join("openclaw-weixin"),
+        home.join("npm")
+            .join("node_modules")
+            .join("@tencent-weixin")
+            .join("openclaw-weixin"),
+    ]
+}
+
+fn find_weixin_plugin_dir() -> Option<PathBuf> {
+    weixin_plugin_dirs()
+        .into_iter()
+        .find(|dir| dir.is_dir() && plugin_install_marker_exists(dir))
+}
+
+fn ensure_weixin_manifest_startup() -> Result<bool, String> {
+    let Some(plugin_dir) = find_weixin_plugin_dir() else {
+        return Ok(false);
+    };
+    let manifest_path = plugin_dir.join("openclaw.plugin.json");
+    if !manifest_path.is_file() {
+        return Ok(false);
+    }
+    let raw = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("读取微信插件 manifest 失败: {e}"))?;
+    let mut manifest: Value =
+        serde_json::from_str(&raw).map_err(|e| format!("解析微信插件 manifest 失败: {e}"))?;
+    let root = manifest
+        .as_object_mut()
+        .ok_or("微信插件 manifest 顶层格式错误")?;
+
+    let activation = root.entry("activation").or_insert_with(|| json!({}));
+    let activation_obj = activation
+        .as_object_mut()
+        .ok_or("微信插件 manifest.activation 格式错误")?;
+    let mut changed = activation_obj.get("onStartup").and_then(|v| v.as_bool()) != Some(true);
+    activation_obj.insert("onStartup".into(), json!(true));
+
+    let channels = root.entry("channels").or_insert_with(|| json!([]));
+    let channels_arr = channels
+        .as_array_mut()
+        .ok_or("微信插件 manifest.channels 格式错误")?;
+    if !channels_arr
+        .iter()
+        .any(|v| v.as_str() == Some("openclaw-weixin"))
+    {
+        channels_arr.push(json!("openclaw-weixin"));
+        changed = true;
+    }
+
+    if changed {
+        let pretty = serde_json::to_string_pretty(&manifest)
+            .map_err(|e| format!("序列化微信插件 manifest 失败: {e}"))?;
+        fs::write(&manifest_path, pretty)
+            .map_err(|e| format!("写入微信插件 manifest 失败: {e}"))?;
+    }
+    Ok(changed)
+}
+
+async fn refresh_registry_and_restart_gateway_hard() -> Result<String, String> {
+    let refresh = tokio::time::timeout(
+        Duration::from_secs(120),
+        crate::utils::openclaw_command_async()
+            .args(["plugins", "registry", "--refresh"])
+            .output(),
+    )
+    .await
+    .map_err(|_| "刷新插件 registry 超时".to_string())?
+    .map_err(|e| format!("刷新插件 registry 失败: {e}"))?;
+    if !refresh.status.success() {
+        let stderr = String::from_utf8_lossy(&refresh.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&refresh.stdout).trim().to_string();
+        return Err(format!(
+            "刷新插件 registry 失败: {}",
+            if stderr.is_empty() { stdout } else { stderr }
+        ));
+    }
+
+    let restart = tokio::time::timeout(
+        Duration::from_secs(120),
+        crate::utils::openclaw_command_async()
+            .args(["gateway", "restart"])
+            .output(),
+    )
+    .await
+    .map_err(|_| "重启 Gateway 超时".to_string())?
+    .map_err(|e| format!("重启 Gateway 失败: {e}"))?;
+    if !restart.status.success() {
+        let stderr = String::from_utf8_lossy(&restart.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&restart.stdout).trim().to_string();
+        return Err(format!(
+            "重启 Gateway 失败: {}",
+            if stderr.is_empty() { stdout } else { stderr }
+        ));
+    }
+
+    Ok("插件 registry 已刷新，Gateway 已硬重启".to_string())
+}
+
+async fn heal_weixin_runtime_after_install_or_login() -> Result<String, String> {
+    let mut notes = Vec::new();
+    if ensure_weixin_manifest_startup()? {
+        notes.push("已补齐微信插件 activation.onStartup".to_string());
+    }
+
+    let mut cfg = super::config::load_openclaw_json()?;
+    ensure_weixin_runtime_config(&mut cfg)?;
+    super::config::save_openclaw_json(&cfg)?;
+    notes.push("已补齐微信运行时配置与默认绑定".to_string());
+
+    notes.push(refresh_registry_and_restart_gateway_hard().await?);
+    Ok(notes.join("；"))
+}
+
 fn ensure_weixin_runtime_config(cfg: &mut Value) -> Result<(), String> {
     ensure_plugin_allowed(cfg, "openclaw-weixin")?;
 
@@ -1274,15 +1425,17 @@ fn ensure_weixin_runtime_config(cfg: &mut Value) -> Result<(), String> {
 /// 检测微信插件安装状态与版本
 #[tauri::command]
 pub async fn check_weixin_plugin_status() -> Result<Value, String> {
-    let ext_dir = super::openclaw_dir()
-        .join("extensions")
-        .join("openclaw-weixin");
     let mut installed = false;
     let mut installed_version: Option<String> = None;
     let mut installed_at: Option<String> = None;
     let mut updated_at: Option<String> = None;
 
-    // 检查本地安装
+    // 检查本地安装：兼容新版 npm 插件目录与旧版 extensions 目录
+    let ext_dir = find_weixin_plugin_dir().unwrap_or_else(|| {
+        super::openclaw_dir()
+            .join("extensions")
+            .join("openclaw-weixin")
+    });
     let pkg_json = ext_dir.join("package.json");
     if pkg_json.is_file() {
         installed = true;
@@ -1390,20 +1543,20 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
         Ok(resp) => resp.status().is_success(),
         Err(_) => false,
     };
-    let connected = installed
-        && compatible
-        && channel_enabled
-        && has_channel_config
-        && has_binding
-        && gateway_reachable;
+    let has_saved_account = has_weixin_saved_account();
+    let logged_in = has_channel_config || has_saved_account;
+    let connected =
+        installed && compatible && channel_enabled && logged_in && has_binding && gateway_reachable;
     let status_hint = if connected {
-        "微信插件、渠道配置、绑定和本机 Gateway 均已就绪".to_string()
+        "微信插件、登录账号、渠道配置、绑定和本机 Gateway 均已就绪".to_string()
     } else if !installed {
         "微信插件未安装".to_string()
     } else if !compatible {
         compat_error.clone()
-    } else if !channel_enabled || !has_channel_config {
-        "微信插件已安装，但 channels.openclaw-weixin 尚未完成登录配置".to_string()
+    } else if !channel_enabled {
+        "微信插件已安装，但 channels.openclaw-weixin 尚未启用".to_string()
+    } else if !logged_in {
+        "微信插件已安装，但尚未完成扫码登录或账号文件未保存".to_string()
     } else if !has_binding {
         "微信渠道已配置，但还没有绑定到任何 Agent，会导致微信侧提示暂无法连接 OpenClaw".to_string()
     } else if !gateway_reachable {
@@ -1427,6 +1580,8 @@ pub async fn check_weixin_plugin_status() -> Result<Value, String> {
         "compatError": compat_error,
         "channelEnabled": channel_enabled,
         "hasChannelConfig": has_channel_config,
+        "hasSavedAccount": has_saved_account,
+        "loggedIn": logged_in,
         "hasBinding": has_binding,
         "gatewayReachable": gateway_reachable,
         "gatewayUrl": gateway_url,
@@ -1664,6 +1819,21 @@ pub async fn run_channel_action(
             json!({ "platform": &platform, "action": &action, "progress": 100 }),
         );
         if status.success() {
+            match heal_weixin_runtime_after_install_or_login().await {
+                Ok(msg) => {
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "info", "message": msg }),
+                    );
+                }
+                Err(err) => {
+                    let _ = app.emit(
+                        "channel-action-log",
+                        json!({ "platform": &platform, "action": &action, "kind": "stderr", "message": format!("微信插件安装后自愈失败：{}", err) }),
+                    );
+                    return Err(format!("微信插件已安装，但运行时自愈失败：{}", err));
+                }
+            }
             let _ = app.emit(
                 "channel-action-done",
                 json!({ "platform": &platform, "action": &action }),
@@ -1823,23 +1993,14 @@ pub async fn run_channel_action(
     };
 
     if status.success() {
-        // 微信登录成功后写入 channels/plugins/bindings，确保 Gateway 能实际启动并路由微信 channel
+        // 微信登录成功后写入 channels/plugins/bindings、补齐 manifest 启动声明、刷新 registry 并硬重启 Gateway，确保 monitor 真正启动
         if platform == "weixin" && action == "login" {
-            if let Ok(mut cfg) = super::config::load_openclaw_json() {
-                match ensure_weixin_runtime_config(&mut cfg) {
-                    Ok(()) => {
-                        let _ = super::config::save_openclaw_json(&cfg);
-                        emit_payload("info", "已补齐 plugins.allow / plugins.entries / channels.openclaw-weixin / 默认 main 绑定".to_string());
-                    }
-                    Err(err) => emit_payload("info", format!("微信运行时配置补齐失败：{}", err)),
-                }
-            }
-            match super::config::do_reload_gateway(&app).await {
-                Ok(msg) => emit_payload("info", format!("微信登录成功，已重载 Gateway：{}", msg)),
+            match heal_weixin_runtime_after_install_or_login().await {
+                Ok(msg) => emit_payload("info", format!("微信登录成功，已完成运行时自愈：{}", msg)),
                 Err(err) => emit_payload(
                     "info",
                     format!(
-                        "微信登录成功，但自动重载 Gateway 失败，请手动重启 Gateway：{}",
+                        "微信登录成功，但运行时自愈失败，请手动重启 Gateway 或重新安装插件：{}",
                         err
                     ),
                 ),

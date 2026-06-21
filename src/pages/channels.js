@@ -31,6 +31,57 @@ function renderWeixinPluginDetails(s) {
   </div>`
 }
 
+function renderWeixinPluginStatus(s, installBtn) {
+  const parts = []
+  if (!s) return `<span style="color:var(--warning);font-weight:600">⚠ ${t('channels.pluginStatusFailed')}</span><br><span style="font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('channels.retryOrUseManualCommand') || '请点击一键安装插件修复，或使用下方手动命令。'}</span>`
+  if (s.installed && s.compatible === false) {
+    parts.push(`<span style="color:var(--error);font-weight:600">⚠ ${t('channels.pluginIncompatible')}</span>`)
+    parts.push(renderWeixinPluginDetails(s))
+    parts.push(`<br><span style="color:var(--error);font-size:var(--font-size-xs)">${escapeHtml(s.compatError || t('channels.pluginCompatErrorHint'))}</span>`)
+    if (installBtn) {
+      installBtn.textContent = t('channels.reinstallCompatible')
+      installBtn.style.background = 'var(--error)'
+    }
+  } else if (s.connected) {
+    parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
+    parts.push(renderWeixinPluginDetails(s))
+    parts.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
+    if (s.updateAvailable && s.latestVersion) {
+      parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
+      if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
+    }
+  } else if (s.installed) {
+    parts.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
+    parts.push(renderWeixinPluginDetails(s))
+    parts.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || t('channels.pluginInstalled'))}</span>`)
+    if (!s.hasBinding) parts.push(`<br><span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('channels.bindAgentHint')}</span>`)
+    if (s.updateAvailable && s.latestVersion) {
+      parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
+      if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
+    } else if (s.latestVersion) {
+      parts.push(`<span style="color:var(--text-tertiary)">(${t('channels.upToDate')})</span>`)
+    }
+  } else {
+    parts.push(`<span style="color:var(--text-tertiary)">○ ${t('channels.pluginNotInstalled')}</span>`)
+    if (s.latestVersion) parts.push(`${t('channels.latestVersion')} ${escapeHtml(s.latestVersion)}`)
+    parts.push(t('channels.clickInstallBelow'))
+  }
+  return parts.join(' ')
+}
+
+async function refreshWeixinPluginStatus(modal) {
+  const statusEl = modal?.querySelector?.('#weixin-plugin-status')
+  if (!statusEl) return
+  const installBtn = modal.querySelector('[data-channel-action="install"]')
+  try {
+    statusEl.textContent = t('channels.reDetecting') || t('channels.detectingPlugin')
+    const status = await api.checkWeixinPluginStatus()
+    statusEl.innerHTML = renderWeixinPluginStatus(status, installBtn)
+  } catch (error) {
+    statusEl.innerHTML = renderWeixinPluginStatus(null, installBtn)
+  }
+}
+
 // ── 渠道注册表：面板内置向导，覆盖 OpenClaw 官方渠道 + 国内扩展渠道 ──
 
 const PLATFORM_REGISTRY = {
@@ -1696,47 +1747,7 @@ async function openConfigDialog(pid, page, state, accountId) {
 
     // 微信插件状态检测
     if (pid === 'weixin') {
-      const statusEl = modal.querySelector('#weixin-plugin-status')
-      if (statusEl) {
-        api.checkWeixinPluginStatus().then(s => {
-          if (!s) { statusEl.textContent = t('channels.pluginStatusFailed'); return }
-          const parts = []
-          const installBtn = modal.querySelector('[data-channel-action="install"]')
-          if (s.installed && s.compatible === false) {
-            parts.push(`<span style="color:var(--error);font-weight:600">⚠ ${t('channels.pluginIncompatible')}</span>`)
-            parts.push(renderWeixinPluginDetails(s))
-            parts.push(`<br><span style="color:var(--error);font-size:var(--font-size-xs)">${s.compatError || t('channels.pluginCompatErrorHint')}</span>`)
-            if (installBtn) {
-              installBtn.textContent = t('channels.reinstallCompatible')
-              installBtn.style.background = 'var(--error)'
-            }
-          } else if (s.connected) {
-            parts.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
-            parts.push(renderWeixinPluginDetails(s))
-            parts.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
-            if (s.updateAvailable && s.latestVersion) {
-              parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
-              if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
-            }
-          } else if (s.installed) {
-            parts.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
-            parts.push(renderWeixinPluginDetails(s))
-            parts.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || t('channels.pluginInstalled'))}</span>`)
-            if (!s.hasBinding) parts.push(`<br><span style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('channels.bindAgentHint')}</span>`)
-            if (s.updateAvailable && s.latestVersion) {
-              parts.push(`<span style="color:var(--warning)">→ ${t('channels.newVersionAvailable', { version: s.latestVersion })}</span>`)
-              if (installBtn) installBtn.textContent = t('channels.upgradePlugin')
-            } else if (s.latestVersion) {
-              parts.push(`<span style="color:var(--text-tertiary)">(${t('channels.upToDate')})</span>`)
-            }
-          } else {
-            parts.push(`<span style="color:var(--text-tertiary)">○ ${t('channels.pluginNotInstalled')}</span>`)
-            if (s.latestVersion) parts.push(`${t('channels.latestVersion')} ${s.latestVersion}`)
-            parts.push(t('channels.clickInstallBelow'))
-          }
-          statusEl.innerHTML = parts.join(' ')
-        }).catch(() => { statusEl.textContent = t('channels.pluginStatusFailed') })
-      }
+      refreshWeixinPluginStatus(modal)
     }
 
     const actionResultEl = modal.querySelector('#channel-action-result')
@@ -1780,26 +1791,9 @@ async function openConfigDialog(pid, page, state, accountId) {
 
           const output = await runPlatformLoginAction(pid, actionId, reg, actionResultEl)
           toast(t('channels.executionDone'), 'success')
-          // 安装完成后刷新插件状态
-          if (pid === 'weixin' && actionId === 'install') {
-            const statusEl = modal.querySelector('#weixin-plugin-status')
-            if (statusEl) {
-              statusEl.textContent = t('channels.reDetecting')
-              api.checkWeixinPluginStatus().then(s => {
-                if (!s) return
-                const p = []
-                if (s.connected) {
-                  p.push(`<span style="color:var(--success);font-weight:600">● ${t('channels.channelConnected')}</span>`)
-                  p.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
-                  p.push(`<br><span style="color:var(--success);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
-                } else if (s.installed) {
-                  p.push(`<span style="color:var(--warning);font-weight:600">● ${t('channels.pluginInstalled')}</span>`)
-                  p.push(`${t('channels.version')} <strong>${s.installedVersion || t('channels.unknown')}</strong>`)
-                  p.push(`<br><span style="color:var(--warning);font-size:var(--font-size-xs)">${escapeHtml(s.statusHint || '')}</span>`)
-                }
-                statusEl.innerHTML = p.join(' ') || t('channels.pluginInstalled')
-              }).catch(() => {})
-            }
+          // 安装/登录完成后刷新插件状态
+          if (pid === 'weixin' && ['install', 'login'].includes(actionId)) {
+            await refreshWeixinPluginStatus(modal)
           }
           if (actionId === 'login') {
             const logBox = actionResultEl.querySelector('#channel-action-log-box')
