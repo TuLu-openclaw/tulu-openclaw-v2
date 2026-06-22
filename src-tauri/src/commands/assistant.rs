@@ -1323,21 +1323,19 @@ async fn open_xingshu_skill_url_window(
     app: tauri::AppHandle,
     url: &str,
     title: &str,
-    label_prefix: &str,
+    window_label: &str,
 ) -> Result<String, String> {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let window_label = format!("{}_{}", label_prefix, ts);
     let parsed_url: url::Url = url
         .parse()
         .map_err(|e| format!("星枢技能中心 URL 无效: {}", e))?;
 
-    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(parsed_url))
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.close();
+    }
+
+    WebviewWindowBuilder::new(&app, window_label, WebviewUrl::External(parsed_url))
         .title(title)
         .inner_size(1280.0, 860.0)
         .min_inner_size(980.0, 640.0)

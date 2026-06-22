@@ -1,0 +1,9 @@
+{
+  "identifier": "xingshu-skill-remote",
+  "description": "Allow the official XingShu skill pages to invoke the in-app installer from dedicated windows.",
+  "windows": ["xingshu_skill_center", "xingshu_skill_security"],
+  "remote": {
+    "urls": ["https://www.aiyu.jx.cn/*"]
+  },
+  "permissions": ["core:default"]
+}
