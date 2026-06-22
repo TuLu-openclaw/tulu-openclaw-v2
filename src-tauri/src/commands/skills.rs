@@ -216,7 +216,7 @@ fn skill_key(value: &str) -> String {
         .to_ascii_lowercase()
         .trim_start_matches('@')
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or(value)
         .to_string()
 }
