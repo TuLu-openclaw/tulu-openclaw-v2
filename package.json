@@ -1,6 +1,6 @@
 {
   "name": "星枢OpenClaw",
-  "version": "4.0.10",
+  "version": "4.1.1",
   "private": true,
   "description": "星枢OpenClaw - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
   "type": "module",

@@ -147,11 +147,13 @@ async fn install_skillhub_skill_to_openclaw(slug: String) -> Result<Value, Strin
         .and_then(|v| v.as_array())
         .map(|items| {
             items.iter().any(|item| {
-                let name_matches = item.get("name")
+                let name_matches = item
+                    .get("name")
                     .and_then(|v| v.as_str())
                     .map(|name| skill_key(name) == skill_key(&slug))
                     .unwrap_or(false);
-                let path_matches = item.get("filePath")
+                let path_matches = item
+                    .get("filePath")
                     .and_then(|v| v.as_str())
                     .map(|path| std::path::Path::new(path) == installed_path)
                     .unwrap_or(false);
@@ -669,7 +671,11 @@ fn skill_install_time_millis(skill_dir: &std::path::Path) -> i64 {
             candidates.push(system_time_millis(modified));
         }
     }
-    candidates.into_iter().filter(|value| *value > 0).min().unwrap_or(0)
+    candidates
+        .into_iter()
+        .filter(|value| *value > 0)
+        .min()
+        .unwrap_or(0)
 }
 
 fn skill_install_time_rfc3339(skill_dir: &std::path::Path) -> Option<String> {
@@ -677,8 +683,7 @@ fn skill_install_time_rfc3339(skill_dir: &std::path::Path) -> Option<String> {
     if millis <= 0 {
         return None;
     }
-    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
-        .map(|dt| dt.to_rfc3339())
+    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis).map(|dt| dt.to_rfc3339())
 }
 
 fn resolve_custom_skill_dir(name: &str) -> Option<std::path::PathBuf> {
