@@ -53,6 +53,22 @@ async function loadSkillAgentUsage() {
   }
 }
 
+function installedTimeMs(skill = {}) {
+  const direct = Number(skill.installedAtMs || skill.installed_at_ms || skill.installTimeMs || 0)
+  if (Number.isFinite(direct) && direct > 0) return direct
+  const raw = skill.installedAt || skill.installed_at || skill.createdAt || skill.created_at || skill.updatedAt || skill.updated_at || ''
+  const parsed = raw ? Date.parse(raw) : 0
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function sortSkillsByInstallDate(skills = []) {
+  return [...(skills || [])].sort((a, b) => {
+    const delta = installedTimeMs(b) - installedTimeMs(a)
+    if (delta !== 0) return delta
+    return String(a?.name || '').localeCompare(String(b?.name || ''))
+  })
+}
+
 function agentOptionsHtml(agents = []) {
   return (agents || []).map(agent => `<option value="${esc(agent.id)}">${esc(agent.identityName || agent.id)}（${esc(agent.id)}）</option>`).join('')
 }
@@ -142,7 +158,7 @@ async function loadSkills(page) {
 }
 
 function renderSkills(el, data, agentUsage = { agents: [], usage: new Map() }) {
-  const skills = data?.skills || []
+  const skills = sortSkillsByInstallDate(data?.skills || [])
   _lastSkillsData = skills
   _lastAgents = agentUsage.agents || []
   const cliAvailable = data?.cliAvailable !== false
@@ -622,6 +638,8 @@ function bindEvents(page) {
       page.querySelector('#skills-tab-xingshu-security').style.display = key === 'xingshu-security' ? '' : 'none'
       // 切到商店 tab 时加载全量索引
       if (key === 'store') loadStore(page)
+      // 每次打开“已安装”都重新扫描并按安装日期刷新排序
+      if (key === 'installed') loadSkills(page)
     }
   })
 

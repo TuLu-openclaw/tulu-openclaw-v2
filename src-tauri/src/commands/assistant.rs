@@ -1319,9 +1319,9 @@ pub async fn open_xingshu_chat_window(app: tauri::AppHandle) -> Result<String, S
     Ok("ok".into())
 }
 
-async fn open_xingshu_skill_window(
+async fn open_xingshu_skill_url_window(
     app: tauri::AppHandle,
-    route: &str,
+    url: &str,
     title: &str,
     label_prefix: &str,
 ) -> Result<String, String> {
@@ -1333,14 +1333,18 @@ async fn open_xingshu_skill_window(
         .unwrap_or_default()
         .as_millis();
     let window_label = format!("{}_{}", label_prefix, ts);
-    let app_url = format!("/index.html#{}", route);
+    let parsed_url: url::Url = url
+        .parse()
+        .map_err(|e| format!("星枢技能中心 URL 无效: {}", e))?;
 
-    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(app_url.into()))
+    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(parsed_url))
         .title(title)
         .inner_size(1280.0, 860.0)
         .min_inner_size(980.0, 640.0)
         .resizable(true)
         .decorations(true)
+        .visible(true)
+        .focused(true)
         .center()
         .build()
         .map_err(|e| format!("创建{}窗口失败: {}", title, e))?;
@@ -1350,9 +1354,9 @@ async fn open_xingshu_skill_window(
 
 #[tauri::command]
 pub async fn open_xingshu_skill_center_window(app: tauri::AppHandle) -> Result<String, String> {
-    open_xingshu_skill_window(
+    open_xingshu_skill_url_window(
         app,
-        "/xingshu-skill-center",
+        "https://www.aiyu.jx.cn/xingshu-skill/index.local.html",
         "星枢技能中心",
         "xingshu_skill_center",
     )
@@ -1361,9 +1365,9 @@ pub async fn open_xingshu_skill_center_window(app: tauri::AppHandle) -> Result<S
 
 #[tauri::command]
 pub async fn open_xingshu_skill_security_window(app: tauri::AppHandle) -> Result<String, String> {
-    open_xingshu_skill_window(
+    open_xingshu_skill_url_window(
         app,
-        "/xingshu-skill-security",
+        "https://www.aiyu.jx.cn/skill-security/",
         "星枢安全检测",
         "xingshu_skill_security",
     )

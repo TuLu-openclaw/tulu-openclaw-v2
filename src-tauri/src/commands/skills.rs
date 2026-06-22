@@ -140,17 +140,22 @@ async fn install_skillhub_skill_to_openclaw(slug: String) -> Result<Value, Strin
     }
     let installed_path = super::skillhub::install(&slug, &skills_dir).await?;
     verify_installed_skill(&slug, &installed_path)?;
-    let validation = validate_skill_name(&slug)?;
+    let validation = validate_skill_path(&installed_path)?;
     let list = scan_local_skills(None)?;
     let found = list
         .get("skills")
         .and_then(|v| v.as_array())
         .map(|items| {
             items.iter().any(|item| {
-                item.get("name")
+                let name_matches = item.get("name")
                     .and_then(|v| v.as_str())
                     .map(|name| skill_key(name) == skill_key(&slug))
-                    .unwrap_or(false)
+                    .unwrap_or(false);
+                let path_matches = item.get("filePath")
+                    .and_then(|v| v.as_str())
+                    .map(|path| std::path::Path::new(path) == installed_path)
+                    .unwrap_or(false);
+                name_matches || path_matches
             })
         })
         .unwrap_or(false);
@@ -185,12 +190,7 @@ fn verify_installed_skill(slug: &str, installed_path: &std::path::Path) -> Resul
     Ok(())
 }
 
-fn validate_skill_name(name: &str) -> Result<Value, String> {
-    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
-        return Err("无效的 Skill 名称".to_string());
-    }
-    let skill_dir =
-        resolve_custom_skill_dir(name).ok_or_else(|| format!("Skill「{name}」不存在"))?;
+fn validate_skill_path(skill_dir: &std::path::Path) -> Result<Value, String> {
     let skill_md = skill_dir.join("SKILL.md");
     if !skill_md.exists() {
         return Err("缺少 SKILL.md 文件".to_string());
@@ -644,6 +644,43 @@ fn custom_skill_roots() -> Vec<(std::path::PathBuf, &'static str, bool)> {
     roots
 }
 
+fn system_time_millis(time: std::time::SystemTime) -> i64 {
+    time.duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
+}
+
+fn skill_install_time_millis(skill_dir: &std::path::Path) -> i64 {
+    let skill_md = skill_dir.join("SKILL.md");
+    let mut candidates = Vec::new();
+    if let Ok(meta) = std::fs::metadata(skill_dir) {
+        if let Ok(created) = meta.created() {
+            candidates.push(system_time_millis(created));
+        }
+        if let Ok(modified) = meta.modified() {
+            candidates.push(system_time_millis(modified));
+        }
+    }
+    if let Ok(meta) = std::fs::metadata(&skill_md) {
+        if let Ok(created) = meta.created() {
+            candidates.push(system_time_millis(created));
+        }
+        if let Ok(modified) = meta.modified() {
+            candidates.push(system_time_millis(modified));
+        }
+    }
+    candidates.into_iter().filter(|value| *value > 0).min().unwrap_or(0)
+}
+
+fn skill_install_time_rfc3339(skill_dir: &std::path::Path) -> Option<String> {
+    let millis = skill_install_time_millis(skill_dir);
+    if millis <= 0 {
+        return None;
+    }
+    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
+        .map(|dt| dt.to_rfc3339())
+}
+
 fn resolve_custom_skill_dir(name: &str) -> Option<std::path::PathBuf> {
     custom_skill_roots()
         .into_iter()
@@ -666,6 +703,8 @@ fn scan_custom_skill_detail(name: &str) -> Option<Value> {
             .unwrap_or_default();
         let eligible = base.get("ready").and_then(|v| v.as_bool()).unwrap_or(false);
 
+        let install_time_ms = skill_install_time_millis(&skill_path);
+        let install_time = skill_install_time_rfc3339(&skill_path);
         let mut detail = serde_json::json!({
             "name": name,
             "description": base.get("description").cloned().unwrap_or(Value::String(String::new())),
@@ -677,6 +716,8 @@ fn scan_custom_skill_detail(name: &str) -> Option<Value> {
             "bundled": bundled,
             "uninstallable": !bundled,
             "filePath": skill_path.to_string_lossy().to_string(),
+            "installedAt": install_time,
+            "installedAtMs": install_time_ms,
             "homepage": base.get("homepage").cloned().unwrap_or(Value::Null),
             "version": base.get("version").cloned().unwrap_or(Value::Null),
             "author": base.get("author").cloned().unwrap_or(Value::Null),
@@ -729,9 +770,12 @@ fn scan_local_skill_entries() -> Result<Vec<Value>, String> {
                 continue;
             }
 
+            let skill_path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
-            let base = scan_single_skill(&entry.path(), &name);
+            let base = scan_single_skill(&skill_path, &name);
             let eligible = base.get("ready").and_then(|v| v.as_bool()).unwrap_or(false);
+            let install_time_ms = skill_install_time_millis(&skill_path);
+            let install_time = skill_install_time_rfc3339(&skill_path);
             let mut item = serde_json::json!({
                 "name": name,
                 "description": base.get("description").cloned().unwrap_or(Value::String(String::new())),
@@ -742,7 +786,9 @@ fn scan_local_skill_entries() -> Result<Vec<Value>, String> {
                 "source": source_label,
                 "bundled": bundled,
                 "uninstallable": !bundled,
-                "filePath": entry.path().to_string_lossy().to_string(),
+                "filePath": skill_path.to_string_lossy().to_string(),
+                "installedAt": install_time,
+                "installedAtMs": install_time_ms,
                 "homepage": base.get("homepage").cloned().unwrap_or(Value::Null),
                 "missing": {
                     "bins": [],
@@ -764,9 +810,13 @@ fn scan_local_skill_entries() -> Result<Vec<Value>, String> {
     }
 
     skills.sort_by(|a, b| {
-        let an = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let bn = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        an.cmp(bn)
+        let at = a.get("installedAtMs").and_then(|v| v.as_i64()).unwrap_or(0);
+        let bt = b.get("installedAtMs").and_then(|v| v.as_i64()).unwrap_or(0);
+        bt.cmp(&at).then_with(|| {
+            let an = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let bn = b.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            an.cmp(bn)
+        })
     });
 
     Ok(skills)
