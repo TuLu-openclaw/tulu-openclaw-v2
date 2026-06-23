@@ -249,6 +249,7 @@ pub fn run() {
             // OpenMontage 外部视频工厂（AGPL，外部连接器模式）
             openmontage::openmontage_status,
             openmontage::openmontage_install,
+            openmontage::openmontage_open_studio,
             openmontage::openmontage_open_folder,
             // Agent 管理
             agent::list_agents,

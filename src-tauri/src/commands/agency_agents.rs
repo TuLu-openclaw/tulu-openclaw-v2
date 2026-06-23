@@ -45,22 +45,34 @@ fn manifest() -> Result<AgencyManifest, String> {
 }
 
 fn agency_resource_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Ok(dir) = app.path().resource_dir().map(|dir| dir.join(RESOURCE_ROOT)) {
+    let mut candidates = Vec::new();
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join(RESOURCE_ROOT));
+        candidates.push(resource_dir.join("resources").join(RESOURCE_ROOT));
+        candidates.push(
+            resource_dir
+                .join("_up_")
+                .join("resources")
+                .join(RESOURCE_ROOT),
+        );
+    }
+
+    let current = std::env::current_dir().map_err(|e| format!("读取当前目录失败: {e}"))?;
+    candidates.push(
+        current
+            .join("src-tauri")
+            .join("resources")
+            .join(RESOURCE_ROOT),
+    );
+    candidates.push(current.join("resources").join(RESOURCE_ROOT));
+
+    for dir in candidates {
         if dir.is_dir() {
             return Ok(dir);
         }
     }
 
-    let dev_dir = std::env::current_dir()
-        .map_err(|e| format!("读取当前目录失败: {e}"))?
-        .join("src-tauri")
-        .join("resources")
-        .join(RESOURCE_ROOT);
-    if dev_dir.is_dir() {
-        return Ok(dev_dir);
-    }
-
-    Err("未找到内置 AI 专家库资源".to_string())
+    Err("未找到内置 AI 专家库资源，请确认安装包包含 resources/agency-agents".to_string())
 }
 
 fn safe_agent_id(id: &str) -> Result<String, String> {

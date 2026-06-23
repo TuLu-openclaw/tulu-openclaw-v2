@@ -85,15 +85,30 @@
   gap: var(--space-sm);
 }
 
-.om-checks > div {
+.om-tool {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-tertiary);
+}
+
+.om-tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.om-tool-path {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .om-badge {
@@ -128,9 +143,17 @@
   margin-top: var(--space-md);
 }
 
-.om-note code {
+.om-note code,
+.om-steps code {
   color: var(--text-secondary);
   word-break: break-all;
+}
+
+.om-steps {
+  margin: 0;
+  padding-left: 1.3em;
+  color: var(--text-secondary);
+  line-height: 1.8;
 }
 
 .om-working,

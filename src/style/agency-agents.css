@@ -103,10 +103,49 @@
   margin-top: var(--space-sm);
 }
 
-.agency-detail-modal {
-  width: min(920px, 92vw);
+.agency-page .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.agency-page .modal-card {
+  width: min(720px, 92vw);
   max-height: 86vh;
   overflow: auto;
+  padding: var(--space-lg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+}
+
+.agency-page .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.agency-page .modal-header h3 {
+  margin: 0;
+}
+
+.agency-page .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-md);
+}
+
+.agency-detail-modal {
+  width: min(920px, 92vw);
 }
 
 .agency-detail-files {

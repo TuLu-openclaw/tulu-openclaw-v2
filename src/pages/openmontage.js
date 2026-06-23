@@ -13,6 +13,15 @@ function yes(value) {
   return value ? '<span class="om-badge ok">可用</span>' : '<span class="om-badge warn">缺失</span>'
 }
 
+function toolCheck(label, available, path, version) {
+  return `
+    <div class="om-tool ${available ? 'ok' : 'warn'}">
+      <div class="om-tool-row"><span>${esc(label)}</span>${yes(available)}</div>
+      <div class="om-tool-path">${available ? esc(path || version || '已从全局路径检测到') : '未在系统 PATH / 用户 PATH / 常见安装目录中找到'}</div>
+    </div>
+  `
+}
+
 function statusText() {
   if (!_status) return '检测中'
   return _status.installed ? '已连接' : '未安装'
@@ -47,25 +56,36 @@ function renderStatus() {
     <div class="om-section">
       <h2>环境检测</h2>
       <div class="om-checks">
-        <div>Git ${yes(s.gitAvailable)}</div>
-        <div>Python ${yes(s.pythonAvailable)}</div>
-        <div>Node.js ${yes(s.nodeAvailable)}</div>
-        <div>npm ${yes(s.npmAvailable)}</div>
-        <div>uv ${yes(s.uvAvailable)}</div>
-        <div>FFmpeg ${yes(s.ffmpegAvailable)}</div>
+        ${toolCheck('Git', s.gitAvailable, s.gitPath, s.gitVersion)}
+        ${toolCheck('Python', s.pythonAvailable, s.pythonPath, s.pythonVersion)}
+        ${toolCheck('Node.js', s.nodeAvailable, s.nodePath, s.nodeVersion)}
+        ${toolCheck('npm', s.npmAvailable, s.npmPath, s.npmVersion)}
+        ${toolCheck('uv', s.uvAvailable, s.uvPath, s.uvVersion)}
+        ${toolCheck('FFmpeg', s.ffmpegAvailable, s.ffmpegPath, s.ffmpegVersion)}
       </div>
-      <div class="om-note">FFmpeg 缺失不影响安装，但会影响本地视频渲染/转码。后续完整测试时一起处理。</div>
+      <div class="om-note">检测会读取当前进程 PATH、Windows 用户/系统全局 PATH、npm/Git/Node/WinGet 等常见安装目录。安装后无需重启应用也能重新扫描。</div>
     </div>
 
     <div class="om-section">
       <h2>可执行操作</h2>
       <div class="om-actions">
         <button class="btn btn-primary" data-action="install" ${_loading ? 'disabled' : ''}>${s.installed ? '更新 / 修复安装' : '安装 OpenMontage'}</button>
+        <button class="btn btn-primary" data-action="open-studio" ${!s.installed || !s.remotionReady || _loading ? 'disabled' : ''}>打开视频工作台</button>
         <button class="btn btn-secondary" data-action="install-nodeps" ${_loading ? 'disabled' : ''}>只克隆源码</button>
         <button class="btn btn-secondary" data-action="open-folder" ${!s.installed || _loading ? 'disabled' : ''}>打开目录</button>
         <button class="btn btn-secondary" data-action="refresh" ${_loading ? 'disabled' : ''}>刷新状态</button>
       </div>
       <div class="om-note">安装位置：<code>${esc(s.path || '')}</code></div>
+    </div>
+
+    <div class="om-section">
+      <h2>怎么用</h2>
+      <ol class="om-steps">
+        <li>先点「更新 / 修复安装」，确保 Python 依赖和 Remotion 依赖都已安装。</li>
+        <li>点「打开视频工作台」，会启动 OpenMontage 的 Remotion Studio：<code>http://localhost:3000</code>。</li>
+        <li>要让 AI 帮你完整制作视频，点「打开目录」，把需求交给 OpenClaw / Codex / Cursor，让它读取 <code>AGENT_GUIDE.md</code> 和 <code>pipeline_defs</code> 后执行。</li>
+        <li>示例需求：<code>用 OpenMontage 制作一个 60 秒产品宣传片，中文旁白，输出 mp4。</code></li>
+      </ol>
     </div>
   `
 }
@@ -105,6 +125,12 @@ function bindEvents(page) {
     if (action === 'refresh') await loadStatus()
     if (action === 'install') await install(true)
     if (action === 'install-nodeps') await install(false)
+    if (action === 'open-studio') {
+      try {
+        const res = await api.openmontageOpenStudio()
+        toast.success(`视频工作台已启动：${res?.url || 'http://localhost:3000'}`)
+      } catch (e) { toast.error(e?.message || e) }
+    }
     if (action === 'open-folder') {
       try { await api.openmontageOpenFolder() } catch (e) { toast.error(e?.message || e) }
     }
