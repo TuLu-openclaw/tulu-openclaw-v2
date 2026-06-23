@@ -494,6 +494,11 @@ export const api = {
   agencyAgentInstall: (id, overwrite = false) => { invalidate('agency_agents_list', 'list_agents', 'get_agent_detail'); return invoke('agency_agent_install', { id, overwrite }) },
   agencyAgentsInstallBulk: (division = null, overwrite = false) => { invalidate('agency_agents_list', 'list_agents', 'get_agent_detail'); return invoke('agency_agents_install_bulk', { division, overwrite }) },
 
+  // OpenMontage 外部视频工厂（AGPL 外部连接器）
+  openmontageStatus: () => cachedInvoke('openmontage_status', {}, 5000),
+  openmontageInstall: (update = false, installDeps = true) => { invalidate('openmontage_status'); return invoke('openmontage_install', { update, installDeps }, 600000) },
+  openmontageOpenFolder: () => invoke('openmontage_open_folder'),
+
   // 日志（短缓存）
   readLogTail: (logName, lines = 100) => cachedInvoke('read_log_tail', { logName, lines }, 5000),
   searchLog: (logName, query, maxResults = 50) => invoke('search_log', { logName, query, maxResults }),

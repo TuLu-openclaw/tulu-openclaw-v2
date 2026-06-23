@@ -44,6 +44,7 @@ export default {
   miaoguVerify: _('喵咕验证', 'Miaogu Verify'),
   weiyanVerify: _('微验验证', 'Weiyan Verify'),
   movieTool: _('星枢影视', 'Xingshu Movies'),
+  openmontage: _('视频工厂', 'Video Factory'),
   xingshuChatroom: _('星枢聊天室', 'Xingshu Chatroom'),
   lobsterOffice: _('龙虾办公室', 'Lobster Office'),
   globalBuiltin: _('全球内置', 'Global Built-in'),

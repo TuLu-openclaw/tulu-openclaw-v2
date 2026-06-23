@@ -7,7 +7,7 @@ mod windows_proxy;
 
 use commands::{
     agency_agents, agent, assistant, config, device, extensions, hermes, hermes_providers, logs,
-    memory, messaging, music, pairing, proxy, service, skills, tvbox, update,
+    memory, messaging, music, openmontage, pairing, proxy, service, skills, tvbox, update,
 };
 
 const CODEX_PROMPT_USAGE_TEXT: &str =
@@ -246,6 +246,10 @@ pub fn run() {
             extensions::get_clawapp_status,
             extensions::install_cftunnel,
             extensions::install_clawapp,
+            // OpenMontage 外部视频工厂（AGPL，外部连接器模式）
+            openmontage::openmontage_status,
+            openmontage::openmontage_install,
+            openmontage::openmontage_open_folder,
             // Agent 管理
             agent::list_agents,
             agent::get_agent_detail,
