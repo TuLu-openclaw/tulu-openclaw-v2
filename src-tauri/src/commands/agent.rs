@@ -651,15 +651,7 @@ pub async fn update_agent_config(
             agent.insert("tools".to_string(), tools.clone());
         }
     }
-    for key in ["profile", "metadata", "description", "instructions"] {
-        if let Some(value) = config.get(key) {
-            if value.is_null() {
-                agent.remove(key);
-            } else {
-                agent.insert(key.to_string(), value.clone());
-            }
-        }
-    }
+    strip_unsupported_agent_fields(agent);
 
     super::config::save_openclaw_json(&root)?;
     let app2 = app.clone();
@@ -667,6 +659,12 @@ pub async fn update_agent_config(
         let _ = super::config::do_reload_gateway(&app2).await;
     });
     Ok(json!({ "ok": true }))
+}
+
+fn strip_unsupported_agent_fields(agent: &mut serde_json::Map<String, Value>) {
+    for key in ["profile", "metadata", "description", "instructions"] {
+        agent.remove(key);
+    }
 }
 
 /// 创建新 agent（优先走 CLI，失败则直接写 openclaw.json 兜底）

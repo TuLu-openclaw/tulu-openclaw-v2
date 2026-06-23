@@ -1967,10 +1967,14 @@ fn strip_ui_fields(mut val: Value) -> Value {
                 if let Some(Value::Array(arr)) = agents_obj.get_mut("list") {
                     for agent in arr.iter_mut() {
                         if let Some(agent_obj) = agent.as_object_mut() {
-                            // 清理 agent 中的 UI 字段，但保留 profiles
+                            // 清理 agent 中的 UI/旧预设字段，避免严格 schema 校验失败
                             agent_obj.remove("current");
                             agent_obj.remove("latest");
                             agent_obj.remove("update_available");
+                            agent_obj.remove("profile");
+                            agent_obj.remove("metadata");
+                            agent_obj.remove("description");
+                            agent_obj.remove("instructions");
                         }
                     }
                 }

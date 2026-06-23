@@ -374,20 +374,6 @@ async function createEcomAgent(page, state) {
       tools: {
         profile: 'full',
       },
-      profile: 'ecommerce',
-      metadata: {
-        preset: 'ecom-mover',
-        domain: 'ecommerce',
-        spuMode: 'spu-first',
-        workbench: {
-          enabled: true,
-          sourcingList: true,
-          sellingList: true,
-          parallelRoutes: true,
-          subAgents: true,
-          forceRefreshEachRound: true,
-        },
-      },
     })
     for (const file of ECOM_AGENT_BOOTSTRAP_FILES) {
       await api.writeAgentFile(targetId, file.name, file.content)
