@@ -120,7 +120,7 @@ pub async fn openmontage_install(update: bool, install_deps: bool) -> Result<Val
     let mut steps = vec!["repo".to_string()];
     if install_deps {
         if command_exists("uv") {
-            run_capture("uv", &["venv"], Some(&dir))?;
+            run_capture("uv", &["venv", "--allow-existing"], Some(&dir))?;
             run_capture(
                 "uv",
                 &["pip", "install", "-r", "requirements.txt"],
