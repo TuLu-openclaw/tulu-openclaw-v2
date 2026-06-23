@@ -10,10 +10,17 @@ const REPO_URL: &str = "https://github.com/calesthio/OpenMontage.git";
 const REPO_DIR: &str = "OpenMontage";
 
 fn hidden_cmd(program: &str) -> Command {
-    let mut cmd = Command::new(program);
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
-    cmd
+    {
+        let mut cmd = Command::new(program);
+        cmd.creation_flags(0x08000000);
+        cmd
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 fn tools_root() -> PathBuf {
