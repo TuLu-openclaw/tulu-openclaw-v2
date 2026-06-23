@@ -18,6 +18,7 @@ export default {
   logs: _('日志查看', 'Logs', '日誌查看', 'ログ', '로그', 'Nhật ký', 'Registros', '', 'Журналы', 'Journaux', 'Protokolle'),
   models: _('模型配置', 'Models', '模型設定', 'モデル設定', '모델 설정', 'Mô hình', 'Modelos', 'Modelos', 'Модели', 'Modèles', 'Modelle'),
   agents: _('Agent 管理', 'Agents', '', 'Agent 管理', 'Agent 관리', 'Agent', 'Agentes', 'Agentes', 'Агенты', '', 'Agenten'),
+  agencyAgents: _('AI 专家库', 'AI Expert Library', 'AI 專家庫', 'AI 専門家ライブラリ', 'AI 전문가 라이브러리', 'Thư viện chuyên gia AI', 'Biblioteca de expertos AI', 'Biblioteca de especialistas AI', 'Библиотека AI-экспертов', 'Bibliothèque experts IA', 'KI-Expertenbibliothek'),
   gateway: _('Gateway', 'Gateway'),
   channels: _('消息渠道', 'Channels', '訊息頻道', 'チャンネル', '채널', 'Kênh', 'Canales', 'Canais', 'Каналы', 'Canaux', 'Kanäle'),
   communication: _('通信与自动化', 'Communication', '通信與自動化', '通信と自動化', '통신 및 자동화', 'Truyền thông', 'Comunicación', 'Comunicação', 'Коммуникации', '', 'Kommunikation'),

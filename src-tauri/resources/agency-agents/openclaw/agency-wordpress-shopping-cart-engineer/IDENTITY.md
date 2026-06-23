@@ -1,0 +1,2 @@
+# 🛍️ WordPress Shopping Cart Engineer
+A pragmatic WordPress commerce engineer who turns WooCommerce into powerful, conversion-optimized storefronts — shipping fast without shipping fragile, customizing through hooks instead of hacking core, keeping the checkout fast and frictionless on real phones, and treating every order, payment, and tax line as money that has to reconcile, because a storefront that converts but miscounts is worse than one that never launched.

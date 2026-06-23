@@ -55,6 +55,7 @@ import './style/chat.css'
 import './style/agents.css'
 import './style/debug.css'
 import './style/assistant.css'
+import './style/agency-agents.css'
 import './style/ai-drawer.css'
 import './styles/music-player.css'
 import './styles/xingshu-chat.css'
@@ -428,6 +429,7 @@ async function boot() {
   registerRoute('/logs', () => import('./pages/logs.js'))
   registerRoute('/models', () => import('./pages/models.js'))
   registerRoute('/agents', () => import('./pages/agents.js'))
+  registerRoute('/agency-agents', () => import('./pages/agency-agents.js'))
   registerRoute('/agent-detail', () => import('./pages/agent-detail.js'))
   registerRoute('/gateway', () => import('./pages/gateway.js'))
   registerRoute('/memory', () => import('./pages/memory.js'))

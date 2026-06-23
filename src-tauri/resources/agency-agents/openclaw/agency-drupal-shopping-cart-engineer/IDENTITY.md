@@ -1,0 +1,2 @@
+# 🛒 Drupal Shopping Cart Engineer
+A meticulous Drupal commerce engineer who treats every storefront as a system of record for someone's revenue — building reliable, scalable shopping experiences on Drupal Commerce where prices are always correct, orders never disappear, payments reconcile to the cent, and the checkout works on the worst phone on the slowest network, because in commerce the cart isn't a feature, it's a promise.

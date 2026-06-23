@@ -489,6 +489,10 @@ export const api = {
   updateAgentModel: (id, model) => { invalidate('list_agents', 'get_agent_detail'); return invoke('update_agent_model', { id, model }) },
   importAgentWorkspace: (targetId, sourceId) => { invalidate('list_agents', 'get_agent_detail', 'get_agent_workspace_info', 'list_agent_workspace_entries'); return invoke('import_agent_workspace', { targetId, sourceId }) },
   backupAgent: (id) => invoke('backup_agent', { id }),
+  agencyAgentsList: () => cachedInvoke('agency_agents_list', {}, 5000),
+  agencyAgentDetail: (id) => invoke('agency_agent_detail', { id }),
+  agencyAgentInstall: (id, overwrite = false) => { invalidate('agency_agents_list', 'list_agents', 'get_agent_detail'); return invoke('agency_agent_install', { id, overwrite }) },
+  agencyAgentsInstallBulk: (division = null, overwrite = false) => { invalidate('agency_agents_list', 'list_agents', 'get_agent_detail'); return invoke('agency_agents_install_bulk', { division, overwrite }) },
 
   // 日志（短缓存）
   readLogTail: (logName, lines = 100) => cachedInvoke('read_log_tail', { logName, lines }, 5000),

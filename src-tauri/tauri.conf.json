@@ -43,6 +43,7 @@
     ],
     "resources": [
       "resources/Star-Office-UI-master/**/*",
+      "resources/agency-agents/**/*",
       "resources/codex提示词/**/*",
       "resources/runtime/**/*"
     ],

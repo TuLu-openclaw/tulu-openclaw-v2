@@ -6,8 +6,8 @@ mod utils;
 mod windows_proxy;
 
 use commands::{
-    agent, assistant, config, device, extensions, hermes, hermes_providers, logs, memory,
-    messaging, music, pairing, proxy, service, skills, tvbox, update,
+    agency_agents, agent, assistant, config, device, extensions, hermes, hermes_providers, logs,
+    memory, messaging, music, pairing, proxy, service, skills, tvbox, update,
 };
 
 const CODEX_PROMPT_USAGE_TEXT: &str =
@@ -263,6 +263,11 @@ pub fn run() {
             agent::update_agent_model,
             agent::import_agent_workspace,
             agent::backup_agent,
+            // AI 专家库
+            agency_agents::agency_agents_list,
+            agency_agents::agency_agent_detail,
+            agency_agents::agency_agent_install,
+            agency_agents::agency_agents_install_bulk,
             // AI 助手工具
             assistant::assistant_exec,
             assistant::assistant_read_file,
