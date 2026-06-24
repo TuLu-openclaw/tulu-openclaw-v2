@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 use std::fs;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -8,6 +9,7 @@ use std::os::windows::process::CommandExt;
 
 const REPO_URL: &str = "https://github.com/calesthio/OpenMontage.git";
 const REPO_DIR: &str = "OpenMontage";
+const NODE_X64_VERSION: &str = "22.13.1";
 
 fn hidden_cmd(program: &str) -> Command {
     #[cfg(target_os = "windows")]
@@ -29,6 +31,126 @@ fn tools_root() -> PathBuf {
 
 fn openmontage_dir() -> PathBuf {
     tools_root().join(REPO_DIR)
+}
+
+fn render_runtime_root() -> PathBuf {
+    openmontage_dir().join(".openclaw-render-runtime")
+}
+
+fn bundled_node_dir() -> PathBuf {
+    render_runtime_root().join(format!("node-v{NODE_X64_VERSION}-win-x64"))
+}
+
+#[cfg(target_os = "windows")]
+fn bundled_node_path() -> PathBuf {
+    bundled_node_dir().join("node.exe")
+}
+
+#[cfg(target_os = "windows")]
+fn bundled_npm_path() -> PathBuf {
+    bundled_node_dir().join("npm.cmd")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn bundled_node_path() -> PathBuf {
+    PathBuf::new()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn bundled_npm_path() -> PathBuf {
+    PathBuf::new()
+}
+
+fn is_windows_arm64() -> bool {
+    cfg!(target_os = "windows") && std::env::consts::ARCH == "aarch64"
+}
+
+fn selected_node_path() -> Option<PathBuf> {
+    if is_windows_arm64() && bundled_node_path().is_file() {
+        return Some(bundled_node_path());
+    }
+    resolve_command("node")
+}
+
+fn selected_npm_path() -> Option<PathBuf> {
+    if is_windows_arm64() && bundled_npm_path().is_file() {
+        return Some(bundled_npm_path());
+    }
+    resolve_command("npm")
+}
+
+fn runtime_mode() -> &'static str {
+    if is_windows_arm64() {
+        if bundled_node_path().is_file() && bundled_npm_path().is_file() {
+            "windows-arm64-x64-node"
+        } else {
+            "windows-arm64-needs-x64-node"
+        }
+    } else {
+        "native"
+    }
+}
+
+fn render_supported() -> bool {
+    if is_windows_arm64() {
+        bundled_node_path().is_file() && bundled_npm_path().is_file()
+    } else {
+        selected_node_path().is_some() && selected_npm_path().is_some()
+    }
+}
+
+fn tts_provider_files(dir: &Path) -> Vec<(&'static str, PathBuf)> {
+    let audio = dir.join("tools").join("audio");
+    vec![
+        ("ElevenLabs", audio.join("elevenlabs_tts.py")),
+        ("OpenAI", audio.join("openai_tts.py")),
+        ("Google TTS", audio.join("google_tts.py")),
+        ("Doubao", audio.join("doubao_tts.py")),
+        ("Piper", audio.join("piper_tts.py")),
+    ]
+}
+
+fn env_present(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+}
+
+fn tts_provider_available(name: &str, file_exists: bool) -> bool {
+    if !file_exists {
+        return false;
+    }
+    match name {
+        "ElevenLabs" => env_present("ELEVENLABS_API_KEY"),
+        "OpenAI" => env_present("OPENAI_API_KEY"),
+        "Google TTS" => {
+            env_present("GOOGLE_API_KEY") || env_present("GOOGLE_APPLICATION_CREDENTIALS")
+        }
+        "Doubao" => env_present("DOUBAO_API_KEY") || env_present("ARK_API_KEY"),
+        "Piper" => command_exists("piper"),
+        _ => false,
+    }
+}
+
+fn openmontage_node_env(node_dir: Option<&Path>) -> Vec<(String, String)> {
+    let mut envs = Vec::new();
+    if let Some(dir) = node_dir.and_then(Path::parent) {
+        let current_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths = vec![dir.to_path_buf()];
+        paths.extend(std::env::split_paths(&current_path));
+        if let Ok(joined) = std::env::join_paths(paths) {
+            envs.push(("PATH".to_string(), joined.to_string_lossy().to_string()));
+        }
+        envs.push((
+            "npm_config_arch".to_string(),
+            if is_windows_arm64() {
+                "x64".to_string()
+            } else {
+                std::env::consts::ARCH.to_string()
+            },
+        ));
+    }
+    envs
 }
 
 #[cfg(target_os = "windows")]
@@ -159,6 +281,10 @@ fn resolve_command(program: &str) -> Option<PathBuf> {
 
 fn command_version(program: &str) -> Option<String> {
     let path = resolve_command(program)?;
+    command_version_path(&path)
+}
+
+fn command_version_path(path: &Path) -> Option<String> {
     hidden_cmd(path.to_string_lossy().as_ref())
         .arg("--version")
         .output()
@@ -178,15 +304,27 @@ fn command_exists(program: &str) -> bool {
 
 fn run_capture(program: &str, args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
     let command_path = resolve_command(program).unwrap_or_else(|| PathBuf::from(program));
+    run_capture_path(&command_path, args, cwd, &[])
+}
+
+fn run_capture_path(
+    command_path: &Path,
+    args: &[&str],
+    cwd: Option<&Path>,
+    envs: &[(String, String)],
+) -> Result<String, String> {
     let command_label = command_path.to_string_lossy().to_string();
     let mut cmd = hidden_cmd(&command_label);
     cmd.args(args);
+    for (key, value) in envs {
+        cmd.env(key, value);
+    }
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
     let out = cmd
         .output()
-        .map_err(|e| format!("运行 {program} 失败: {e}"))?;
+        .map_err(|e| format!("运行 {} 失败: {e}", command_path.display()))?;
     let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
     if out.status.success() {
@@ -210,6 +348,45 @@ fn read_package_version(dir: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+#[cfg(target_os = "windows")]
+async fn ensure_windows_x64_node_runtime() -> Result<Vec<String>, String> {
+    let mut steps = Vec::new();
+    let node = bundled_node_path();
+    let npm = bundled_npm_path();
+    if node.is_file() && npm.is_file() {
+        steps.push("x64-node-present".to_string());
+        return Ok(steps);
+    }
+
+    fs::create_dir_all(render_runtime_root())
+        .map_err(|e| format!("创建 OpenMontage x64 运行时目录失败: {e}"))?;
+    let zip_url =
+        format!("https://nodejs.org/dist/v{NODE_X64_VERSION}/node-v{NODE_X64_VERSION}-win-x64.zip");
+    let bytes = reqwest::get(&zip_url)
+        .await
+        .map_err(|e| format!("下载 Windows x64 Node 失败: {e}"))?
+        .bytes()
+        .await
+        .map_err(|e| format!("读取 Windows x64 Node 安装包失败: {e}"))?;
+    let reader = Cursor::new(bytes);
+    let mut archive =
+        zip::ZipArchive::new(reader).map_err(|e| format!("解压 Windows x64 Node 失败: {e}"))?;
+    archive
+        .extract(render_runtime_root())
+        .map_err(|e| format!("释放 Windows x64 Node 失败: {e}"))?;
+
+    if !node.is_file() || !npm.is_file() {
+        return Err("Windows x64 Node 运行时安装后仍未找到 node.exe/npm.cmd".into());
+    }
+    steps.push("x64-node-installed".to_string());
+    Ok(steps)
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn ensure_windows_x64_node_runtime() -> Result<Vec<String>, String> {
+    Ok(Vec::new())
+}
+
 #[tauri::command]
 pub async fn openmontage_status() -> Result<Value, String> {
     let dir = openmontage_dir();
@@ -217,29 +394,59 @@ pub async fn openmontage_status() -> Result<Value, String> {
     let venv_dir = dir.join(".venv");
     let node_modules = remotion_dir.join("node_modules");
     let installed = dir.join("README.md").exists() && dir.join("pipeline_defs").is_dir();
+    let selected_node = selected_node_path();
+    let selected_npm = selected_npm_path();
+    let tts_providers: Vec<Value> = tts_provider_files(&dir)
+        .into_iter()
+        .map(|(name, file)| {
+            let file_exists = file.is_file();
+            json!({
+                "name": name,
+                "file": file.to_string_lossy(),
+                "fileExists": file_exists,
+                "available": tts_provider_available(name, file_exists)
+            })
+        })
+        .collect();
+    let tts_available = tts_providers.iter().any(|item| {
+        item.get("available")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    });
 
     Ok(json!({
         "repoUrl": REPO_URL,
         "path": dir.to_string_lossy(),
         "installed": installed,
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "windowsArm64": is_windows_arm64(),
+        "runtimeMode": runtime_mode(),
+        "renderSupported": render_supported(),
+        "renderRuntimeReady": render_supported(),
+        "renderRuntimePath": if is_windows_arm64() { Some(bundled_node_dir().to_string_lossy().to_string()) } else { None },
+        "requiresX64Runtime": is_windows_arm64(),
         "gitAvailable": command_exists("git"),
         "pythonAvailable": command_exists("python"),
-        "nodeAvailable": command_exists("node"),
-        "npmAvailable": command_exists("npm"),
+        "nodeAvailable": selected_node.is_some(),
+        "npmAvailable": selected_npm.is_some(),
         "uvAvailable": command_exists("uv"),
         "ffmpegAvailable": command_exists("ffmpeg"),
         "gitPath": resolve_command("git").map(|p| p.to_string_lossy().to_string()),
         "pythonPath": resolve_command("python").map(|p| p.to_string_lossy().to_string()),
-        "nodePath": resolve_command("node").map(|p| p.to_string_lossy().to_string()),
-        "npmPath": resolve_command("npm").map(|p| p.to_string_lossy().to_string()),
+        "nodePath": selected_node.as_ref().map(|p| p.to_string_lossy().to_string()),
+        "npmPath": selected_npm.as_ref().map(|p| p.to_string_lossy().to_string()),
         "uvPath": resolve_command("uv").map(|p| p.to_string_lossy().to_string()),
         "ffmpegPath": resolve_command("ffmpeg").map(|p| p.to_string_lossy().to_string()),
         "gitVersion": command_version("git"),
         "pythonVersion": command_version("python"),
-        "nodeVersion": command_version("node"),
-        "npmVersion": command_version("npm"),
+        "nodeVersion": selected_node.as_ref().and_then(|p| command_version_path(p)),
+        "npmVersion": selected_npm.as_ref().and_then(|p| command_version_path(p)),
         "uvVersion": command_version("uv"),
         "ffmpegVersion": command_version("ffmpeg"),
+        "ttsProviderAvailable": tts_available,
+        "ttsProviders": tts_providers,
+        "completeOpenMontageReady": installed && render_supported() && tts_available,
         "commit": if installed { git_head(&dir) } else { None },
         "remotionVersion": if installed { read_package_version(&dir) } else { None },
         "pythonReady": venv_dir.exists(),
@@ -247,6 +454,27 @@ pub async fn openmontage_status() -> Result<Value, String> {
         "pipelineCount": if installed { fs::read_dir(dir.join("pipeline_defs")).map(|it| it.filter_map(Result::ok).filter(|e| e.path().extension().and_then(|v| v.to_str()) == Some("yaml")).count()).unwrap_or(0) } else { 0 },
         "license": "AGPL-3.0",
         "integrationMode": "external-connector"
+    }))
+}
+
+#[tauri::command]
+pub async fn openmontage_prepare_runtime() -> Result<Value, String> {
+    let mut steps = Vec::new();
+    if is_windows_arm64() {
+        steps.extend(ensure_windows_x64_node_runtime().await?);
+    } else if !render_supported() {
+        return Err("未检测到可用的 Node.js/npm，无法准备 OpenMontage 渲染运行时".into());
+    } else {
+        steps.push("native-runtime-present".to_string());
+    }
+
+    Ok(json!({
+        "ok": true,
+        "runtimeMode": runtime_mode(),
+        "renderSupported": render_supported(),
+        "steps": steps,
+        "nodePath": selected_node_path().map(|p| p.to_string_lossy().to_string()),
+        "npmPath": selected_npm_path().map(|p| p.to_string_lossy().to_string())
     }))
 }
 
@@ -288,8 +516,15 @@ pub async fn openmontage_install(update: bool, install_deps: bool) -> Result<Val
         }
 
         let remotion_dir = dir.join("remotion-composer");
-        if command_exists("npm") && remotion_dir.is_dir() {
-            run_capture("npm", &["install"], Some(&remotion_dir))?;
+        if is_windows_arm64() {
+            steps.extend(ensure_windows_x64_node_runtime().await?);
+        }
+        if remotion_dir.is_dir() {
+            let npm = selected_npm_path()
+                .ok_or_else(|| "未检测到 npm，无法安装 Remotion 依赖".to_string())?;
+            let node = selected_node_path();
+            let envs = openmontage_node_env(node.as_deref());
+            run_capture_path(&npm, &["install"], Some(&remotion_dir), &envs)?;
             steps.push("remotion-npm".to_string());
         }
     }
@@ -309,18 +544,25 @@ pub async fn openmontage_open_studio() -> Result<Value, String> {
     if !remotion_dir.is_dir() {
         return Err("OpenMontage 尚未安装或缺少 remotion-composer".into());
     }
-    if !command_exists("npm") {
+    if !render_supported() {
+        return Err("当前环境尚未准备完整 OpenMontage 渲染运行时。Windows ARM64 需要先执行更新 / 修复安装以准备 x64 Node。".into());
+    }
+    if selected_npm_path().is_none() {
         return Err("未检测到 npm，无法启动 Remotion 工作台".into());
     }
 
-    let npm = resolve_command("npm").unwrap_or_else(|| PathBuf::from("npm"));
-    hidden_cmd(npm.to_string_lossy().as_ref())
-        .args(["run", "start"])
+    let npm = selected_npm_path().unwrap_or_else(|| PathBuf::from("npm"));
+    let node = selected_node_path();
+    let mut cmd = hidden_cmd(npm.to_string_lossy().as_ref());
+    cmd.args(["run", "start"])
         .current_dir(&remotion_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
+        .stderr(Stdio::null());
+    for (key, value) in openmontage_node_env(node.as_deref()) {
+        cmd.env(key, value);
+    }
+    cmd.spawn()
         .map_err(|e| format!("启动 Remotion 工作台失败: {e}"))?;
 
     Ok(json!({

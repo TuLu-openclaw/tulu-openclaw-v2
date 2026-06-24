@@ -248,6 +248,7 @@ pub fn run() {
             extensions::install_clawapp,
             // OpenMontage 外部视频工厂（AGPL，外部连接器模式）
             openmontage::openmontage_status,
+            openmontage::openmontage_prepare_runtime,
             openmontage::openmontage_install,
             openmontage::openmontage_open_studio,
             openmontage::openmontage_open_folder,

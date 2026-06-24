@@ -496,6 +496,7 @@ export const api = {
 
   // OpenMontage 外部视频工厂（AGPL 外部连接器）
   openmontageStatus: () => cachedInvoke('openmontage_status', {}, 5000),
+  openmontagePrepareRuntime: () => { invalidate('openmontage_status'); return invoke('openmontage_prepare_runtime', {}, 600000) },
   openmontageInstall: (update = false, installDeps = true) => { invalidate('openmontage_status'); return invoke('openmontage_install', { update, installDeps }, 600000) },
   openmontageOpenStudio: () => invoke('openmontage_open_studio'),
   openmontageOpenFolder: () => invoke('openmontage_open_folder'),

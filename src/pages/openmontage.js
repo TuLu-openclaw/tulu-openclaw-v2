@@ -13,6 +13,23 @@ function yes(value) {
   return value ? '<span class="om-badge ok">可用</span>' : '<span class="om-badge warn">缺失</span>'
 }
 
+function modeBadge(value) {
+  if (value === 'native') return '<span class="om-badge ok">原生完整模式</span>'
+  if (value === 'windows-arm64-x64-node') return '<span class="om-badge ok">Windows ARM64 · x64 Node 模式</span>'
+  if (value === 'windows-arm64-needs-x64-node') return '<span class="om-badge warn">需准备 x64 Node</span>'
+  return `<span class="om-badge warn">${esc(value || '未知')}</span>`
+}
+
+function providerList(items = []) {
+  if (!items.length) return '<div class="om-provider-empty">未检测到 OpenMontage TTS provider 文件</div>'
+  return items.map(item => `
+    <div class="om-provider ${item.available ? 'ok' : 'warn'}">
+      <span>${esc(item.name)}</span>
+      ${yes(item.available)}
+    </div>
+  `).join('')
+}
+
 function toolCheck(label, available, path, version) {
   return `
     <div class="om-tool ${available ? 'ok' : 'warn'}">
@@ -46,11 +63,43 @@ function renderStatus() {
         <div class="om-card-value small">${esc(s.commit || '未安装')}</div>
         <div class="om-card-meta">OpenMontage HEAD</div>
       </div>
+      <div class="om-card ${s.completeOpenMontageReady ? 'primary' : 'danger'}">
+        <div class="om-card-label">完整模式</div>
+        <div class="om-card-value small">${s.completeOpenMontageReady ? '可用' : '未就绪'}</div>
+        <div class="om-card-meta">渲染运行时 + OpenMontage TTS</div>
+      </div>
       <div class="om-card danger">
         <div class="om-card-label">许可证</div>
         <div class="om-card-value small">AGPL-3.0</div>
         <div class="om-card-meta">外部连接器模式，不内置源码</div>
       </div>
+    </div>
+
+    <div class="om-section">
+      <h2>完整 OpenMontage 能力</h2>
+      <div class="om-capability">
+        <div>
+          <strong>平台</strong>
+          <div class="om-note compact">${esc(s.os || '')} / ${esc(s.arch || '')}</div>
+        </div>
+        <div>
+          <strong>渲染运行时</strong>
+          <div>${modeBadge(s.runtimeMode)}</div>
+          <div class="om-note compact">${s.renderRuntimePath ? esc(s.renderRuntimePath) : '使用系统原生 Node.js / npm'}</div>
+        </div>
+        <div>
+          <strong>正式完成条件</strong>
+          <div>${yes(s.completeOpenMontageReady)}</div>
+          <div class="om-note compact">禁止用系统 TTS / FFmpeg 低配兜底冒充 OpenMontage 成片。</div>
+        </div>
+      </div>
+      <div class="om-note">Windows ARM64 会自动准备 Windows x64 Node 运行时，让 Remotion 按 x64 链路工作；其他平台优先使用原生 Node.js。</div>
+    </div>
+
+    <div class="om-section">
+      <h2>OpenMontage 配音 Provider</h2>
+      <div class="om-providers">${providerList(s.ttsProviders || [])}</div>
+      <div class="om-note">配音必须走 OpenMontage 的 TTS selector/provider：ElevenLabs、OpenAI、Google TTS、Doubao 或 Piper。没有可用 provider 时，应提示缺失，不能降级成本机系统 TTS。</div>
     </div>
 
     <div class="om-section">
@@ -70,7 +119,8 @@ function renderStatus() {
       <h2>可执行操作</h2>
       <div class="om-actions">
         <button class="btn btn-primary" data-action="install" ${_loading ? 'disabled' : ''}>${s.installed ? '更新 / 修复安装' : '安装 OpenMontage'}</button>
-        <button class="btn btn-primary" data-action="open-studio" ${!s.installed || !s.remotionReady || _loading ? 'disabled' : ''}>打开视频工作台</button>
+        <button class="btn btn-secondary" data-action="prepare-runtime" ${_loading ? 'disabled' : ''}>准备完整渲染运行时</button>
+        <button class="btn btn-primary" data-action="open-studio" ${!s.installed || !s.remotionReady || !s.renderRuntimeReady || _loading ? 'disabled' : ''}>打开视频工作台</button>
         <button class="btn btn-secondary" data-action="install-nodeps" ${_loading ? 'disabled' : ''}>只克隆源码</button>
         <button class="btn btn-secondary" data-action="open-folder" ${!s.installed || _loading ? 'disabled' : ''}>打开目录</button>
         <button class="btn btn-secondary" data-action="refresh" ${_loading ? 'disabled' : ''}>刷新状态</button>
@@ -81,9 +131,10 @@ function renderStatus() {
     <div class="om-section">
       <h2>怎么用</h2>
       <ol class="om-steps">
-        <li>先点「更新 / 修复安装」，确保 Python 依赖和 Remotion 依赖都已安装。</li>
-        <li>点「打开视频工作台」，会启动 OpenMontage 的 Remotion Studio：<code>http://localhost:3000</code>。</li>
-        <li>要让 AI 帮你完整制作视频，点「打开目录」，把需求交给 OpenClaw / Codex / Cursor，让它读取 <code>AGENT_GUIDE.md</code> 和 <code>pipeline_defs</code> 后执行。</li>
+        <li>先点「更新 / 修复安装」，确保 Python 依赖、OpenMontage TTS 工具和 Remotion 依赖都已安装。</li>
+        <li>如果是 Windows ARM64，点「准备完整渲染运行时」，系统会准备 x64 Node，让 Remotion 使用完整 x64 渲染链路。</li>
+        <li>确认「完整模式」显示可用后，再点「打开视频工作台」，启动 OpenMontage 的 Remotion Studio：<code>http://localhost:3000</code>。</li>
+        <li>配音必须配置 OpenMontage TTS provider；缺 key 时只提示缺失，不再用系统 TTS 冒充正式成片。</li>
         <li>示例需求：<code>用 OpenMontage 制作一个 60 秒产品宣传片，中文旁白，输出 mp4。</code></li>
       </ol>
     </div>
@@ -124,6 +175,16 @@ function bindEvents(page) {
     const action = btn.dataset.action
     if (action === 'refresh') await loadStatus()
     if (action === 'install') await install(true)
+    if (action === 'prepare-runtime') {
+      try {
+        _loading = true
+        const body = _page.querySelector('#openmontage-body')
+        body.innerHTML = '<div class="om-working">正在准备完整 OpenMontage 渲染运行时，请稍等…</div>'
+        const res = await api.openmontagePrepareRuntime()
+        toast.success(`渲染运行时已准备：${res?.runtimeMode || ''}`)
+      } catch (e) { toast.error(e?.message || e) }
+      finally { _loading = false; await loadStatus() }
+    }
     if (action === 'install-nodeps') await install(false)
     if (action === 'open-studio') {
       try {

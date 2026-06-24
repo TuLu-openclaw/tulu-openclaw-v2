@@ -143,6 +143,43 @@
   margin-top: var(--space-md);
 }
 
+.om-note.compact {
+  margin-top: 4px;
+  font-size: var(--font-size-xs);
+}
+
+.om-capability {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.om-capability > div,
+.om-provider {
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.om-providers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-sm);
+}
+
+.om-provider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.om-provider-empty {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
 .om-note code,
 .om-steps code {
   color: var(--text-secondary);
