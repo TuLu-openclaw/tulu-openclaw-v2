@@ -1,5 +1,6 @@
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
+import { showUpgradeModal } from '../components/modal.js'
 import { navigate } from '../router.js'
 
 let _page = null
@@ -175,6 +176,17 @@ function renderStatus() {
       <div class="om-note">安装位置：<code>${esc(s.path || '')}</code></div>
     </div>
 
+    <div class="om-section om-factory-guide">
+      <h2>出厂级使用步骤</h2>
+      <div class="om-guide-grid">
+        <div><strong>1. 修复安装</strong><span>点「更新 / 修复安装」，弹窗会显示源码、Python、Piper、Remotion 每一步结果。</span></div>
+        <div><strong>2. 补云服务 Key</strong><span>Piper 可自动补；ElevenLabs / OpenAI / Google / Doubao 必须在 OpenMontage 的 .env 里填写自己的 API Key。</span></div>
+        <div><strong>3. 进入创作助手</strong><span>点「打开视频创作助手」，系统会跳到对话页并自动填好 OpenMontage 专用 Agent 工作流。</span></div>
+        <div><strong>4. 打开工作台</strong><span>点「打开视频工作台」会启动 Remotion Studio 并打开浏览器，首次编译需要等待。</span></div>
+        <div><strong>5. 人审导出</strong><span>按 Agent 提示确认 pipeline、成本、风险、脚本、镜头、配音和导出，避免低配兜底冒充正式成片。</span></div>
+      </div>
+    </div>
+
     <div class="om-section">
       <h2>怎么用</h2>
       <ol class="om-steps">
@@ -203,15 +215,39 @@ async function install(installDeps) {
   if (_loading) return
   _loading = true
   const body = _page.querySelector('#openmontage-body')
-  body.innerHTML = `<div class="om-working">正在${installDeps ? '安装 OpenMontage 并初始化依赖' : '克隆 OpenMontage'}，请稍等…</div>`
+  const modal = showUpgradeModal(installDeps ? 'OpenMontage 更新 / 修复安装' : 'OpenMontage 源码安装')
+  modal.onClose(() => loadStatus())
+  modal.setProgress(8)
+  modal.appendLog(installDeps ? '开始检查 OpenMontage 源码、Python、Remotion 和 Piper 本地 TTS。' : '开始克隆 OpenMontage 源码。')
+  body.innerHTML = `<div class="om-working">正在${installDeps ? '安装 OpenMontage 并初始化依赖' : '克隆 OpenMontage'}，详情请看弹出的进度窗口…</div>`
   try {
+    modal.setProgress(25)
+    modal.appendLog('正在执行安装命令，请不要重复点击按钮。')
     const res = await api.openmontageInstall(Boolean(_status?.installed), installDeps)
-    toast.success(`OpenMontage 已准备完成：${res.commit || ''}`)
+    modal.setProgress(82)
+    ;(res?.steps || []).forEach(step => modal.appendLog(`完成：${step}`))
+    modal.appendLog(`安装目录：${res?.path || '未知'}`)
+    if (res?.commit) modal.appendLog(`OpenMontage HEAD：${res.commit}`)
+    modal.appendLog('说明：Piper 可自动安装；ElevenLabs / OpenAI / Google / Doubao 需要用户自己的 API Key，安装器不会伪造云服务凭据。')
+    modal.setDone('OpenMontage 安装流程完成，请查看状态卡片')
+    toast('OpenMontage 安装流程完成', 'success')
   } catch (e) {
-    toast.error(`OpenMontage 安装失败：${e?.message || e}`)
+    const msg = e?.message || e
+    modal.appendLog(`失败：${msg}`)
+    modal.setError(`OpenMontage 安装失败：${msg}`)
+    toast(`OpenMontage 安装失败：${msg}`, 'error', { duration: 6000 })
   } finally {
     _loading = false
     await loadStatus()
+  }
+}
+
+async function openExternalUrl(url) {
+  try {
+    const { open } = await import('@tauri-apps/plugin-shell')
+    await open(url)
+  } catch (_) {
+    window.open(url, '_blank', 'noopener')
   }
 }
 
@@ -223,31 +259,57 @@ function bindEvents(page) {
     if (action === 'refresh') await loadStatus()
     if (action === 'install') await install(true)
     if (action === 'prepare-runtime') {
+      const modal = showUpgradeModal('OpenMontage 完整渲染运行时')
       try {
         _loading = true
         const body = _page.querySelector('#openmontage-body')
-        body.innerHTML = '<div class="om-working">正在准备完整 OpenMontage 渲染运行时，请稍等…</div>'
+        body.innerHTML = '<div class="om-working">正在准备完整 OpenMontage 渲染运行时，详情请看弹出的进度窗口…</div>'
+        modal.setProgress(15)
+        modal.appendLog('检查当前平台和 Node/npm 渲染链路。')
         const res = await api.openmontagePrepareRuntime()
-        toast.success(`渲染运行时已准备：${res?.runtimeMode || ''}`)
-      } catch (e) { toast.error(e?.message || e) }
+        modal.setProgress(80)
+        ;(res?.steps || []).forEach(step => modal.appendLog(`完成：${step}`))
+        modal.appendLog(`运行时模式：${res?.runtimeMode || '未知'}`)
+        modal.setDone('渲染运行时已准备完成')
+        toast(`渲染运行时已准备：${res?.runtimeMode || ''}`, 'success')
+      } catch (e) {
+        const msg = e?.message || e
+        modal.appendLog(`失败：${msg}`)
+        modal.setError(`渲染运行时准备失败：${msg}`)
+        toast(msg, 'error', { duration: 6000 })
+      }
       finally { _loading = false; await loadStatus() }
     }
     if (action === 'install-nodeps') await install(false)
     if (action === 'open-studio') {
+      const modal = showUpgradeModal('启动 OpenMontage 视频工作台')
       try {
+        modal.setProgress(20)
+        modal.appendLog('正在启动 Remotion Studio。')
         const res = await api.openmontageOpenStudio()
-        toast.success(`视频工作台已启动：${res?.url || 'http://localhost:3000'}`)
-      } catch (e) { toast.error(e?.message || e) }
+        modal.setProgress(70)
+        modal.appendLog(`工作目录：${res?.cwd || '未知'}`)
+        modal.appendLog(`访问地址：${res?.url || 'http://localhost:3000'}`)
+        modal.appendLog('正在打开浏览器。如果页面暂时空白，请等待 Remotion 首次编译完成后刷新。')
+        await openExternalUrl(res?.url || 'http://localhost:3000')
+        modal.setDone('视频工作台已启动')
+        toast(`视频工作台已启动：${res?.url || 'http://localhost:3000'}`, 'success')
+      } catch (e) {
+        const msg = e?.message || e
+        modal.appendLog(`失败：${msg}`)
+        modal.setError(`视频工作台启动失败：${msg}`)
+        toast(msg, 'error', { duration: 6000 })
+      }
     }
     if (action === 'open-agent') {
       try {
         localStorage.setItem('openmontage.chatDraft', buildOpenMontagePrompt(_status || {}))
-        toast.success('已准备 OpenMontage 专用对话提示词')
+        toast('正在进入 OpenMontage 视频创作助手', 'success')
         navigate('/chat')
-      } catch (e) { toast.error(e?.message || e) }
+      } catch (e) { toast(e?.message || e, 'error', { duration: 6000 }) }
     }
     if (action === 'open-folder') {
-      try { await api.openmontageOpenFolder() } catch (e) { toast.error(e?.message || e) }
+      try { await api.openmontageOpenFolder(); toast('已打开 OpenMontage 安装目录', 'success') } catch (e) { toast(e?.message || e, 'error', { duration: 6000 }) }
     }
   })
 }

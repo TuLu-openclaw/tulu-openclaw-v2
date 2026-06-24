@@ -232,6 +232,31 @@
   font-size: var(--font-size-sm);
 }
 
+.om-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-sm);
+}
+
+.om-guide-grid > div {
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.om-guide-grid strong,
+.om-guide-grid span {
+  display: block;
+}
+
+.om-guide-grid span {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
 .om-note code,
 .om-steps code {
   color: var(--text-secondary);

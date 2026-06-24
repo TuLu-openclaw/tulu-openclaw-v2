@@ -3,7 +3,7 @@
  */
 import { api } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { showConfirm } from '../components/modal.js'
+import { showConfirm, showUpgradeModal } from '../components/modal.js'
 import { t } from '../lib/i18n.js'
 
 let _activePage = null
@@ -167,6 +167,15 @@ async function refresh(page) {
     _state.data = data
     content.innerHTML = `
       ${renderStats(data)}
+      <div class="agency-guide">
+        <h2>出厂级使用说明</h2>
+        <div class="agency-guide-grid">
+          <div><strong>1. 先选场景</strong><span>用分类或搜索找到对应岗位，例如安全审计、前端开发、销售增长、短视频制作。</span></div>
+          <div><strong>2. 预览能力</strong><span>点「预览」查看专家的身份、工作规则和自带工作区文件，确认适合再安装。</span></div>
+          <div><strong>3. 安装专家</strong><span>单个安装适合测试；安装当前分类适合某个业务线；安装全部适合完整专家库部署。</span></div>
+          <div><strong>4. 使用专家</strong><span>安装后到 Agent 管理 / 对话入口选择该专家发起任务；安装窗口会显示复制数量、配置写入和错误明细。</span></div>
+        </div>
+      </div>
       <div class="clawhub-toolbar agency-toolbar">
         <input class="input" id="agency-search" placeholder="搜索专家、岗位、能力..." value="${esc(_state.query)}" style="flex:1">
         <select class="input input-sm" id="agency-division">${renderDivisionOptions(data)}</select>
@@ -174,6 +183,7 @@ async function refresh(page) {
         <button class="btn btn-primary btn-sm" data-action="install-division">安装当前分类</button>
         <button class="btn btn-primary btn-sm" data-action="install-all">安装全部</button>
       </div>
+      <div class="agency-install-note">安装会弹出实时进度窗口：显示正在安装什么、复制了多少文件、配置是否写入、失败时具体是哪一个专家出错。</div>
       <div class="agency-count" id="agency-count"></div>
       <div class="agency-grid" id="agency-list"></div>
       <div id="agency-detail"></div>
@@ -195,14 +205,31 @@ async function refresh(page) {
 }
 
 async function installOne(page, id) {
+  let modal = null
   try {
     const overwrite = await showConfirm(`安装/更新专家「${id}」？已存在时会覆盖内置 SOUL/AGENTS/IDENTITY 文件。`)
     if (!overwrite) return
+    modal = showUpgradeModal('安装 AI 专家')
+    modal.setProgress(15)
+    modal.appendLog(`开始安装专家：${id}`)
+    modal.appendLog('正在复制专家工作区并写入 OpenClaw Agent 配置。')
     const res = await api.agencyAgentInstall(id, true)
+    modal.setProgress(85)
+    modal.appendLog(`专家名称：${res?.name || id}`)
+    modal.appendLog(`工作区：${res?.workspace || '未知'}`)
+    modal.appendLog(`复制文件数：${res?.copied ?? 0}`)
+    modal.appendLog(res?.configChanged ? 'Agent 配置已更新。' : 'Agent 配置已存在，本次覆盖工作区。')
+    modal.setDone(`已安装 ${res?.name || id}`)
+    modal.onClose(() => refresh(page))
     toast(`已安装 ${res?.name || id}`, 'success')
     await refresh(page)
   } catch (e) {
-    toast(`安装失败：${e?.message || e}`, 'error')
+    const msg = e?.message || e
+    if (modal) {
+      modal.appendLog(`失败：${msg}`)
+      modal.setError(`安装失败：${msg}`)
+    }
+    toast(`安装失败：${msg}`, 'error', { duration: 6000 })
   }
 }
 
@@ -210,12 +237,30 @@ async function installBulk(page, division = null) {
   const label = division ? `「${divisionLabel(division)}」分类` : '全部 217 个专家'
   const ok = await showConfirm(`确认安装 ${label}？已存在的专家会备份在 OpenClaw 配置外，请谨慎覆盖。`)
   if (!ok) return
+  const modal = showUpgradeModal(`安装 AI 专家库：${label}`)
   try {
+    modal.setProgress(10)
+    modal.appendLog(`开始安装 ${label}。`)
+    modal.appendLog('批量安装可能需要一段时间，请不要重复点击。')
     const res = await api.agencyAgentsInstallBulk(division, true)
+    modal.setProgress(88)
+    modal.appendLog(`新增/更新：${res?.installed || 0}`)
+    modal.appendLog(`跳过：${res?.skipped || 0}`)
+    modal.appendLog(`复制文件数：${res?.copied || 0}`)
+    if ((res?.errors || []).length) {
+      res.errors.forEach(item => modal.appendLog(`错误：${item.id} - ${item.error}`))
+      modal.setError(`安装完成但有 ${res.errors.length} 个错误`)
+    } else {
+      modal.setDone('AI 专家库安装完成')
+    }
+    modal.onClose(() => refresh(page))
     toast(`安装完成：新增/更新 ${res?.installed || 0}，跳过 ${res?.skipped || 0}`, res?.success === false ? 'warning' : 'success')
     await refresh(page)
   } catch (e) {
-    toast(`批量安装失败：${e?.message || e}`, 'error')
+    const msg = e?.message || e
+    modal.appendLog(`失败：${msg}`)
+    modal.setError(`批量安装失败：${msg}`)
+    toast(`批量安装失败：${msg}`, 'error', { duration: 6000 })
   }
 }
 

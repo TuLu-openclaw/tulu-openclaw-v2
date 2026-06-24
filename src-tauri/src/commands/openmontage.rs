@@ -1,5 +1,6 @@
 use serde_json::{json, Value};
 use std::fs;
+#[cfg(target_os = "windows")]
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
