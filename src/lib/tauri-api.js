@@ -501,6 +501,13 @@ export const api = {
   openmontageOpenStudio: () => invoke('openmontage_open_studio'),
   openmontageOpenFolder: () => invoke('openmontage_open_folder'),
 
+  // CLI-Anything 工具中心（外部连接器 + 安全安装器）
+  cliAnythingStatus: () => cachedInvoke('cli_anything_status', {}, 5000),
+  cliAnythingInstall: () => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_install', {}, 600000) },
+  cliAnythingCatalog: (query = '') => cachedInvoke('cli_anything_catalog', { query: query || null }, 15000),
+  cliAnythingInstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_install_tool', { name }, 600000) },
+  cliAnythingMatrixPreflight: (name) => invoke('cli_anything_matrix_preflight', { name }, 120000),
+
   // 日志（短缓存）
   readLogTail: (logName, lines = 100) => cachedInvoke('read_log_tail', { logName, lines }, 5000),
   searchLog: (logName, query, maxResults = 50) => invoke('search_log', { logName, query, maxResults }),

@@ -110,6 +110,7 @@ function NAV_ITEMS_OPENCLAW() { return [
       { route: '/weiyan-verify', label: t('sidebar.weiyanVerify'), icon: 'verify' },
       { route: '/movie-tool', label: t('sidebar.movieTool'), icon: 'movie' },
       { route: '/openmontage', label: t('sidebar.openmontage'), icon: 'video-factory' },
+      { route: '/cli-anything', label: t('sidebar.cliAnything'), icon: 'extensions' },
       { route: '/music-player', label: t('sidebar.musicPlayer'), icon: 'music' },
       { dataAction: 'open-xingshu-chat', label: t('sidebar.xingshuChatroom'), icon: 'chatroom' },
       { route: '/lobster-office', label: t('sidebar.lobsterOffice'), icon: 'lobster' },

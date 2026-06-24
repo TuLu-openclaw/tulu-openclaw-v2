@@ -614,9 +614,16 @@ function showPageGuide(container) {
 function applyOpenMontageDraft() {
   if (!_textarea) return
   let draft = ''
+  let source = 'openmontage'
   try {
-    draft = localStorage.getItem('openmontage.chatDraft') || ''
-    if (draft) localStorage.removeItem('openmontage.chatDraft')
+    draft = localStorage.getItem('cliAnything.chatDraft') || ''
+    if (draft) {
+      localStorage.removeItem('cliAnything.chatDraft')
+      source = 'cli-anything'
+    } else {
+      draft = localStorage.getItem('openmontage.chatDraft') || ''
+      if (draft) localStorage.removeItem('openmontage.chatDraft')
+    }
   } catch {}
   if (!draft || _textarea.value.trim()) return
   _textarea.value = draft
@@ -624,7 +631,9 @@ function applyOpenMontageDraft() {
   const pos = _textarea.value.length
   _textarea.setSelectionRange(pos, pos)
   _textarea.dispatchEvent(new Event('input', { bubbles: true }))
-  appendSystemMessage('已进入 OpenMontage 视频创作助手模式。下方输入框已填好专用工作流提示词，你可以直接发送，或先把“我的需求”改成你想做的视频。')
+  appendSystemMessage(source === 'cli-anything'
+    ? '已进入 CLI-Anything 工具中枢 / 电商工作流协同模式。下方输入框已填好专用 Agent 提示词，你可以直接发送，或先补充具体任务。'
+    : '已进入 OpenMontage 视频创作助手模式。下方输入框已填好专用工作流提示词，你可以直接发送，或先把“我的需求”改成你想做的视频。')
 }
 // ── 事件绑定 ──
 
