@@ -82,15 +82,20 @@ fn path_dirs() -> Vec<PathBuf> {
 }
 
 fn command_candidates(program: &str) -> Vec<PathBuf> {
-    let mut names = vec![program.to_string()];
     #[cfg(target_os = "windows")]
-    {
+    let names = {
+        let mut names = vec![program.to_string()];
         if !program.ends_with(".exe") && !program.ends_with(".cmd") && !program.ends_with(".bat") {
             names.push(format!("{program}.exe"));
             names.push(format!("{program}.cmd"));
             names.push(format!("{program}.bat"));
         }
-    }
+        names
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let names = [program.to_string()];
+
     path_dirs()
         .into_iter()
         .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
