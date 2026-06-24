@@ -5,7 +5,7 @@ use std::io::Cursor;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -453,6 +453,52 @@ fn clear_remotion_studio_cache(remotion_dir: &Path) -> Result<Vec<String>, Strin
     Ok(steps)
 }
 
+#[cfg(target_os = "windows")]
+fn stop_existing_remotion_studio(remotion_dir: &Path) -> Result<Vec<String>, String> {
+    let remotion_marker = remotion_dir.to_string_lossy().replace('\\', "\\\\");
+    let script = format!(
+        r#"$marker = '{}'
+$targets = Get-CimInstance Win32_Process | Where-Object {{
+  $_.ProcessId -ne $PID -and $_.CommandLine -and (
+    $_.CommandLine -like "*$marker*" -or
+    $_.CommandLine -like '*remotion studio*' -or
+    $_.CommandLine -like '*@remotion\\cli*'
+  )
+}}
+$ids = @($targets | Select-Object -ExpandProperty ProcessId)
+foreach ($id in $ids) {{ Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }}
+$ids -join ','"#,
+        remotion_marker
+    );
+    let output = hidden_cmd("powershell")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &script,
+        ])
+        .output()
+        .map_err(|e| format!("清理旧 Remotion 工作台进程失败: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "清理旧 Remotion 工作台进程失败: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let killed = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if killed.is_empty() {
+        Ok(vec!["old-studio-processes-none".to_string()])
+    } else {
+        Ok(vec![format!("old-studio-processes-stopped:{killed}")])
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn stop_existing_remotion_studio(_remotion_dir: &Path) -> Result<Vec<String>, String> {
+    Ok(vec!["old-studio-process-cleanup-skipped".to_string()])
+}
+
 fn find_available_local_port(start: u16) -> Result<u16, String> {
     for port in start..start.saturating_add(50) {
         if TcpListener::bind(("127.0.0.1", port)).is_ok() {
@@ -700,7 +746,9 @@ pub async fn openmontage_open_studio() -> Result<Value, String> {
         return Err("未检测到 npx，无法启动 Remotion 工作台".into());
     };
 
-    let mut steps = clear_remotion_studio_cache(&remotion_dir)?;
+    let mut steps = stop_existing_remotion_studio(&remotion_dir)?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    steps.extend(clear_remotion_studio_cache(&remotion_dir)?);
     let port = find_available_local_port(3100)?;
     let node = selected_node_path();
     let mut cmd = hidden_cmd(npx.to_string_lossy().as_ref());
@@ -728,7 +776,11 @@ pub async fn openmontage_open_studio() -> Result<Value, String> {
     } else {
         "studio-started-waiting-for-first-build".to_string()
     });
-    let url = format!("http://localhost:{port}");
+    let launch_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let url = format!("http://localhost:{port}/?openclawLaunch={launch_id}");
 
     Ok(json!({
         "ok": true,
