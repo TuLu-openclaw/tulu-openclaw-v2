@@ -182,7 +182,7 @@ function renderStatus() {
         <div><strong>1. 修复安装</strong><span>点「更新 / 修复安装」，弹窗会显示源码、Python、Piper、Remotion 每一步结果。</span></div>
         <div><strong>2. 补云服务 Key</strong><span>Piper 可自动补；ElevenLabs / OpenAI / Google / Doubao 必须在 OpenMontage 的 .env 里填写自己的 API Key。</span></div>
         <div><strong>3. 进入创作助手</strong><span>点「打开视频创作助手」，系统会跳到对话页并自动填好 OpenMontage 专用 Agent 工作流。</span></div>
-        <div><strong>4. 打开工作台</strong><span>点「打开视频工作台」会启动 Remotion Studio 并打开浏览器，首次编译需要等待。</span></div>
+        <div><strong>4. 打开工作台</strong><span>点「打开视频工作台」会清理坏缓存、选择空闲端口、启动 Remotion Studio 并打开浏览器，首次编译需要等待。</span></div>
         <div><strong>5. 人审导出</strong><span>按 Agent 提示确认 pipeline、成本、风险、脚本、镜头、配音和导出，避免低配兜底冒充正式成片。</span></div>
       </div>
     </div>
@@ -192,7 +192,7 @@ function renderStatus() {
       <ol class="om-steps">
         <li>先点「更新 / 修复安装」，确保 Python 依赖、OpenMontage TTS 工具和 Remotion 依赖都已安装。</li>
         <li>如果是 Windows ARM64，点「准备完整渲染运行时」，系统会准备 x64 Node，让 Remotion 使用完整 x64 渲染链路。</li>
-        <li>确认「完整模式」显示可用后，再点「打开视频工作台」，启动 OpenMontage 的 Remotion Studio：<code>http://localhost:3000</code>。</li>
+        <li>确认「完整模式」显示可用后，再点「打开视频工作台」，系统会自动选择空闲端口启动 OpenMontage 的 Remotion Studio。</li>
         <li>配音必须配置 OpenMontage TTS provider；缺 key 时只提示缺失，不再用系统 TTS 冒充正式成片。</li>
         <li>示例需求：<code>用 OpenMontage 制作一个 60 秒产品宣传片，中文旁白，输出 mp4。</code></li>
       </ol>
@@ -288,12 +288,14 @@ function bindEvents(page) {
         modal.appendLog('正在启动 Remotion Studio。')
         const res = await api.openmontageOpenStudio()
         modal.setProgress(70)
+        ;(res?.steps || []).forEach(step => modal.appendLog(`完成：${step}`))
         modal.appendLog(`工作目录：${res?.cwd || '未知'}`)
-        modal.appendLog(`访问地址：${res?.url || 'http://localhost:3000'}`)
-        modal.appendLog('正在打开浏览器。如果页面暂时空白，请等待 Remotion 首次编译完成后刷新。')
-        await openExternalUrl(res?.url || 'http://localhost:3000')
+        modal.appendLog(`访问地址：${res?.url || '自动端口'}`)
+        modal.appendLog(res?.ready ? '本地端口已响应，可以打开工作台。' : '进程已启动，Remotion 首次编译可能还需要几秒。')
+        modal.appendLog('已在启动前清理 Remotion / webpack 缓存，避免旧缓存导致 React insertBefore 崩溃。')
+        await openExternalUrl(res?.url || 'http://localhost:3100')
         modal.setDone('视频工作台已启动')
-        toast(`视频工作台已启动：${res?.url || 'http://localhost:3000'}`, 'success')
+        toast(`视频工作台已启动：${res?.url || ''}`, 'success')
       } catch (e) {
         const msg = e?.message || e
         modal.appendLog(`失败：${msg}`)

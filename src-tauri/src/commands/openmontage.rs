@@ -2,8 +2,10 @@ use serde_json::{json, Value};
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::io::Cursor;
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -62,6 +64,10 @@ fn bundled_npm_path() -> PathBuf {
     PathBuf::new()
 }
 
+fn bundled_npx_path() -> PathBuf {
+    bundled_node_dir().join("npx.cmd")
+}
+
 fn is_windows_arm64() -> bool {
     cfg!(target_os = "windows") && std::env::consts::ARCH == "aarch64"
 }
@@ -78,6 +84,13 @@ fn selected_npm_path() -> Option<PathBuf> {
         return Some(bundled_npm_path());
     }
     resolve_command("npm")
+}
+
+fn selected_npx_path() -> Option<PathBuf> {
+    if is_windows_arm64() && bundled_npx_path().is_file() {
+        return Some(bundled_npx_path());
+    }
+    resolve_command("npx")
 }
 
 fn runtime_mode() -> &'static str {
@@ -428,6 +441,32 @@ fn run_capture_path(
     }
 }
 
+fn clear_remotion_studio_cache(remotion_dir: &Path) -> Result<Vec<String>, String> {
+    let mut steps = Vec::new();
+    let cache_dir = remotion_dir.join("node_modules").join(".cache");
+    if cache_dir.exists() {
+        fs::remove_dir_all(&cache_dir).map_err(|e| {
+            format!("清理 Remotion / webpack 缓存失败，请关闭视频工作台后重试: {e}")
+        })?;
+        steps.push("remotion-webpack-cache-cleared".to_string());
+    }
+    Ok(steps)
+}
+
+fn find_available_local_port(start: u16) -> Result<u16, String> {
+    for port in start..start.saturating_add(50) {
+        if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return Ok(port);
+        }
+    }
+    Err("未找到可用于 OpenMontage 视频工作台的本地端口".into())
+}
+
+fn local_port_is_ready(port: u16) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
+}
+
 fn git_head(dir: &Path) -> Option<String> {
     run_capture("git", &["rev-parse", "--short", "HEAD"], Some(dir)).ok()
 }
@@ -569,7 +608,8 @@ pub async fn openmontage_prepare_runtime() -> Result<Value, String> {
         "renderSupported": render_supported(),
         "steps": steps,
         "nodePath": selected_node_path().map(|p| p.to_string_lossy().to_string()),
-        "npmPath": selected_npm_path().map(|p| p.to_string_lossy().to_string())
+        "npmPath": selected_npm_path().map(|p| p.to_string_lossy().to_string()),
+        "npxPath": selected_npx_path().map(|p| p.to_string_lossy().to_string())
     }))
 }
 
@@ -656,14 +696,15 @@ pub async fn openmontage_open_studio() -> Result<Value, String> {
     if !render_supported() {
         return Err("当前环境尚未准备完整 OpenMontage 渲染运行时。Windows ARM64 需要先执行更新 / 修复安装以准备 x64 Node。".into());
     }
-    if selected_npm_path().is_none() {
-        return Err("未检测到 npm，无法启动 Remotion 工作台".into());
-    }
+    let Some(npx) = selected_npx_path() else {
+        return Err("未检测到 npx，无法启动 Remotion 工作台".into());
+    };
 
-    let npm = selected_npm_path().unwrap_or_else(|| PathBuf::from("npm"));
+    let mut steps = clear_remotion_studio_cache(&remotion_dir)?;
+    let port = find_available_local_port(3100)?;
     let node = selected_node_path();
-    let mut cmd = hidden_cmd(npm.to_string_lossy().as_ref());
-    cmd.args(["run", "start"])
+    let mut cmd = hidden_cmd(npx.to_string_lossy().as_ref());
+    cmd.args(["remotion", "studio", "--port", &port.to_string()])
         .current_dir(&remotion_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -674,10 +715,28 @@ pub async fn openmontage_open_studio() -> Result<Value, String> {
     cmd.spawn()
         .map_err(|e| format!("启动 Remotion 工作台失败: {e}"))?;
 
+    let mut ready = false;
+    for _ in 0..40 {
+        if local_port_is_ready(port) {
+            ready = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    steps.push(if ready {
+        "studio-port-ready".to_string()
+    } else {
+        "studio-started-waiting-for-first-build".to_string()
+    });
+    let url = format!("http://localhost:{port}");
+
     Ok(json!({
         "ok": true,
-        "url": "http://localhost:3000",
+        "url": url,
+        "port": port,
+        "ready": ready,
         "cwd": remotion_dir.to_string_lossy(),
+        "steps": steps
     }))
 }
 
