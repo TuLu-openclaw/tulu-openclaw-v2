@@ -9,6 +9,95 @@ let _catalog = []
 let _query = ''
 let _loading = false
 
+const ECOM_AGENT_SESSION = 'agent:ecom-mover'
+const ECOM_AGENT_NAME = '电商专属工作流'
+const TOOL_NAME_ZH = {
+  JumpServer: '堡垒机管理',
+  OpenRefine: '数据清洗',
+  'CC Switch': '编码工具配置管理',
+  WireMock: '接口模拟服务',
+  NSLogger: '苹果日志采集',
+  AnyGen: '云端内容生成',
+}
+const CATEGORY_ZH = {
+  devops: '运维',
+  database: '数据库',
+  testing: '测试',
+  generation: '生成',
+  ecommerce: '电商',
+  browser: '浏览器',
+  office: '办公',
+  image: '图像',
+  video: '视频',
+  uncategorized: '未分类',
+}
+const SOURCE_ZH = {
+  harness: '内置适配',
+  public: '公开命令',
+  local: '本地命令',
+  official: '官方工具',
+}
+
+function isCodeBrowserTool(tool) {
+  const haystack = [
+    tool?.name,
+    tool?.displayName,
+    tool?.category,
+    tool?.description,
+    tool?.entryPoint,
+  ].map(v => String(v || '').toLowerCase()).join(' ')
+  return /browser|chrome|chromium|playwright|selenium|puppeteer|cdp|auto[- ]?browser|web[- ]?automation/.test(haystack)
+}
+
+function browserControlBadge(tool) {
+  if (!isCodeBrowserTool(tool)) return ''
+  return '<div class="ca-browser-badge">代码级操控浏览器 · 电商专属 Agent 必用</div>'
+}
+
+function cnCategory(value) {
+  return CATEGORY_ZH[String(value || '').toLowerCase()] || value || '未分类'
+}
+
+function cnSource(value) {
+  return SOURCE_ZH[String(value || '').toLowerCase()] || value || '内置适配'
+}
+
+function cnToolName(tool) {
+  return TOOL_NAME_ZH[tool?.displayName] || TOOL_NAME_ZH[tool?.name] || tool?.displayName || tool?.name || '未命名工具'
+}
+
+function cnRequires(text) {
+  const value = String(text || '').trim()
+  if (!value) return '未声明'
+  return value
+    .replace(/installed with active database/ig, '已安装并有可用数据库')
+    .replace(/running as a local web server/ig, '本机服务正在运行')
+    .replace(/or newer/ig, '或更新版本')
+    .replace(/server running/ig, '服务正在运行')
+    .replace(/macOS for native Bonjour live capture/ig, 'macOS 原生 Bonjour 实时采集')
+    .replace(/Python 3\.10\+/ig, 'Python 3.10+')
+    .replace(/ANYGEN_API_KEY/g, 'AnyGen API 密钥')
+}
+
+function cnDescription(tool) {
+  const name = tool?.displayName || tool?.name || ''
+  const desc = String(tool?.description || '').trim()
+  const known = {
+    JumpServer: '通过 JumpServer 接口管理资产、用户、权限、会话、账号和审计日志。',
+    OpenRefine: '把 OpenRefine 接入 Agent 流程，用于数据导入、清洗、检查、导出和操作历史回滚。',
+    'CC Switch': '管理 AI 编程工具配置，检查供应商、技能、MCP 服务、用量统计和代理设置。',
+    WireMock: '管理 HTTP 模拟服务：创建桩、检查请求、录制流量并维护测试场景。',
+    NSLogger: '采集、解析、筛选、导出并镜像 iOS / macOS 日志。',
+    AnyGen: '通过 AnyGen 云接口生成文档、幻灯片、网站等内容。',
+  }
+  if (known[name]) return known[name]
+  if (!desc) return '该工具暂未提供中文说明。请先查看依赖和入口，再交给 Agent 判断是否适合当前任务。'
+  if (/^[\x00-\x7F\s.,;:()/_+\-—]+$/.test(desc)) {
+    return '该工具来自 CLI-Anything 目录，原始说明为英文。星枢会保留入口和依赖信息，具体用途请交给专属 Agent 进一步判断。'
+  }
+  return desc
+}
+
 function esc(value) {
   return String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]))
 }
@@ -56,24 +145,47 @@ ${tool ? `候选工具：${tool.displayName || tool.name}（${tool.name}）\n用
 2. 再选择 CLI 工具：图片类优先 GIMP/Imagemagick 类，视频类优先 Kdenlive/Shotcut/VideoCaptioner，文档表格优先 LibreOffice/OpenRefine，知识资料优先 Obsidian/Joplin/Zotero。
 3. 每一步都输出：输入文件、执行命令、输出文件、质量检查项、失败回滚方案。
 4. 不允许未经确认就提交上架、删除商品、群发消息、付款或修改线上店铺。
-5. 需要浏览器后台时，交给浏览器深控/CDP 模块；需要本地专业软件时，交给 CLI-Anything 工具中枢。
+5. 需要浏览器后台时，必须优先选择标注“代码级操控浏览器”的工具（CDP / Playwright / Selenium / Puppeteer / Chrome 自动化），用于打开网页、点击、填表、截图、读取 DOM 和验收页面状态。
+6. 需要本地专业软件时，交给 CLI-Anything 工具中枢；工具中枢只准备能力，最终编排由电商专属 Agent 内部完成。
 
 请先给我一套“电商任务拆解清单”，并说明你要调用哪些 CLI 工具、是否需要先安装依赖。`
+}
+
+function renderProtocolLink() {
+  return `
+    <div class="ca-protocol">
+      <div class="ca-protocol-node hub">
+        <span>工具中枢</span>
+        <strong>安装 / 搜索 / 预检 CLI 工具</strong>
+        <em>只负责把外部软件能力准备好；其中“代码级操控浏览器”是电商后台自动化的关键能力</em>
+      </div>
+      <div class="ca-protocol-arrow">协议通信 →</div>
+      <div class="ca-protocol-node agent">
+        <span>专属 Agent</span>
+        <strong>${ECOM_AGENT_NAME}</strong>
+        <em>内部编排商品资料、图片、标题、上架检查、子 Agent 协作</em>
+      </div>
+      <button class="btn btn-primary" data-action="open-ecom-agent">进入专属 Agent</button>
+    </div>
+  `
 }
 
 function renderStatus() {
   const s = _status || {}
   return `
     <div class="ca-hero">
-      <div>
-        <div class="ca-kicker">CLI-Anything · Agent-Native Software Hub</div>
-        <h1>AI 工具中枢</h1>
-        <p>把 Blender、GIMP、LibreOffice、Obsidian、Kdenlive、FreeCAD 等专业软件变成 Agent 可调用的命令行能力。星枢负责安装、预检、日志和新手引导，Agent 负责拆解任务和调用工具。</p>
+      <div class="ca-hero-main">
+        <div>
+          <div class="ca-kicker">CLI-Anything · Agent 原生工具中枢</div>
+          <h1>AI 工具中枢</h1>
+          <p>这里不是单独的英文工具列表，而是给 Agent 准备工具能力的中转站。普通工具由星枢安装和预检；电商任务通过协议交给已创建的“${ECOM_AGENT_NAME}”做内部联动和任务编排。</p>
+        </div>
+        <div class="ca-hero-actions">
+          <button class="btn btn-primary" data-action="install" ${_loading ? 'disabled' : ''}>自动安装 / 修复依赖</button>
+          <button class="btn btn-secondary" data-action="refresh" ${_loading ? 'disabled' : ''}>刷新状态</button>
+        </div>
       </div>
-      <div class="ca-hero-actions">
-        <button class="btn btn-primary" data-action="install" ${_loading ? 'disabled' : ''}>自动安装 / 修复依赖</button>
-        <button class="btn btn-secondary" data-action="refresh" ${_loading ? 'disabled' : ''}>刷新状态</button>
-      </div>
+      ${renderProtocolLink()}
     </div>
 
     <div class="ca-grid">
@@ -93,10 +205,11 @@ function renderGuide() {
       <h2>新手使用步骤</h2>
       <div class="ca-steps">
         <div><b>1. 自动安装</b><span>点击“自动安装 / 修复依赖”，星枢会检测 Python、修复 pip，并安装/升级 cli-anything-hub。</span></div>
-        <div><b>2. 搜索工具</b><span>输入 video、image、office、browser、obsidian、blender、ecommerce 等关键词，查看工具用途和依赖。</span></div>
+        <div><b>2. 搜索工具</b><span>输入“视频、图片、办公、浏览器、表格、电商”等中文关键词，星枢会把工具用途转成新手能看懂的中文说明。</span></div>
         <div><b>3. 查看依赖</b><span>每个工具会显示 requires。很多 CLI 需要目标软件本体，例如 GIMP/Blender/LibreOffice。</span></div>
         <div><b>4. 安装工具</b><span>点击工具卡片的安装按钮，星枢会显示安装日志；失败会保留错误原因，方便 Agent 修复。</span></div>
-        <div><b>5. 联动 Agent</b><span>点击“交给 Agent”或“电商工作流”，自动填入详细提示词，让 Agent 按安全步骤调用工具。</span></div>
+        <div><b>5. 协议联动</b><span>电商任务不要在工具卡片里硬做；工具中枢通过协议把候选工具、依赖和任务目标交给“${ECOM_AGENT_NAME}”内部联动。</span></div>
+        <div><b>6. 浏览器操控</b><span>凡是能用代码打开网页、点击、填表、截图、读取 DOM、走 CDP/Playwright/Selenium 的工具，都会标注“代码级操控浏览器”，电商专属 Agent 优先使用。</span></div>
       </div>
     </div>
 
@@ -139,9 +252,9 @@ function renderCatalog() {
   return `
     <div class="ca-section">
       <div class="ca-section-head">
-        <div><h2>工具搜索与安装</h2><p>支持 CLI-Hub 原生工具和公开 CLI。搜索结果最多显示 80 个，避免新手被长列表淹没。</p></div>
+        <div><h2>工具搜索与安装</h2><p>支持 CLI-Hub 原生工具和公开 CLI。搜索结果最多显示 80 个；带“代码级操控浏览器”标识的工具，是电商专属 Agent 处理后台页面、商品采集、自动填表和截图验收时优先使用的能力。</p></div>
         <form class="ca-search" data-action="search-form">
-          <input id="ca-search-input" value="${esc(_query)}" placeholder="搜索：video / image / browser / office / obsidian / ecommerce" />
+          <input id="ca-search-input" value="${esc(_query)}" placeholder="搜索：视频 / 图片 / 浏览器 / 办公 / 表格 / 电商" />
           <button class="btn btn-primary" type="submit">搜索</button>
         </form>
       </div>
@@ -156,16 +269,17 @@ function renderTool(tool) {
   return `
     <div class="ca-tool-card">
       <div class="ca-tool-head">
-        <div><strong>${esc(tool.displayName || tool.name)}</strong><span>${esc(tool.name)} · ${esc(tool.category || 'uncategorized')}</span></div>
-        <span class="ca-source">${esc(tool.source || 'harness')}</span>
+        <div><strong>${esc(cnToolName(tool))}</strong><span>${esc(tool.name)} · ${esc(cnCategory(tool.category))}</span></div>
+        <span class="ca-source">${esc(cnSource(tool.source))}</span>
       </div>
-      <p>${esc(shortText(tool.description, 180))}</p>
-      <div class="ca-tool-meta"><b>依赖：</b>${esc(tool.requires || '未声明')}</div>
-      <div class="ca-tool-meta"><b>入口：</b><code>${esc(tool.entryPoint || '')}</code></div>
+      ${browserControlBadge(tool)}
+      <p>${esc(shortText(cnDescription(tool), 180))}</p>
+      <div class="ca-tool-meta"><b>依赖：</b>${esc(cnRequires(tool.requires))}</div>
+      <div class="ca-tool-meta"><b>命令入口：</b><code>${esc(tool.entryPoint || '')}</code></div>
       <div class="ca-tool-actions">
         <button class="btn btn-primary" data-action="install-tool" data-name="${esc(tool.name)}">安装工具</button>
-        <button class="btn btn-secondary" data-action="agent" data-name="${esc(tool.name)}">交给 Agent</button>
-        <button class="btn btn-secondary" data-action="ecommerce" data-name="${esc(tool.name)}">电商工作流</button>
+        <button class="btn btn-secondary" data-action="agent" data-name="${esc(tool.name)}">交给通用 Agent</button>
+        <button class="btn btn-secondary ca-ecom-btn" data-action="ecommerce" data-name="${esc(tool.name)}">交给电商专属 Agent</button>
       </div>
     </div>
   `
@@ -190,12 +304,33 @@ async function loadStatus() {
   _status = await api.cliAnythingStatus()
 }
 
+function normalizeSearchQuery(query) {
+  const value = String(query || '').trim()
+  const map = {
+    电商: 'ecommerce',
+    商城: 'ecommerce',
+    商品: 'ecommerce',
+    图片: 'image',
+    图像: 'image',
+    视频: 'video',
+    剪辑: 'video',
+    浏览器: 'browser',
+    网页: 'browser',
+    办公: 'office',
+    表格: 'office',
+    数据: 'data',
+    设计: 'design',
+    文档: 'document',
+  }
+  return map[value] || value
+}
+
 async function loadCatalog(query = _query) {
   if (!_status?.cliHubAvailable) {
     _catalog = []
     return
   }
-  const res = await api.cliAnythingCatalog(query || '')
+  const res = await api.cliAnythingCatalog(normalizeSearchQuery(query || ''))
   _catalog = res?.items || []
 }
 
@@ -300,11 +435,14 @@ function bindEvents(page) {
         await refresh(_query)
       }
     }
+    if (action === 'open-ecom-agent') {
+      openAgent(buildEcommercePrompt(), '已切换到电商专属 Agent 协议通信', ECOM_AGENT_SESSION)
+    }
     if (action === 'agent') {
       openAgent(buildAgentPrompt(findTool(btn.dataset.name)), '已生成 CLI-Anything Agent 联动提示词')
     }
     if (action === 'ecommerce') {
-      openAgent(buildEcommercePrompt(findTool(btn.dataset.name)), '已生成电商工作流 Agent 协同提示词', 'agent:ecom-mover')
+      openAgent(buildEcommercePrompt(findTool(btn.dataset.name)), '已交给电商专属 Agent 内部联动', ECOM_AGENT_SESSION)
     }
     if (action === 'matrix') {
       const name = btn.dataset.name
