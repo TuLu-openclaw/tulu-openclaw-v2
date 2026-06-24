@@ -570,6 +570,7 @@ export async function render() {
 
   // 首次使用引导提示
   showPageGuide(_messagesEl)
+  applyOpenMontageDraft()
   restoreReplyStatus()
   loadGroupSessions()
   loadTaskBoard()
@@ -610,6 +611,21 @@ function showPageGuide(container) {
   container.insertBefore(guide, container.firstChild)
 }
 
+function applyOpenMontageDraft() {
+  if (!_textarea) return
+  let draft = ''
+  try {
+    draft = localStorage.getItem('openmontage.chatDraft') || ''
+    if (draft) localStorage.removeItem('openmontage.chatDraft')
+  } catch {}
+  if (!draft || _textarea.value.trim()) return
+  _textarea.value = draft
+  _textarea.focus()
+  const pos = _textarea.value.length
+  _textarea.setSelectionRange(pos, pos)
+  _textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  appendSystemMessage('已进入 OpenMontage 视频创作助手模式。下方输入框已填好专用工作流提示词，你可以直接发送，或先把“我的需求”改成你想做的视频。')
+}
 // ── 事件绑定 ──
 
 function bindEvents(page) {

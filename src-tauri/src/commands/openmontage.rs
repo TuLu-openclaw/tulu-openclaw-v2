@@ -116,18 +116,111 @@ fn env_present(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn tts_provider_available(name: &str, file_exists: bool) -> bool {
+fn env_file_value(dir: &Path, name: &str) -> Option<String> {
+    let text = fs::read_to_string(dir.join(".env")).ok()?;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != name {
+            continue;
+        }
+        let value = value
+            .split_once(" #")
+            .map(|(v, _)| v)
+            .unwrap_or(value)
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        if !value.is_empty() && value != "***" && !value.contains("your_key") {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn env_present_for_openmontage(dir: &Path, names: &[&str]) -> bool {
+    names
+        .iter()
+        .any(|name| env_present(name) || env_file_value(dir, name).is_some())
+}
+
+fn venv_python(dir: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        dir.join(".venv").join("Scripts").join("python.exe")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        dir.join(".venv").join("bin").join("python")
+    }
+}
+
+fn venv_command(dir: &Path, program: &str) -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let candidates = [
+        dir.join(".venv")
+            .join("Scripts")
+            .join(format!("{program}.exe")),
+        dir.join(".venv")
+            .join("Scripts")
+            .join(format!("{program}.cmd")),
+        dir.join(".venv").join("Scripts").join(program),
+    ];
+
+    #[cfg(not(target_os = "windows"))]
+    let candidates = [dir.join(".venv").join("bin").join(program)];
+
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+fn python_module_available(python: &Path, module: &str) -> bool {
+    python.is_file()
+        && run_capture_path(python, &["-c", &format!("import {module}")], None, &[]).is_ok()
+}
+
+fn piper_available(dir: &Path) -> bool {
+    command_exists("piper")
+        || venv_command(dir, "piper").is_some()
+        || python_module_available(&venv_python(dir), "piper")
+}
+
+fn tts_provider_hint(name: &str) -> &'static str {
+    match name {
+        "ElevenLabs" => "云端高质量配音：需要 ELEVENLABS_API_KEY",
+        "OpenAI" => "OpenAI 配音：需要 OPENAI_API_KEY",
+        "Google TTS" => "Google 配音：需要 GOOGLE_API_KEY / GEMINI_API_KEY 或凭据文件",
+        "Doubao" => "豆包配音：需要 DOUBAO_SPEECH_API_KEY",
+        "Piper" => "本地免费配音：更新 / 修复安装会自动尝试安装 piper-tts",
+        _ => "需要按 OpenMontage provider 要求配置",
+    }
+}
+
+fn tts_provider_available(dir: &Path, name: &str, file_exists: bool) -> bool {
     if !file_exists {
         return false;
     }
     match name {
-        "ElevenLabs" => env_present("ELEVENLABS_API_KEY"),
-        "OpenAI" => env_present("OPENAI_API_KEY"),
-        "Google TTS" => {
-            env_present("GOOGLE_API_KEY") || env_present("GOOGLE_APPLICATION_CREDENTIALS")
-        }
-        "Doubao" => env_present("DOUBAO_API_KEY") || env_present("ARK_API_KEY"),
-        "Piper" => command_exists("piper"),
+        "ElevenLabs" => env_present_for_openmontage(dir, &["ELEVENLABS_API_KEY"]),
+        "OpenAI" => env_present_for_openmontage(dir, &["OPENAI_API_KEY"]),
+        "Google TTS" => env_present_for_openmontage(
+            dir,
+            &[
+                "GOOGLE_API_KEY",
+                "GEMINI_API_KEY",
+                "GOOGLE_APPLICATION_CREDENTIALS",
+            ],
+        ),
+        "Doubao" => env_present_for_openmontage(
+            dir,
+            &["DOUBAO_SPEECH_API_KEY", "DOUBAO_API_KEY", "ARK_API_KEY"],
+        ),
+        "Piper" => piper_available(dir),
         _ => false,
     }
 }
@@ -404,7 +497,8 @@ pub async fn openmontage_status() -> Result<Value, String> {
                 "name": name,
                 "file": file.to_string_lossy(),
                 "fileExists": file_exists,
-                "available": tts_provider_available(name, file_exists)
+                "available": tts_provider_available(&dir, name, file_exists),
+                "hint": tts_provider_hint(name)
             })
         })
         .collect();
@@ -505,6 +599,9 @@ pub async fn openmontage_install(update: bool, install_deps: bool) -> Result<Val
                 &["pip", "install", "-r", "requirements.txt"],
                 Some(&dir),
             )?;
+            if run_capture("uv", &["pip", "install", "piper-tts"], Some(&dir)).is_ok() {
+                steps.push("piper-tts".to_string());
+            }
             steps.push("python-uv".to_string());
         } else if command_exists("python") {
             run_capture(
@@ -512,7 +609,18 @@ pub async fn openmontage_install(update: bool, install_deps: bool) -> Result<Val
                 &["-m", "pip", "install", "-r", "requirements.txt"],
                 Some(&dir),
             )?;
+            if run_capture("python", &["-m", "pip", "install", "piper-tts"], Some(&dir)).is_ok() {
+                steps.push("piper-tts".to_string());
+            }
             steps.push("python-pip".to_string());
+        }
+
+        let env_file = dir.join(".env");
+        let env_example = dir.join(".env.example");
+        if !env_file.exists() && env_example.is_file() {
+            fs::copy(&env_example, &env_file)
+                .map_err(|e| format!("创建 OpenMontage .env 失败: {e}"))?;
+            steps.push("env-example".to_string());
         }
 
         let remotion_dir = dir.join("remotion-composer");
