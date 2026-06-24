@@ -6,8 +6,9 @@ mod utils;
 mod windows_proxy;
 
 use commands::{
-    agency_agents, agent, assistant, config, device, extensions, hermes, hermes_providers, logs,
-    memory, messaging, music, openmontage, pairing, proxy, service, skills, tvbox, update,
+    agency_agents, agent, assistant, cli_anything, config, device, extensions, hermes,
+    hermes_providers, logs, memory, messaging, music, openmontage, pairing, proxy, service, skills,
+    tvbox, update,
 };
 
 const CODEX_PROMPT_USAGE_TEXT: &str =
@@ -252,6 +253,12 @@ pub fn run() {
             openmontage::openmontage_install,
             openmontage::openmontage_open_studio,
             openmontage::openmontage_open_folder,
+            // CLI-Anything 工具中心（外部连接器 + 安全安装器）
+            cli_anything::cli_anything_status,
+            cli_anything::cli_anything_install,
+            cli_anything::cli_anything_catalog,
+            cli_anything::cli_anything_install_tool,
+            cli_anything::cli_anything_matrix_preflight,
             // Agent 管理
             agent::list_agents,
             agent::get_agent_detail,

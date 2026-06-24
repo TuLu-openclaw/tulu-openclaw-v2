@@ -57,6 +57,7 @@ import './style/debug.css'
 import './style/assistant.css'
 import './style/agency-agents.css'
 import './style/openmontage.css'
+import './style/cli-anything.css'
 import './style/ai-drawer.css'
 import './styles/music-player.css'
 import './styles/xingshu-chat.css'
@@ -439,6 +440,7 @@ async function boot() {
   registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
   registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
   registerRoute('/openmontage', () => import('./pages/openmontage.js'))
+  registerRoute('/cli-anything', () => import('./pages/cli-anything.js'))
   registerRoute('/music-player', () => import('./pages/music-player.js'))
   registerRoute('/xingshu-chat', () => import('./pages/xingshu-chat.js'))
   registerRoute('/xingshu-skill-center', () => import('./pages/xingshu-skill-center.js'))
