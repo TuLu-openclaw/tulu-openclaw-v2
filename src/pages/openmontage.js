@@ -243,6 +243,7 @@ async function install(installDeps) {
 }
 
 async function openExternalUrl(url) {
+  if (!url) return
   try {
     const { open } = await import('@tauri-apps/plugin-shell')
     await open(url)
@@ -291,10 +292,12 @@ function bindEvents(page) {
         ;(res?.steps || []).forEach(step => modal.appendLog(`完成：${step}`))
         modal.appendLog(`工作目录：${res?.cwd || '未知'}`)
         modal.appendLog(`访问地址：${res?.url || '自动端口'}`)
-        modal.appendLog(res?.ready ? '本地端口已响应，可以打开工作台。' : '进程已启动，Remotion 首次编译可能还需要几秒。')
-        modal.appendLog('已在启动前清理 Remotion / webpack 缓存，避免旧缓存导致 React insertBefore 崩溃。')
-        await openExternalUrl(res?.url || 'http://localhost:3100')
-        modal.setDone('视频工作台已启动')
+        modal.appendLog(res?.ready ? '本地端口已响应，正在使用应用内独立窗口打开工作台。' : '进程已启动，Remotion 首次编译可能还需要几秒。')
+        modal.appendLog('已在启动前清理旧工作台进程和 Remotion / webpack 缓存，避免旧状态导致 React insertBefore 崩溃。')
+        if (!res?.openedInAppWindow) {
+          await openExternalUrl(res?.url)
+        }
+        modal.setDone('视频工作台已在应用内独立窗口启动')
         toast(`视频工作台已启动：${res?.url || ''}`, 'success')
       } catch (e) {
         const msg = e?.message || e

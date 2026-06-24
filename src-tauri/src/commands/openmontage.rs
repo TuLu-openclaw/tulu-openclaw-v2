@@ -6,6 +6,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -733,7 +734,7 @@ pub async fn openmontage_install(update: bool, install_deps: bool) -> Result<Val
 }
 
 #[tauri::command]
-pub async fn openmontage_open_studio() -> Result<Value, String> {
+pub async fn openmontage_open_studio(app: tauri::AppHandle) -> Result<Value, String> {
     let dir = openmontage_dir();
     let remotion_dir = dir.join("remotion-composer");
     if !remotion_dir.is_dir() {
@@ -781,12 +782,31 @@ pub async fn openmontage_open_studio() -> Result<Value, String> {
         .map(|d| d.as_millis())
         .unwrap_or(0);
     let url = format!("http://localhost:{port}/?openclawLaunch={launch_id}");
+    let parsed_url: url::Url = url
+        .parse()
+        .map_err(|e| format!("OpenMontage 工作台地址无效: {e}"))?;
+    let window_label = "openmontage_studio";
+    if let Some(window) = app.get_webview_window(window_label) {
+        let _ = window.close();
+    }
+    tauri::WebviewWindowBuilder::new(&app, window_label, tauri::WebviewUrl::External(parsed_url))
+        .title("OpenMontage 视频工作台")
+        .inner_size(1440.0, 920.0)
+        .min_inner_size(1100.0, 720.0)
+        .resizable(true)
+        .decorations(true)
+        .visible(true)
+        .focused(true)
+        .center()
+        .build()
+        .map_err(|e| format!("打开 OpenMontage 内置工作台窗口失败: {e}"))?;
 
     Ok(json!({
         "ok": true,
         "url": url,
         "port": port,
         "ready": ready,
+        "openedInAppWindow": true,
         "cwd": remotion_dir.to_string_lossy(),
         "steps": steps
     }))
