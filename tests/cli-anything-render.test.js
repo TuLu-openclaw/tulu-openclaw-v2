@@ -43,6 +43,6 @@ test('CLI-Anything 首屏不等待状态检测完成', async () => {
   assert.match(page.innerHTML, /正在后台检测环境/)
   assert.match(page.innerHTML, /浏览器代码化操控/)
   assert.match(page.innerHTML, /GIMP 图片编辑/)
-  assert.doesNotMatch(page.innerText, /售卖版|analytics|未声明|正在打开 AI 工具中枢|invoke timeout|Successfully|Uninstalling|Attempting uninstall/)
+  assert.doesNotMatch(page.innerText, /售卖版|analytics|未声明|正在打开工具中枢|invoke timeout|Successfully|Uninstalling|Attempting uninstall/)
   assert.doesNotMatch(page.innerText, /cli-hub|pip|setuptools|wheel|Python/i)
 })

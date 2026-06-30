@@ -568,7 +568,7 @@ function toolActionLabel(tool) {
 function confirmToolUninstall(tool, name) {
   const label = tool?.displayName || cnToolName(tool) || name
   return window.confirm([
-    `即将卸载 CLI 工具：${label}（${name}）`,
+    `即将卸载：${label}`,
     '这会移除星枢为该能力安装的控制入口；不会删除第三方软件本体，也不会删除用户数据。',
     '确认继续？',
   ].join('\n'))
@@ -920,7 +920,7 @@ async function renderInitialContent() {
 
 export async function render() {
   _page = document.createElement('div')
-  _page.innerHTML = '<div id="cli-anything-body"><div class="ca-working">正在打开 AI 工具中枢，请稍候…</div></div>'
+  _page.innerHTML = '<div id="cli-anything-body"><div class="ca-working">正在打开工具中枢，请稍候…</div></div>'
   bindEvents(_page)
   setTimeout(() => {
     renderInitialContent()
