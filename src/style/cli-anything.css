@@ -496,6 +496,26 @@
   background: rgba(248, 250, 252, .78);
 }
 
+.ca-selection-notice {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(99, 102, 241, .24);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(238, 242, 255, .96), rgba(255, 255, 255, .92));
+}
+
+.ca-selection-notice strong {
+  color: #312e81;
+  font-size: 15px;
+}
+
+.ca-selection-notice span {
+  color: #475569;
+  line-height: 1.65;
+}
+
 .ca-catalog {
   grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
 }

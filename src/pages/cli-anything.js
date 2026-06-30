@@ -368,10 +368,17 @@ function getReadiness() {
   }
 }
 
+function catalogCountLabel() {
+  const visibleTotal = filteredCatalog().length || _catalog.length
+  const fullTotal = Number(_status?.catalogTotal || 0)
+  if (_status?.cliHubAvailable && fullTotal > 0) return [`${visibleTotal} / ${fullTotal}`, '当前筛选 / 完整目录']
+  return [`${visibleTotal} 个`, '本机推荐；完整目录需先完成检测']
+}
+
 function renderHero() {
   const s = _status || {}
   const ready = getReadiness()
-  const visibleTotal = filteredCatalog().length || _catalog.length
+  const [countValue, countDesc] = catalogCountLabel()
   return `
     <div class="ca-hero ca-hero-${ready.tone}">
       <div class="ca-hero-main">
@@ -393,7 +400,7 @@ function renderHero() {
       <div class="ca-status-grid ca-status-compact">
         ${renderStatusCard('工具引擎', s.cliHubAvailable ? '可用' : s.loading ? '检测中' : '需准备', s.cliHubVersion || '负责安装和管理工具', s.cliHubAvailable ? 'ok' : s.loading ? 'info' : 'warn')}
         ${renderStatusCard('基础环境', s.pythonAvailable && s.pipAvailable ? '可用' : s.loading ? '检测中' : '需修复', '工具运行所需基础组件', s.pythonAvailable && s.pipAvailable ? 'ok' : s.loading ? 'info' : 'warn')}
-        ${renderStatusCard('可选工具', `${visibleTotal} 个`, '先看用途，再决定是否安装', visibleTotal ? 'ok' : 'warn')}
+        ${renderStatusCard('推荐工具', countValue, countDesc, filteredCatalog().length ? 'ok' : 'warn')}
         ${renderStatusCard('操作安全', '会确认', '安装/卸载/敏感操作前都会二次确认', 'ok')}
       </div>
       ${s.statusError ? `<div class="ca-inline-warning">检测提示：${esc(s.statusError)}。这不会阻塞页面使用。</div>` : ''}
@@ -528,6 +535,18 @@ function renderMatrix() {
   `
 }
 
+function renderPackSelectionNotice(pack, tools) {
+  if (!pack) return ''
+  const names = tools.slice(0, 8).map(tool => cnToolName(tool)).join('、')
+  const more = tools.length > 8 ? ` 等 ${tools.length} 个` : ` ${tools.length} 个`
+  return `
+    <div class="ca-selection-notice" id="ca-selection-notice">
+      <strong>已切换到：${esc(pack.title)}</strong>
+      <span>下面已筛选出 ${esc(names)}${esc(more)}推荐工具。先看每张卡片的“需要什么”和当前状态，再决定安装或交给 Agent 规划。</span>
+    </div>
+  `
+}
+
 function renderCatalog() {
   const pack = currentPack()
   const tools = filteredCatalog()
@@ -544,6 +563,7 @@ function renderCatalog() {
           <button class="btn btn-primary" type="submit">搜索</button>
         </form>
       </div>
+      ${pack ? renderPackSelectionNotice(pack, tools) : ''}
       ${pack ? `<div class="ca-pack-summary"><b>这个入口包含：</b>${pack.includes.map(esc).join('、')}<br><b>使用前注意：</b>${esc(pack.caution)}</div>` : ''}
       <div class="ca-catalog">
         ${tools.length ? tools.map(renderTool).join('') : '<div class="ca-empty">没有找到匹配工具。请换个关键词，或回到“全部”查看推荐工具。</div>'}
@@ -759,6 +779,11 @@ async function selectPack(id) {
   _activePack = id
   _query = ''
   await refresh('', { checkStatus: false })
+  const pack = currentPack()
+  if (pack) {
+    toast(`已显示${pack.title}的推荐工具，请往下查看工具卡片`, 'success', { duration: 3500 })
+    setTimeout(() => document.getElementById('ca-selection-notice')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 0)
+  }
 }
 
 function bindEvents(page) {

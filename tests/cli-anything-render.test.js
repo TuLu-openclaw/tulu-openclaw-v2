@@ -39,6 +39,7 @@ test('CLI-Anything 首屏不等待状态检测完成', async () => {
   const { render } = await import('../src/pages/cli-anything.js')
   const page = await render()
   await new Promise(resolve => setTimeout(resolve, 50))
+  assert.match(page.innerHTML, /本机推荐；完整目录需先完成检测/)
   assert.match(page.innerHTML, /选择任务，星枢自动准备工具/)
   assert.match(page.innerHTML, /正在后台检测环境/)
   assert.match(page.innerHTML, /浏览器代码化操控/)
