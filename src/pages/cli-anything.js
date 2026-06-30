@@ -10,6 +10,7 @@ let _query = ''
 let _loading = false
 let _activePack = 'all'
 let _refreshing = false
+const _toolStateOverrides = new Map()
 
 const ECOM_AGENT_SESSION = 'agent:ecom-mover'
 const ECOM_AGENT_NAME = '电商专属工作流'
@@ -263,10 +264,27 @@ function currentPack() {
   return CAPABILITY_PACKS.find(p => p.id === _activePack) || null
 }
 
+function applyToolState(tool) {
+  const override = _toolStateOverrides.get(tool?.name)
+  return override ? { ...tool, ...override } : tool
+}
+
+function applyToolStates(tools) {
+  return (tools || []).map(applyToolState)
+}
+
+function rememberToolState(name, state) {
+  if (!name) return
+  _toolStateOverrides.set(name, state)
+  _catalog = applyToolStates(_catalog)
+  renderBodyNow()
+}
+
 function filteredCatalog() {
   const pack = currentPack()
-  if (!pack) return _catalog
-  return _catalog.filter(tool => toolMatchesPack(tool, pack))
+  const catalog = applyToolStates(_catalog)
+  if (!pack) return catalog
+  return catalog.filter(tool => toolMatchesPack(tool, pack))
 }
 
 function badge(text, kind = '') {
@@ -538,7 +556,7 @@ function confirmToolUninstall(tool, name) {
   const label = tool?.displayName || cnToolName(tool) || name
   return window.confirm([
     `即将卸载 CLI 工具：${label}（${name}）`,
-    '这会移除星枢为该能力安装的控制入口；不会删除第三方软件本体，也不会删除用户数据。',,
+    '这会移除星枢为该能力安装的控制入口；不会删除第三方软件本体，也不会删除用户数据。',
     '确认继续？',
   ].join('\n'))
 }
@@ -583,7 +601,7 @@ function renderContent() {
 }
 
 function findTool(name) {
-  return _catalog.find(item => item.name === name) || null
+  return applyToolState(_catalog.find(item => item.name === name) || null)
 }
 
 function findPack(id) {
@@ -665,12 +683,12 @@ async function loadCatalog(query = _query) {
   const pack = currentPack()
   if (!_status?.cliHubAvailable) {
     const fallback = fallbackCatalog()
-    _catalog = pack ? fallback.filter(tool => toolMatchesPack(tool, pack)) : fallback
+    _catalog = applyToolStates(pack ? fallback.filter(tool => toolMatchesPack(tool, pack)) : fallback)
     return
   }
   const finalQuery = query || pack?.search || ''
   const res = await api.cliAnythingCatalog(normalizeSearchQuery(finalQuery))
-  _catalog = res?.items || []
+  _catalog = applyToolStates(res?.items || [])
 }
 
 async function refresh(query = _query, options = {}) {
@@ -678,7 +696,10 @@ async function refresh(query = _query, options = {}) {
   if (!body) return
   const shouldCheckStatus = options.checkStatus !== false
   try {
-    if (shouldCheckStatus) await loadStatus()
+    if (shouldCheckStatus) {
+      _toolStateOverrides.clear()
+      await loadStatus()
+    }
     await loadCatalog(query)
     _refreshing = false
     body.innerHTML = renderContent()
@@ -780,7 +801,7 @@ function bindEvents(page) {
       const name = btn.dataset.name
       const tool = findTool(name)
       if (!confirmToolInstall(tool, name)) return
-      const modal = showUpgradeModal(`安装 CLI 工具：${name}`)
+      const modal = showUpgradeModal(`安装工具：${cnToolName(tool) || name}`)
       try {
         _loading = true
         modal.setProgress(12)
@@ -793,10 +814,12 @@ function bindEvents(page) {
         userLog(modal, res?.installed === false ? '正在复查安装结果…' : '安装完成，正在刷新工具状态…')
         appendDiagnostics(modal, '查看原始安装日志', res?.output || '')
         if (res?.installed === false) {
+          rememberToolState(name, { installed: false, installState: 'failed' })
           throw new Error('安装后没有检测到可用状态。请查看高级诊断，或点击“重新安装”。')
         }
-        modal.setDone(`工具 ${name} 安装完成`)
-        toast(`工具 ${name} 安装完成`, 'success')
+        rememberToolState(name, { installed: true, installState: 'installed', installedPackage: res?.installedPackage || name })
+        modal.setDone(`${cnToolName(tool) || name} 安装完成`)
+        toast(`${cnToolName(tool) || name} 安装完成`, 'success')
       } catch (e) {
         const msg = e?.message || e
         modal.appendLog(`失败：${msg}`)
@@ -811,7 +834,7 @@ function bindEvents(page) {
       const name = btn.dataset.name
       const tool = findTool(name)
       if (!confirmToolUninstall(tool, name)) return
-      const modal = showUpgradeModal(`卸载 CLI 工具：${name}`)
+      const modal = showUpgradeModal(`卸载工具：${cnToolName(tool) || name}`)
       try {
         _loading = true
         modal.setProgress(20)
@@ -821,10 +844,12 @@ function bindEvents(page) {
         userLog(modal, '正在复查卸载结果…')
         appendDiagnostics(modal, '查看原始卸载日志', res?.output || '')
         if (res?.installed) {
+          rememberToolState(name, { installed: true, installState: 'installed', installedPackage: res?.installedPackage || name })
           throw new Error(`卸载后仍检测到 ${res.installedPackage || name} 存在。请查看高级诊断后重试。`)
         }
-        modal.setDone(`工具 ${name} 已卸载`)
-        toast(`工具 ${name} 已卸载`, 'success')
+        rememberToolState(name, { installed: false, installState: 'not-installed', installedPackage: '' })
+        modal.setDone(`${cnToolName(tool) || name} 已卸载`)
+        toast(`${cnToolName(tool) || name} 已卸载`, 'success')
       } catch (e) {
         const msg = e?.message || e
         modal.appendLog(`失败：${msg}`)
@@ -875,7 +900,7 @@ async function renderInitialContent() {
     matrixAvailable: false,
     loading: true,
   }
-  _catalog = fallbackCatalog()
+  _catalog = applyToolStates(fallbackCatalog())
   const body = _page?.querySelector('#cli-anything-body')
   if (body) body.innerHTML = renderContent()
 }
