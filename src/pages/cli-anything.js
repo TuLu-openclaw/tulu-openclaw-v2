@@ -527,7 +527,20 @@ function findPack(id) {
 }
 
 async function loadStatus() {
-  _status = await api.cliAnythingStatus()
+  try {
+    _status = await api.cliAnythingStatus()
+  } catch (e) {
+    console.warn('[cli-anything] status detection skipped:', e)
+    _status = {
+      ok: false,
+      pythonAvailable: false,
+      pipAvailable: false,
+      cliHubAvailable: false,
+      cliHubVersion: '',
+      matrixAvailable: false,
+      statusError: e?.message || String(e),
+    }
+  }
 }
 
 function normalizeSearchQuery(query) {
@@ -768,10 +781,28 @@ function bindEvents(page) {
   })
 }
 
+async function renderInitialContent() {
+  _status = {
+    ok: false,
+    pythonAvailable: false,
+    pipAvailable: false,
+    cliHubAvailable: false,
+    cliHubVersion: '',
+    matrixAvailable: false,
+    loading: true,
+  }
+  _catalog = fallbackCatalog()
+  const body = _page?.querySelector('#cli-anything-body')
+  if (body) body.innerHTML = renderContent()
+}
+
 export async function render() {
   _page = document.createElement('div')
   _page.innerHTML = '<div id="cli-anything-body"><div class="ca-working">正在加载星枢工具生态中心…</div></div>'
   bindEvents(_page)
-  setTimeout(() => refresh(''), 0)
+  setTimeout(() => {
+    renderInitialContent()
+    refresh('').catch(e => console.warn('[cli-anything] initial refresh failed:', e))
+  }, 0)
   return _page
 }
