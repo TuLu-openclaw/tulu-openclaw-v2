@@ -3019,9 +3019,147 @@ function serverCached(key, ttlMs, fn) {
   return result
 }
 
+function runCliAnything(program, args = [], options = {}) {
+  const result = spawnSync(program, args, {
+    encoding: 'utf8',
+    timeout: options.timeout || 120000,
+    windowsHide: true,
+    cwd: options.cwd || process.cwd(),
+    env: { ...process.env, CLI_HUB_NO_ANALYTICS: '1', PYTHONUTF8: '1' },
+  })
+  const stdout = (result.stdout || '').trim()
+  const stderr = (result.stderr || '').trim()
+  const output = stdout || stderr
+  if (result.error) throw result.error
+  if (result.status && result.status !== 0) throw new Error(output || (program + ' exited ' + result.status))
+  return output
+}
+
+function pythonPathForCliAnything() {
+  for (const cmd of isWindows ? ['python', 'py', 'python3'] : ['python3', 'python']) {
+    try { runCliAnything(cmd, ['--version'], { timeout: 5000 }); return cmd } catch {}
+  }
+  return null
+}
+
+function validCliToolName(name) {
+  return /^[A-Za-z0-9._-]{1,80}$/.test(String(name || ''))
+}
+
+function cliToolPackageNames(item, name) {
+  const names = [name, 'cli-anything-' + name, name + '-agent-harness']
+  for (const key of ['package', 'package_name', 'pip_package', 'npm_package']) {
+    if (item?.[key]) names.unshift(String(item[key]))
+  }
+  return [...new Set(names.filter(validCliToolName))]
+}
+
+function cliToolInstalledState(item, name) {
+  const python = pythonPathForCliAnything()
+  for (const pkg of cliToolPackageNames(item, name)) {
+    if (python) {
+      try { runCliAnything(python, ['-m', 'pip', 'show', pkg], { timeout: 10000 }); return { installed: true, installedPackage: pkg } } catch {}
+    }
+    try { runCliAnything('npm', ['list', '-g', pkg, '--depth=0'], { timeout: 10000 }); return { installed: true, installedPackage: pkg } } catch {}
+  }
+  try { runCliAnything(name, ['--version'], { timeout: 5000 }); return { installed: true, installedPackage: name } } catch {}
+  return { installed: false, installedPackage: '' }
+}
+
+function fallbackCliCatalogItems(query = '') {
+  const items = [
+    ['browser', '浏览器代码化操控', 'browser', '通过代码打开网页、点击、填表、读取 DOM、截图和验收页面状态。', 'Chrome / 自动化后端', 'cli-anything-browser'],
+    ['gimp', 'GIMP 图片编辑', 'image', '图片裁剪、抠图、批量压缩、格式转换和商品图处理。', 'GIMP 软件本体', 'cli-anything-gimp'],
+    ['libreoffice', 'LibreOffice 办公文档', 'office', 'Word、Excel、PPT、PDF 生成和转换。', 'LibreOffice 软件本体', 'cli-anything-libreoffice'],
+    ['openrefine', 'OpenRefine 数据清洗', 'database', '商品表、SKU 表、供应商表清洗去重。', 'OpenRefine 本地服务', 'cli-anything-openrefine'],
+    ['kdenlive', 'Kdenlive 视频剪辑', 'video', '短视频剪辑、字幕、转场和批量渲染。', 'Kdenlive / MLT 后端', 'cli-anything-kdenlive'],
+    ['obsidian', 'Obsidian 知识库', 'knowledge', '资料、SOP、竞品分析和项目知识沉淀。', 'Obsidian 本地库', 'cli-anything-obsidian'],
+    ['ollama', 'Ollama 本地模型', 'ai', '本地模型管理、离线推理和私有化 AI。', 'Ollama 软件本体', 'cli-anything-ollama'],
+  ].map(([name, displayName, category, description, requires, entryPoint]) => ({ name, displayName, category, description, requires, entryPoint, source: 'local', installCmd: 'cli-hub install ' + name }))
+  const q = String(query || '').toLowerCase()
+  return q ? items.filter(item => Object.values(item).join(' ').toLowerCase().includes(q)) : items
+}
+
 // === API Handlers ===
 
 const handlers = {
+  cli_anything_status() {
+    const python = pythonPathForCliAnything()
+    let pythonVersion = ''
+    if (python) { try { pythonVersion = runCliAnything(python, ['--version'], { timeout: 5000 }) } catch {} }
+    let pipAvailable = false
+    if (python) { try { runCliAnything(python, ['-m', 'pip', '--version'], { timeout: 10000 }); pipAvailable = true } catch {} }
+    let cliHubVersion = ''
+    let cliHubAvailable = false
+    try { cliHubVersion = runCliAnything('cli-hub', ['--version'], { timeout: 10000 }); cliHubAvailable = true } catch {}
+    const catalog = fallbackCliCatalogItems()
+    return { ok: true, pythonAvailable: !!python, pythonPath: python || '', pythonVersion, pipAvailable, cliHubAvailable, cliHubVersion, analyticsDisabled: true, bundledAvailable: true, matrixAvailable: true, catalogTotal: catalog.length, harnessCount: catalog.length, publicCount: 0, categories: [...new Set(catalog.map(i => i.category))], matrixNames: ['video-creation', 'image-design', 'knowledge-research'], installRoot: path.join(homedir(), '.cli-hub') }
+  },
+
+  cli_anything_install() {
+    const python = pythonPathForCliAnything()
+    if (!python) throw new Error('未检测到 Python 3.10+。请先安装 Python，或安装星枢运行时后重试。')
+    const steps = ['Python 已检测：' + python]
+    try { steps.push(runCliAnything(python, ['--version'], { timeout: 5000 })) } catch {}
+    runCliAnything(python, ['-m', 'ensurepip', '--upgrade'], { timeout: 120000 })
+    steps.push('pip 检查 / 修复完成')
+    runCliAnything(python, ['-m', 'pip', 'install', '--upgrade', 'pip', 'setuptools', 'wheel'], { timeout: 120000 })
+    steps.push('pip / setuptools / wheel 已升级')
+    try {
+      runCliAnything(python, ['-m', 'pip', 'install', '--upgrade', '--force-reinstall', '--no-cache-dir', 'git+https://github.com/HKUDS/CLI-Anything.git#subdirectory=cli-hub'], { timeout: 600000 })
+      steps.push('cli-anything-hub 已从 GitHub 最新源码安装 / 更新')
+    } catch (githubErr) {
+      runCliAnything(python, ['-m', 'pip', 'install', '--upgrade', 'cli-anything-hub'], { timeout: 300000 })
+      steps.push('GitHub 安装失败后已从 PyPI 安装 / 更新：' + (githubErr.message || githubErr))
+    }
+    let cliHubVersion = '已安装但版本读取失败'
+    try { cliHubVersion = runCliAnything('cli-hub', ['--version'], { timeout: 10000 }) } catch {}
+    return { ok: true, steps, cliHubVersion, analyticsDisabled: true }
+  },
+
+  cli_anything_catalog({ query } = {}) {
+    let items = []
+    try {
+      const args = query ? ['search', String(query), '--json'] : ['list', '--json', '--source', 'all']
+      const parsed = JSON.parse(runCliAnything('cli-hub', args, { timeout: 180000 }))
+      items = Array.isArray(parsed) ? parsed : []
+    } catch {
+      items = fallbackCliCatalogItems(query)
+    }
+    items = items.slice(0, 80).map(item => {
+      const name = item.name || item.display_name || ''
+      const state = cliToolInstalledState(item, name)
+      return { name, displayName: item.display_name || item.displayName || name, description: item.description || '', category: item.category || '', version: item.version || '', requires: item.requires || '', entryPoint: item.entry_point || item.entryPoint || '', installCmd: item.install_cmd || item.installCmd || ('cli-hub install ' + name), homepage: item.homepage || '', source: item._source || item.source || 'harness', ...state }
+    })
+    return { ok: true, query: query || '', count: items.length, items, source: 'dev-api' }
+  },
+
+  cli_anything_install_tool({ name }) {
+    if (!validCliToolName(name)) throw new Error('工具名不合法，只允许英文、数字、点、下划线和中划线。')
+    const output = runCliAnything('cli-hub', ['install', name], { timeout: 600000 })
+    return { ok: true, name, output, ...cliToolInstalledState(null, name), analyticsDisabled: true }
+  },
+
+  cli_anything_uninstall_tool({ name }) {
+    if (!validCliToolName(name)) throw new Error('工具名不合法，只允许英文、数字、点、下划线和中划线。')
+    const python = pythonPathForCliAnything()
+    const packages = cliToolPackageNames(null, name)
+    const outputs = []
+    if (python) {
+      try { outputs.push(runCliAnything(python, ['-m', 'pip', 'uninstall', '-y', ...packages], { timeout: 300000 })) } catch (e) { outputs.push('pip 卸载跳过或失败：' + (e.message || e)) }
+    }
+    for (const pkg of packages) {
+      try { outputs.push(runCliAnything('npm', ['uninstall', '-g', pkg], { timeout: 120000 })) } catch (e) { outputs.push('npm 卸载 ' + pkg + ' 跳过或失败：' + (e.message || e)) }
+    }
+    return { ok: true, name, packages, output: outputs.join('\n'), ...cliToolInstalledState(null, name), analyticsDisabled: true }
+  },
+
+  cli_anything_matrix_preflight({ name }) {
+    if (!validCliToolName(name)) throw new Error('矩阵名不合法。')
+    try { return { ok: true, exitSuccess: true, name, output: JSON.parse(runCliAnything('cli-hub', ['matrix', 'preflight', name, '--json'], { timeout: 120000 })) } }
+    catch (e) { return { ok: true, exitSuccess: true, name, source: 'dev-api-preview', output: { mode: 'preview', message: '当前 Web dev 后端无法执行 matrix 预检：' + (e.message || e) } } }
+  },
+
   // 配置读写
   read_openclaw_config() {
     return readOpenclawConfigRequired()

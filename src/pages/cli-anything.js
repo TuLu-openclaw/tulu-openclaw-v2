@@ -458,22 +458,46 @@ function renderCatalog() {
   `
 }
 
+function describeInstallState(tool) {
+  const state = tool?.installed ? 'installed' : tool?.installState || 'not-installed'
+  if (state === 'installed') return ['已安装', 'ok']
+  if (state === 'failed') return ['安装失败', 'bad']
+  if (state === 'installing') return ['安装中', 'warn']
+  return ['未安装', 'warn']
+}
+
+function toolActionLabel(tool) {
+  return tool?.installed ? '重新安装' : '安装这个工具'
+}
+
+function confirmToolUninstall(tool, name) {
+  const label = tool?.displayName || cnToolName(tool) || name
+  return window.confirm([
+    `即将卸载 CLI 工具：${label}（${name}）`,
+    '这会移除对应 pip/npm harness 包；不会删除第三方软件本体，也不会删除用户数据。',
+    '确认继续？',
+  ].join('\n'))
+}
+
 function renderTool(tool) {
   const [difficulty, difficultyText] = explainInstallDifficulty(tool)
+  const [installLabel, installTone] = describeInstallState(tool)
   const browserBadge = isCodeBrowserTool(tool) ? '<span class="ca-browser-badge">代码级操控浏览器</span>' : ''
+  const uninstallButton = tool.installed ? `<button class="btn btn-secondary" data-action="uninstall-tool" data-name="${esc(tool.name)}">卸载</button>` : ''
   return `
     <div class="ca-tool-card">
       <div class="ca-tool-head">
         <div><strong>${esc(cnToolName(tool))}</strong><span>${esc(tool.name)} · ${esc(cnCategory(tool.category))}</span></div>
         <span class="ca-source">${esc(cnSource(tool.source))}</span>
       </div>
-      <div class="ca-chip-row">${browserBadge}${badge(difficulty, difficulty === '较简单' ? 'ok' : 'warn')}</div>
+      <div class="ca-chip-row">${browserBadge}${badge(difficulty, difficulty === '较简单' ? 'ok' : 'warn')}${badge(installLabel, installTone)}</div>
       <p>${esc(shortText(cnDescription(tool), 260))}</p>
       <div class="ca-tool-explain"><b>小白解释：</b><span>${esc(difficultyText)}</span></div>
       <div class="ca-tool-meta"><b>需要什么：</b>${esc(cnRequires(tool.requires))}</div>
       <div class="ca-tool-meta"><b>命令入口：</b><code>${esc(tool.entryPoint || '安装后由星枢自动识别')}</code></div>
       <div class="ca-tool-actions">
-        <button class="btn btn-primary" data-action="install-tool" data-name="${esc(tool.name)}">安装这个工具</button>
+        <button class="btn btn-primary" data-action="install-tool" data-name="${esc(tool.name)}">${toolActionLabel(tool)}</button>
+        ${uninstallButton}
         <button class="btn btn-secondary" data-action="agent" data-name="${esc(tool.name)}">让 Agent 解释/使用</button>
         <button class="btn btn-secondary ca-ecom-btn" data-action="ecommerce" data-name="${esc(tool.name)}">交给电商 Agent</button>
       </div>
@@ -580,7 +604,9 @@ async function refresh(query = _query) {
     await loadCatalog(query)
     body.innerHTML = renderContent()
   } catch (e) {
-    body.innerHTML = `<div class="ca-error">CLI-Anything 状态加载失败：${esc(e?.message || e)}</div>`
+    const msg = e?.message || e
+    const timeoutHint = /timeout|超时|abort/i.test(String(msg)) ? '<p>已按 3 分钟页面级超时停止等待。工具中枢可能仍在后台初始化，请稍后点“重新检测”。</p>' : ''
+    body.innerHTML = `<div class="ca-error">CLI-Anything 状态加载失败：${esc(msg)}${timeoutHint}<button class="btn btn-primary" data-action="refresh">重新检测</button></div>`
   }
 }
 
@@ -670,12 +696,42 @@ function bindEvents(page) {
         const res = await api.cliAnythingInstallTool(name)
         modal.setProgress(85)
         modal.appendLog(res?.output || '安装命令执行完成')
+        if (res?.installed === false) {
+          throw new Error('安装命令已执行，但未检测到工具已安装。请查看日志或点击“重新安装”。')
+        }
         modal.setDone(`工具 ${name} 安装完成`)
         toast(`工具 ${name} 安装完成`, 'success')
       } catch (e) {
         const msg = e?.message || e
         modal.appendLog(`失败：${msg}`)
         modal.setError(`工具安装失败：${msg}`)
+        toast(msg, 'error', { duration: 8000 })
+      } finally {
+        _loading = false
+        await refresh(_query)
+      }
+    }
+    if (action === 'uninstall-tool') {
+      const name = btn.dataset.name
+      const tool = findTool(name)
+      if (!confirmToolUninstall(tool, name)) return
+      const modal = showUpgradeModal(`卸载 CLI 工具：${name}`)
+      try {
+        _loading = true
+        modal.setProgress(20)
+        modal.appendLog(`准备卸载：${tool?.displayName || name}`)
+        const res = await api.cliAnythingUninstallTool(name)
+        modal.setProgress(90)
+        modal.appendLog(res?.output || '卸载命令执行完成')
+        if (res?.installed) {
+          throw new Error(`卸载命令已执行，但仍检测到 ${res.installedPackage || name} 存在。请查看日志后重试。`)
+        }
+        modal.setDone(`工具 ${name} 已卸载`)
+        toast(`工具 ${name} 已卸载`, 'success')
+      } catch (e) {
+        const msg = e?.message || e
+        modal.appendLog(`失败：${msg}`)
+        modal.setError(`工具卸载失败：${msg}`)
         toast(msg, 'error', { duration: 8000 })
       } finally {
         _loading = false

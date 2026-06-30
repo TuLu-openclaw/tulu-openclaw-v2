@@ -502,10 +502,11 @@ export const api = {
   openmontageOpenFolder: () => invoke('openmontage_open_folder'),
 
   // CLI-Anything 工具中心（外部连接器 + 安全安装器）
-  cliAnythingStatus: () => cachedInvoke('cli_anything_status', {}, 5000),
+  cliAnythingStatus: () => cachedInvoke('cli_anything_status', {}, 180000),
   cliAnythingInstall: () => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_install', {}, 600000) },
-  cliAnythingCatalog: (query = '') => cachedInvoke('cli_anything_catalog', { query: query || null }, 15000),
+  cliAnythingCatalog: (query = '') => cachedInvoke('cli_anything_catalog', { query: query || null }, 180000),
   cliAnythingInstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_install_tool', { name }, 600000) },
+  cliAnythingUninstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_uninstall_tool', { name }, 300000) },
   cliAnythingMatrixPreflight: (name) => invoke('cli_anything_matrix_preflight', { name }, 120000),
 
   // 日志（短缓存）

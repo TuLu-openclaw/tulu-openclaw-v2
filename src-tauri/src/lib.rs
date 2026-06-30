@@ -258,6 +258,7 @@ pub fn run() {
             cli_anything::cli_anything_install,
             cli_anything::cli_anything_catalog,
             cli_anything::cli_anything_install_tool,
+            cli_anything::cli_anything_uninstall_tool,
             cli_anything::cli_anything_matrix_preflight,
             // Agent 管理
             agent::list_agents,

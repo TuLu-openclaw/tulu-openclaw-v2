@@ -211,6 +211,44 @@ fn cli_hub_matrix_available() -> bool {
     run_capture_program("cli-hub", &["matrix", "list", "--json"]).is_ok()
 }
 
+fn cli_tool_package_names(item: Option<&Value>, name: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(item) = item {
+        for key in ["package", "package_name", "pip_package", "npm_package"] {
+            if let Some(value) = item.get(key).and_then(Value::as_str) {
+                names.push(value.to_string());
+            }
+        }
+    }
+    names.push(name.to_string());
+    names.push(format!("cli-anything-{name}"));
+    names.push(format!("{name}-agent-harness"));
+    let mut seen = std::collections::HashSet::new();
+    names
+        .into_iter()
+        .filter(|value| valid_tool_name(value) && seen.insert(value.clone()))
+        .collect()
+}
+
+fn cli_tool_installed_state(item: Option<&Value>, name: &str) -> (bool, String) {
+    for package in cli_tool_package_names(item, name) {
+        if let Some(python) = python_path() {
+            if run_capture_path(&python, &["-m", "pip", "show", &package]).is_ok() {
+                return (true, package);
+            }
+        }
+        if resolve_command("npm").is_some()
+            && run_capture_program("npm", &["list", "-g", &package, "--depth=0"]).is_ok()
+        {
+            return (true, package);
+        }
+    }
+    if !name.is_empty() && resolve_command(name).is_some() {
+        return (true, name.to_string());
+    }
+    (false, String::new())
+}
+
 fn parse_catalog(text: &str, limit: usize) -> Vec<Value> {
     let Ok(value) = serde_json::from_str::<Value>(text) else {
         return Vec::new();
@@ -222,8 +260,10 @@ fn parse_catalog(text: &str, limit: usize) -> Vec<Value> {
         .iter()
         .take(limit)
         .map(|item| {
+            let name = item.get("name").and_then(Value::as_str).unwrap_or("");
+            let (installed, installed_package) = cli_tool_installed_state(Some(item), name);
             json!({
-                "name": item.get("name").and_then(Value::as_str).unwrap_or(""),
+                "name": name,
                 "displayName": item.get("display_name").and_then(Value::as_str).unwrap_or_else(|| item.get("name").and_then(Value::as_str).unwrap_or("")),
                 "description": item.get("description").and_then(Value::as_str).unwrap_or(""),
                 "category": item.get("category").and_then(Value::as_str).unwrap_or(""),
@@ -233,6 +273,8 @@ fn parse_catalog(text: &str, limit: usize) -> Vec<Value> {
                 "installCmd": item.get("install_cmd").and_then(Value::as_str).unwrap_or(""),
                 "homepage": item.get("homepage").and_then(Value::as_str).unwrap_or(""),
                 "source": item.get("_source").and_then(Value::as_str).unwrap_or("harness"),
+                "installed": installed,
+                "installedPackage": installed_package,
             })
         })
         .collect()
@@ -787,6 +829,7 @@ pub async fn cli_anything_install_tool(app: AppHandle, name: String) -> Result<V
             .map(|item| serde_json::to_string_pretty(item).unwrap_or_default())
             .unwrap_or_default();
         let (source, output) = install_local_harness(python.as_deref(), &local_path)?;
+        let (installed, installed_package) = cli_tool_installed_state(bundled_item.as_ref(), &name);
         return Ok(json!({
             "ok": true,
             "name": name,
@@ -794,6 +837,8 @@ pub async fn cli_anything_install_tool(app: AppHandle, name: String) -> Result<V
             "output": output,
             "source": source,
             "localPath": local_path.to_string_lossy().to_string(),
+            "installed": installed,
+            "installedPackage": installed_package,
             "analyticsDisabled": true
         }));
     }
@@ -803,11 +848,65 @@ pub async fn cli_anything_install_tool(app: AppHandle, name: String) -> Result<V
     }
     let info = run_capture_program("cli-hub", &["info", &name])?;
     let output = run_capture_program("cli-hub", &["install", &name])?;
+    let (installed, installed_package) = cli_tool_installed_state(bundled_item.as_ref(), &name);
     Ok(json!({
         "ok": true,
         "name": name,
         "info": info,
         "output": output,
+        "installed": installed,
+        "installedPackage": installed_package,
+        "analyticsDisabled": true
+    }))
+}
+
+fn pip_uninstall_packages(python: &Path, packages: &[String]) -> Result<String, String> {
+    let mut args = vec![
+        "-m".to_string(),
+        "pip".to_string(),
+        "uninstall".to_string(),
+        "-y".to_string(),
+    ];
+    args.extend(packages.iter().cloned());
+    run_capture_path_owned(python, &args)
+}
+
+#[tauri::command]
+pub async fn cli_anything_uninstall_tool(app: AppHandle, name: String) -> Result<Value, String> {
+    if !valid_tool_name(&name) {
+        return Err("工具名不合法，只允许英文、数字、点、下划线和中划线。".into());
+    }
+    let item = bundled_tool_item(Some(&app), &name);
+    let packages = cli_tool_package_names(item.as_ref(), &name);
+    let mut outputs = Vec::new();
+    let mut attempted = false;
+    if let Some(python) = python_path() {
+        attempted = true;
+        match pip_uninstall_packages(&python, &packages) {
+            Ok(output) => outputs.push(output),
+            Err(err) => outputs.push(format!("pip 卸载跳过或失败：{err}")),
+        }
+    }
+    if resolve_command("npm").is_some() {
+        for package in &packages {
+            attempted = true;
+            match run_capture_program("npm", &["uninstall", "-g", package]) {
+                Ok(output) => outputs.push(output),
+                Err(err) => outputs.push(format!("npm 卸载 {package} 跳过或失败：{err}")),
+            }
+        }
+    }
+    if !attempted {
+        return Err("未找到 Python/pip 或 npm，无法执行卸载。".into());
+    }
+    let (installed, installed_package) = cli_tool_installed_state(item.as_ref(), &name);
+    Ok(json!({
+        "ok": !installed,
+        "name": name,
+        "packages": packages,
+        "installed": installed,
+        "installedPackage": installed_package,
+        "output": outputs.join("\n"),
         "analyticsDisabled": true
     }))
 }
