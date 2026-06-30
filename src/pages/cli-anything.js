@@ -275,9 +275,21 @@ function applyToolStates(tools) {
 
 function rememberToolState(name, state) {
   if (!name) return
-  _toolStateOverrides.set(name, state)
+  _toolStateOverrides.set(name, { ...state, verifiedAt: Date.now() })
   _catalog = applyToolStates(_catalog)
   renderBodyNow()
+}
+
+async function recheckToolState(name) {
+  if (!name) return
+  try {
+    await refresh(_query, { checkStatus: true })
+  } catch (e) {
+    console.warn('[cli-anything] tool state recheck failed:', e)
+    const current = _toolStateOverrides.get(name) || {}
+    _toolStateOverrides.set(name, { ...current, installState: 'verify-needed', needsRecheck: true })
+    renderBodyNow()
+  }
 }
 
 function filteredCatalog() {
@@ -542,7 +554,8 @@ function renderCatalog() {
 
 function describeInstallState(tool) {
   const state = tool?.installed ? 'installed' : tool?.installState || 'not-installed'
-  if (state === 'installed') return ['已安装', 'ok']
+  if (state === 'installed') return [tool?.needsRecheck ? '需复查' : '已安装', tool?.needsRecheck ? 'warn' : 'ok']
+  if (state === 'verify-needed') return ['需复查', 'warn']
   if (state === 'failed') return ['安装失败', 'bad']
   if (state === 'installing') return ['安装中', 'warn']
   return ['未安装', 'warn']
@@ -817,7 +830,7 @@ function bindEvents(page) {
           rememberToolState(name, { installed: false, installState: 'failed' })
           throw new Error('安装后没有检测到可用状态。请查看高级诊断，或点击“重新安装”。')
         }
-        rememberToolState(name, { installed: true, installState: 'installed', installedPackage: res?.installedPackage || name })
+        rememberToolState(name, { installed: true, installState: 'installed', installedPackage: res?.installedPackage || name, needsRecheck: false })
         modal.setDone(`${cnToolName(tool) || name} 安装完成`)
         toast(`${cnToolName(tool) || name} 安装完成`, 'success')
       } catch (e) {
@@ -827,7 +840,7 @@ function bindEvents(page) {
         toast(msg, 'error', { duration: 8000 })
       } finally {
         _loading = false
-        await refresh(_query, { checkStatus: false })
+        await recheckToolState(name)
       }
     }
     if (action === 'uninstall-tool') {
@@ -844,7 +857,7 @@ function bindEvents(page) {
         userLog(modal, '正在复查卸载结果…')
         appendDiagnostics(modal, '查看原始卸载日志', res?.output || '')
         if (res?.installed) {
-          rememberToolState(name, { installed: true, installState: 'installed', installedPackage: res?.installedPackage || name })
+          rememberToolState(name, { installed: true, installState: 'installed', installedPackage: res?.installedPackage || name, needsRecheck: false })
           throw new Error(`卸载后仍检测到 ${res.installedPackage || name} 存在。请查看高级诊断后重试。`)
         }
         rememberToolState(name, { installed: false, installState: 'not-installed', installedPackage: '' })
@@ -857,7 +870,7 @@ function bindEvents(page) {
         toast(msg, 'error', { duration: 8000 })
       } finally {
         _loading = false
-        await refresh(_query, { checkStatus: false })
+        await recheckToolState(name)
       }
     }
     if (action === 'open-ecom-agent') {
