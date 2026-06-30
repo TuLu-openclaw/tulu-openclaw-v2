@@ -9,6 +9,7 @@ let _catalog = []
 let _query = ''
 let _loading = false
 let _activePack = 'all'
+let _refreshing = false
 
 const ECOM_AGENT_SESSION = 'agent:ecom-mover'
 const ECOM_AGENT_NAME = '电商专属工作流'
@@ -216,7 +217,7 @@ function cnRequires(text) {
     .replace(/server running/ig, '服务正在运行')
     .replace(/or newer/ig, '或更新版本')
     .replace(/macOS for native Bonjour live capture/ig, 'macOS 原生 Bonjour 实时采集')
-    .replace(/Python 3\.10\+/ig, 'Python 3.10+')
+    .replace(/Python 3\.10\+/ig, '运行环境 3.10+')
     .replace(/ANYGEN_API_KEY/g, 'AnyGen API 密钥')
 }
 
@@ -226,7 +227,7 @@ function explainInstallDifficulty(tool) {
   if (/api[_ -]?key|token|credential|secret/.test(req + desc)) return ['需要密钥', '需要先准备平台 API Key 或账号授权。']
   if (/running|server|local web server|service/.test(req)) return ['需要服务', '需要目标软件或本地服务先运行。']
   if (/blender|gimp|libreoffice|inkscape|kdenlive|shotcut|obs|zotero|joplin|openrefine|comfyui|ollama/.test(req + desc)) return ['需要本体', '需要安装对应软件本体，CLI 只是控制入口。']
-  if (!req || req.includes('python')) return ['较简单', '通常只需要 Python 和 CLI 包。']
+  if (!req || req.includes('python')) return ['较简单', '通常只需要基础运行环境和工具包。']
   return ['需预检', '请先看依赖说明，安装日志会提示缺什么。']
 }
 
@@ -314,7 +315,7 @@ function getReadiness() {
   if (status.loading) return {
     tone: 'checking',
     title: '正在后台检测环境',
-    desc: '工具列表已经可以查看；Python、pip、工具引擎状态会在检测完成后自动刷新。',
+    desc: '工具列表已经可以查看；基础环境和工具引擎状态会在检测完成后自动刷新。',
     action: '先选择你要做的事',
   }
   if (status.cliHubAvailable && status.pythonAvailable && status.pipAvailable) return {
@@ -332,7 +333,7 @@ function getReadiness() {
   return {
     tone: 'attention',
     title: '需要先准备工具引擎',
-    desc: '还没有检测到完整 Python/pip/工具引擎环境。工具说明可先看，安装前会再次确认。',
+    desc: '还没有检测到完整基础环境和工具引擎。工具说明可先看，安装前会再次确认。',
     action: '点击一键准备工具引擎',
   }
 }
@@ -351,7 +352,7 @@ function renderHero() {
         </div>
         <div class="ca-hero-actions">
           <button class="btn btn-primary" data-action="install" ${_loading ? 'disabled' : ''}>一键准备工具引擎</button>
-          <button class="btn btn-secondary" data-action="refresh" ${_loading ? 'disabled' : ''}>重新检测</button>
+          <button class="btn btn-secondary" data-action="refresh" ${_loading || _refreshing ? 'disabled' : ''}>${_refreshing ? '检测中…' : '重新检测'}</button>
         </div>
       </div>
       <div class="ca-readiness">
@@ -361,7 +362,7 @@ function renderHero() {
       </div>
       <div class="ca-status-grid ca-status-compact">
         ${renderStatusCard('工具引擎', s.cliHubAvailable ? '可用' : s.loading ? '检测中' : '需准备', s.cliHubVersion || '负责安装和管理工具', s.cliHubAvailable ? 'ok' : s.loading ? 'info' : 'warn')}
-        ${renderStatusCard('基础环境', s.pythonAvailable && s.pipAvailable ? '可用' : s.loading ? '检测中' : '需修复', s.pythonVersion || 'Python / pip', s.pythonAvailable && s.pipAvailable ? 'ok' : s.loading ? 'info' : 'warn')}
+        ${renderStatusCard('基础环境', s.pythonAvailable && s.pipAvailable ? '可用' : s.loading ? '检测中' : '需修复', '工具运行所需基础组件', s.pythonAvailable && s.pipAvailable ? 'ok' : s.loading ? 'info' : 'warn')}
         ${renderStatusCard('可选工具', `${visibleTotal} 个`, '先看用途，再决定是否安装', visibleTotal ? 'ok' : 'warn')}
         ${renderStatusCard('操作安全', '会确认', '安装/卸载/敏感操作前都会二次确认', 'ok')}
       </div>
@@ -372,6 +373,29 @@ function renderHero() {
 
 function renderStatusCard(label, value, desc, state) {
   return `<div class="ca-status-card ${state}"><span>${esc(label)}</span><strong>${esc(value)}</strong><em>${esc(desc)}</em></div>`
+}
+
+function renderBodyNow() {
+  const body = _page?.querySelector('#cli-anything-body')
+  if (body) body.innerHTML = renderContent()
+}
+
+function userLog(modal, text) {
+  modal.appendLog(text)
+}
+
+function appendDiagnostics(modal, title, raw) {
+  const value = String(raw || '').trim()
+  if (!value) return
+  modal.appendHtmlLog(`<details class="ca-modal-diagnostics"><summary>${esc(title)}</summary><pre>${esc(value.slice(0, 8000))}</pre></details>`)
+}
+
+function summarizeInstallResult(res) {
+  const steps = Array.isArray(res?.steps) ? res.steps : []
+  const readable = steps
+    .filter(step => !/analytics|setuptools|wheel|pip\s+\/\s+setuptools|cli-hub 版本/i.test(String(step)))
+    .map(step => String(step).replace(/^完成：?s*/, ''))
+  return readable.length ? readable.slice(0, 4) : ['工具引擎已准备完成']
 }
 
 function renderBeginnerGuide() {
@@ -514,7 +538,7 @@ function confirmToolUninstall(tool, name) {
   const label = tool?.displayName || cnToolName(tool) || name
   return window.confirm([
     `即将卸载 CLI 工具：${label}（${name}）`,
-    '这会移除对应 pip/npm harness 包；不会删除第三方软件本体，也不会删除用户数据。',
+    '这会移除星枢为该能力安装的控制入口；不会删除第三方软件本体，也不会删除用户数据。',,
     '确认继续？',
   ].join('\n'))
 }
@@ -656,6 +680,7 @@ async function refresh(query = _query, options = {}) {
   try {
     if (shouldCheckStatus) await loadStatus()
     await loadCatalog(query)
+    _refreshing = false
     body.innerHTML = renderContent()
   } catch (e) {
     const msg = e?.message || e
@@ -666,6 +691,7 @@ async function refresh(query = _query, options = {}) {
     } else {
       _status = { ..._status, statusError: msg, loading: false }
     }
+    _refreshing = false
     body.innerHTML = renderContent()
     toast('工具状态检测失败，页面已切换为离线推荐模式', 'warn', { duration: 5000 })
   }
@@ -674,16 +700,13 @@ async function refresh(query = _query, options = {}) {
 function confirmToolInstall(tool, name) {
   const [difficulty, difficultyText] = explainInstallDifficulty(tool)
   const lines = [
-    `即将安装 CLI 工具：${tool?.displayName || name}（${name}）`,
-    `用途说明：${cnDescription(tool)}`,
+    `即将安装：${tool?.displayName || cnToolName(tool) || name}`,
+    `用途：${cnDescription(tool)}`,
     `安装难度：${difficulty} - ${difficultyText}`,
-    `来源：${tool?.source || 'harness'}`,
-    `分类：${tool?.category || '未声明'}`,
-    `依赖：${tool?.requires || '未声明'}`,
-    `入口：${tool?.entryPoint || '未声明'}`,
+    `需要：${cnRequires(tool?.requires)}`,
+    '说明：星枢只安装控制入口，不会静默安装第三方软件本体。',
   ]
-  if (tool?.installCmd) lines.push(`安装命令：${tool.installCmd}`)
-  lines.push('', 'cli-hub install 可能执行 pip / npm / uv 或其他安装命令；第三方软件本体不会被星枢静默安装。请确认继续。')
+  lines.push('', '确认继续安装？')
   return window.confirm(lines.join('\n'))
 }
 
@@ -718,18 +741,29 @@ function bindEvents(page) {
     const btn = event.target.closest('[data-action]')
     if (!btn || _loading) return
     const action = btn.dataset.action
-    if (action === 'refresh') return refresh(_query, { checkStatus: true })
+    if (action === 'refresh') {
+      _refreshing = true
+      _status = { ...(_status || {}), loading: true, statusError: '' }
+      renderBodyNow()
+      try {
+        await refresh(_query, { checkStatus: true })
+      } finally {
+        _refreshing = false
+      }
+      return
+    }
     if (action === 'pack' || action === 'use-pack') return selectPack(btn.dataset.pack || 'all')
     if (action === 'install') {
       const modal = showUpgradeModal('星枢工具引擎 · 一键准备')
       try {
         _loading = true
         modal.setProgress(10)
-        modal.appendLog('开始检测 Python、pip、setuptools、wheel 和 cli-anything-hub。')
-        modal.appendLog('售卖版策略：不静默安装系统级 Python；不隐藏第三方软件依赖；默认关闭 CLI-Hub analytics。')
+        userLog(modal, '正在检查基础环境…')
+        userLog(modal, '不会静默安装系统软件；需要用户确认的步骤会明确提示。')
         const res = await api.cliAnythingInstall()
         modal.setProgress(85)
-        ;(res?.steps || []).forEach(step => modal.appendLog(`完成：${step}`))
+        summarizeInstallResult(res).forEach(step => userLog(modal, `完成：${step}`))
+        appendDiagnostics(modal, '查看详细检测日志', (res?.steps || []).join('\n'))
         modal.setDone('工具引擎已准备完成')
         toast('工具引擎已准备完成', 'success')
       } catch (e) {
@@ -750,15 +784,16 @@ function bindEvents(page) {
       try {
         _loading = true
         modal.setProgress(12)
-        modal.appendLog(`工具：${tool?.displayName || name}`)
-        modal.appendLog(`用途：${cnDescription(tool)}`)
-        modal.appendLog(`依赖：${tool?.requires || '未声明'}`)
-        modal.appendLog('即将通过 cli-hub install 安装。第三方软件本体不会被静默安装，缺失时会在日志里提示。')
+        userLog(modal, `正在安装：${tool?.displayName || cnToolName(tool) || name}`)
+        userLog(modal, `用途：${cnDescription(tool)}`)
+        userLog(modal, `需要：${cnRequires(tool?.requires)}`)
+        userLog(modal, '如果缺少第三方软件本体，安装结果会明确提示。')
         const res = await api.cliAnythingInstallTool(name)
         modal.setProgress(85)
-        modal.appendLog(res?.output || '安装命令执行完成')
+        userLog(modal, res?.installed === false ? '正在复查安装结果…' : '安装完成，正在刷新工具状态…')
+        appendDiagnostics(modal, '查看原始安装日志', res?.output || '')
         if (res?.installed === false) {
-          throw new Error('安装命令已执行，但未检测到工具已安装。请查看日志或点击“重新安装”。')
+          throw new Error('安装后没有检测到可用状态。请查看高级诊断，或点击“重新安装”。')
         }
         modal.setDone(`工具 ${name} 安装完成`)
         toast(`工具 ${name} 安装完成`, 'success')
@@ -780,12 +815,13 @@ function bindEvents(page) {
       try {
         _loading = true
         modal.setProgress(20)
-        modal.appendLog(`准备卸载：${tool?.displayName || name}`)
+        userLog(modal, `正在卸载：${tool?.displayName || cnToolName(tool) || name}`)
         const res = await api.cliAnythingUninstallTool(name)
         modal.setProgress(90)
-        modal.appendLog(res?.output || '卸载命令执行完成')
+        userLog(modal, '正在复查卸载结果…')
+        appendDiagnostics(modal, '查看原始卸载日志', res?.output || '')
         if (res?.installed) {
-          throw new Error(`卸载命令已执行，但仍检测到 ${res.installedPackage || name} 存在。请查看日志后重试。`)
+          throw new Error(`卸载后仍检测到 ${res.installedPackage || name} 存在。请查看高级诊断后重试。`)
         }
         modal.setDone(`工具 ${name} 已卸载`)
         toast(`工具 ${name} 已卸载`, 'success')
@@ -815,10 +851,10 @@ function bindEvents(page) {
       const modal = showUpgradeModal(`工作流矩阵预检：${name}`)
       try {
         modal.setProgress(20)
-        modal.appendLog('正在执行 cli-hub matrix preflight --json。')
+        userLog(modal, '正在检查这条工作流缺少哪些工具…')
         const res = await api.cliAnythingMatrixPreflight(name)
         modal.setProgress(90)
-        modal.appendLog(JSON.stringify(res?.output || {}, null, 2).slice(0, 6000))
+        appendDiagnostics(modal, '查看原始预检结果', JSON.stringify(res?.output || {}, null, 2))
         modal.setDone('矩阵预检完成，请按缺口安装，不要盲目全量安装。')
       } catch (e) {
         const msg = e?.message || e

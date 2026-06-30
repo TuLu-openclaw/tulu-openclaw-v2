@@ -534,6 +534,27 @@
   color: #4f46e5 !important;
 }
 
+.ca-modal-diagnostics {
+  margin-top: 8px;
+  border: 1px solid rgba(203, 213, 225, .85);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, .9);
+  padding: 8px 10px;
+}
+
+.ca-modal-diagnostics summary {
+  cursor: pointer;
+  color: #4f46e5;
+  font-weight: 800;
+}
+
+.ca-modal-diagnostics pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #475569;
+}
+
 .ca-empty,
 .ca-error,
 .ca-working {
