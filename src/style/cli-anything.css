@@ -251,15 +251,34 @@
 .ca-decision-grid,
 .ca-pack-grid,
 .ca-matrix-grid,
+.ca-catalog-mode {
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 165, 250, .28);
+  background: linear-gradient(135deg, rgba(239, 246, 255, .96), rgba(255, 255, 255, .92));
+}
+
+.ca-catalog-mode strong {
+  display: block;
+  color: #1d4ed8;
+  margin-bottom: 6px;
+}
+
+.ca-catalog-mode span,
+.ca-catalog-mode em {
+  display: block;
+  color: #475569;
+  line-height: 1.65;
+}
+
+.ca-catalog-mode em { font-style: normal; margin-top: 6px; }
+
 .ca-catalog {
   display: grid;
   gap: 12px;
 }
 
-.ca-decision-grid {
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  margin-top: 16px;
-}
 
 .ca-decision-grid div,
 .ca-tool-explain {

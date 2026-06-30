@@ -96,6 +96,7 @@ export default defineConfig({
   build: {
     target: ['es2021', 'chrome100', 'safari13'],
     minify: !process.env.TAURI_DEBUG ? 'terser' : false,
+    cssMinify: false,
     sourcemap: !!process.env.TAURI_DEBUG,
     chunkSizeWarningLimit: 700,
     // Tauri 多页面入口：index.html + 龙虾办公室独立窗口页面

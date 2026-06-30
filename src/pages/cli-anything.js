@@ -10,6 +10,8 @@ let _query = ''
 let _loading = false
 let _activePack = 'all'
 let _refreshing = false
+let _catalogMode = 'offline'
+let _catalogError = ''
 const _toolStateOverrides = new Map()
 
 const ECOM_AGENT_SESSION = 'agent:ecom-mover'
@@ -371,8 +373,15 @@ function getReadiness() {
 function catalogCountLabel() {
   const visibleTotal = filteredCatalog().length || _catalog.length
   const fullTotal = Number(_status?.catalogTotal || 0)
-  if (_status?.cliHubAvailable && fullTotal > 0) return [`${visibleTotal} / ${fullTotal}`, '当前筛选 / 完整目录']
-  return [`${visibleTotal} 个`, '本机推荐；完整目录需先完成检测']
+  if (_catalogMode === 'full' && fullTotal > 0) return [`${visibleTotal} / ${fullTotal}`, '当前筛选 / 完整目录']
+  if (_catalogMode === 'full') return [`${visibleTotal} 个`, '完整目录已加载']
+  return [`${visibleTotal} 个`, '离线推荐；完整目录可重新检测']
+}
+
+function catalogModeNotice() {
+  if (_catalogMode === 'full') return ''
+  const reason = _catalogError || _status?.statusError || ''
+  return `<div class="ca-catalog-mode offline"><strong>当前是离线推荐模式</strong><span>先显示本机内置的高频推荐工具，不代表完整工具总数。点“一键准备工具引擎”或“重新检测”后，能连上完整目录时会自动切换为完整目录。</span>${reason ? `<em>检测提示：${esc(reason)}</em>` : ''}</div>`
 }
 
 function renderHero() {
@@ -404,6 +413,7 @@ function renderHero() {
         ${renderStatusCard('操作安全', '会确认', '安装/卸载/敏感操作前都会二次确认', 'ok')}
       </div>
       ${s.statusError ? `<div class="ca-inline-warning">检测提示：${esc(s.statusError)}。这不会阻塞页面使用。</div>` : ''}
+      ${catalogModeNotice()}
     </div>
   `
 }
@@ -535,14 +545,12 @@ function renderMatrix() {
   `
 }
 
-function renderPackSelectionNotice(pack, tools) {
+function renderPackSelectionNotice(pack) {
   if (!pack) return ''
-  const names = tools.slice(0, 8).map(tool => cnToolName(tool)).join('、')
-  const more = tools.length > 8 ? ` 等 ${tools.length} 个` : ` ${tools.length} 个`
   return `
     <div class="ca-selection-notice" id="ca-selection-notice">
       <strong>已切换到：${esc(pack.title)}</strong>
-      <span>下面已筛选出 ${esc(names)}${esc(more)}推荐工具。先看每张卡片的“需要什么”和当前状态，再决定安装或交给 Agent 规划。</span>
+      <span>下面显示的是这类任务的推荐工具，不是全部工具总数。你可以先看每张卡片的“需要什么”和当前状态，再决定安装或交给 Agent 规划。</span>
     </div>
   `
 }
@@ -563,7 +571,7 @@ function renderCatalog() {
           <button class="btn btn-primary" type="submit">搜索</button>
         </form>
       </div>
-      ${pack ? renderPackSelectionNotice(pack, tools) : ''}
+      ${pack ? renderPackSelectionNotice(pack) : ''}
       ${pack ? `<div class="ca-pack-summary"><b>这个入口包含：</b>${pack.includes.map(esc).join('、')}<br><b>使用前注意：</b>${esc(pack.caution)}</div>` : ''}
       <div class="ca-catalog">
         ${tools.length ? tools.map(renderTool).join('') : '<div class="ca-empty">没有找到匹配工具。请换个关键词，或回到“全部”查看推荐工具。</div>'}
@@ -714,14 +722,25 @@ function fallbackCatalog() {
 
 async function loadCatalog(query = _query) {
   const pack = currentPack()
+  const fallback = fallbackCatalog()
   if (!_status?.cliHubAvailable) {
-    const fallback = fallbackCatalog()
+    _catalogMode = 'offline'
+    _catalogError = _status?.statusError || ''
     _catalog = applyToolStates(pack ? fallback.filter(tool => toolMatchesPack(tool, pack)) : fallback)
     return
   }
   const finalQuery = query || pack?.search || ''
-  const res = await api.cliAnythingCatalog(normalizeSearchQuery(finalQuery))
-  _catalog = applyToolStates(res?.items || [])
+  try {
+    const res = await api.cliAnythingCatalog(normalizeSearchQuery(finalQuery))
+    const items = Array.isArray(res?.items) ? res.items : []
+    _catalogMode = 'full'
+    _catalogError = ''
+    _catalog = applyToolStates(items)
+  } catch (e) {
+    _catalogMode = 'offline'
+    _catalogError = e?.message || String(e)
+    _catalog = applyToolStates(pack ? fallback.filter(tool => toolMatchesPack(tool, pack)) : fallback)
+  }
 }
 
 async function refresh(query = _query, options = {}) {
@@ -781,7 +800,9 @@ async function selectPack(id) {
   await refresh('', { checkStatus: false })
   const pack = currentPack()
   if (pack) {
-    toast(`已显示${pack.title}的推荐工具，请往下查看工具卡片`, 'success', { duration: 3500 })
+    const names = filteredCatalog().slice(0, 3).map(tool => cnToolName(tool)).join('、')
+    const more = filteredCatalog().length > 3 ? ` 等 ${filteredCatalog().length} 个` : ` ${filteredCatalog().length} 个`
+    toast(`已筛选出 ${pack.title} 的推荐工具：${names}${more}。往下看每张卡片的“需要什么”和“当前状态”，再决定安装。`, 'success', { duration: 4500 })
     setTimeout(() => document.getElementById('ca-selection-notice')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 0)
   }
 }
