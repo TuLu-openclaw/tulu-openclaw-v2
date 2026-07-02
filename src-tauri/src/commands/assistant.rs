@@ -689,9 +689,9 @@ pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String,
                     .danger_accept_invalid_certs(true)
                     .build()
                     .map_err(|e| format!("vod_fetch TLS 兼容客户端错误: {e}"))?;
-                send_request(&insecure_client)
-                    .await
-                    .map_err(|e| format!("vod_fetch 请求失败: {first_err}; TLS 兼容重试失败: {e}"))?
+                send_request(&insecure_client).await.map_err(|e| {
+                    format!("vod_fetch 请求失败: {first_err}; TLS 兼容重试失败: {e}")
+                })?
             } else {
                 return Err(format!("vod_fetch 请求失败: {first_err}"));
             }
@@ -720,16 +720,27 @@ pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String,
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn napp03_api_fetch(path: String, query: Option<serde_json::Value>, timeout_secs: Option<u64>) -> Result<String, String> {
-    let clean_path = if path.starts_with('/') { path } else { format!("/{path}") };
+pub async fn napp03_api_fetch(
+    path: String,
+    query: Option<serde_json::Value>,
+    timeout_secs: Option<u64>,
+) -> Result<String, String> {
+    let clean_path = if path.starts_with('/') {
+        path
+    } else {
+        format!("/{path}")
+    };
     let is_allowed_logic_path = clean_path == "/vod/search/query";
     if clean_path.contains("..") || (!clean_path.ends_with(".capi") && !is_allowed_logic_path) {
         return Err("napp03_api_fetch 只允许 .capi 接口或已确认的搜索接口".into());
     }
 
     let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(12).clamp(3, 60));
-    let client = super::build_http_client(timeout, Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"))
-        .map_err(|e| format!("napp03 HTTP 客户端错误: {e}"))?;
+    let client = super::build_http_client(
+        timeout,
+        Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
+    )
+    .map_err(|e| format!("napp03 HTTP 客户端错误: {e}"))?;
 
     let params = query_to_pairs(query.as_ref())?;
     let query_string = params
@@ -737,7 +748,11 @@ pub async fn napp03_api_fetch(path: String, query: Option<serde_json::Value>, ti
         .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
         .collect::<Vec<_>>()
         .join("&");
-    let api_base = if is_allowed_logic_path { "https://vlogic.zmizr.cn" } else { "https://vcache.zmizr.cn" };
+    let api_base = if is_allowed_logic_path {
+        "https://vlogic.zmizr.cn"
+    } else {
+        "https://vcache.zmizr.cn"
+    };
     let api_url = if query_string.is_empty() {
         format!("{api_base}{clean_path}")
     } else {
@@ -780,7 +795,10 @@ pub async fn napp03_api_fetch(path: String, query: Option<serde_json::Value>, ti
     if !resp.status().is_success() {
         return Err(format!("napp03 HTTP {}", resp.status()));
     }
-    let bytes = resp.bytes().await.map_err(|e| format!("napp03 读取响应失败: {e}"))?;
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| format!("napp03 读取响应失败: {e}"))?;
     let plain = Aes256CbcDec::new(
         b"ayt5wy5afwmwrpb19k9s3psx3dymyd0n".into(),
         b"b3t069ijy7pirw0j".into(),
@@ -794,9 +812,13 @@ pub async fn napp03_api_fetch(path: String, query: Option<serde_json::Value>, ti
 fn query_to_pairs(query: Option<&serde_json::Value>) -> Result<Vec<(String, String)>, String> {
     let mut pairs = Vec::new();
     if let Some(value) = query {
-        let obj = value.as_object().ok_or_else(|| "query 必须是对象".to_string())?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| "query 必须是对象".to_string())?;
         for (key, val) in obj {
-            if key.is_empty() { continue; }
+            if key.is_empty() {
+                continue;
+            }
             let text = match val {
                 serde_json::Value::Null => String::new(),
                 serde_json::Value::String(s) => s.clone(),
@@ -813,7 +835,8 @@ fn query_to_pairs(query: Option<&serde_json::Value>) -> Result<Vec<(String, Stri
 
 #[cfg(target_os = "windows")]
 fn hmac_sha1_hex(key: &str, data: &str) -> Result<String, String> {
-    let mut mac = HmacSha1::new_from_slice(key.as_bytes()).map_err(|e| format!("HMAC key 错误: {e}"))?;
+    let mut mac =
+        HmacSha1::new_from_slice(key.as_bytes()).map_err(|e| format!("HMAC key 错误: {e}"))?;
     mac.update(data.as_bytes());
     let bytes = mac.finalize().into_bytes();
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
@@ -1118,23 +1141,28 @@ pub async fn open_player_window(
         return Err("视频URL不能为空".into());
     }
 
-    // 获取 exe 所在目录，找 player.html
+    // 获取 player.html：优先开发源码，其次 Tauri resource_dir，最后 exe 目录。
+    // 不能静默 fallback 到原视频 URL，否则 resume/进度回写逻辑完全不会执行。
     let exe_path = std::env::current_exe().map_err(|e| format!("获取程序路径失败: {}", e))?;
     let base_dir = exe_path
         .parent()
         .ok_or_else(|| String::from("无法获取程序目录"))?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| base_dir.to_path_buf());
 
-    let dev_html = base_dir.join("src").join("player.html");
-    let html_path = if dev_html.exists() {
-        dev_html
-    } else {
-        let root_html = base_dir.join("player.html");
-        if root_html.exists() {
-            root_html
-        } else {
-            base_dir.join("player.html")
-        }
-    };
+    let mut html_candidates = vec![
+        cwd.join("src").join("player.html"),
+        base_dir.join("src").join("player.html"),
+        base_dir.join("player.html"),
+    ];
+    if let Ok(res_dir) = app.path().resource_dir() {
+        html_candidates.push(res_dir.join("player.html"));
+        html_candidates.push(res_dir.join("src").join("player.html"));
+    }
+    let html_path = html_candidates
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+        .ok_or_else(|| format!("未找到播放器文件 player.html，已查找: {}", html_candidates.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>().join(" | ")))?;
 
     // 构建 player.html URL 参数
     let encoded_url = urlencoding_encode(&url);
@@ -1145,23 +1173,18 @@ pub async fn open_player_window(
     let encoded_ctx = urlencoding_encode(&playback_ctx);
     let encoded_pic = urlencoding_encode(&pic);
 
-    let player_url = if html_path.exists() {
-        format!(
-            "file:///{}?url={}&title={}&resume={}&lang={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
-            html_path.to_string_lossy().replace('\\', "/"),
-            encoded_url,
-            encoded_title,
-            resume,
-            encoded_lang,
-            encoded_alleps,
-            encoded_allurls,
-            encoded_ctx,
-            encoded_pic,
-        )
-    } else {
-        // player.html 不存在则直接打开原始 URL
-        url.clone()
-    };
+    let player_url = format!(
+        "file:///{}?url={}&title={}&resume={}&lang={}&all_eps={}&all_urls={}&playback_ctx={}&pic={}",
+        html_path.to_string_lossy().replace('\\', "/"),
+        encoded_url,
+        encoded_title,
+        resume,
+        encoded_lang,
+        encoded_alleps,
+        encoded_allurls,
+        encoded_ctx,
+        encoded_pic,
+    );
 
     // 生成唯一窗口标签（避免重复）
     use std::time::{SystemTime, UNIX_EPOCH};

@@ -42,6 +42,9 @@
       "icons/icon.ico"
     ],
     "resources": [
+      "resources/player.html",
+      "player.html",
+      "../src/player.html",
       "resources/Star-Office-UI-master/**/*",
       "resources/agency-agents/**/*",
       "resources/cli-anything/**/*",

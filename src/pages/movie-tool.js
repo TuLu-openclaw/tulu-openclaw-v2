@@ -1259,6 +1259,7 @@ let _catCache = {}
 const HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'
 const KEY_SEARCH = 'tulu_vod_search'
 const KEY_PLAY   = 'tulu_vod_play'
+const KEY_LIBRARY_FOLLOW = 'tulu_library_follow'
 
 let cat = 'movie'
 let src = 0
@@ -1310,6 +1311,27 @@ function updatePlayProgress(id, source, progress, epName, duration) {
   savePlayHistory(h)
 }
 function clearPlayHistory() { savePlayHistory([]) }
+
+function getFollowList() {
+  try { return JSON.parse(localStorage.getItem(KEY_LIBRARY_FOLLOW) || '[]') } catch { return [] }
+}
+function saveFollowList(list) { try { localStorage.setItem(KEY_LIBRARY_FOLLOW, JSON.stringify(list)) } catch {} }
+function followKey(item) { return [item?.sourceKey || item?._librarySourceKey || item?._srcKey || item?.source || '', item?.api || item?._libraryApi || item?._api || '', item?.detailId || item?.vod_id || item?._detailUrl || item?.id || item?.name || item?.vod_name || ''].join('|') }
+function upsertFollow(item) {
+  const key = followKey(item)
+  if (!key.replace(/\|/g, '')) return
+  const list = getFollowList().filter(x => followKey(x) !== key)
+  list.unshift({ ...item, followKey: key, updatedAt: Date.now() })
+  saveFollowList(list.slice(0, 80))
+}
+function removeFollowByKey(key) { saveFollowList(getFollowList().filter(x => (x.followKey || followKey(x)) !== key)) }
+function isFollowed(item) { const key = followKey(item); return getFollowList().some(x => (x.followKey || followKey(x)) === key) }
+function getLatestPlayForVod(item) {
+  const source = item?.sourceName || item?.source || item?._librarySourceName || ''
+  const id = String(item?.detailId || item?.vod_id || item?.id || '')
+  const name = item?.name || item?.vod_name || ''
+  return getPlayHistory().find(h => (source ? h.source === source : true) && (String(h.id) === id || h.name === name || (name && String(h.name || '').startsWith(name)))) || null
+}
 
 // ── 监听独立播放器窗口的消息（Tauri event + postMessage fallback） ──
 let _playerEventUnlisten = null
@@ -1757,8 +1779,8 @@ function initApp(el) {
       </div>
 
       <div class="tvbox-mode-tabs">
-        <button class="tvbox-mode-tab active" data-mode="vod">${escHtml(mt('vodMode'))}</button>
-        <button class="tvbox-mode-tab" id="t-library-entry" data-mode="library">星枢片库</button>
+        <button class="tvbox-mode-tab active" id="t-library-entry" data-mode="library">星枢片库</button>
+        <button class="tvbox-mode-tab" data-mode="vod">${escHtml(mt('vodMode'))}</button>
         <button class="tvbox-mode-tab" data-mode="live">${escHtml(mt('liveMode'))}</button>
         <button class="tvbox-mode-tab" data-mode="tvboxjson">${escHtml(mt('tvboxJsonMode'))}</button>
         <button class="tvbox-mode-tab" data-mode="crawl">${escHtml(mt('crawlMode'))}</button>
@@ -1828,7 +1850,7 @@ function initApp(el) {
   el.querySelector('#t-player-overlay').addEventListener('click', e => { if (e.target === el.querySelector('#t-player-overlay')) closePlayer() })
 
   // 模式切换（vod / live / tvboxjson）
-  let mode = 'vod'
+  let mode = 'library'
   el.querySelectorAll('.tvbox-mode-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       const newMode = btn.dataset.mode
@@ -1872,9 +1894,10 @@ function initApp(el) {
   // 链接输入按钮
   el.querySelector('#t-url-input')?.addEventListener('click', showUrlInput)
 
-  renderCatBar(); renderSrcBar()
-  if (getPlayHistory().length > 0 && !query) showPlayHistory()
-  else loadData()
+  el.classList.toggle('tvbox-library-mode', true)
+  el.querySelector('#t-catbar').innerHTML = ''
+  el.querySelector('#t-srcbar').innerHTML = ''
+  showLibraryHome()
 
   function doSearch(q) {
     query = q.trim()
@@ -1903,7 +1926,7 @@ function initApp(el) {
     const tags = el.querySelector('#t-history-tags')
     if (!tags) return
     tags.innerHTML = getSearchHistory().slice(0, 8).map(s =>
-      '<span class="tvbox-history-item"><button class="tvbox-history-tag" data-q="' + escHtml(s) + '">' + escHtml(s) + '</button><button class="tvbox-history-remove" data-q="' + escHtml(s) + '" title="删除">×</button></span>'
+      '<div class="tvbox-history-item"><button class="tvbox-history-tag" data-q="' + escHtml(s) + '"><span class="tvbox-history-clock">↻</span><span class="tvbox-history-text">' + escHtml(s) + '</span></button><button class="tvbox-history-remove" data-q="' + escHtml(s) + '" title="删除">×</button></div>'
     ).join('')
     tags.querySelectorAll('.tvbox-history-tag').forEach(tag => {
       tag.addEventListener('click', () => {
@@ -2291,7 +2314,7 @@ function setDebug(msg, detail) {
     content.innerHTML = '<div class="tvbox-loading">' + escHtml(mt('loadingTvboxJson')) + '</div>'
     const api = getActiveTvbox()
     if (!api) {
-      content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('selectTvboxSourceFirstDetailed')) + '</div><div style="text-align:center;margin-top:20px"><button id="t-add-tvbox-btn" style="background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">' + escHtml(mt('addCustomTvboxApi')) + '</button></div>'
+      content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('selectTvboxSourceFirstDetailed')) + '</div><div style="text-align:center;margin-top:20px"><button id="t-add-tvbox-btn" style="background:#0a59f7;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer">' + escHtml(mt('addCustomTvboxApi')) + '</button></div>'
       el.querySelector('#t-add-tvbox-btn')?.addEventListener('click', showApiManage)
       return
     }
@@ -2327,7 +2350,7 @@ function setDebug(msg, detail) {
     container.innerHTML = allSources.map((s, i) =>
       '<button class="tvbox-tab ' + (s.key === activeKey || (i === 0 && !activeKey) ? 'active' : '') + '" data-key="' + s.key + '">' + s.name + '</button>'
     ).join('') +
-    '<button class="tvbox-tab" id="t-add-custom-btn" style="color:#e50914;font-size:13px">＋ ' + escHtml(mt('custom')) + '</button>'
+    '<button class="tvbox-tab" id="t-add-custom-btn" style="color:#317af7;font-size:13px">＋ ' + escHtml(mt('custom')) + '</button>'
     container.querySelectorAll('.tvbox-tab[data-key]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const key = btn.dataset.key
@@ -2349,28 +2372,28 @@ function setDebug(msg, detail) {
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center'
     const custom = getCustomTvbox()
     const activeKey = getActiveTvboxKey()
-    overlay.innerHTML = '<div style="background:#1a1a2e;border-radius:16px;padding:24px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;color:#fff;font-family:sans-serif">' +
+    overlay.innerHTML = '<div style="background:var(--bg-secondary);border-radius:16px;padding:24px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;color:var(--text-primary);font-family:inherit">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
         '<div style="font-size:16px;font-weight:bold">⚙️ ' + escHtml(mt('tvboxApiManageTitle')) + '</div>' +
-        '<button id="t-api-close" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:4px">✕</button>' +
+        '<button id="t-api-close" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;padding:4px">✕</button>' +
       '</div>' +
       '<div style="margin-bottom:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">' + escHtml(mt('builtinTvboxJsonSources')) + '</div>' +
-        TVBOX_BUILTIN.map(a => '<div class="tvbox-src-item' + (a.key === activeKey ? ' active' : '') + '" data-key="' + a.key + '" data-type="builtin" style="padding:10px 12px;background:' + (a.key === activeKey ? '#2a2a4a' : '#252540') + ';border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
-          '<span>' + a.name + '</span><span style="font-size:12px;color:#888">' + (a.note || '') + '</span></div>').join('') +
+        '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">' + escHtml(mt('builtinTvboxJsonSources')) + '</div>' +
+        TVBOX_BUILTIN.map(a => '<div class="tvbox-src-item' + (a.key === activeKey ? ' active' : '') + '" data-key="' + a.key + '" data-type="builtin" style="padding:10px 12px;background:' + (a.key === activeKey ? 'var(--accent-muted)' : 'var(--bg-tertiary)') + ';border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
+          '<span>' + a.name + '</span><span style="font-size:12px;color:var(--text-secondary)">' + (a.note || '') + '</span></div>').join('') +
       '</div>' +
       '<div style="margin-bottom:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">' + escHtml(mt('customTvboxApiCount', { count: custom.length })) + '</div>' +
-        (custom.length ? custom.map(a => '<div style="padding:10px 12px;background:#252540;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
+        '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">' + escHtml(mt('customTvboxApiCount', { count: custom.length })) + '</div>' +
+        (custom.length ? custom.map(a => '<div style="padding:10px 12px;background:var(--bg-tertiary);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
           '<div style="overflow:hidden"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.name) + '</div>' +
-          '<div style="font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.url) + '</div></div>' +
-          '<button class="t-del-api" data-key="' + a.key + '" style="background:#e50914;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">' + escHtml(mt('delete')) + '</button></div>').join('') : '<div style="color:#555;font-size:13px;text-align:center;padding:12px">' + escHtml(mt('noCustomApi')) + '</div>') +
+          '<div style="font-size:11px;color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px">' + escHtml(a.url) + '</div></div>' +
+          '<button class="t-del-api" data-key="' + a.key + '" style="background:#0a59f7;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">' + escHtml(mt('delete')) + '</button></div>').join('') : '<div style="color:var(--text-tertiary);font-size:13px;text-align:center;padding:12px">' + escHtml(mt('noCustomApi')) + '</div>') +
       '</div>' +
-      '<div style="border-top:1px solid #333;padding-top:16px">' +
-        '<div style="font-size:13px;color:#888;margin-bottom:8px">' + escHtml(mt('addCustomTvboxJsonApi')) + '</div>' +
-        '<input id="t-api-name" placeholder="' + escHtml(mt('apiNamePlaceholder')) + '" style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
-        '<input id="t-api-url" placeholder="' + escHtml(mt('apiUrlPlaceholder')) + '" style="width:100%;background:#252540;border:1px solid #333;color:#fff;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
-        '<button id="t-api-add-btn" style="width:100%;background:#e50914;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">' + escHtml(mt('addAndUse')) + '</button>' +
+      '<div style="border-top:1px solid var(--border-primary);padding-top:16px">' +
+        '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">' + escHtml(mt('addCustomTvboxJsonApi')) + '</div>' +
+        '<input id="t-api-name" placeholder="' + escHtml(mt('apiNamePlaceholder')) + '" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border-primary);color:var(--text-primary);border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
+        '<input id="t-api-url" placeholder="' + escHtml(mt('apiUrlPlaceholder')) + '" style="width:100%;background:var(--bg-tertiary);border:1px solid var(--border-primary);color:var(--text-primary);border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:8px;display:block"/>' +
+        '<button id="t-api-add-btn" style="width:100%;background:#0a59f7;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">' + escHtml(mt('addAndUse')) + '</button>' +
       '</div>' +
     '</div>'
     document.body.appendChild(overlay)
@@ -2392,7 +2415,7 @@ function setDebug(msg, detail) {
         if (src?.url) {
           navigator.clipboard?.writeText(src.url).catch(() => {})
           const orig = item.style.background
-          item.style.background = '#3a3a6a'
+          item.style.background = 'var(--accent-muted)'
           setTimeout(() => { item.style.background = orig }, 300)
         }
       })
@@ -2603,7 +2626,7 @@ function setDebug(msg, detail) {
       setTimeout(() => {
         const iframe = document.getElementById('tv-iframe')
         if (iframe && iframe.style.display !== 'none') {
-          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">' + escHtml(mt('playbackAddressInvalid')) + '</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">' + escHtml(mt('openInBrowser')) + '</a></div>'
+          body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:var(--text-secondary);margin-bottom:14px">' + escHtml(mt('playbackAddressInvalid')) + '</p><a href="' + safeUrl + '" target="_blank" class="tvbox-open-ext">' + escHtml(mt('openInBrowser')) + '</a></div>'
         }
       }, 10000)
     }
@@ -2676,9 +2699,9 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
   async function showLibraryHome(initialQuery = '') {
     const content = el.querySelector('#t-content')
     const sources = [
-      { key: 'yinghua', name: YINGHUA_SOURCE_NAME, desc: '公开页面分类 / 搜索 / 多线路播放', categories: YINGHUA_CATEGORIES, loadCategories: loadYinghuaCategories, list: loadYinghuaCategory, search: searchYinghua },
       { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, desc: 'PC 实时入口，分类 / 搜索 / 播放列表', categories: NAPP03_CATEGORIES, groups: NAPP03_GROUPS, activeGroupId: 'home', loadCategories: loadNapp03Categories, list: loadAiyiCategory, search: searchAiyiNapp },
-      { key: 'ip51122', name: IP51122_SOURCE_NAME, desc: '实时首页 / 分类 / 搜索 / 原站详情播放', categories: PAGE_LIBRARY_CATEGORIES, loadCategories: loadIp51122Categories, list: loadIp51122Category, search: searchIp51122 },
+      { key: 'yinghua', name: YINGHUA_SOURCE_NAME, desc: '公开页面分类 / 搜索 / 多线路播放', categories: YINGHUA_CATEGORIES, loadCategories: loadYinghuaCategories, list: loadYinghuaCategory, search: searchYinghua },
+      { key: 'ip51122', name: IP51122_SOURCE_NAME, desc: '实时首页 / 分类 / 搜索 / 详情播放', categories: PAGE_LIBRARY_CATEGORIES, loadCategories: loadIp51122Categories, list: loadIp51122Category, search: searchIp51122 },
     ]
     let activeSourceKey = sources[0].key
     let activeCategory = sources[0].categories[0]
@@ -2688,13 +2711,14 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     let libraryCursor = ''
     let libraryPaging = null
     let loadingToken = 0
+    let activeLibraryView = 'home'
     const resetLibraryPaging = () => {
       libraryPage = 1
       libraryCursor = ''
       libraryPaging = null
     }
 
-    const sourceByKey = key => sources.find(s => s.key === key) || sources[0]
+    const sourceByKey = key => sources.find(s => s.key === key) || VOD_SOURCES.find(s => s.key === key) || sources[0]
     const refreshSourceCategories = async (source) => {
       if (!source?.loadCategories || source._categoriesLoaded) return source.categories
       try {
@@ -2710,15 +2734,11 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       if (source.groups && !source.groups.some(group => group.id === source.activeGroupId)) source.activeGroupId = source.groups[0]?.id
       return source.categories
     }
-    const originUrlForSource = source => source.key === 'a_napp03' ? NAPP03_BOOT_BASE : source.key === 'ip51122' ? IP51122_LIST_BASE : ''
     const renderOriginFallback = (source, message = '') => {
-      const originUrl = originUrlForSource(source)
-      if (!originUrl) return ''
       return '<div class="tvbox-empty tvbox-origin-fallback">' +
         '<div class="tvbox-empty-icon">🌐</div>' +
         '<div class="tvbox-empty-title">原站数据未接入成功</div>' +
         '<div class="tvbox-empty-sub">' + escHtml(message || '当前站点需要原站 SPA/API 或浏览器防护会话，内嵌模式已停用，避免黑屏误导。') + '</div>' +
-        '<a class="tvbox-open-ext" href="' + escHtml(originUrl) + '" target="_blank" rel="noreferrer">打开原站验证</a>' +
       '</div>'
     }
     const renderNapp03Filters = (source) => {
@@ -2735,28 +2755,55 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     }
     const renderShell = () => {
       const source = sourceByKey(activeSourceKey)
+      const libraryHistory = getSearchHistory().slice(0, 8)
       content.innerHTML = '<div class="tvbox-library-workspace">' +
         '<aside class="tvbox-library-sidebar">' +
-          '<div class="tvbox-library-side-title">星枢片库</div>' +
-          '<div class="tvbox-library-side-sub">实时资源站点</div>' +
-          sources.map(s => '<button class="tvbox-library-source' + (s.key === activeSourceKey ? ' active' : '') + '" data-source="' + escHtml(s.key) + '"><strong>' + escHtml(s.name) + '</strong><span>' + escHtml(s.desc) + '</span></button>').join('') +
+          '<button class="tvbox-library-nav' + (activeLibraryView === 'home' ? ' active' : '') + '" data-view="home"><strong>星枢片库</strong><span>默认入口 / 天穹优先</span></button>' +
+          '<button class="tvbox-library-nav' + (activeLibraryView === 'follow' ? ' active' : '') + '" data-view="follow"><strong>我的追剧</strong><span>收藏视频 / 续播更新</span></button>' +
+          '<button class="tvbox-library-nav' + (activeLibraryView === 'history' ? ' active' : '') + '" data-view="history"><strong>播放历史</strong><span>最近观看 / 继续播放</span></button>' +
+          '<div class="tvbox-library-side-title">实时资源站点</div>' +
+          '<div class="tvbox-library-side-sub">分类浏览</div>' +
+          sources.map(s => '<button class="tvbox-library-source' + (activeLibraryView === 'home' && s.key === activeSourceKey ? ' active' : '') + '" data-source="' + escHtml(s.key) + '"><strong>' + escHtml(s.name) + '</strong><span>' + escHtml(s.desc) + '</span></button>').join('') +
         '</aside>' +
         '<main class="tvbox-library-main">' +
           '<div class="tvbox-library-toolbar">' +
             '<div><div class="tvbox-library-title">' + escHtml(source.name) + '</div><div class="tvbox-library-desc">' + escHtml(source.desc) + '</div></div>' +
-            '<div class="tvbox-library-search"><input id="library-search-input" placeholder="搜索星枢片库三站资源" value="' + escHtml(libraryQuery) + '" /><button id="library-search-btn">搜索</button>' + (originUrlForSource(source) ? '<button id="library-origin-btn" type="button">打开原站</button>' : '') + '</div>' +
+            '<div class="tvbox-library-search"><input id="library-search-input" name="xingshu-library-search" type="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="搜索星枢片库 + 影视点播全部资源" value="' + escHtml(libraryQuery) + '" /><button id="library-search-btn">搜索</button></div>' +
           '</div>' +
+          '<div class="tvbox-library-search-history"' + (libraryHistory.length ? '' : ' style="display:none"') + '>' + libraryHistory.map(q => '<span class="tvbox-library-search-chip"><button data-q="' + escHtml(q) + '">' + escHtml(q) + '</button><button class="remove" data-remove-q="' + escHtml(q) + '">×</button></span>').join('') + '</div>' +
           '<div class="tvbox-library-groups">' + (source.groups ? source.groups.map(group => '<button class="tvbox-library-group' + (group.id === (source.activeGroupId || source.groups[0]?.id) ? ' active' : '') + '" data-group="' + escHtml(group.id) + '">' + escHtml(group.name) + '</button>').join('') : '') + '</div>' +
           '<div class="tvbox-library-cats">' + source.categories.filter(cat => !source.groups || cat.groupId === (source.activeGroupId || source.groups[0]?.id)).map(cat => '<button class="tvbox-library-cat' + (cat.id === activeCategory.id ? ' active' : '') + '" data-cat="' + escHtml(cat.id) + '">' + escHtml(cat.name) + '</button>').join('') + '</div>' +
           renderNapp03Filters(source) +
           '<div id="library-list" class="tvbox-library-list"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div></div>' +
         '</main>' +
       '</div>'
-      content.querySelector('#library-origin-btn')?.addEventListener('click', () => {
-        const originUrl = originUrlForSource(sourceByKey(activeSourceKey))
-        if (originUrl) window.open(originUrl, '_blank', 'noopener,noreferrer')
-      })
+      
+      content.querySelectorAll('.tvbox-library-nav').forEach(btn => btn.addEventListener('click', () => {
+        activeLibraryView = btn.dataset.view || 'home'
+        libraryQuery = ''
+        resetLibraryPaging()
+        renderShell()
+        if (activeLibraryView === 'follow') renderLibraryFollowList()
+        else if (activeLibraryView === 'history') renderLibraryHistoryList()
+        else loadLibraryList()
+      }))
+      content.querySelectorAll('[data-q]').forEach(btn => btn.addEventListener('click', () => {
+        activeLibraryView = 'home'
+        libraryQuery = btn.dataset.q || ''
+        resetLibraryPaging()
+        renderShell()
+        loadLibraryList()
+      }))
+      content.querySelectorAll('[data-remove-q]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation()
+        removeSearchHistory(btn.dataset.removeQ || '')
+        renderShell()
+        if (activeLibraryView === 'follow') renderLibraryFollowList()
+        else if (activeLibraryView === 'history') renderLibraryHistoryList()
+        else loadLibraryList()
+      }))
       content.querySelectorAll('.tvbox-library-source').forEach(btn => btn.addEventListener('click', async () => {
+        activeLibraryView = 'home'
         activeSourceKey = btn.dataset.source
         const next = sourceByKey(activeSourceKey)
         activeCategory = next.categories[0]
@@ -2799,13 +2846,19 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       }))
       content.querySelector('#library-search-btn')?.addEventListener('click', () => {
         libraryQuery = content.querySelector('#library-search-input')?.value.trim() || ''
+        if (libraryQuery) addSearchHistory(libraryQuery)
+        activeLibraryView = 'home'
         resetLibraryPaging()
+        renderShell()
         loadLibraryList()
       })
       content.querySelector('#library-search-input')?.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
           libraryQuery = e.currentTarget.value.trim()
+          if (libraryQuery) addSearchHistory(libraryQuery)
+          activeLibraryView = 'home'
           resetLibraryPaging()
+          renderShell()
           loadLibraryList()
         }
       })
@@ -2826,11 +2879,77 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       const detailId = escHtml((itemSourceKey === 'ip51122' && item._detailUrl) ? item._detailUrl : (item.vod_id || item._detailUrl || ''))
       const poster = renderPosterImg(item.vod_pic || '', item.vod_name || '', itemSourceKey, itemApi || (source.key === 'yinghua' ? YINGHUA_BASE : source.key === 'a_napp03' ? NAPP03_BASE : IP51122_DETAIL_BASE), '影')
       const note = escHtml(item.vod_remarks || item.type_name || item.vod_year || '')
+      const followed = isFollowed({ sourceKey: itemSourceKey, api: itemApi, detailId: itemSourceKey === 'ip51122' && item._detailUrl ? item._detailUrl : (item.vod_id || item._detailUrl || ''), name: item.vod_name || item.name, sourceName: itemSourceName })
       return '<article class="tvbox-library-vod" data-source="' + escHtml(source.key) + '" data-item-source="' + escHtml(itemSourceKey) + '" data-api="' + escHtml(itemApi) + '" data-source-name="' + escHtml(itemSourceName) + '" data-detail="' + detailId + '" data-action="' + escHtml(item._libraryAction || '') + '" data-name="' + title + '" data-pic="' + escHtml(item.vod_pic || '') + '">' +
         '<button class="tvbox-library-vod-poster">' + poster + (note ? '<span>' + note + '</span>' : '') + '</button>' +
         '<div class="tvbox-library-vod-title">' + title + '</div>' +
         '<div class="tvbox-library-vod-meta">' + escHtml(itemSourceName) + '</div>' +
+        '<div class="tvbox-library-card-actions"><button data-open-saved>播放详情</button><button data-follow-card>' + (followed ? '已追剧' : '追剧') + '</button></div>' +
       '</article>'
+    }
+
+    const renderLibraryEntryGrid = (title, subtitle, items, emptyText, modeName) => {
+      const box = content.querySelector('#library-list')
+      if (!box) return
+      if (!items.length) {
+        box.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-title">' + escHtml(emptyText) + '</div><div class="tvbox-empty-sub">搜索或播放后这里会自动记录，方便继续观看。</div></div>'
+        return
+      }
+      box.innerHTML = '<section class="tvbox-library-section"><div class="tvbox-library-section-head"><h3>' + escHtml(title) + '</h3><span>' + escHtml(subtitle) + '</span></div><div class="tvbox-library-card-grid">' + items.map(entry => {
+        const latest = entry._history || getLatestPlayForVod(entry)
+        const progress = latest?.duration > 0 ? Math.min(100, Math.round((latest.progress || 0) / latest.duration * 100)) : 0
+        return '<article class="tvbox-library-vod tvbox-library-saved" data-source="' + escHtml(entry.sourceKey || 'a_napp03') + '" data-item-source="' + escHtml(entry.sourceKey || '') + '" data-api="' + escHtml(entry.api || '') + '" data-source-name="' + escHtml(entry.sourceName || entry.source || '') + '" data-detail="' + escHtml(entry.detailId || entry.id || '') + '" data-action="' + escHtml(entry.action || '') + '" data-name="' + escHtml(entry.name || '') + '" data-pic="' + escHtml(entry.pic || '') + '" data-resume-url="' + escHtml(latest?.epUrl || '') + '" data-resume-ep="' + escHtml(latest?.epName || '') + '" data-resume-progress="' + escHtml(latest?.progress || 0) + '" data-resume-duration="' + escHtml(latest?.duration || 0) + '">' +
+          '<button class="tvbox-library-vod-poster">' + renderPosterImg(entry.pic || '', entry.name || '', entry.sourceKey || '', entry.api || '', '影') + (latest?.epName ? '<span>看到 ' + escHtml(latest.epName) + '</span>' : '') + '</button>' +
+          '<div class="tvbox-library-vod-title">' + escHtml(entry.name || '未命名') + '</div>' +
+          '<div class="tvbox-library-vod-meta">' + escHtml((entry.sourceName || entry.source || '星枢片库') + (latest?.epName ? ' · 可续播' : '')) + '</div>' +
+          (progress ? '<div class="tvbox-library-progress"><i style="width:' + progress + '%"></i></div>' : '') +
+          '<div class="tvbox-library-card-actions"><button data-resume-saved ' + (latest?.epUrl ? '' : 'disabled') + '>续播</button><button data-open-saved>播放详情</button>' + (modeName === 'follow' ? '<button data-remove-follow="' + escHtml(entry.followKey || followKey(entry)) + '">取消追剧</button>' : '') + '</div>' +
+        '</article>'
+      }).join('') + '</div></section>'
+      bindLibraryResult(box, sourceByKey(activeSourceKey), {})
+      box.querySelectorAll('[data-resume-saved]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation()
+        if (btn.disabled) return
+        const card = btn.closest('.tvbox-library-vod')
+        const resumeUrl = card?.dataset.resumeUrl || ''
+        if (!card || !resumeUrl) return
+        const progress = Number(card.dataset.resumeProgress || 0)
+        const duration = Number(card.dataset.resumeDuration || 0)
+        upsertPlayHistory({
+          id: card.dataset.detail, name: card.dataset.name, pic: card.dataset.pic,
+          source: card.dataset.sourceName, epName: card.dataset.resumeEp,
+          epUrl: resumeUrl, progress, duration,
+          allUrls: [resumeUrl], allEps: [{ epName: card.dataset.resumeEp || '续播', url: resumeUrl }],
+        })
+        openPlayerVod(card.dataset.name + (card.dataset.resumeEp ? ' ' + card.dataset.resumeEp : ''), resumeUrl, card.dataset.detail, card.dataset.sourceName, card.dataset.resumeEp, card.dataset.pic, [resumeUrl], progress, [{ epName: card.dataset.resumeEp || '续播', url: resumeUrl }])
+      }))
+      box.querySelectorAll('[data-remove-follow]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation()
+        removeFollowByKey(btn.dataset.removeFollow || '')
+        renderLibraryFollowList()
+      }))
+    }
+
+    const renderLibraryFollowList = () => renderLibraryEntryGrid('我的追剧', '收藏的视频会结合播放进度显示续播状态', getFollowList(), '还没有追剧收藏', 'follow')
+    const renderLibraryHistoryList = () => {
+      const rows = getPlayHistory().map(h => ({
+        sourceKey: h._srcKey || '',
+        sourceName: h.source || '',
+        source: h.source || '',
+        detailId: h.id,
+        name: h.name || h.epName || '未命名',
+        pic: h.pic || '',
+        id: h.id,
+        _history: h,
+      }))
+      const seen = new Set()
+      const items = rows.filter(item => {
+        const key = followKey(item)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).slice(0, 60)
+      renderLibraryEntryGrid('播放历史', '按最近观看排序，可继续打开详情播放', items, '暂无播放历史', 'history')
     }
 
     const renderCards = (items, source, result = {}) => {
@@ -2846,7 +2965,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     }
 
     const openLibraryDetail = async (card) => {
-      const source = sourceByKey(card.dataset.source)
+      const source = sourceByKey(card.dataset.itemSource || card.dataset.source)
       const detail = card.dataset.detail
       if (!detail) return alert('缺少详情地址')
       if (card.dataset.action === 'napp03-url-list') {
@@ -2861,7 +2980,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       try {
         let resolved
         if (source.key === 'a_napp03' || card.dataset.itemSource === 'a_napp03') resolved = await withLibraryTimeout(fetchPageApiDetail(sourceByKey('a_napp03'), detail, card.dataset.name, card.dataset.pic), 12000)
-        else if (card.dataset.api && card.dataset.source !== 'ip51122') resolved = await fetchCmsVodDetail(card.dataset.api, detail, card.dataset.name, card.dataset.pic)
+        else if (card.dataset.api && card.dataset.itemSource !== 'ip51122') resolved = await fetchCmsVodDetail(card.dataset.api, detail, card.dataset.name, card.dataset.pic)
         else resolved = source.key === 'yinghua'
           ? await withLibraryTimeout(openYinghuaDetail({ vod_id: detail, vod_name: card.dataset.name, vod_pic: card.dataset.pic, _detailUrl: `${YINGHUA_BASE}/index.php/vod/detail/id/${detail}.html` }), 12000)
           : await withLibraryTimeout(fetchPageApiDetail(source, detail, card.dataset.name, card.dataset.pic), 12000)
@@ -2896,7 +3015,24 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
           }
         } catch {}
       }))
-      return { list: results, total: results.length, page: libraryPage }
+      await Promise.allSettled(VOD_SOURCES.filter(source => !sources.some(s => s.key === source.key)).map(async source => {
+        try {
+          const qe = encodeURIComponent(keyword)
+          let json = { list: [] }
+          try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=' + libraryPage) } catch {}
+          if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=' + libraryPage) } catch {} }
+          if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe) } catch {} }
+          for (const raw of (json?.list || [])) {
+            const item = normalizeVodItem(raw, source)
+            if (!movieNameMatches(item, keyword)) continue
+            const key = source.key + ':' + (item.vod_id || item._detailUrl || item.vod_name)
+            if (seen.has(key)) continue
+            seen.add(key)
+            results.push({ ...item, _librarySourceName: source.name, _librarySourceKey: source.key, _libraryApi: source.api || '' })
+          }
+        } catch {}
+      }))
+      return { list: results, total: results.length, page: libraryPage, hasMore: results.length >= (sources.length + VOD_SOURCES.length) * 8 }
     }
 
     const withLibraryTimeout = (promise, ms = 15000) => Promise.race([
@@ -2911,7 +3047,18 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
         libraryPaging = { mode: 'napp03-url-list', sourceKey: source.key, rawUrl: btn.dataset.url, title, items: [], nextCursor: '', exhausted: false }
         await loadPagedLibraryResult(box, source)
       }))
-      box.querySelectorAll('.tvbox-library-vod').forEach(card => card.addEventListener('click', () => openLibraryDetail(card)))
+      box.querySelectorAll('[data-follow-card]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation()
+        const card = btn.closest('.tvbox-library-vod')
+        if (!card) return
+        upsertFollow({ sourceKey: card.dataset.itemSource || card.dataset.source, sourceName: card.dataset.sourceName, api: card.dataset.api, detailId: card.dataset.detail, action: card.dataset.action, name: card.dataset.name, pic: card.dataset.pic })
+        btn.textContent = '已追剧'
+        btn.classList.add('active')
+      }))
+      box.querySelectorAll('.tvbox-library-vod').forEach(card => card.addEventListener('click', e => {
+        if (e.target.closest('[data-follow-card], [data-remove-follow]')) return
+        openLibraryDetail(card)
+      }))
       box.querySelector('#library-prev')?.addEventListener('click', async () => {
         if (libraryPage <= 1) return
         libraryPage--
@@ -2977,9 +3124,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       try {
         let result = libraryQuery ? { list: [], total: 0, page: libraryPage } : null
         if (libraryQuery) {
-          result = source?.search
-            ? await withLibraryTimeout(source.search(libraryQuery, libraryPage), 18000).catch(() => searchLibraryFallbackSources(libraryQuery))
-            : await withLibraryTimeout(searchLibraryFallbackSources(libraryQuery), 18000).catch(() => ({ list: [] }))
+          result = await withLibraryTimeout(searchLibraryFallbackSources(libraryQuery), 18000).catch(() => ({ list: [] }))
           result.page = libraryPage
         } else if (source.key === 'a_napp03' && activeCategory?.typeId !== 'home') {
           if (!libraryPaging || libraryPaging.mode !== 'napp03-category') {
@@ -3050,23 +3195,25 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     const backBtn = '<div style="margin-bottom:12px"><button class="tvbox-back-btn" id="t-detail-back">' + escHtml(mt('backToList')) + '</button></div>'
     const firstUrls = episodes[preferredSi]?.urls || []
     const siHtml = episodes.length > 1
-      ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">' + escHtml(mt('selectSource')) + '</span>' +
+      ? '<section class="tvbox-line-panel"><div class="tvbox-line-panel-head"><span>' + escHtml(mt('selectSource')) + '</span><em>' + episodes.length + ' 条线路</em></div><div class="tvbox-line-tabs">' +
           episodes.map((e, i) => {
             const meta = [e.tag, e.tips, e.total ? `${e.total}集` : ''].filter(Boolean).join(' · ')
-            return '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '" title="' + escHtml(meta || e.name) + '">' + escHtml(e.name) + (meta ? '<small style="margin-left:4px;opacity:.72">' + escHtml(meta) + '</small>' : '') + (i===preferredSi?' ★':'') + '</button>'
+            return '<button class="tvbox-tab tvbox-line-tab' + (i===preferredSi?' active':'') + '" data-si="' + i + '" title="' + escHtml(meta || e.name) + '"><strong>' + escHtml(e.name) + '</strong>' + (meta ? '<small>' + escHtml(meta) + '</small>' : '') + (i===preferredSi?' <b>推荐</b>':'') + '</button>'
           }).join('') +
-        '</div>'
+        '</div></section>'
       : ''
 
     const sourceForPic = VOD_SOURCES.find(s => s.name === sourceName) || {}
     const picCands = buildPicCandidates(item.vod_pic, sourceForPic.key, sourceForPic.api || '')
     body.innerHTML =
       backBtn +
-      '<div class="tvbox-ep-info">' +
-        renderPosterImg(item.vod_pic, item.vod_name, sourceForPic.key || item._srcKey, sourceForPic.api || item._api || '').replace('<img ', '<img class="tvbox-ep-pic" ') +
-        (doubanRating ? '<div style="color:#f5c518;font-size:14px;margin:4px 0">' + doubanRating + '</div>' : '') +
-        '<div class="tvbox-ep-desc">' + (item.vod_content || mt('noDescription')) + '</div>' +
-      '</div>' +
+      '<section class="tvbox-ep-info">' +
+        '<div class="tvbox-ep-poster-wrap">' + renderPosterImg(item.vod_pic, item.vod_name, sourceForPic.key || item._srcKey, sourceForPic.api || item._api || '').replace('<img ', '<img class="tvbox-ep-pic" ') + '</div>' +
+        '<div class="tvbox-ep-meta">' +
+          (doubanRating ? '<div class="tvbox-ep-rating">' + doubanRating + '</div>' : '') +
+          '<div class="tvbox-ep-desc">' + (item.vod_content || mt('noDescription')) + '</div>' +
+        '</div>' +
+      '</section>' +
       siHtml +
       '<div class="tvbox-ep-list-title" id="t-ep-list-title">' + escHtml(mt('episodeListCount', { count: firstUrls.length })) + '</div>' +
       '<div class="tvbox-ep-grid" id="t-ep-grid">' +
@@ -3611,7 +3758,7 @@ function pickDirectUrl(url) {
     const safeUrl = normalizeHttpUrl(url) || url || '#'
     return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;color:#f87171;font-size:13px;text-align:center;padding:12px">' +
       '<div>' + escHtml(message || mt('playbackFailed')) + '</div>' +
-      (safeUrl && safeUrl !== '#' ? '<a href="' + escHtml(safeUrl) + '" target="_blank" rel="noopener" style="color:#a78bfa;text-decoration:none">' + escHtml(mt('openInBrowser')) + '</a>' : '') +
+      (safeUrl && safeUrl !== '#' ? '<a href="' + escHtml(safeUrl) + '" target="_blank" rel="noopener" style="color:#5c97ff;text-decoration:none">' + escHtml(mt('openInBrowser')) + '</a>' : '') +
     '</div>'
   }
 
@@ -3896,7 +4043,7 @@ function pickDirectUrl(url) {
     items.forEach(ep => {
       const btn = document.createElement('button')
       btn.textContent = ep.epName || ep.name || ep.url
-      btn.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;color:' + (ep.url === _floatState.currentUrl ? '#e74c3c' : '#ccc') + ';font-size:12px;cursor:pointer'
+      btn.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;color:' + (ep.url === _floatState.currentUrl ? '#5c97ff' : '#ccc') + ';font-size:12px;cursor:pointer'
       btn.addEventListener('click', () => {
         switchFloatEpisode(ep.url, 0)
         menu.remove()
@@ -4034,7 +4181,7 @@ function pickDirectUrl(url) {
         </div>
         <div class="tvbox-crawl-form" style="margin-bottom:8px">
           <input id="t-crawl-url" type="url" placeholder="${mt('crawlUrlPlaceholder')}" />
-          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#e74c3c">🔬 ${mt('deepSniff')}</button>
+          <button id="t-crawl-go" class="tvbox-crawl-btn" style="background:#0a59f7">🔬 ${mt('deepSniff')}</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text-secondary)">
@@ -4665,7 +4812,7 @@ function pickDirectUrl(url) {
     // 无法直接提取 hash → vod_id 映射，改用 iframe 尝试
     const vidWrap = document.querySelector('#_fvid')
     if (vidWrap) {
-      vidWrap.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b6b8a;font-size:13px">${mt('sharePageBrowserRequired')}</div>`
+      vidWrap.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:13px">${mt('sharePageBrowserRequired')}</div>`
     }
     // 更新说明
     const urlBar = document.querySelector('.tvbox-float-url-bar')

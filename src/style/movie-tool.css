@@ -1,30 +1,34 @@
 /* ============================================
-   星枢影视 - Premium OTT UI 样式
-   2026-04-19 v9
+   星枢影视 · 企业版 - HarmonyOS Design 风格
+   2026-07-03 v10 · 华为官方设计语言（深色模式），主色 Huawei Blue #0A59F7
    ============================================ */
 
 /* ── 重置 & 变量 ── */
 .tvbox-root {
-  --bg-primary: #080810;
-  --bg-elevated: #0f0f1a;
-  --bg-card: #14141f;
-  --bg-card-hover: #1a1a28;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-hover: rgba(255, 255, 255, 0.15);
-  --text-primary: #f0f0f8;
-  --text-secondary: #9090b0;
-  --text-muted: #55556a;
-  --accent: #7c3aed;
-  --accent2: #a855f7;
-  --accent-gradient: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
-  --glass-bg: rgba(15, 15, 26, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.06);
+  /* 日间模式（默认，HarmonyOS Light） */
+  --bg-primary: #f1f3f5;
+  --bg-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f5f7fa;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.18);
+  --text-primary: #1a1c1f;
+  --text-secondary: #5f6672;
+  --text-muted: #99a2b3;
+  --accent: #0a59f7;
+  --accent2: #2e6ff2;
+  --accent-gradient: linear-gradient(135deg, #0a59f7 0%, #4d8dff 100%);
+  --glass-bg: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --nav-fade: rgba(241, 243, 245, 0.92);
+  --skeleton-a: #e8ebef;
+  --skeleton-b: #f6f8fa;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.5);
-  --shadow-float: 0 8px 40px rgba(0, 0, 0, 0.7);
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-float: 0 8px 40px rgba(0, 0, 0, 0.16);
+  --font: 'HarmonyOS Sans SC', 'HarmonyOS Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   font-family: var(--font);
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -34,12 +38,34 @@
   box-sizing: border-box;
 }
 
+/* 夜间模式（跟随桌面端 data-theme） */
+[data-theme="dark"] .tvbox-root {
+  --bg-primary: #0c0f14;
+  --bg-elevated: #151920;
+  --bg-card: #1b2029;
+  --bg-card-hover: #232935;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --text-primary: #e8ebf0;
+  --text-secondary: #99a2b3;
+  --text-muted: #5c6575;
+  --accent: #317af7;
+  --accent2: #5c97ff;
+  --glass-bg: rgba(18, 22, 30, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --nav-fade: rgba(12, 15, 20, 0.92);
+  --skeleton-a: #1e242e;
+  --skeleton-b: #2a3140;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
 /* ── 顶部导航 ── */
 .tvbox-navbar {
   position: sticky;
   top: 0;
   z-index: 200;
-  background: linear-gradient(to bottom, var(--bg-primary) 0%, rgba(8, 8, 16, 0.92) 100%);
+  background: linear-gradient(to bottom, var(--bg-primary) 0%, var(--nav-fade) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
@@ -59,22 +85,20 @@
 .tvbox-brand-icon {
   width: 36px;
   height: 36px;
-  background: var(--accent-gradient);
-  border-radius: 10px;
+  background: var(--accent);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   flex-shrink: 0;
-  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.4);
+  box-shadow: none;
 }
 
 .tvbox-brand-name {
   font-size: 18px;
   font-weight: 700;
-  background: linear-gradient(90deg, #a78bfa, #ec4899);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--text-primary);
   letter-spacing: 0.5px;
 }
 
@@ -85,7 +109,7 @@
   align-items: center;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: 8px;
   padding: 0 4px 0 14px;
   gap: 8px;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -93,7 +117,7 @@
 
 .tvbox-search-box:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+  box-shadow: 0 0 0 3px rgba(49, 122, 247, 0.15);
 }
 
 .tvbox-search-icon { font-size: 14px; flex-shrink: 0; }
@@ -112,9 +136,9 @@
 .tvbox-search-input::placeholder { color: var(--text-muted); }
 
 .tvbox-search-btn {
-  background: var(--accent-gradient);
+  background: var(--accent);
   border: none;
-  border-radius: 20px;
+  border-radius: 6px;
   padding: 7px 16px;
   font-size: 13px;
   font-weight: 600;
@@ -125,7 +149,7 @@
   flex-shrink: 0;
 }
 
-.tvbox-search-btn:hover { opacity: 0.88; transform: scale(1.03); }
+.tvbox-search-btn:hover { background: var(--accent2); }
 
 /* ── 模式切换 ── */
 .tvbox-mode-tabs { display: flex; gap: 6px; }
@@ -133,7 +157,7 @@
 .tvbox-mode-tab {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 6px;
   padding: 6px 14px;
   font-size: 13px;
   font-weight: 500;
@@ -146,10 +170,9 @@
 .tvbox-mode-tab:hover { border-color: var(--border-hover); color: var(--text-primary); }
 
 .tvbox-mode-tab.active {
-  background: var(--accent-gradient);
-  border-color: transparent;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.35);
 }
 
 /* ── 分类横条 ── */
@@ -166,7 +189,7 @@
 .tvbox-cat-chip {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 6px;
   padding: 5px 12px;
   font-size: 12px;
   color: var(--text-secondary);
@@ -222,7 +245,7 @@
 .tvbox-src-chip:hover { border-color: var(--accent); color: var(--accent2); }
 
 .tvbox-src-chip.active {
-  background: rgba(124, 58, 237, 0.18);
+  background: rgba(49, 122, 247, 0.18);
   border-color: var(--accent);
   color: var(--accent2);
   font-weight: 600;
@@ -250,7 +273,7 @@
 .tvbox-section-title { font-size: 14px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
 .tvbox-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .tvbox-section-heading { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--text-primary); }
-.tvbox-section-heading-dot { width: 4px; height: 16px; border-radius: 2px; background: var(--accent-gradient); }
+.tvbox-section-heading-dot { width: 4px; height: 16px; border-radius: 2px; background: var(--accent); }
 
 .tvbox-clear-btn {
   background: var(--bg-elevated);
@@ -278,7 +301,7 @@
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
-.tvbox-card:hover .tvbox-card-inner { transform: translateY(-3px); border-color: var(--border-hover); box-shadow: var(--shadow-card); }
+.tvbox-card:hover .tvbox-card-inner { border-color: var(--accent); box-shadow: var(--shadow-card); }
 
 .tvbox-card-pic { position: relative; aspect-ratio: 2/3; background: var(--bg-elevated); overflow: hidden; }
 
@@ -303,7 +326,7 @@
   border-radius: 4px;
   padding: 2px 5px;
   font-size: 9px;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.92);
   max-width: 90%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -397,7 +420,7 @@
   background: var(--bg-card-hover);
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 4px 16px rgba(49, 122, 247, 0.2);
 }
 
 .tvbox-live-icon { font-size: 20px; }
@@ -529,7 +552,7 @@
 }
 .tvbox-player-mini:hover { background: var(--bg-elevated); color: var(--accent); }
 
-.tvbox-player-close:hover { background: #2a2a3a; border-color: #e53e3e; color: #fc8181; }
+.tvbox-player-close:hover { background: var(--bg-card-hover); border-color: #e53e3e; color: #fc8181; }
 
 .tvbox-player-body {
   flex: 1;
@@ -625,7 +648,7 @@
 .tvbox-source-tab:hover { border-color: var(--accent); color: var(--accent2); }
 
 .tvbox-source-tab.active {
-  background: rgba(124, 58, 237, 0.2);
+  background: rgba(49, 122, 247, 0.2);
   border-color: var(--accent);
   color: var(--accent2);
   font-weight: 600;
@@ -668,7 +691,7 @@
   white-space: nowrap;
 }
 
-.tvbox-ep-btn:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124, 58, 237, 0.08); }
+.tvbox-ep-btn:hover { border-color: var(--accent); color: var(--accent2); background: rgba(49, 122, 247, 0.08); }
 
 .tvbox-ep-btn.playing {
   background: rgba(16, 185, 129, 0.15);
@@ -761,7 +784,7 @@
 
 /* ── 悬浮播放器自定义控制条 ── */
 .float-ctrl-bar {
-  background: rgba(16, 16, 28, 0.88);
+  background: var(--glass-bg);
   backdrop-filter: blur(8px);
   padding: 5px 8px 6px;
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -792,7 +815,7 @@
 .float-seek-fill {
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  background: var(--accent, #e74c3c);
+  background: var(--accent, #317af7);
   border-radius: 2px;
   width: 0%;
   transition: width 0.1s;
@@ -902,7 +925,7 @@
 .tvbox-url-row input:focus { border-color: var(--accent); }
 
 .tvbox-url-go {
-  background: var(--accent-gradient);
+  background: var(--accent);
   border: none;
   border-radius: 10px;
   padding: 9px 16px;
@@ -942,21 +965,705 @@
 .tvbox-crawl-sub { font-size: 14px; color: var(--text-secondary); }
 .tvbox-crawl-form { display: flex; gap: 10px; margin-bottom: 16px; }
 .tvbox-crawl-form input { flex: 1; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; }
-.tvbox-crawl-btn { padding: 12px 24px; background: linear-gradient(135deg, #667eea, #764ba2); border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; }
+.tvbox-crawl-btn { padding: 12px 24px; background: var(--accent); border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; }
 .tvbox-crawl-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .tvbox-crawl-hint { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 20px; }
 .tvbox-crawl-status { padding: 12px; border-radius: 8px; margin-bottom: 16px; text-align: center; font-size: 13px; display: none; }
-.tvbox-crawl-status-loading { background: rgba(102, 126, 234, 0.2); color: #667eea; }
+.tvbox-crawl-status-loading { background: rgba(49, 122, 247, 0.2); color: var(--accent2); }
 .tvbox-crawl-status-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
 .tvbox-crawl-status-error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 .tvbox-crawl-results { margin-top: 20px; }
 
 /* Wex 配置面板 */
-.tvbox-wex-panel{padding:20px}.tvbox-wex-header{text-align:center;margin-bottom:20px}.tvbox-wex-icon{font-size:40px}.tvbox-wex-title{font-size:22px;font-weight:600}.tvbox-wex-form{display:flex;gap:10px;margin-bottom:16px}.tvbox-wex-form input{flex:1;padding:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text-primary)}.tvbox-wex-btn{padding:12px 20px;background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:8px;color:#fff;cursor:pointer}.tvbox-wex-btn:disabled{opacity:0.6}.tvbox-wex-status{padding:12px;border-radius:8px;margin-bottom:16px;text-align:center;display:none}.tvbox-wex-status-success{background:rgba(16,185,129,0.2);color:#10b981}.tvbox-wex-status-error{background:rgba(239,68,68,0.2);color:#ef4444}
+.tvbox-wex-panel{padding:20px}.tvbox-wex-header{text-align:center;margin-bottom:20px}.tvbox-wex-icon{font-size:40px}.tvbox-wex-title{font-size:22px;font-weight:600}.tvbox-wex-form{display:flex;gap:10px;margin-bottom:16px}.tvbox-wex-form input{flex:1;padding:12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text-primary)}.tvbox-wex-btn{padding:12px 20px;background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer}.tvbox-wex-btn:disabled{opacity:0.6}.tvbox-wex-status{padding:12px;border-radius:8px;margin-bottom:16px;text-align:center;display:none}.tvbox-wex-status-success{background:rgba(16,185,129,0.2);color:#10b981}.tvbox-wex-status-error{background:rgba(239,68,68,0.2);color:#ef4444}
 
 /* 骨架屏 */
-.tvbox-skeleton{background:linear-gradient(90deg,#1e1e2e 25%,#2a2a3e 50%,#1e1e2e 75%);background-size:200% 100%;animation:skeleton-shine 1.4s infinite;border-radius:8px}
+.tvbox-skeleton{background:linear-gradient(90deg,var(--skeleton-a) 25%,var(--skeleton-b) 50%,var(--skeleton-a) 75%);background-size:200% 100%;animation:skeleton-shine 1.4s infinite;border-radius:8px}
 @keyframes skeleton-shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .tvbox-skeleton-card{border-radius:8px;height:160px;margin-bottom:8px}
 .tvbox-skeleton-text{height:14px;margin-bottom:8px;border-radius:4px}
 .tvbox-skeleton-sub{height:10px;width:60%;border-radius:4px}
+
+
+/* ============================================
+   星枢片库 · 企业级工作台（侧栏 + 主区）
+   ============================================ */
+.tvbox-library-workspace {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-elevated);
+  min-height: 560px;
+}
+
+/* 左侧站点导航 */
+.tvbox-library-sidebar {
+  width: 208px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-primary);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tvbox-library-side-title { font-size: 15px; font-weight: 700; color: var(--text-primary); padding: 0 4px; }
+.tvbox-library-side-sub { font-size: 11px; color: var(--text-muted); padding: 0 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.tvbox-library-nav,
+.tvbox-library-source {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tvbox-library-nav strong,
+.tvbox-library-source strong { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.tvbox-library-nav span,
+.tvbox-library-source span { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.tvbox-library-nav:hover,
+.tvbox-library-source:hover { background: var(--bg-card-hover); }
+.tvbox-library-nav.active,
+.tvbox-library-source.active { background: var(--accent-muted, rgba(10, 89, 247, 0.08)); border-color: var(--accent); }
+.tvbox-library-nav.active strong,
+.tvbox-library-source.active strong { color: var(--accent); }
+.tvbox-library-nav { border-color: var(--border); background: var(--bg-elevated); }
+.tvbox-library-nav:first-child { order: -3; }
+.tvbox-library-nav[data-view="follow"] { order: -2; }
+.tvbox-library-nav[data-view="history"] { order: -1; margin-bottom: 6px; }
+
+/* 右侧主区 */
+.tvbox-library-main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 工具栏：标题 + 搜索 */
+.tvbox-library-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.tvbox-library-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.tvbox-library-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.tvbox-library-search { display: flex; gap: 8px; flex-shrink: 0; }
+.tvbox-library-search input {
+  width: 220px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.tvbox-library-search input:focus { border-color: var(--accent); }
+.tvbox-library-search button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.tvbox-library-search button:hover { background: var(--accent2); }
+.tvbox-library-search-history { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.tvbox-library-search-chip { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-primary); }
+.tvbox-library-search-chip button { border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; padding: 4px 8px; cursor: pointer; }
+.tvbox-library-search-chip button:first-child:hover { color: var(--accent); }
+.tvbox-library-search-chip .remove { border-left: 1px solid var(--border); color: var(--text-muted); padding: 4px 7px; }
+.tvbox-library-search-chip .remove:hover { color: var(--error, #dc2626); background: rgba(220, 38, 38, 0.08); }
+
+/* 分组 / 分类 */
+.tvbox-library-groups { display: flex; flex-wrap: wrap; gap: 6px; }
+.tvbox-library-groups:empty { display: none; }
+.tvbox-library-group {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-library-group:hover { border-color: var(--accent); color: var(--accent); }
+.tvbox-library-group.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.tvbox-library-cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.tvbox-library-cats:empty { display: none; }
+.tvbox-library-cat {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-library-cat:hover { border-color: var(--accent); color: var(--accent); }
+.tvbox-library-cat.active { background: var(--accent-muted, rgba(10, 89, 247, 0.1)); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* napp03 筛选行 */
+.tvbox-library-filters { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; }
+.tvbox-library-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tvbox-library-filter-row > span { font-size: 12px; color: var(--text-muted); min-width: 40px; }
+.tvbox-library-filter {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-library-filter:hover { color: var(--accent); }
+.tvbox-library-filter.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* 列表 / 分区 */
+.tvbox-library-list { flex: 1; min-height: 240px; }
+.tvbox-library-section { margin-bottom: 24px; }
+.tvbox-library-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tvbox-library-section-head h3 { font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 0; padding-left: 10px; border-left: 3px solid var(--accent); }
+.tvbox-library-section-head span { font-size: 11px; color: var(--text-muted); }
+.tvbox-library-more {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-library-more:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 海报卡片网格 */
+.tvbox-library-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 14px; }
+.tvbox-library-vod { cursor: pointer; }
+.tvbox-library-vod-poster {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 2/3;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tvbox-library-vod:hover .tvbox-library-vod-poster { border-color: var(--accent); box-shadow: var(--shadow-card); }
+.tvbox-library-vod-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tvbox-library-vod-poster > span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.78), transparent);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 11px;
+  padding: 14px 8px 6px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvbox-library-vod-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); margin-top: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tvbox-library-vod-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tvbox-library-card-actions { display: flex; gap: 6px; margin-top: 7px; }
+.tvbox-library-card-actions button { flex: 1; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-primary); color: var(--text-secondary); font-size: 11px; padding: 5px 6px; cursor: pointer; transition: all 0.15s; }
+.tvbox-library-card-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tvbox-library-card-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+.tvbox-library-card-actions button[data-follow-card],
+.tvbox-library-card-actions button[data-follow-card].active { background: var(--accent-muted, rgba(10, 89, 247, 0.08)); color: var(--accent); border-color: var(--accent); }
+.tvbox-library-progress { height: 3px; margin-top: 6px; border-radius: 999px; background: var(--bg-primary); overflow: hidden; }
+.tvbox-library-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+
+/* 分页 */
+.tvbox-library-pager { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; padding: 18px 0 4px; }
+.tvbox-library-pager button {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-library-pager button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tvbox-library-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+.tvbox-library-pager > span { font-size: 12px; color: var(--text-muted); }
+.tvbox-library-jump { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; }
+.tvbox-library-jump input {
+  width: 52px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: center;
+  outline: none;
+}
+.tvbox-library-jump input:focus { border-color: var(--accent); }
+
+/* 播放错误 / 原站回退 */
+.tvbox-playback-error { text-align: center; padding: 40px 20px; }
+.tvbox-playback-error-title { font-size: 13px; color: var(--error, #dc2626); }
+.tvbox-origin-fallback .tvbox-open-ext {
+  display: inline-block;
+  margin-top: 10px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 7px 18px;
+  font-size: 13px;
+  text-decoration: none;
+}
+.tvbox-origin-fallback .tvbox-open-ext:hover { background: var(--accent2); color: #fff; }
+
+/* 窄屏：侧栏折叠为横向 */
+@media (max-width: 900px) {
+  .tvbox-library-workspace { flex-direction: column; }
+  .tvbox-library-sidebar { width: auto; flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--border); }
+  .tvbox-library-side-sub { border-bottom: none; }
+  .tvbox-library-toolbar { flex-direction: column; }
+  .tvbox-library-search input { width: 100%; flex: 1; }
+}
+
+
+/* ============================================
+   搜索历史下拉面板（企业级）
+   ============================================ */
+.tvbox-search-wrap { position: relative; }
+.tvbox-search-history-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-float);
+  padding: 10px 12px 12px;
+}
+.tvbox-search-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.tvbox-search-history-head > span { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.tvbox-search-history-clear {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.tvbox-search-history-clear:hover { color: var(--error, #dc2626); background: var(--bg-card-hover); }
+.tvbox-search-history-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tvbox-history-item {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.tvbox-history-item:hover { border-color: var(--accent); }
+.tvbox-history-tag {
+  background: transparent;
+  border: none;
+  padding: 5px 4px 5px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvbox-history-item:hover .tvbox-history-tag { color: var(--accent); }
+.tvbox-history-remove {
+  background: transparent;
+  border: none;
+  padding: 5px 8px 5px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.tvbox-history-remove:hover { color: var(--error, #dc2626); }
+
+/* ============================================
+   最近播放（横向卡片轨道）
+   ============================================ */
+.tvbox-history-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tvbox-history-title > span:first-child { font-size: 14px; }
+.tvbox-clear-danger:hover { border-color: var(--error, #dc2626) !important; color: var(--error, #dc2626) !important; }
+
+.tvbox-history-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 118px;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.tvbox-history-rail::-webkit-scrollbar { height: 6px; }
+.tvbox-history-rail::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.tvbox-hist-card { display: flex; flex-direction: column; }
+.tvbox-hist-poster {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 2/3;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tvbox-hist-card:hover .tvbox-hist-poster { border-color: var(--accent); box-shadow: var(--shadow-card); }
+.tvbox-hist-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tvbox-hist-resume {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.tvbox-hist-source {
+  position: absolute;
+  bottom: 8px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.66);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 9px;
+  border-radius: 4px;
+  padding: 2px 5px;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvbox-hist-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.tvbox-hist-progress > div { height: 100%; background: var(--accent); }
+.tvbox-hist-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvbox-hist-ep {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+  min-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tvbox-hist-actions { display: flex; gap: 6px; margin-top: 6px; }
+.tvbox-hist-action {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-hist-action:hover { border-color: var(--accent); color: var(--accent); }
+.tvbox-hist-action.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.tvbox-hist-action.primary:hover { background: var(--accent2); color: #fff; }
+
+
+/* ============================================
+   详情页 / 线路选择企业级样式
+   ============================================ */
+.tvbox-back-btn {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-back-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tvbox-ep-info {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  gap: 18px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.tvbox-ep-poster-wrap { width: 156px; aspect-ratio: 2/3; overflow: hidden; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elevated); }
+.tvbox-ep-pic { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tvbox-ep-meta { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.tvbox-ep-rating { align-self: flex-start; background: rgba(251, 191, 36, 0.16); color: #b45309; border: 1px solid rgba(251, 191, 36, 0.32); border-radius: 6px; padding: 3px 8px; font-size: 12px; font-weight: 700; }
+[data-theme="dark"] .tvbox-ep-rating { color: #fbbf24; }
+.tvbox-ep-desc { color: var(--text-secondary); font-size: 13px; line-height: 1.75; max-height: 168px; overflow: auto; }
+.tvbox-line-panel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.tvbox-line-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tvbox-line-panel-head span { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.tvbox-line-panel-head em { font-style: normal; font-size: 11px; color: var(--text-muted); }
+.tvbox-line-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.tvbox-line-tab {
+  min-width: 132px;
+  max-width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tvbox-line-tab strong { font-size: 13px; font-weight: 700; color: var(--text-primary); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tvbox-line-tab small { font-size: 11px; color: var(--text-muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tvbox-line-tab b { font-size: 10px; color: var(--accent); font-weight: 700; }
+.tvbox-line-tab:hover { border-color: var(--accent); }
+.tvbox-line-tab.active { border-color: var(--accent); background: var(--accent-muted, rgba(10,89,247,0.1)); }
+.tvbox-ep-list-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 10px 0; padding-left: 10px; border-left: 3px solid var(--accent); }
+.tvbox-ep-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+.tvbox-ep-btn { border-radius: 8px; padding: 11px 8px; font-size: 13px; background: var(--bg-elevated); }
+@media (max-width: 760px) {
+  .tvbox-ep-info { grid-template-columns: 92px minmax(0, 1fr); }
+  .tvbox-ep-poster-wrap { width: 92px; }
+  .tvbox-ep-desc { max-height: 132px; }
+}
+
+
+/* ============================================
+   DESKTOP POLISH v3 · 搜索历史 + 详情页桌面端强覆盖
+   ============================================ */
+.tvbox-navbar { overflow: visible !important; }
+.tvbox-search-wrap { position: relative !important; z-index: 350 !important; }
+.tvbox-search-history-panel {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  left: 0 !important;
+  right: auto !important;
+  width: min(520px, 100%) !important;
+  display: none;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16) !important;
+  padding: 10px !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .tvbox-search-history-panel { box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55) !important; }
+.tvbox-search-history-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 2px 4px 8px !important;
+  margin: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.tvbox-search-history-head > span {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  color: var(--text-secondary) !important;
+}
+.tvbox-search-history-clear {
+  height: 24px !important;
+  padding: 0 8px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  background: var(--bg-primary) !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+}
+.tvbox-search-history-tags {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding-top: 8px !important;
+}
+.tvbox-history-item {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 28px !important;
+  align-items: center !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+.tvbox-history-item:hover { background: var(--bg-card-hover) !important; }
+.tvbox-history-tag {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 8px 10px !important;
+  color: var(--text-secondary) !important;
+  font-size: 13px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+.tvbox-history-clock { color: var(--text-muted) !important; font-size: 12px !important; }
+.tvbox-history-text { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+.tvbox-history-remove {
+  width: 28px !important;
+  height: 28px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+}
+.tvbox-history-remove:hover { color: var(--error, #dc2626) !important; }
+
+/* 详情页：桌面端大面板，而不是移动端弹窗 */
+.tvbox-player-overlay { padding: 24px !important; align-items: center !important; }
+.tvbox-player-box {
+  width: min(1180px, calc(100vw - 64px)) !important;
+  max-width: none !important;
+  height: min(820px, calc(100vh - 64px)) !important;
+  max-height: none !important;
+  border-radius: 12px !important;
+  background: var(--bg-elevated) !important;
+}
+.tvbox-player-hdr {
+  height: 58px !important;
+  padding: 0 24px !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.tvbox-player-title { font-size: 18px !important; font-weight: 800 !important; }
+.tvbox-player-body {
+  padding: 22px 24px 24px !important;
+  display: grid !important;
+  grid-template-columns: 320px minmax(0, 1fr) !important;
+  grid-template-areas:
+    "info info"
+    "lines episodes" !important;
+  gap: 18px !important;
+  align-content: start !important;
+}
+.tvbox-player-body > div:first-child { grid-column: 1 / -1 !important; margin-bottom: 0 !important; }
+.tvbox-ep-info {
+  grid-area: info !important;
+  display: grid !important;
+  grid-template-columns: 210px minmax(0, 1fr) !important;
+  gap: 24px !important;
+  min-height: 280px !important;
+  padding: 18px !important;
+  margin: 0 !important;
+  background: var(--bg-primary) !important;
+  border-radius: 10px !important;
+}
+.tvbox-ep-poster-wrap { width: 210px !important; height: 300px !important; }
+.tvbox-ep-desc { max-height: 260px !important; font-size: 15px !important; line-height: 1.9 !important; }
+.tvbox-line-panel {
+  grid-area: lines !important;
+  margin: 0 !important;
+  height: 100% !important;
+  min-height: 330px !important;
+  padding: 14px !important;
+  overflow: hidden !important;
+}
+.tvbox-line-tabs {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  max-height: 292px !important;
+  gap: 8px !important;
+}
+.tvbox-line-tab {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 64px !important;
+}
+.tvbox-ep-list-title {
+  grid-area: episodes !important;
+  align-self: start !important;
+  margin: 0 0 -2px !important;
+}
+.tvbox-ep-grid {
+  grid-area: episodes !important;
+  margin-top: 38px !important;
+  align-self: start !important;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)) !important;
+  gap: 10px !important;
+}
+.tvbox-player-foot { padding: 10px 24px !important; }
+@media (max-width: 980px) {
+  .tvbox-player-body { grid-template-columns: 1fr !important; grid-template-areas: "info" "lines" "episodes" !important; }
+  .tvbox-line-panel { min-height: auto !important; }
+  .tvbox-line-tabs { flex-direction: row !important; overflow-x: auto !important; max-height: none !important; }
+}
