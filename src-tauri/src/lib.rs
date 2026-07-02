@@ -316,6 +316,8 @@ pub fn run() {
             assistant::sync_openclaw_to_office,
             #[cfg(target_os = "windows")]
             assistant::vod_fetch,
+            #[cfg(target_os = "windows")]
+            assistant::napp03_api_fetch,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,

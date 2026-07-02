@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 星枢影视 - 影视点播 + 电视直播
  * VOD: 多源聚合（暴风/星之尘/天涯/饭太稀/肥猫）
  * TV: 多源直播（繁星/聚浪等M3U源）
@@ -36,15 +36,849 @@ function normalizeHttpUrl(value) {
   }
 }
 
+function parseYinghuaListHtml(html, baseUrl) {
+  const results = []
+  const seen = new Set()
+  const addFromBlock = (block) => {
+    const href = block.match(/href=["']([^"']*\/index\.php\/vod\/detail\/id\/\d+\.html[^"']*)["']/i)?.[1]
+    if (!href) return
+    const url = new URL(href, baseUrl).href
+    const idMatch = href.match(/\/id\/(\d+)\.html/i)
+    const id = idMatch ? idMatch[1] : url
+    if (seen.has(id)) return
+    seen.add(id)
+    const picRaw = block.match(/data-original=["']([^"']+)["']/i)?.[1] || block.match(/src=["']([^"']+)["']/i)?.[1] || ''
+    const title = decodeHtmlEntities((block.match(/title=["']([^"']+)["']/i)?.[1] || block.match(/<h3[^>]*class=["'][^"']*title[^"']*["'][^>]*>[\s\S]*?<a[^>]*>([^<]+)/i)?.[1] || '').trim())
+    const remarks = decodeHtmlEntities((block.match(/pic-text[^>]*>([^<]+)/i)?.[1] || '').trim())
+    results.push({
+      vod_id: id,
+      vod_name: title,
+      vod_pic: picRaw ? new URL(picRaw, baseUrl).href : '',
+      vod_remarks: remarks,
+      type_name: '动漫',
+      _detailUrl: url,
+    })
+  }
+  const boxRe = /<div[^>]+class=["'][^"']*stui-vodlist__box[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi
+  let match
+  while ((match = boxRe.exec(html)) && results.length < 60) addFromBlock(match[1])
+  const mediaRe = /<li[^>]+class=["'][^"']*(?:active|clearfix|top-line-dot)[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi
+  while ((match = mediaRe.exec(html)) && results.length < 60) addFromBlock(match[1])
+  return results
+}
+
+function decodeHtmlEntities(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+}
+
+function extractYinghuaLines(html, baseUrl) {
+  const lines = []
+  const lineKeys = new Set()
+  const pushLine = (name, eps) => {
+    const seenUrls = new Set()
+    const cleanEps = eps.filter(ep => {
+      if (!ep?.url || seenUrls.has(ep.url)) return false
+      seenUrls.add(ep.url)
+      return true
+    })
+    if (!cleanEps.length) return
+    const key = cleanEps.map(ep => ep.url).join('|')
+    if (lineKeys.has(key)) return
+    lineKeys.add(key)
+    lines.push({ name: cleanLineName(name, '线路' + (lines.length + 1)), urls: cleanEps })
+  }
+  const fromMatch = html.match(/player_aaaa\.from\s*=\s*['"]([^'"]+)['"]/i)
+  const urlMatch = html.match(/player_aaaa\.url\s*=\s*['"]([^'"]+)['"]/i)
+  const sourceNames = (fromMatch?.[1] || '').split('$$$')
+  const sourceUrls = (urlMatch?.[1] || '').split('$$$')
+  for (let i = 0; i < Math.min(sourceNames.length, sourceUrls.length); i++) {
+    const name = cleanLineName(sourceNames[i], '线路' + (i + 1))
+    const raw = sourceUrls[i] || ''
+    const eps = raw.split('#').map((part, epIndex) => {
+      const idx = part.indexOf('$')
+      const epName = idx >= 0 ? part.slice(0, idx).trim() : '第' + (epIndex + 1) + '集'
+      const epUrl = idx >= 0 ? part.slice(idx + 1).trim() : part.trim()
+      return epUrl ? { name: epName, url: new URL(epUrl, baseUrl).href } : null
+    }).filter(Boolean)
+    if (eps.length) pushLine(name, eps)
+  }
+  if (!lines.length) {
+    const playlistBlocks = [...html.matchAll(/<div[^>]+class=["'][^"']*(?:playlist|play-list|stui-content__playlist|stui-play__list|anthology|episode-list)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)]
+    playlistBlocks.forEach((block, blockIndex) => {
+      const eps = [...block[1].matchAll(/<a[^>]+href=["']([^"']*(?:\/play\/|\/index\.php\/vod\/play\/)[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+        .map((m, i) => ({
+          name: decodeHtmlEntities(m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) || ('第' + (i + 1) + '集'),
+          url: normalizeEpisodeUrl(m[1], baseUrl),
+        }))
+        .filter(ep => ep.url)
+      pushLine('线路' + (blockIndex + 1), eps)
+    })
+  }
+  if (!lines.length) {
+    const eps = [...html.matchAll(/<a[^>]+href=["']([^"']*(?:\/play\/|\/index\.php\/vod\/play\/)[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+      .map((m, i) => ({
+        name: decodeHtmlEntities(m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) || ('第' + (i + 1) + '集'),
+        url: normalizeEpisodeUrl(m[1], baseUrl),
+      }))
+      .filter(ep => ep.url)
+    if (eps.length) {
+      if (eps.length > 220) {
+        const groups = new Map()
+        eps.forEach(ep => {
+          const sid = ep.url.match(/\/sid\/(\d+)\//i)?.[1] || 'default'
+          if (!groups.has(sid)) groups.set(sid, [])
+          groups.get(sid).push(ep)
+        })
+        ;[...groups.values()].forEach((group, groupIndex) => pushLine(groupIndex === 0 ? '默认线路' : '线路' + (groupIndex + 1), group))
+      } else {
+        pushLine('默认线路', eps)
+      }
+    }
+  }
+  return lines
+}
+
+function isYinghuaPlayPageUrl(url) {
+  return /yinghua289\.com\/index\.php\/vod\/play\//i.test(String(url || '')) || /\/index\.php\/vod\/play\//i.test(String(url || ''))
+}
+
+function parseYinghuaPlayUrl(html, baseUrl) {
+  const playerJson = html.match(/var\s+player_aaaa\s*=\s*(\{[\s\S]*?\})\s*<\/script>/i)?.[1]
+  if (playerJson) {
+    try {
+      const data = JSON.parse(playerJson)
+      const rawUrl = data?.url || ''
+      if (rawUrl) return normalizeEpisodeUrl(rawUrl, baseUrl)
+    } catch {}
+  }
+  const direct = html.match(/https?:\\?\/\\?\/[^'"<>\\]+(?:m3u8|mp4)(?:[^'"<>\\]*)/i)?.[0]
+  if (direct) return direct.replace(/\\\//g, '/')
+  const iframe = html.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1]
+  if (iframe) return normalizeEpisodeUrl(iframe, baseUrl)
+  return ''
+}
+
+async function resolvePlayableUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw || raw === '#') return raw
+  if (isDirectVideoUrl(raw)) return raw
+  if (isYinghuaPlayPageUrl(raw)) {
+    const html = await fetchYinghuaPage(raw)
+    const playable = parseYinghuaPlayUrl(html, raw)
+    if (!playable) throw new Error('樱花播放页未解析到真实播放地址')
+    return playable
+  }
+  return raw
+}
+
+const NAPP03_API_CACHE_BASE = 'https://vcache.zmizr.cn'
+const NAPP03_IMAGE_BASES = {
+  vod1: 'https://vres.dsty29.com/vod1',
+  sres: 'https://sres.dsty29.com',
+}
+
+async function fetchNapp03Api(path, query = {}) {
+  const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+  if (!invoke) throw new Error('天穹接口需要 Tauri 后端解密，当前环境不可用')
+  const text = await invoke('napp03_api_fetch', { path, query, timeoutSecs: 12 })
+  const json = JSON.parse(text)
+  if (json?.code !== 200) throw new Error(json?.message || '天穹接口返回异常')
+  return json.data || {}
+}
+
+function napp03ImageUrl(item) {
+  const imagePath = item?.imagePath || item?.cover || item?.pic || ''
+  if (!imagePath) return ''
+  if (/^https?:\/\//i.test(imagePath)) return imagePath
+  const group = item?.imageGroup || 'vod1'
+  const base = NAPP03_IMAGE_BASES[group] || NAPP03_IMAGE_BASES.vod1
+  return new URL(imagePath.replace(/^\//, ''), base + '/').href
+}
+
+function napp03VodId(item) {
+  const url = String(item?.url || item?._detailUrl || '')
+  const urlId = url.match(/vod\/(?:detail|play)\?vodId=(\d+)/i)?.[1] || url.match(/[?&]vodId=(\d+)/i)?.[1]
+  if (url && !urlId) return ''
+  return item?.vodId || item?.vod_id || urlId || item?.id || ''
+}
+
+function mapNapp03Vod(item) {
+  const id = napp03VodId(item)
+  return {
+    vod_id: id,
+    vod_name: item?.title || item?.name || '未命名',
+    vod_pic: napp03ImageUrl(item),
+    vod_remarks: item?.bottomLabel || item?.topLeftLabel || item?.channelName || '',
+    type_name: item?.channelName || (Array.isArray(item?.labels) ? item.labels.map(x => x.name).filter(Boolean).slice(0, 2).join(' / ') : '天穹'),
+    _detailUrl: id ? `vod/detail?vodId=${id}` : '',
+    _api: NAPP03_API_CACHE_BASE,
+    _srcKey: 'a_napp03',
+  }
+}
+
+function mapNapp03HomeCard(item) {
+  const url = String(item?.url || '')
+  if (/^browser\?/i.test(url) || /^article\//i.test(url)) return null
+  if (/specialTopic\/vods|vod\/timeline|netflixTopic\/vods/i.test(url)) return mapNapp03TopicCard(item)
+  const vod = mapNapp03Vod(item)
+  return vod.vod_id ? vod : null
+}
+
+function mapNapp03TopicCard(item) {
+  const header = item?.header || item
+  const url = header?.url || item?.url || ''
+  const id = header?.id || item?.id || url
+  return {
+    vod_id: id,
+    vod_name: header?.title || item?.title || '未命名专题',
+    vod_pic: napp03ImageUrl({ imagePath: header?.coverPathVertical || header?.coverPathHorizontal || item?.coverPathVertical || item?.coverPathHorizontal, imageGroup: header?.coverGroupVertical || header?.coverGroupHorizontal || item?.coverGroupVertical || item?.coverGroupHorizontal }),
+    vod_remarks: header?.count ? (/部$/.test(String(header.count)) ? String(header.count) : String(header.count).replace(/^共?/, '共') + '部') : (item?.count || '专题'),
+    type_name: header?.summary || '专题',
+    _detailUrl: url,
+    _libraryAction: 'napp03-url-list',
+    _api: NAPP03_API_CACHE_BASE,
+    _srcKey: 'a_napp03',
+  }
+}
+
+function mapNapp03TopicSections(data) {
+  const sections = []
+  ;(Array.isArray(data?.items) ? data.items : []).forEach((block, index) => {
+    const blockType = String(block?._vod || '')
+    if (/^ad/i.test(blockType)) return
+    const rawItems = Array.isArray(block?.data) ? block.data : []
+    const list = rawItems.map(mapNapp03TopicCard).filter(item => item.vod_id && item._detailUrl)
+    if (!list.length) return
+    const title = block?.header?.title || block?.title || ('专题模块 ' + (index + 1))
+    sections.push({ title, list, style: blockType || 'topic', url: block?.header?.url || '' })
+  })
+  return sections
+}
+
+function mapNapp03HomeSections(data) {
+  const sections = []
+  const pushSection = (title, rawItems, options = {}) => {
+    if (!Array.isArray(rawItems) || !rawItems.length) return
+    const list = mergeVodLists([rawItems.map(mapNapp03HomeCard).filter(Boolean).filter(item => item.vod_id && (item._detailUrl || item._libraryAction))], options.limit || 24)
+    if (!list.length) return
+    sections.push({ title: title || '推荐', list, style: options.style || 'grid', url: options.url || '' })
+  }
+  pushSection('轮播推荐', data?.banners?.data || data?.banners?.items || data?.banners, { limit: 12, style: 'banner' })
+  ;(Array.isArray(data?.blocks) ? data.blocks : []).forEach((block, index) => {
+    const blockType = String(block?._vod || block?.type || '')
+    if (/^ad/i.test(blockType)) return
+    const title = block?.header?.title || block?.title || block?.name || ('推荐模块 ' + (index + 1))
+    const url = block?.header?.url || block?.url || ''
+    pushSection(title, block?.data || block?.items || block?.list, { limit: 30, style: blockType || 'grid', url })
+  })
+  return sections
+}
+
+function mapNapp03Home(data) {
+  const items = []
+  const seen = new Set()
+  const push = raw => {
+    const mapped = mapNapp03HomeCard(raw)
+    if (!mapped || !mapped.vod_id || seen.has(mapped.vod_id)) return
+    seen.add(mapped.vod_id)
+    items.push(mapped)
+  }
+  const pushMany = value => {
+    if (Array.isArray(value)) value.forEach(push)
+  }
+  pushMany(data?.banners?.data)
+  pushMany(data?.banners?.items)
+  pushMany(data?.banners)
+  ;(Array.isArray(data?.blocks) ? data.blocks : []).forEach(block => {
+    const blockType = String(block?._vod || block?.type || '')
+    if (/^ad/i.test(blockType)) return
+    pushMany(block?.data)
+    pushMany(block?.items)
+    pushMany(block?.list)
+  })
+  pushMany(data?.data)
+  pushMany(data?.items)
+  pushMany(data?.list)
+  return items
+}
+
+async function loadNapp03UrlList(rawUrl, title = '专题', cursor = '') {
+  const url = String(rawUrl || '')
+  const queryText = url.split('?')[1] || ''
+  const params = Object.fromEntries(new URLSearchParams(queryText))
+  let path = ''
+  let query = {}
+  if (/specialTopic\/vods/i.test(url) && params.specialTopicId) {
+    path = '/vod/specialTopic/vods.capi'
+    query = { specialTopicId: params.specialTopicId }
+  } else if (/vod\/timeline/i.test(url) && params.timelineId) {
+    path = '/vod/timeline.capi'
+    query = { timelineId: params.timelineId }
+  } else if (/netflixTopic\/vods/i.test(url) && params.netflixTopicId) {
+    path = '/vod/netflixNewWatch/vods.capi'
+    query = { netflixTopicId: params.netflixTopicId }
+  } else {
+    throw new Error('该原站模块暂未找到可用接口：' + title)
+  }
+  if (cursor) query.next = cursor
+  const data = await fetchNapp03Api(path, query)
+  const list = (data.items || []).map(mapNapp03Vod).filter(item => item.vod_id)
+  return { list, total: list.length, page: 1, next: data.next || '', hasMore: Boolean(data.next), cursor: cursor || '', request: { kind: 'napp03-url-list', rawUrl, title }, title }
+}
+
+function mapNapp03PlaySourceEpisode(ep, epIndex, source) {
+  const playUrl = ep?.m3u8Url || ep?.url || ep?.playUrl || (Array.isArray(ep?.playUrls) ? ep.playUrls.find(p => p?.url)?.url : '') || ''
+  return {
+    name: ep?.title || ep?.name || `第 ${epIndex + 1} 集`,
+    url: playUrl,
+    _episodeId: ep?.id || ep?.episodeId || '',
+    _episodeVodId: ep?.episodeVodId || source?.episodeVodId || '',
+    _siteId: ep?.siteId || source?.siteId || '',
+    _playUrls: Array.isArray(ep?.playUrls) ? ep.playUrls : [],
+  }
+}
+
+async function loadNapp03PlaySourceEpisodes(source) {
+  const existing = (source?.list || []).map((ep, epIndex) => mapNapp03PlaySourceEpisode(ep, epIndex, source)).filter(ep => ep.url)
+  if (existing.length || !source?.episodeVodId || !source?.siteId) return existing
+  try {
+    const data = await fetchNapp03Api('/v2/vod/episodes.capi', { episodeVodId: source.episodeVodId, siteId: source.siteId })
+    const rows = Array.isArray(data) ? data : (Array.isArray(data?.list) ? data.list : [])
+    return rows.map((ep, epIndex) => mapNapp03PlaySourceEpisode(ep, epIndex, source)).filter(ep => ep.url)
+  } catch (e) {
+    console.warn('[movie] 天穹线路加载失败:', source?.name || source?.siteId, e?.message || e)
+    return []
+  }
+}
+
+async function loadNapp03Detail(detailId, name, pic) {
+  const data = await fetchNapp03Api('/vod/detail.capi', { vodId: detailId })
+  const sources = Array.isArray(data.playSources) ? data.playSources : []
+  const lines = (await Promise.all(sources.map(async (source, lineIndex) => {
+    const eps = await loadNapp03PlaySourceEpisodes(source)
+    return eps.length ? {
+      name: source.name || source.siteId || `线路${lineIndex + 1}`,
+      tag: source.tag || '',
+      tips: source.tips || '',
+      urls: eps,
+      total: source.total || eps.length,
+      siteId: source.siteId || '',
+      episodeVodId: source.episodeVodId || '',
+    } : null
+  }))).filter(Boolean)
+  if (!lines.length) throw new Error('天穹详情已返回，但没有可播放线路')
+  return {
+    vod_id: data.id || detailId,
+    vod_name: data.title || name || '未命名',
+    vod_pic: napp03ImageUrl(data) || pic || '',
+    vod_content: data.summary || '',
+    vod_play_from: lines.map(l => l.name).join('$$$'),
+    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
+    _episodes: lines,
+    _srcKey: 'a_napp03',
+    _api: NAPP03_API_CACHE_BASE,
+  }
+}
+
 function isDirectVideoUrl(url) {
   return /\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(String(url || ''))
 }
 
+function normalizeEpisodeUrl(url, baseUrl) {
+  if (!url) return ''
+  const raw = String(url).trim()
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  try { return new URL(raw, baseUrl).href } catch { return raw }
+}
+
+function getPlayableSourceKey(source) {
+  if (!source) return ''
+  return source.key || source.name || ''
+}
+
+const IP51122_LIST_BASE = 'https://www.ncat21.com'
+const IP51122_DETAIL_BASE = 'https://www.ncat21.com'
+const IP51122_FALLBACK_BASE = 'https://43.248.100.69:51080'
+let _ip51122SearchToken = ''
+let _napp03WarmupPromise = null
+
+function isCdndefendHtml(html) {
+  return /Protected by cdndefend|cdndefend_js_cookie|verifying your browser/i.test(String(html || ''))
+}
+
+function warmupNapp03Cdndefend() {
+  if (typeof document === 'undefined') return Promise.resolve()
+  if (_napp03WarmupPromise) return _napp03WarmupPromise
+  _napp03WarmupPromise = new Promise(resolve => {
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;border:0'
+    let done = false
+    const finish = () => {
+      if (done) return
+      done = true
+      setTimeout(() => { try { iframe.remove() } catch {} }, 1000)
+      resolve()
+    }
+    iframe.onload = () => setTimeout(finish, 1600)
+    iframe.onerror = finish
+    setTimeout(finish, 6000)
+    iframe.src = NAPP03_BOOT_BASE + '/'
+    document.body.appendChild(iframe)
+  }).finally(() => { _napp03WarmupPromise = null })
+  return _napp03WarmupPromise
+}
+
+async function fetchNapp03Page(path) {
+  const url = /^https?:\/\//i.test(path) ? path : new URL(path, NAPP03_BASE).href
+  let result = await fetchTextWithFallback(url, {
+    timeoutMs: 9000,
+    proxyTimeoutMs: 5000,
+    preferTauri: true,
+    headers: { 'Accept': 'text/html,application/xhtml+xml' },
+  })
+  let html = result.text
+  if (result.status === 850 || isCdndefendHtml(html)) {
+    clearCachedMovieRequest('text:' + url)
+    await warmupNapp03Cdndefend()
+    result = await fetchTextWithFallback(url, {
+      timeoutMs: 9000,
+      proxyTimeoutMs: 5000,
+      preferTauri: true,
+      headers: { 'Accept': 'text/html,application/xhtml+xml' },
+    })
+    html = result.text
+  }
+  if (result.status === 850 || isCdndefendHtml(html)) throw new Error('ncat 实时站点 cdndefend 防护未通过，请先打开天穹启动页 ' + NAPP03_BOOT_BASE)
+  return html
+}
+
+function extractNapp03Cards(html, baseUrl, limit = 60) {
+  const results = []
+  const seen = new Set()
+  const hrefRe = /<a[^>]+href=["']([^"']*\/detail\/(\d+)\.html)["'][^>]*>[\s\S]*?<\/a>/gi
+  let match
+  while ((match = hrefRe.exec(html)) && results.length < limit) {
+    const block = match[0]
+    const context = html.slice(Math.max(0, match.index - 500), Math.min(html.length, hrefRe.lastIndex + 500))
+    const href = match[1]
+    const id = match[2]
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const detailUrl = new URL(href, baseUrl).href
+    const picRaw = block.match(/data-original=["']([^"']+)["']/i)?.[1]
+      || block.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]
+      || context.match(/data-original=["']([^"']+)["']/i)?.[1]
+      || context.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]
+      || ''
+    const titleRaw = block.match(/carousel-item-title[^>]*>([^<]+)</i)?.[1]
+      || block.match(/alt=["']([^"']+)["']/i)?.[1]
+      || block.match(/title=["']([^"']+)["']/i)?.[1]
+      || block.match(/class=["'][^"']*(?:video|vod|item|title)[^"']*["'][^>]*>([^<]+)</i)?.[1]
+      || context.match(/carousel-item-title[^>]*>([^<]+)</i)?.[1]
+      || ''
+    const title = decodeHtmlEntities(titleRaw.replace(/𝕜𝕜𝕪𝕤𝟘𝟙\.𝕔𝕠𝕞|kkys01\.com/ig, '').trim())
+    if (!title || /placeholder|logo|网飞猫|可可影视|kekys/i.test(title)) continue
+    results.push({
+      vod_id: id,
+      vod_name: title,
+      vod_pic: picRaw ? new URL(decodeHtmlEntities(picRaw), baseUrl).href : '',
+      type_name: '影视',
+      _detailUrl: detailUrl,
+      _api: baseUrl,
+      _srcKey: 'a_napp03',
+    })
+  }
+  return results
+}
+
+function cleanLineName(value, fallback) {
+  const raw = decodeHtmlEntities(String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+  if (!raw) return fallback
+  if (/movieTool\.|selectSource|^[a-z0-9_\-]{4,}$/i.test(raw) && !/[\u4e00-\u9fa5]/.test(raw)) return fallback
+  return raw.replace(/[•·*★☆]+/g, '').trim() || fallback
+}
+
+function parseNapp03DetailHtml(html, baseUrl, detailId, name, pic) {
+  const title = decodeHtmlEntities((
+    html.match(/<div[^>]+class=["'][^"']*detail-title[^"']*["'][^>]*>[\s\S]*?<strong>(?!𝕜𝕜𝕪𝕤)([^<]+)<\/strong>/i)?.[1]
+    || html.match(/<title[^>]*>([^<-]+)(?:-|<)/i)?.[1]
+    || name
+    || ''
+  ).trim())
+  const posterRaw = html.match(/<div[^>]+class=["'][^"']*detail-pic[^"']*["'][^>]*>[\s\S]*?<img[^>]+data-original=["']([^"']+)["']/i)?.[1]
+    || html.match(/<div[^>]+class=["'][^"']*detail-pic[^"']*["'][^>]*>[\s\S]*?<img[^>]+src=["']([^"']+)["']/i)?.[1]
+    || pic
+    || ''
+  const desc = decodeHtmlEntities((html.match(/<div[^>]+class=["'][^"']*detail-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim())
+  const sourceNames = [...html.matchAll(/<span[^>]+class=["'][^"']*source-item-label[^"']*["'][^>]*>([^<]+)<\/span>[\s\S]*?<span[^>]+class=["'][^"']*source-item-sublabel[^"']*["'][^>]*>([^<]*)<\/span>/gi)]
+    .map((m, i) => cleanLineName(m[1] || m[2], '线路' + (i + 1)))
+  const lines = []
+  const lineBlocks = [...html.matchAll(/<div[^>]+class=["'][^"']*(?:episode-list|playlist|player-list|play-list|source-item)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)]
+  if (lineBlocks.length) {
+    lineBlocks.forEach((blockMatch, blockIndex) => {
+      const urls = [...blockMatch[1].matchAll(/<a[^>]+href=["']([^"']*\/play\/[^"']+|[^"']*\/index\.php\/vod\/play\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+        .map((ep, i) => {
+          const rawName = decodeHtmlEntities(ep[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+          return { name: rawName || ('集' + (i + 1)), url: normalizeEpisodeUrl(ep[1], baseUrl) }
+        })
+        .filter(ep => ep.url)
+      if (urls.length) lines.push({ name: cleanLineName(sourceNames[blockIndex], '线路' + (blockIndex + 1)), urls })
+    })
+  }
+  if (!lines.length) {
+    const urls = [...html.matchAll(/<a[^>]+href=["']([^"']*\/play\/[^"']+|[^"']*\/index\.php\/vod\/play\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+      .map((ep, i) => ({
+        name: decodeHtmlEntities(ep[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) || ('集' + (i + 1)),
+        url: normalizeEpisodeUrl(ep[1], baseUrl),
+      }))
+      .filter(ep => ep.url)
+    if (urls.length) lines.push({ name: '默认线路', urls })
+  }
+  if (!lines.length) return null
+  return {
+    vod_id: detailId,
+    vod_name: title,
+    vod_pic: posterRaw ? new URL(decodeHtmlEntities(posterRaw), baseUrl).href : '',
+    vod_content: desc,
+    vod_play_from: lines.map(l => l.name).join('$$$'),
+    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
+    _episodes: lines,
+    _detailHtml: html,
+    _srcKey: 'a_napp03',
+    _api: baseUrl,
+  }
+}
+
+function parseIp51122ListHtml(html, baseUrl) {
+  const results = []
+  const seen = new Set()
+  const patterns = [
+    /<a[^>]+href=["']([^"']*\/detail\/\d+\.html)["'][^>]*class=["'][^"']*(?:carousel-item|v-item|search-result-item)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi,
+    /<div[^>]+class=["'][^"']*module-item[^"']*["'][^>]*>([\s\S]*?)(?=<div[^>]+class=["'][^"']*module-item|<\/section>|<\/main>)/gi,
+  ]
+  for (const re of patterns) {
+    let match
+    while ((match = re.exec(html)) && results.length < 60) {
+      const block = match[2] || match[1]
+      const href = match[2] ? match[1] : block.match(/href=["']([^"']*\/detail\/\d+\.html)["']/i)?.[1]
+      if (!href) continue
+      const id = href.match(/\/detail\/(\d+)\.html/i)?.[1] || href
+      if (seen.has(id)) continue
+      seen.add(id)
+      const title = decodeHtmlEntities((
+        block.match(/carousel-item-title[^>]*>([^<]+)/i)?.[1] ||
+        block.match(/search-result-item-main[\s\S]*?<div[^>]+class=["']title["'][^>]*>([^<]+)/i)?.[1] ||
+        [...block.matchAll(/v-item-title[^>]*>([^<]+)/gi)].map(m => m[1].trim()).find(v => v && !/可可影视|kekys/i.test(v)) ||
+        block.match(/title=["']([^"']+)["']/i)?.[1] ||
+        ''
+      ).trim())
+      if (!title || /可可影视|kekys/i.test(title)) continue
+      const picRaw = block.match(/data-original=["']([^"']+)["']/i)?.[1] || block.match(/src=["']([^"']+)["']/i)?.[1] || ''
+      results.push({
+        vod_id: id,
+        vod_name: title,
+        vod_pic: picRaw ? new URL(picRaw, baseUrl).href : '',
+        type_name: '影视',
+        _detailUrl: new URL(href, baseUrl).href,
+        _api: baseUrl,
+        _srcKey: 'ip51122',
+      })
+    }
+    if (results.length) break
+  }
+  return results
+}
+
+function parseLibraryCategoryLinks(html, baseUrl, options = {}) {
+  const categories = []
+  const seen = new Set()
+  const add = (id, name, typeId) => {
+    const cleanName = decodeHtmlEntities(String(name || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+    if (!id || !cleanName || seen.has(id)) return
+    if (options.exclude?.some(re => re.test(cleanName))) return
+    seen.add(id)
+    categories.push({ id, name: cleanName, typeId })
+  }
+  const patterns = options.patterns || []
+  for (const pattern of patterns) {
+    let match
+    while ((match = pattern.exec(html))) {
+      const href = decodeHtmlEntities(match[1] || '')
+      const text = match[2] || ''
+      const idMatch = href.match(options.idRegex)
+      if (!idMatch) continue
+      const rawId = idMatch[1]
+      add(String(options.idPrefix || '') + rawId, text, options.typeId ? options.typeId(rawId, href) : rawId)
+    }
+  }
+  return categories
+}
+
+async function loadYinghuaCategories() {
+  const html = await fetchYinghuaPage(YINGHUA_BASE + '/')
+  const cats = parseLibraryCategoryLinks(html, YINGHUA_BASE, {
+    idRegex: /\/index\.php\/vod\/type\/id\/(\d+)\.html/i,
+    idPrefix: 'yh_',
+    typeId: id => Number(id),
+    exclude: [/首页|留言|排行|专题|明星|资讯|搜索/],
+    patterns: [/<a[^>]+href=["']([^"']*\/index\.php\/vod\/type\/id\/\d+\.html)["'][^>]*>([\s\S]*?)<\/a>/gi],
+  })
+  return cats.length ? cats : YINGHUA_CATEGORIES
+}
+
+async function loadNapp03Categories() {
+  const validTypeIds = new Set(['home'])
+  for (const typeId of [...new Set(NAPP03_CATEGORIES.map(cat => cat.typeId))]) {
+    if (typeId === 'home') continue
+    try {
+      const data = await fetchNapp03Api('/vod/channel/list.capi', { channelId: typeId, page: 1 })
+      if ((data.items || []).length) validTypeIds.add(typeId)
+    } catch {
+      validTypeIds.add(typeId)
+    }
+  }
+  const groups = NAPP03_GROUPS.map(group => ({
+    ...group,
+    children: group.children.filter(cat => cat.specialPath || cat.unsupported || validTypeIds.has(cat.typeId)),
+  })).filter(group => group.children.length)
+  return { groups, categories: groups.flatMap(group => group.children.map(cat => ({ ...cat, groupId: group.id }))) }
+}
+
+async function loadIp51122Categories() {
+  const html = await fetchIp51122Page('/', IP51122_LIST_BASE)
+  const parsed = parseLibraryCategoryLinks(html, IP51122_LIST_BASE, {
+    idRegex: /\/channel\/([^\/'"?#]+)(?:\.html|\/)?/i,
+    idPrefix: 'ip_',
+    typeId: id => id,
+    exclude: [/首页|搜索|排行|专题|留言|明星/],
+    patterns: [/<a[^>]+href=["']([^"']*\/channel\/[^"']+?)["'][^>]*>([\s\S]*?)<\/a>/gi],
+  })
+  return parsed.length ? [{ id: 'home', name: '首页推荐', typeId: 'home' }, ...parsed] : PAGE_LIBRARY_CATEGORIES
+}
+
+async function fetchIp51122Page(path, baseUrl = IP51122_LIST_BASE) {
+  const url = /^https?:\/\//i.test(path) ? path : new URL(path, baseUrl).href
+  let result = await fetchTextWithFallback(url, {
+    timeoutMs: 10000,
+    proxyTimeoutMs: 5000,
+    preferTauri: true,
+    headers: { 'Accept': 'text/html,application/xhtml+xml' },
+    credentials: 'omit',
+  })
+  let html = result.text
+  if ((result.status === 850 || isCdndefendHtml(html)) && /^https:\/\/www\.ncat21\.com/i.test(url)) {
+    clearCachedMovieRequest('text:' + url)
+    const fallbackUrl = url.replace(/^https:\/\/www\.ncat21\.com/i, IP51122_FALLBACK_BASE)
+    result = await fetchTextWithFallback(fallbackUrl, {
+      timeoutMs: 10000,
+      proxyTimeoutMs: 5000,
+      preferTauri: true,
+      headers: { 'Accept': 'text/html,application/xhtml+xml' },
+      credentials: 'omit',
+    })
+    html = result.text
+    if (html && !isCdndefendHtml(html)) return html
+  }
+  if (result.status === 850 || isCdndefendHtml(html)) throw new Error('云岚实时站点 cdndefend 防护未通过；已尝试官方域名与备用回源 IP')
+  return html
+}
+
+async function searchAiyiNapp(keyword, page = 1) {
+  const target = String(keyword || '').trim()
+  if (!target) return { list: [], total: 0, page, hasMore: false }
+  try {
+    const data = await fetchNapp03Api('/vod/search/query', { next: `page=${Math.max(1, Number(page) || 1)}`, k: target, type: 1, channelId: 0 })
+    const list = (data.items || []).map(mapNapp03Vod).filter(item => item.vod_id)
+    return { list, total: list.length, page, next: data.next || '', hasMore: Boolean(data.next), cursor: data.next || '' }
+  } catch (error) {
+    const channels = [0, 1, 2, 3, 4, 5, 6, 7]
+    const found = []
+    const seen = new Set()
+    for (const channelId of channels) {
+      let next = ''
+      for (let depth = 0; depth < 8; depth++) {
+        const query = { channelId }
+        if (next) query.next = next
+        const data = await fetchNapp03Api('/vod/channel/list.capi', query)
+        for (const raw of (data.items || [])) {
+          const item = mapNapp03Vod(raw)
+          if (!movieNameMatches(item, target)) continue
+          if (!item.vod_id || seen.has(item.vod_id)) continue
+          seen.add(item.vod_id)
+          found.push(item)
+        }
+        if (!data.next || data.next === next) break
+        next = data.next
+      }
+    }
+    return { list: found, total: found.length, page, hasMore: false, message: found.length ? '' : '天穹真实搜索接口暂未完成初始化，已降级跨频道深度检索；原始错误：' + (error?.message || '未知错误') }
+  }
+}
+
+async function getIp51122SearchToken() {
+  if (_ip51122SearchToken) return _ip51122SearchToken
+  const html = await fetchIp51122Page('/search?k=%E4%BB%99%E9%80%86', IP51122_LIST_BASE).catch(() => '')
+  const encoded = html.match(/[?&]t=([^"'&<\s]+)/i)?.[1]
+  if (encoded) {
+    _ip51122SearchToken = decodeURIComponent(encoded)
+    return _ip51122SearchToken
+  }
+  throw new Error('云岚实时搜索 token 未生成，原站脚本/防护未通过')
+}
+
+async function searchIp51122(keyword, page = 1) {
+  const token = await getIp51122SearchToken()
+  const path = keyword ? `/search?k=${encodeURIComponent(keyword)}&t=${encodeURIComponent(token)}` : `/?t=${encodeURIComponent(token)}`
+  const html = await fetchIp51122Page(path, IP51122_LIST_BASE)
+  const list = parseIp51122ListHtml(html, IP51122_LIST_BASE)
+  return { list, total: list.length, page }
+}
+
+function mergeVodLists(lists, limit = 96) {
+  const merged = []
+  const seen = new Set()
+  for (const list of lists) {
+    for (const item of (Array.isArray(list) ? list : [])) {
+      const key = String(item?.vod_id || item?._detailUrl || item?.vod_name || '').trim()
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      merged.push(item)
+      if (merged.length >= limit) return merged
+    }
+  }
+  return merged
+}
+
+async function loadAiyiCategory(category, page = 1, filters = {}) {
+  const config = typeof category === 'object' && category ? category : { typeId: category }
+  if (config.unsupported) {
+    return { list: [], total: 0, page, hasMore: false, message: '该子频道属于原站独立功能区，当前接口未暴露真实资源列表；为避免分类错配，暂不使用其他频道内容替代。' }
+  }
+  if (config.specialPath) {
+    const query = { ...(config.specialQuery || {}) }
+    if (filters.cursor) query.next = filters.cursor
+    const data = await fetchNapp03Api(config.specialPath, query)
+    if (config.resultKind === 'homeSections') {
+      const sections = mapNapp03HomeSections(data)
+      const list = sections.length ? mergeVodLists(sections.map(section => section.list), Number.MAX_SAFE_INTEGER) : mapNapp03Home(data)
+      return { list, total: list.length, page: 1, next: data.next || '', hasMore: Boolean(data.next), cursor: filters.cursor || '' }
+    }
+    const sections = mapNapp03TopicSections(data)
+    const list = mergeVodLists(sections.map(section => section.list), Number.MAX_SAFE_INTEGER)
+    return { list, total: list.length, page: 1, next: data.next || '', hasMore: Boolean(data.next), cursor: filters.cursor || '' }
+  }
+  const typeId = config.typeId
+  if (typeId === 'home') {
+    const data = await fetchNapp03Api('/v5/vod/home.capi')
+    const sections = mapNapp03HomeSections(data)
+    const list = sections.length ? mergeVodLists(sections.map(section => section.list), 240) : mapNapp03Home(data)
+    return { list, sections, total: list.length, page: 1, hasMore: false, aggregated: false }
+  }
+  const query = { channelId: Number(typeId) || 0 }
+  const sort = NAPP03_SORT_VALUE[filters.sort] ?? filters.sort
+  const year = NAPP03_YEAR_VALUE[filters.year] ?? filters.year
+  const categoryFilter = filters.category || config.category
+  if (categoryFilter) query.category = categoryFilter
+  if (filters.area) query.area = filters.area
+  if (year) query.year = year
+  if (sort) query.sort = sort
+  if (filters.cursor) query.next = filters.cursor
+  const data = await fetchNapp03Api('/vod/channel/list.capi', query)
+  const list = (data.items || []).map(mapNapp03Vod).filter(item => item.vod_id)
+  return { list, total: list.length, page, next: data.next || '', hasMore: Boolean(data.next), cursor: filters.cursor || '' }
+}
+
+async function loadIp51122Category(typeId, page = 1) {
+  const pages = []
+  let lastError = ''
+  const maxPages = typeId && typeId !== 'home' ? 4 : 1
+  for (let p = 1; p <= maxPages; p++) {
+    const paths = typeId && typeId !== 'home'
+      ? [`/channel/${encodeURIComponent(typeId)}${p > 1 ? '-' + p : ''}.html`, `/channel/${encodeURIComponent(typeId)}/page/${p}.html`, `/channel/${encodeURIComponent(typeId)}.html?pg=${p}`]
+      : ['/']
+    let pageList = []
+    for (const path of paths) {
+      const html = await fetchIp51122Page(path, IP51122_LIST_BASE).catch(e => { lastError = e?.message || String(e); return '' })
+      pageList = parseIp51122ListHtml(html, IP51122_LIST_BASE)
+      if (pageList.length) break
+    }
+    if (!pageList.length) break
+    pages.push(pageList)
+    if (p > 1 && mergeVodLists([pages[p - 2], pageList], 120).length <= pages[p - 2].length) break
+  }
+  const list = mergeVodLists(pages, 120)
+  if (list.length) return { list, total: list.length, page: 1, hasMore: false, aggregated: true }
+  return { list: [], total: 0, page, message: lastError || '该站点实时返回为空或防护未通过，没有使用离线兜底。' }
+}
+
+async function fetchYinghuaPage(url) {
+  return (await fetchTextWithFallback(url, {
+    timeoutMs: 8000,
+    proxyTimeoutMs: 5000,
+    preferTauri: true,
+    headers: { 'Accept': 'text/html,application/xhtml+xml' },
+  })).text
+}
+
+async function searchYinghua(keyword, page = 1) {
+  const q = encodeURIComponent(keyword)
+  const html = await fetchYinghuaPage(`${YINGHUA_BASE}/index.php/vod/search/wd/${q}.html`)
+  const list = parseYinghuaListHtml(html, YINGHUA_BASE)
+  return { list, total: list.length, page }
+}
+
+async function loadYinghuaCategory(typeId, page = 1) {
+  const pages = []
+  for (let p = 1; p <= 4; p++) {
+    const html = await fetchYinghuaPage(`${YINGHUA_BASE}/index.php/vod/type/id/${typeId}/page/${p}.html`)
+    const list = parseYinghuaListHtml(html, YINGHUA_BASE)
+    if (!list.length) break
+    pages.push(list)
+    if (!new RegExp('/page/' + (p + 1) + '\\.html|[?&]page=' + (p + 1), 'i').test(html)) break
+  }
+  const list = mergeVodLists(pages, 120)
+  return { list, total: list.length, page: 1, hasMore: false, aggregated: true }
+}
+
+async function openYinghuaDetail(item) {
+  const detailUrl = item?._detailUrl || (item?.vod_id ? `${YINGHUA_BASE}/index.php/vod/detail/id/${item.vod_id}.html` : '')
+  if (!detailUrl) return null
+  const html = await fetchYinghuaPage(detailUrl)
+  if (/403 Forbidden|openresty|Access Denied/i.test(html)) throw new Error('源站返回 403，当前详情页不可用')
+  const title = decodeHtmlEntities((html.match(/<h1[^>]*class=["'][^"']*(?:title|stui-content__detail)[^"']*["'][^>]*>([^<]+)<\/h1>/i)?.[1] || item?.vod_name || '').trim())
+  const pic = html.match(/<img[^>]+src=["']([^"']+)["'][^>]*class=["'][^"']*(?:pic|thumb|stui-content__thumb)[^"']*["']/i)?.[1] || item?.vod_pic || ''
+  const desc = decodeHtmlEntities((html.match(/<div[^>]+class=["'][^"']*(?:desc|stui-content__desc)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+  const lines = extractYinghuaLines(html, YINGHUA_BASE)
+  if (!lines.length) throw new Error('详情页未解析到播放列表')
+  return {
+    vod_id: item?.vod_id || detailUrl,
+    vod_name: title || item?.vod_name || '',
+    vod_pic: pic,
+    vod_content: desc,
+    vod_play_from: lines.map(l => l.name).join('$$$'),
+    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
+    _episodes: lines,
+    _detailUrl: detailUrl,
+  }
+}
+
 const VOD_SOURCES = [
-  { key: 'lzzy',   name: '🌺量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',       type: 'tvbox' },
-  { key: 'bfzy',   name: '🌺暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
-  { key: 'xsd',    name: '🌺星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox' },
-  { key: 'tyys',   name: '🌺天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
+  { key: 'lzzy',   name: '量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod',       type: 'tvbox' },
+  { key: 'bfzy',   name: '暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod',       type: 'tvbox' },
+  { key: 'xsd',    name: '星之尘',  api: 'https://xsd.sdzyapi.com/api.php/provide/vod',   type: 'tvbox', default: true },
+  { key: 'tyys',   name: '天涯资源', api: 'https://tyyszy.com/api.php/provide/vod',      type: 'tvbox' },
 ]
 
 const TV_SOURCES = [
@@ -127,7 +961,7 @@ async function loadTvboxConfig(api) {
   // ── 优先：直接 fetch（Tauri WebView 无 CORS 限制）──────────
   try {
     const resp = await fetch(api.url, {
-      signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
       credentials: 'include'
     })
     if (resp.ok) {
@@ -148,7 +982,7 @@ async function loadTvboxConfig(api) {
     if (invoke) {
       const text = await Promise.race([
         invoke('vod_fetch', { url: api.url }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), 20000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), 8000))
       ])
       if (text && typeof text === 'string') {
         let config
@@ -164,7 +998,7 @@ async function loadTvboxConfig(api) {
 
   // ── 最终降级：直接 fetch（网络问题兜底）─────────────
   try {
-    const resp = await fetch(api.url, { signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined })
+    const resp = await fetch(api.url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined })
     if (!resp.ok) throw new Error('HTTP ' + resp.status)
     const text = await resp.text()
     let config
@@ -345,6 +1179,68 @@ const VOD_TYPE_MAP = {
   tyys:   { movie: 6,  tv: 7,  variety: 16, anime: 25, short: 28 },   // 天涯资源
 }
 
+const YINGHUA_BASE = 'https://www.yinghua289.com'
+const NAPP03_BOOT_BASE = 'https://a.napp03.com'
+const NAPP03_BASE = 'https://www.ncat1.app'
+const YINGHUA_SOURCE_NAME = '樱境天幕片库'
+const YINGHUA_ALT_NAME = '🌸樱华片库'
+const A_NAPP03_SOURCE_NAME = '天穹云影片库'
+const IP51122_SOURCE_NAME = '云岚星幕片库'
+const YINGHUA_CATEGORIES = [
+  { id: 'jp_anime', name: '日本动漫', typeId: 20 },
+  { id: 'cn_anime', name: '国产动漫', typeId: 21 },
+  { id: 'eu_anime', name: '欧美动漫', typeId: 22 },
+  { id: 'anime_movie', name: '动漫电影', typeId: 23 },
+  { id: 'other_anime', name: '其他动漫', typeId: 24 },
+]
+const NAPP03_HOME_CATEGORIES = [
+  { id: 'home_recommend', name: '推荐', typeId: 'home' },
+  { id: 'home_short', name: '短剧', typeId: 6 },
+  { id: 'home_movie', name: '电影', typeId: 1 },
+  { id: 'home_tv', name: '剧集', typeId: 2 },
+  { id: 'home_anime', name: '动漫', typeId: 3 },
+  { id: 'home_variety', name: '综艺纪录', typeId: 4 },
+  { id: 'home_welfare', name: '福利', typeId: 5 },
+]
+const NAPP03_UNSUPPORTED_CATEGORY = { unsupported: true }
+const NAPP03_GROUPS = [
+  { id: 'home', name: '首页', children: NAPP03_HOME_CATEGORIES },
+  { id: 'discover', name: '发现', children: [
+    { id: 'discover_netflix', name: 'Netflix 新片', specialPath: '/vod/netflixNewWatch.capi', resultKind: 'topicSections' },
+    { id: 'discover_topics', name: '全部专题', specialPath: '/v2/vod/specialTopics.capi', resultKind: 'topicSections' },
+    { id: 'discover_topic_movie', name: '大片合集', specialPath: '/vod/specialTopic/categoryTopics.capi', specialQuery: { topicCategoryId: 1 }, resultKind: 'topicSections' },
+    { id: 'discover_topic_star', name: '明星', specialPath: '/vod/specialTopic/categoryTopics.capi', specialQuery: { topicCategoryId: 35 }, resultKind: 'topicSections' },
+    { id: 'discover_topic_score', name: '高分点评', specialPath: '/vod/specialTopic/categoryTopics.capi', specialQuery: { topicCategoryId: 8 }, resultKind: 'topicSections' },
+    { id: 'discover_channel_movie', name: '电影专题页', specialPath: '/v4/vod/channel/topicListView.capi', specialQuery: { channelId: 1 }, resultKind: 'homeSections' },
+    { id: 'discover_channel_tv', name: '剧集专题页', specialPath: '/v4/vod/channel/topicListView.capi', specialQuery: { channelId: 2 }, resultKind: 'homeSections' },
+  ] },
+  { id: 'watch', name: '看啥片', children: [
+    { id: 'watch_all', name: '全部', typeId: 0 },
+    { id: 'watch_new', name: '新片', typeId: 1, sort: 'new' },
+    { id: 'watch_ethics', name: '伦理', typeId: 5 },
+  ] },
+
+]
+const NAPP03_CATEGORIES = NAPP03_GROUPS.flatMap(group => group.children.map(cat => ({ ...cat, groupId: group.id })))
+
+const NAPP03_FILTERS = [
+  { key: 'sort', label: '排序', values: ['综合', '最新', '最热', '评分'] },
+  { key: 'category', label: '类型', values: ['伦理', '福利', '剧情', '情色', '爱情', '喜剧', '惊悚', '写真', '美女', '恐怖', '犯罪', '悬疑', '动作', '同性', '奇幻', '古装', '青春', '科幻', '文艺'] },
+  { key: 'area', label: '地区', values: ['大陆', '香港', '台湾', '美国', '日本', '韩国', '英国', '法国', '德国', '印度', '泰国', '丹麦', '瑞典', '巴西', '加拿大', '俄罗斯', '意大利', '比利时', '爱尔兰', '西班牙', '澳大利亚', '其它'] },
+  { key: 'year', label: '年份', values: ['2026', '2025', '2024', '2023', '2022', '2021', '2020', '10年代', '00年代', '90年代', '80年代', '更早'] },
+]
+const NAPP03_YEAR_VALUE = { '10年代': '2010', '00年代': '2000', '90年代': '1990', '80年代': '1980', '更早': '1970' }
+const NAPP03_SORT_VALUE = { '综合': '', '最新': '最新', '最热': '最热', '评分': '评分' }
+
+const PAGE_LIBRARY_CATEGORIES = [
+  { id: 'home', name: '首页推荐', typeId: 'home' },
+  { id: 'movie', name: '电影', typeId: 1 },
+  { id: 'tv', name: '连续剧', typeId: 2 },
+  { id: 'anime', name: '动漫', typeId: 3 },
+  { id: 'variety', name: '综艺纪录', typeId: 4 },
+  { id: 'short', name: '短剧', typeId: 6 },
+]
+
 const VOD_CATEGORIES = [
   { id: 'movie',   nameKey: 'categoryMovie', name: '电影' },
   { id: 'tv',      nameKey: 'categoryTv', name: '电视剧' },
@@ -389,6 +1285,7 @@ function addSearchHistory(q) {
   saveSearchHistory(h.slice(0, 20))
 }
 function clearSearchHistory() { saveSearchHistory([]) }
+function removeSearchHistory(q) { saveSearchHistory(getSearchHistory().filter(s => s !== q)) }
 
 function getPlayHistory() {
   try { return JSON.parse(localStorage.getItem(KEY_PLAY) || '[]') } catch { return [] }
@@ -494,8 +1391,35 @@ function parseXml(raw) {
 
 // ── 网络请求（优先 Rust 后端代理，绕过 WebView CORS 限制） ──
 
+const MOVIE_REQUEST_CACHE = new Map()
+const MOVIE_BAD_URLS = new Map()
+const MOVIE_CACHE_TTL = 30000
+const MOVIE_BAD_TTL = 60000
+
+function getCachedMovieRequest(key) {
+  const hit = MOVIE_REQUEST_CACHE.get(key)
+  if (!hit || Date.now() - hit.time > MOVIE_CACHE_TTL) return null
+  return hit.value
+}
+function setCachedMovieRequest(key, value) {
+  MOVIE_REQUEST_CACHE.set(key, { time: Date.now(), value })
+  if (MOVIE_REQUEST_CACHE.size > 120) MOVIE_REQUEST_CACHE.delete(MOVIE_REQUEST_CACHE.keys().next().value)
+}
+function clearCachedMovieRequest(key) { MOVIE_REQUEST_CACHE.delete(key) }
+function markBadMovieUrl(key) { MOVIE_BAD_URLS.set(key, Date.now() + MOVIE_BAD_TTL) }
+function isBadMovieUrl(key) {
+  const until = MOVIE_BAD_URLS.get(key)
+  if (!until) return false
+  if (Date.now() > until) { MOVIE_BAD_URLS.delete(key); return false }
+  return true
+}
+
 // 优先直接 fetch，失败走 Tauri Rust 后端，再失败走 CORS 代理
 async function vodApiFetch(url, signal) {
+  const cacheKey = 'json:' + url
+  const cached = getCachedMovieRequest(cacheKey)
+  if (cached) return cached
+  if (isBadMovieUrl(cacheKey)) return { list: [], total: 0 }
   // ── 方式1: Tauri Rust 后端代理（绕过 CORS，Tauri 2.x 必须走这里）────────
   try {
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
@@ -508,7 +1432,7 @@ async function vodApiFetch(url, signal) {
       ]).catch(e => { clearTimeout(tid); return null })
       clearTimeout(tid)
       if (text && typeof text === 'string' && text.trim()) {
-        try { console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80)); return JSON.parse(text) } catch(e) { console.warn('[vodApiFetch] Tauri JSON解析失败:', e.message); return null }
+        try { console.info('[vodApiFetch] Tauri后端成功:', url.slice(0, 80)); const json = JSON.parse(text); setCachedMovieRequest(cacheKey, json); return json } catch(e) { console.warn('[vodApiFetch] Tauri JSON解析失败:', e.message); return null }
       }
     } else { console.warn('[vodApiFetch] Tauri API 不可用') }
   } catch (e) { console.warn('[vodApiFetch] Tauri降级异常:', e.message) }
@@ -523,7 +1447,7 @@ async function vodApiFetch(url, signal) {
       const resp = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined })
       if (resp.ok) {
         const txt = await resp.text()
-        try { console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50)); return JSON.parse(txt) } catch(e) { console.warn('[vodApiFetch] 代理JSON解析失败:', proxy, e.message) }
+        try { console.info('[vodApiFetch] 代理成功:', proxy.slice(0, 30), url.slice(0, 50)); const json = JSON.parse(txt); setCachedMovieRequest(cacheKey, json); return json } catch(e) { console.warn('[vodApiFetch] 代理JSON解析失败:', proxy, e.message) }
       }
     } catch (e) { console.warn('[vodApiFetch] 代理异常:', proxy, e.message) }
   }
@@ -533,22 +1457,107 @@ async function vodApiFetch(url, signal) {
     const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined })
     if (resp.ok) {
       const txt = await resp.text()
-      try { console.info('[vodApiFetch] 直接fetch成功(兜底):', url.slice(0, 80)); return JSON.parse(txt) } catch { return null }
+      try { console.info('[vodApiFetch] 直接fetch成功(兜底):', url.slice(0, 80)); const json = JSON.parse(txt); setCachedMovieRequest(cacheKey, json); return json } catch { return null }
     }
   } catch (e) { console.warn('[vodApiFetch] 直接fetch异常(兜底):', e.message, url.slice(0, 80)) }
 
-  return { list: [], total: 0 }
+  markBadMovieUrl(cacheKey)
+  const empty = { list: [], total: 0 }
+  setCachedMovieRequest(cacheKey, empty)
+  return empty
+}
+
+async function fetchTextWithFallback(url, options = {}) {
+  const timeoutMs = options.timeoutMs || 8000
+  const directTimeoutMs = Math.min(timeoutMs, options.directTimeoutMs || 6000)
+  const proxyTimeoutMs = Math.min(timeoutMs, options.proxyTimeoutMs || 9000)
+  const headers = options.headers || { 'Accept': 'text/html,application/xhtml+xml' }
+  const cacheKey = 'text:' + url
+  const cached = getCachedMovieRequest(cacheKey)
+  if (cached) return cached
+  if (isBadMovieUrl(cacheKey)) throw new Error('最近请求失败，暂时跳过慢源')
+
+  if (options.preferTauri) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+      if (invoke) {
+        const text = await Promise.race([
+          invoke('vod_fetch', { url }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), directTimeoutMs)),
+        ])
+        if (text && typeof text === 'string') {
+          const result = { text, status: 200, via: 'tauri' }
+          setCachedMovieRequest(cacheKey, result)
+          return result
+        }
+      }
+    } catch (tauriError) {
+      console.warn('[fetchTextWithFallback] Tauri 优先请求失败:', tauriError?.message || tauriError, url.slice(0, 80))
+    }
+  }
+
+  try {
+    const resp = await fetch(url, {
+      signal: AbortSignal.timeout ? AbortSignal.timeout(directTimeoutMs) : undefined,
+      credentials: options.credentials || 'include',
+      headers,
+    })
+    const text = await resp.text()
+    if (!resp.ok) throw new Error('HTTP ' + resp.status)
+    const result = { text, status: resp.status, via: 'direct' }
+    setCachedMovieRequest(cacheKey, result)
+    return result
+  } catch (directError) {
+    console.warn('[fetchTextWithFallback] 直接请求失败:', directError?.message || directError, url.slice(0, 80))
+  }
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+    if (invoke) {
+      const text = await Promise.race([
+        invoke('vod_fetch', { url }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('vod_fetch timeout')), directTimeoutMs)),
+      ])
+      if (text && typeof text === 'string') {
+        const result = { text, status: 200, via: 'tauri' }
+        setCachedMovieRequest(cacheKey, result)
+        return result
+      }
+    }
+  } catch (tauriError) {
+    console.warn('[fetchTextWithFallback] Tauri 请求失败:', tauriError?.message || tauriError, url.slice(0, 80))
+  }
+
+  const proxies = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+  ]
+  for (const proxy of proxies) {
+    try {
+      const resp = await fetch(proxy + encodeURIComponent(url), {
+        signal: AbortSignal.timeout ? AbortSignal.timeout(proxyTimeoutMs) : undefined,
+      })
+      const text = await resp.text()
+      if (resp.ok) {
+        const result = { text, status: resp.status, via: proxy }
+        setCachedMovieRequest(cacheKey, result)
+        return result
+      }
+    } catch (proxyError) {
+      console.warn('[fetchTextWithFallback] 代理请求失败:', proxy, proxyError?.message || proxyError)
+    }
+  }
+
+  markBadMovieUrl(cacheKey)
+  throw new Error('Failed to fetch')
 }
 
 // 普通请求（非 JSON）
 async function webFetch(url) {
-  const resp = await fetch(url, {
-    signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined,
-    credentials: 'include',
-    headers: { 'Referer': 'https://claw.qt.cool/' }
-  })
-  if (!resp.ok) throw new Error('HTTP ' + resp.status)
-  return resp.text()
+  return (await fetchTextWithFallback(url, {
+    timeoutMs: 8000,
+    headers: { 'Accept': 'text/html,application/xhtml+xml', 'Referer': 'https://claw.qt.cool/' },
+  })).text
 }
 
 // 通用 JSON 获取（自动降级）
@@ -615,14 +1624,14 @@ function posterFallback(img, placeholder = '🎬') {
     img.src = next[0]
     return
   }
-  if (img.parentElement) img.parentElement.innerHTML = '<span class="tvbox-card-placeholder">' + placeholder + '</span>'
+  if (img.parentElement) img.parentElement.innerHTML = '<span class="tvbox-card-placeholder"><span class="tvbox-card-placeholder-icon">' + placeholder + '</span><span class="tvbox-card-placeholder-text">暂无封面</span></span>'
 }
 
 function renderPosterImg(url, alt, itemSrcKey, itemApi, placeholder = '🎬') {
   const candidates = buildPicCandidates(url, itemSrcKey, itemApi)
-  if (!candidates.length) return '<span class="tvbox-card-placeholder">' + placeholder + '</span>'
+  if (!candidates.length) return '<span class="tvbox-card-placeholder"><span class="tvbox-card-placeholder-icon">' + placeholder + '</span><span class="tvbox-card-placeholder-text">暂无封面</span></span>'
   const first = candidates[0]
-  return '<img src="' + escHtml(first) + '" data-poster-cands="' + escHtml(candidates.slice(1).join('||')) + '" alt="' + escHtml(alt || '') + '" loading="lazy" decoding="async" referrerpolicy="no-referrer" crossorigin="anonymous" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this, \'' + placeholder + '\')" />'
+  return '<img src="' + escHtml(first) + '" data-poster-cands="' + escHtml(candidates.slice(1).join('||')) + '" alt="' + escHtml(alt || '') + '" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="window.__tuluPosterFallback && window.__tuluPosterFallback(this, \'' + placeholder + '\')" />'
 }
 
 function normalizeVodItem(item, source) {
@@ -646,17 +1655,11 @@ if (typeof window !== 'undefined') window.__tuluPosterFallback = posterFallback
 
 
 async function fetchJSONFast(url, signal) {
-  const tasks = []
-  tasks.push(fetchJSON(url, signal))
-  tasks.push(webFetch(url).then(text => {
-    try { return JSON.parse(text) } catch { try { return parseXml(text) } catch { return { list: [], total: 0 } } }
-  }).catch(() => ({ list: [], total: 0 })))
-  const timeout = new Promise(resolve => setTimeout(() => resolve({ list: [], total: 0, _timeout: true }), 4500))
-  const first = await Promise.race([...tasks.map(p => p.then(j => (j?.list?.length || j?.total) ? j : null).catch(() => null)), timeout])
-  if (first) return first
-  const settled = await Promise.allSettled(tasks)
-  for (const r of settled) if (r.status === 'fulfilled' && r.value) return r.value
-  return { list: [], total: 0 }
+  const timeout = new Promise(resolve => setTimeout(() => resolve({ list: [], total: 0, _timeout: true }), 3000))
+  return await Promise.race([
+    fetchJSON(url, signal).catch(() => ({ list: [], total: 0 })),
+    timeout,
+  ])
 }
 
 // ── NZK 解析 ──
@@ -702,7 +1705,7 @@ function convertM3uToNormal(m3u) {
 async function loadTvSource(idx) {
   if (tvCache[idx]) return tvCache[idx]
   try {
-    const text = await fetch(TV_SOURCES[idx].api, { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.text())
+    const text = await fetch(TV_SOURCES[idx].api, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.text())
     const isM3u = text.includes('#EXTM3U') || text.includes('group-title')
     tvCache[idx] = isM3u ? parseNzk(convertM3uToNormal(text)) : parseNzk(text)
   } catch (e) { tvCache[idx] = [] }
@@ -731,7 +1734,7 @@ function initApp(el) {
   el.innerHTML = `
     <nav class="tvbox-navbar">
       <div class="tvbox-brand">
-        <div class="tvbox-brand-icon">🎬</div>
+        <div class="tvbox-brand-icon">影</div>
         <div>
           <div class="tvbox-brand-name">${escHtml(mt('appTitle'))}</div>
           <div id="t-debug-status" style="font-size:10px;color:var(--text-muted);margin-top:2px"></div>
@@ -744,13 +1747,21 @@ function initApp(el) {
           <input class="tvbox-search-input" type="text" id="t-search" placeholder="${escHtml(mt('searchPlaceholder'))}" autocomplete="off" />
           <button class="tvbox-search-btn" id="t-search-btn">${escHtml(mt('searchButton'))}</button>
         </div>
+        <div id="t-history-panel" class="tvbox-search-history-panel" style="display:none">
+          <div class="tvbox-search-history-head">
+            <span>${escHtml(mt('searchHistory'))}</span>
+            <button id="t-clear-history" class="tvbox-search-history-clear">${escHtml(mt('clear'))}</button>
+          </div>
+          <div id="t-history-tags" class="tvbox-search-history-tags"></div>
+        </div>
       </div>
 
       <div class="tvbox-mode-tabs">
-        <button class="tvbox-mode-tab active" data-mode="vod">📺 ${escHtml(mt('vodMode'))}</button>
-        <button class="tvbox-mode-tab" data-mode="live">📡 ${escHtml(mt('liveMode'))}</button>
-        <button class="tvbox-mode-tab" data-mode="tvboxjson">🔗 ${escHtml(mt('tvboxJsonMode'))}</button>
-        <button class="tvbox-mode-tab" data-mode="crawl">🌐 ${escHtml(mt('crawlMode'))}</button>
+        <button class="tvbox-mode-tab active" data-mode="vod">${escHtml(mt('vodMode'))}</button>
+        <button class="tvbox-mode-tab" id="t-library-entry" data-mode="library">星枢片库</button>
+        <button class="tvbox-mode-tab" data-mode="live">${escHtml(mt('liveMode'))}</button>
+        <button class="tvbox-mode-tab" data-mode="tvboxjson">${escHtml(mt('tvboxJsonMode'))}</button>
+        <button class="tvbox-mode-tab" data-mode="crawl">${escHtml(mt('crawlMode'))}</button>
       </div>
     </nav>
 
@@ -769,13 +1780,6 @@ function initApp(el) {
       </div>
     </div>
 
-    <div id="t-history-panel" style="display:none; position:fixed; top:120px; left:50%; transform:translateX(-50%); width:460px; max-width:90vw; background:var(--bg-elevated); border:1px solid var(--border); border-radius:12px; z-index:100; padding:12px 14px; box-shadow:0 16px 48px rgba(0,0,0,.7)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-size:12px;font-weight:600;color:var(--text-secondary)">${escHtml(mt('searchHistory'))}</span>
-        <button id="t-clear-history" style="background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border)">${escHtml(mt('clear'))}</button>
-      </div>
-      <div id="t-history-tags" style="display:flex;flex-wrap:wrap;gap:7px"></div>
-    </div>
 
     <div class="tvbox-player-overlay" id="t-player-overlay" style="display:none">
       <div class="tvbox-player-box">
@@ -799,10 +1803,13 @@ function initApp(el) {
   const searchInput = el.querySelector('#t-search')
   const searchBtn   = el.querySelector('#t-search-btn')
 
+  searchBtn.addEventListener('mousedown', () => hideHistory())
   searchBtn.addEventListener('click', () => doSearch(searchInput.value))
-  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(searchInput.value) })
-  searchInput.addEventListener('focus', () => showSearchHistory())
-  searchInput.addEventListener('blur', () => setTimeout(() => el.querySelector('#t-history-panel').style.display = 'none', 200))
+  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { hideHistory(); doSearch(searchInput.value) } })
+  searchInput.addEventListener('focus', () => { if (!searchInput.value.trim()) showSearchHistory() })
+  searchInput.addEventListener('input', () => { if (!searchInput.value.trim()) showSearchHistory(); else hideHistory() })
+  searchInput.addEventListener('input', () => { if (searchInput.value.trim()) hideHistory() })
+  searchInput.addEventListener('blur', () => setTimeout(() => hideHistory(), 120))
   el.querySelector('#t-clear-history').addEventListener('click', e => { e.stopPropagation(); clearSearchHistory(); renderSearchHistory() })
   el.querySelector('#t-player-close').addEventListener('click', closePlayer)
   el.querySelector('#t-player-mini').addEventListener('click', () => {
@@ -827,6 +1834,7 @@ function initApp(el) {
       const newMode = btn.dataset.mode
       if (newMode === mode) return
       mode = newMode
+      el.classList.toggle('tvbox-library-mode', mode === 'library')
       el.querySelectorAll('.tvbox-mode-tab').forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
       page = 1; query = ''; searchInput.value = ''; hideHistory(); _viewStack = []
@@ -834,6 +1842,10 @@ function initApp(el) {
         el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">' + escHtml(mt('categoryLabel')) + '</span><button class="tvbox-cat-chip active">' + escHtml(mt('allChannels')) + '</button>'
         el.querySelector('#t-catbar').querySelector('.tvbox-cat-chip').addEventListener('click', () => {})
         renderSrcBar()
+      } else if (mode === 'library') {
+        el.querySelector('#t-catbar').innerHTML = ''
+        el.querySelector('#t-srcbar').innerHTML = ''
+        showLibraryHome()
       } else if (mode === 'tvboxjson') {
         el.querySelector('#t-catbar').innerHTML = '<span class="tvbox-catbar-label">' + escHtml(mt('categoryLabel')) + '</span><button class="tvbox-cat-chip active">' + escHtml(mt('all')) + '</button>'
         renderTvboxSrcTabs()
@@ -846,6 +1858,7 @@ function initApp(el) {
         renderSrcBar()
       }
       if (mode === 'live') loadLive()
+      else if (mode === 'library') { /* showLibraryHome 已加载 */ }
       else if (mode === 'tvboxjson') loadTvboxList()
       else if (mode === 'crawl') { /* 等待用户输入 */ }
       else if (getPlayHistory().length > 0 && !query) showPlayHistory()
@@ -869,44 +1882,60 @@ function initApp(el) {
     addSearchHistory(query)
     page = 1
     hideHistory()
+    searchInput.blur()
     _viewStack = []
-    // 搜索只搜当前选中的 API 资源，避免其他源的模糊结果混入当前界面
-    loadData()
+    if (mode === 'library') showLibraryHome(query)
+    else loadData()
   }
 
   function showSearchHistory() {
-    const h = getSearchHistory()
+    const h = getSearchHistory().slice(0, 8)
     const wrap = el.querySelector('#t-history-panel')
-    if (!h.length) { wrap.style.display = 'none'; return }
-    wrap.style.display = 'block'
+    if (!wrap || !h.length || searchInput.value.trim()) {
+      hideHistory()
+      return
+    }
     renderSearchHistory()
+    wrap.style.display = 'block'
   }
 
   function renderSearchHistory() {
     const tags = el.querySelector('#t-history-tags')
-    tags.innerHTML = getSearchHistory().map(s =>
-      '<span class="tvbox-history-tag" data-q="' + escHtml(s) + '">' + escHtml(s) + '</span>'
+    if (!tags) return
+    tags.innerHTML = getSearchHistory().slice(0, 8).map(s =>
+      '<span class="tvbox-history-item"><button class="tvbox-history-tag" data-q="' + escHtml(s) + '">' + escHtml(s) + '</button><button class="tvbox-history-remove" data-q="' + escHtml(s) + '" title="删除">×</button></span>'
     ).join('')
     tags.querySelectorAll('.tvbox-history-tag').forEach(tag => {
       tag.addEventListener('click', () => {
         searchInput.value = tag.dataset.q
+        hideHistory()
         doSearch(tag.dataset.q)
+      })
+    })
+    tags.querySelectorAll('.tvbox-history-remove').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation()
+        removeSearchHistory(btn.dataset.q)
+        renderSearchHistory()
       })
     })
   }
 
-  function hideHistory() { el.querySelector('#t-history-panel').style.display = 'none' }
+  function hideHistory() {
+    const panel = el.querySelector('#t-history-panel')
+    if (panel) panel.style.display = 'none'
+  }
 
   function showPlayHistory() {
     const h = getPlayHistory().slice(0, 12)
     const content = el.querySelector('#t-content')
     if (!h.length) { loadData(); return }
 
-    let html = '<div class="tvbox-section-title"><span>📜</span>' + escHtml(mt('recentPlayback')) + ' ' +
-      '<button id="_h-import" class="tvbox-clear-btn" style="margin-left:8px">📥 ' + escHtml(mt('import')) + '</button>' +
-      '<button id="_h-export" class="tvbox-clear-btn" style="margin-left:4px">📤 ' + escHtml(mt('export')) + '</button>' +
-      '<button id="t-clear-play" class="tvbox-clear-btn" style="margin-left:auto">' + escHtml(mt('clearAll')) + '</button></div>'
-    html += '<div style="display:flex;gap:10px;overflow-x:auto;padding:8px 0 16px;scrollbar-width:none"><style>.tvbox-hist-card{flex-shrink:0;width:100px;cursor:pointer}.tvbox-hist-card:hover .tvbox-card-inner{transform:translateY(-2px);border-color:var(--border-hover)}.tvbox-hist-pic{position:relative;aspect-ratio:2/3;background:var(--bg-elevated);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border);margin-bottom:6px}.tvbox-hist-pic img{width:100%;height:100%;object-fit:cover;display:block}.tvbox-hist-name{font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}.tvbox-hist-ep{font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;padding:0 2px}</style>'
+    let html = '<div class="tvbox-section-title tvbox-history-title"><span>📜</span>' + escHtml(mt('recentPlayback')) + ' ' +
+      '<button id="_h-import" class="tvbox-clear-btn">📥 ' + escHtml(mt('import')) + '</button>' +
+      '<button id="_h-export" class="tvbox-clear-btn">📤 ' + escHtml(mt('export')) + '</button>' +
+      '<button id="t-clear-play" class="tvbox-clear-btn tvbox-clear-danger">' + escHtml(mt('clearAll')) + '</button></div>'
+    html += '<div class="tvbox-history-rail">'
     h.forEach((item, i) => {
       const source = [...VOD_SOURCES, ...TVBOX_BUILTIN].find(s => s.key === item._srcKey || s.name === item.source)
       const srcKey = source?.key || item.source
@@ -914,15 +1943,20 @@ function initApp(el) {
       const posterHtml = renderPosterImg(item.pic, item.name, srcKey, srcApi, '🎬')
       const pct = item.duration > 0 ? Math.round((item.progress / item.duration) * 100) : 0
       const resumeLabel = pct > 95 ? mt('watched') : pct > 2 ? mt('resumePercent', { percent: pct }) : ''
-      html += '<div class="tvbox-hist-card" data-hi="' + i + '" data-progress="' + escHtml(item.progress || 0) + '" data-duration="' + escHtml(item.duration || 0) + '">' +
-        '<div class="tvbox-hist-pic">' +
-        posterHtml +
-          (resumeLabel ? '<span style="position:absolute;top:5px;right:5px;background:rgba(16,185,129,.9);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px">' + escHtml(resumeLabel) + '</span>' : '') +
-          '<div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1)"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,var(--accent),#ec4899)"></div></div>' +
-        '</div>' +
+      html += '<article class="tvbox-hist-card" data-hi="' + i + '" data-progress="' + escHtml(item.progress || 0) + '" data-duration="' + escHtml(item.duration || 0) + '">' +
+        '<button class="tvbox-hist-poster" data-action="detail" title="查看详情">' +
+          posterHtml +
+          (resumeLabel ? '<span class="tvbox-hist-resume">' + escHtml(resumeLabel) + '</span>' : '') +
+          '<span class="tvbox-hist-source">' + escHtml(item.source || srcKey || '历史') + '</span>' +
+          '<div class="tvbox-hist-progress"><div style="width:' + Math.min(100, Math.max(0, pct)) + '%"></div></div>' +
+        '</button>' +
         '<div class="tvbox-hist-name">' + escHtml(item.name) + '</div>' +
         '<div class="tvbox-hist-ep">' + escHtml(item.epName || '') + '</div>' +
-      '</div>'
+        '<div class="tvbox-hist-actions">' +
+          '<button class="tvbox-hist-action primary" data-action="resume">继续</button>' +
+          '<button class="tvbox-hist-action" data-action="detail">详情</button>' +
+        '</div>' +
+      '</article>'
     })
     html += '</div>'
     html += '<div class="tvbox-divider"></div>'
@@ -933,17 +1967,34 @@ function initApp(el) {
     content.querySelector('#_h-import')?.addEventListener('click', e => { e.stopPropagation(); importFavorites() })
     content.querySelector('#_h-export')?.addEventListener('click', e => { e.stopPropagation(); exportFavorites() })
     content.querySelectorAll('.tvbox-hist-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const d = card.dataset
-        const item = h[parseInt(d.hi)] || {}
+      const openHistoryDetail = async (item) => {
+        const source = resolveHistorySource(item)
+        if (!source) {
+          alert('无法识别历史来源，已保留继续播放入口')
+          return
+        }
+        try {
+          const detailId = item.detailId || item.id
+          if (source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') {
+            const resolved = await fetchCmsVodDetail(source.api || '', detailId, item.name, item.pic)
+            return showEpisodePicker(resolved, source.name || item.source)
+          }
+          const resolved = source.key === 'yinghua'
+            ? await openYinghuaDetail({ vod_id: detailId, vod_name: item.name, vod_pic: item.pic, _detailUrl: item.detailUrl })
+            : await fetchPageApiDetail(source, detailId, item.name, item.pic)
+          if (resolved) return showEpisodePicker(resolved, source.name)
+          alert(mt('loadFailed'))
+        } catch (e) {
+          alert(e.message || mt('loadFailed'))
+        }
+      }
+      const resumeHistory = (item, d) => {
         const pct = d.duration > 0 ? Math.round((parseFloat(d.progress) / parseFloat(d.duration)) * 100) : 0
         const progress = pct > 2 ? parseFloat(d.progress) : 0
-        // 续播提示
         if (progress > 0) {
           const mins = Math.floor(progress / 60)
           const secs = Math.round(progress % 60)
           openResumePlayer(item.name, item.pic, item.id, item.source, item.epName, item.epUrl, progress, item.allUrls, item.allEps)
-          // 显示续播提示
           try {
             const body = document.querySelector('#t-player-body')
             if (body) {
@@ -964,9 +2015,32 @@ function initApp(el) {
         } else {
           openResumePlayer(item.name, item.pic, item.id, item.source, item.epName, item.epUrl, 0, item.allUrls, item.allEps)
         }
+      }
+      card.addEventListener('click', (event) => {
+        const d = card.dataset
+        const item = h[parseInt(d.hi)] || {}
+        const action = event.target.closest('[data-action]')?.dataset.action || 'detail'
+        if (action === 'resume') resumeHistory(item, d)
+        else openHistoryDetail(item)
       })
     })
     loadList()
+  }
+
+  function resolveHistorySource(item) {
+    const sourceName = String(item?.source || '')
+    const sourceKey = String(item?._srcKey || item?.srcKey || '')
+    const api = String(item?._api || item?.api || '')
+    const all = [
+      ...VOD_SOURCES,
+      { key: 'yinghua', name: YINGHUA_SOURCE_NAME, api: YINGHUA_BASE },
+      { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: NAPP03_BASE },
+      { key: 'ip51122', name: IP51122_SOURCE_NAME, api: IP51122_LIST_BASE },
+    ]
+    return all.find(s => s.key === sourceKey || s.name === sourceName || s.api === api)
+      || (sourceName.includes('樱') ? { key: 'yinghua', name: YINGHUA_SOURCE_NAME, api: YINGHUA_BASE } : null)
+      || (sourceName.includes('天空') || sourceName.includes('ncat') ? { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: NAPP03_BASE } : null)
+      || (sourceName.includes('云岚') || sourceName.includes('51122') ? { key: 'ip51122', name: IP51122_SOURCE_NAME, api: IP51122_LIST_BASE } : null)
   }
 
   function openResumePlayer(name, pic, id, source, epName, epUrl, progress, allUrls, allEps) {
@@ -984,6 +2058,10 @@ function initApp(el) {
     const source = VOD_SOURCES.find(s => s.key === sourceKey)
     if (!source) return VOD_CATEGORIES.map(c => ({ ...c, typeId: 1 }))
     try {
+      if (source.key === 'yinghua') {
+        _catCache[sourceKey] = YINGHUA_CATEGORIES
+        return YINGHUA_CATEGORIES
+      }
       const json = await fetchJSON(source.api + '?ac=config')
       if (json?.class && Array.isArray(json.class)) {
         const cats = json.class.map(cls => ({
@@ -997,13 +2075,13 @@ function initApp(el) {
         }
       }
     } catch {}
-    // 回退到默认分类（用 typeId=1 试）
     const fallback = VOD_CATEGORIES.map(c => ({ ...c, typeId: (VOD_TYPE_MAP[sourceKey] || {})[c.id] || 1 }))
     _catCache[sourceKey] = fallback
     return fallback
   }
 
   async function renderCatBar(wait = false) {
+    if (mode === 'library') return
     const container = el.querySelector('#t-catbar')
     const source = VOD_SOURCES[src]
     const currentSourceKey = source.key
@@ -1034,6 +2112,7 @@ function initApp(el) {
   }
 
   function renderSrcBar() {
+    if (mode === 'library') return
     const container = el.querySelector('#t-srcbar')
     const list = VOD_SOURCES
     container.innerHTML = '<span class="tvbox-srcbar-label">' + escHtml(mt('sourceLabel')) + '</span>' +
@@ -1057,6 +2136,7 @@ function initApp(el) {
   }
 
   async function loadData() {
+    if (mode === 'library') return
     const content = el.querySelector('#t-content')
     content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div>'
     try {
@@ -1091,13 +2171,16 @@ function setDebug(msg, detail) {
     let json = { list: [], total: 0 }
     const t0 = Date.now()
     try {
-      try {
-        json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
-        _sourceHealth[source.api] = Date.now() - t0
-        setDebug(mt('debugApiReturned'), 'total=' + json.total + ' list.len=' + (json.list?.length || 0) + ' (' + _sourceHealth[source.api] + 'ms)')
-      } catch (e) { setDebug(mt('debugFirstError'), e.message) }
-      if (!json.total && !json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
-      if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
+      if (source.key === 'yinghua') json = await loadYinghuaCategory((YINGHUA_CATEGORIES.find(c => c.id === cat) || YINGHUA_CATEGORIES[0]).typeId, page)
+      else if (source.key === 'a_napp03' || source.key === 'ip51122') json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
+      else {
+        try {
+          json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
+          _sourceHealth[source.api] = Date.now() - t0
+          setDebug(mt('debugApiReturned'), 'total=' + json.total + ' list.len=' + (json.list?.length || 0) + ' (' + _sourceHealth[source.api] + 'ms)')
+        } catch (e) { setDebug(mt('debugFirstError'), e.message) }
+        if (!json.list) { try { json = await fetchJsonp(source.api + '?ac=list&t=' + typeId + '&pg=' + page) } catch {} }
+      }
     } catch (e) { setDebug(mt('debugAllMethodsError'), e.message) }
     if (!json.list || !json.list.length) {
       setDebug(mt('debugTypeIdEmpty'), '')
@@ -1115,7 +2198,7 @@ function setDebug(msg, detail) {
   async function searchAllSources(q) {
     const content = el.querySelector('#t-content')
     const qe = encodeURIComponent(q)
-    const perSourceTimeout = 10000
+    const perSourceTimeout = 6000
     const seen = new Set()
     const merged = []
     let finished = 0
@@ -1129,9 +2212,14 @@ function setDebug(msg, detail) {
       const tid = setTimeout(() => ctrl.abort(), perSourceTimeout)
       try {
         let json = { list: [] }
-        try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal) } catch {}
-        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
-        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
+        try {
+          if (source.key === 'yinghua') json = await searchYinghua(q, 1)
+          else if (source.key === 'a_napp03') json = await searchAiyiNapp(q, 1)
+          else if (source.key === 'ip51122') json = await searchIp51122(q, 1)
+          else json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal)
+        } catch {}
+        if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
+        if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
         const items = (json.list || []).map(item => normalizeVodItem(item, source))
         let added = 0
         for (const item of items) {
@@ -1168,9 +2256,18 @@ function setDebug(msg, detail) {
     let json = { list: [], total: 0 }
     try {
       // 优先 videolist（CMS标准搜索接口）
-      try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + q + '&pg=' + page) } catch {}
-      if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + q + '&pg=' + page) } catch {} }
-      if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=videolist&wd=' + q) } catch {} }
+      if (source.key === 'yinghua') {
+        const html = await fetchYinghuaPage(`${YINGHUA_BASE}/index.php/vod/search/wd/${q}.html`)
+        json = { list: parseYinghuaListHtml(html, YINGHUA_BASE), total: 0 }
+      } else if (source.key === 'a_napp03') {
+        json = await searchAiyiNapp(query, page)
+      } else if (source.key === 'ip51122') {
+        json = await searchIp51122(query, page)
+      } else {
+        try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + q + '&pg=' + page) } catch {}
+        if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + q + '&pg=' + page) } catch {} }
+        if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=videolist&wd=' + q) } catch {} }
+      }
     } catch {}
     const count = json.list?.length || 0
     if (!count) {
@@ -1180,6 +2277,11 @@ function setDebug(msg, detail) {
     const filtered = filterSearchResults((json.list || []).map(item => normalizeVodItem(item, source)), query)
     const total = filtered.length
     setDebug(total > 0 ? mt('exactResultCount', { count: total }) : mt('noSearchResult'), 'list.len=' + (json.list?.length || 0) + ' filtered=' + total)
+    if (!total && source.key === 'a_napp03' && json.message) {
+      const content = el.querySelector('#t-content')
+      content.innerHTML = '<div class="tvbox-empty"><div class="tvbox-empty-icon">🔎</div><div class="tvbox-empty-title">' + escHtml(mt('noSearchResult')) + '</div><div class="tvbox-empty-sub">' + escHtml(json.message) + '</div></div>'
+      return
+    }
     renderVodGrid(filtered, total)
   }
 
@@ -1352,6 +2454,7 @@ function setDebug(msg, detail) {
   }
 
   function renderVodGrid(list, total) {
+    if (mode === 'library') return
     const root = _el // 用全局根元素（initApp 里设置的 _el）
     if (!root) { console.warn('[renderVodGrid] _el 全局根元素不存在!'); return }
     let grid = root.querySelector('#t-main-grid')
@@ -1386,7 +2489,7 @@ function setDebug(msg, detail) {
       const histItem = history.find(h => h.id == item.vod_id && h.source === itemSourceName)
       const pct = histItem && histItem.duration > 0 ? Math.round((histItem.progress / histItem.duration) * 100) : 0
       const resumeLabel = pct > 95 ? mt('watched') : pct > 2 ? mt('resumePercent', { percent: pct }) : ''
-      return '<div class="tvbox-card" data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(itemSourceName) + '" data-api="' + escHtml(itemApi) + '" data-name="' + escHtml(item.vod_name) + '" data-pic="' + escHtml(item.vod_pic) + '">' +
+      return '<div class="tvbox-card" data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(itemSourceName) + '" data-src-key="' + escHtml(item._srcKey || '') + '" data-api="' + escHtml(itemApi) + '" data-name="' + escHtml(item.vod_name) + '" data-pic="' + escHtml(item.vod_pic) + '" data-detail-url="' + escHtml(item._detailUrl || '') + '">' +
         '<div class="tvbox-card-inner">' +
           '<div class="tvbox-card-pic">' +
             renderPosterImg(item.vod_pic, item.vod_name, item._srcKey, itemApi) +
@@ -1407,7 +2510,7 @@ function setDebug(msg, detail) {
     grid.querySelectorAll('.tvbox-card').forEach(card => {
       card.addEventListener('click', () => {
         _viewStack.push('list')
-        openDetail(card.dataset.id, card.dataset.name, card.dataset.source, card.dataset.pic, card.dataset.api)
+        openCardDetail(card)
       })
     })
     if (pagination) {
@@ -1422,6 +2525,23 @@ function setDebug(msg, detail) {
     }
   }
 
+  async function openCardDetail(card) {
+    const d = card.dataset
+    const source = resolveHistorySource({ source: d.source, _srcKey: d.srcKey, _api: d.api })
+    try {
+      if (source && ['yinghua', 'a_napp03', 'ip51122'].includes(source.key)) {
+        const item = { vod_id: d.id, vod_name: d.name, vod_pic: d.pic, _detailUrl: d.detailUrl || '' }
+        const resolved = source.key === 'yinghua'
+          ? await openYinghuaDetail(item)
+          : await fetchPageApiDetail(source, d.detailUrl || d.id, d.name, d.pic)
+        if (resolved) return showEpisodePicker(resolved, source.name)
+      }
+    } catch (e) {
+      console.warn('[movie] 页面型详情打开失败，回退普通详情:', e?.message || e)
+    }
+    return fetchCmsVodDetail(d.api, d.id, d.name, d.pic).then(item => showEpisodePicker(item, d.source))
+  }
+
   async function loadLive() {
     const source = TV_SOURCES[tvSrc]
     const content = el.querySelector('#t-content')
@@ -1429,7 +2549,7 @@ function setDebug(msg, detail) {
     let cats = tvCache[tvSrc]
     if (!cats) {
       try {
-        const text = await fetch(source.api, { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.text())
+        const text = await fetch(source.api, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.text())
         const isM3u = text.includes('#EXTM3U') || text.includes('group-title')
         cats = isM3u ? parseNzk(convertM3uToNormal(text)) : parseNzk(text)
         tvCache[tvSrc] = cats
@@ -1489,25 +2609,410 @@ function setDebug(msg, detail) {
     }
   }
 
-  async function openDetail(id, name, sourceName, pic, sourceApi = '') {
-    const source = sourceApi ? { name: sourceName || 'TVBox', api: sourceApi } : (VOD_SOURCES.find(s => s.name === sourceName) || VOD_SOURCES[src])
+async function fetchCmsVodDetail(api, detailId, fallbackName, fallbackPic) {
+  if (!api || !detailId) throw new Error('缺少详情接口')
+  const detailUrl = api + (api.includes('?') ? '&' : '?') + 'ac=detail&ids=' + encodeURIComponent(detailId)
+  let json = await vodApiFetch(detailUrl)
+  if (!json || !Array.isArray(json.list) || !json.list.length) {
+    const altUrl = api + (api.includes('?') ? '&' : '?') + 'ac=videolist&ids=' + encodeURIComponent(detailId)
+    json = await vodApiFetch(altUrl)
+  }
+  const item = json?.list?.[0]
+  if (!item) throw new Error('未获取到详情')
+  return {
+    ...item,
+    vod_id: item.vod_id || detailId,
+    vod_name: item.vod_name || fallbackName,
+    vod_pic: item.vod_pic || fallbackPic,
+  }
+}
+
+async function fetchPageApiDetail(source, detailId, name, pic) {
+  const base = source.key === 'ip51122' ? IP51122_DETAIL_BASE : source.key === 'a_napp03' ? NAPP03_BASE : source.api
+  if (source.key === 'a_napp03') {
+    const id = String(detailId || '').match(/vodId=(\d+)/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
+    if (!id) throw new Error('天穹详情缺少 vodId')
+    return loadNapp03Detail(id, name, pic)
+  }
+  const urls = source.key === 'ip51122'
+    ? [detailId && String(detailId).includes('/detail/') ? normalizeEpisodeUrl(detailId, base) : `${base}/detail/${encodeURIComponent(detailId)}.html`]
+    : [
+        `${base}/api.php/provide/vod/?ac=detail&ids=${encodeURIComponent(detailId)}`,
+        `${base}/index.php/vod/detail/id/${encodeURIComponent(detailId)}.html`,
+        `${base}/#/home/index?channelId=0`,
+      ]
+  for (const url of urls) {
+    try {
+      const html = source.key === 'ip51122' ? await fetchIp51122Page(url) : await fetchYinghuaPage(url)
+      const detail = await parsePageDetailFromHtml(html, base, detailId, name, pic)
+      if (detail) return detail
+    } catch {}
+  }
+  return null
+}
+
+async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
+  if (/403 Forbidden|openresty|Access Denied/i.test(html)) return null
+  const title = decodeHtmlEntities((html.match(/<h1[^>]*>([^<]+)<\/h1>/i)?.[1] || name || '').trim())
+  const desc = decodeHtmlEntities((html.match(/<div[^>]+class=["'][^"']*(?:desc|content|detail)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+  const poster = html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] || pic || ''
+  const episodeLinks = [...html.matchAll(/<a[^>]+href=["']([^"']*\/play\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+    .map(m => ({ name: decodeHtmlEntities(m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()), url: normalizeEpisodeUrl(m[1], baseUrl) }))
+    .filter(ep => ep.url)
+  const lines = episodeLinks.length ? [{ name: '默认线路', urls: episodeLinks }] : []
+  if (!lines.length) return null
+  return {
+    vod_id: detailId,
+    vod_name: title,
+    vod_pic: poster,
+    vod_content: desc,
+    vod_play_from: lines.map(l => l.name).join('$$$'),
+    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
+    _episodes: lines,
+    _detailHtml: html,
+  }
+}
+
+  async function showLibraryHome(initialQuery = '') {
     const content = el.querySelector('#t-content')
-    content.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div>'
-    const detailId = String(id || '').trim()
-    if (!source?.api || !detailId) {
-      content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('movieNotFound')) + '</div>'
-      return
+    const sources = [
+      { key: 'yinghua', name: YINGHUA_SOURCE_NAME, desc: '公开页面分类 / 搜索 / 多线路播放', categories: YINGHUA_CATEGORIES, loadCategories: loadYinghuaCategories, list: loadYinghuaCategory, search: searchYinghua },
+      { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, desc: 'PC 实时入口，分类 / 搜索 / 播放列表', categories: NAPP03_CATEGORIES, groups: NAPP03_GROUPS, activeGroupId: 'home', loadCategories: loadNapp03Categories, list: loadAiyiCategory, search: searchAiyiNapp },
+      { key: 'ip51122', name: IP51122_SOURCE_NAME, desc: '实时首页 / 分类 / 搜索 / 原站详情播放', categories: PAGE_LIBRARY_CATEGORIES, loadCategories: loadIp51122Categories, list: loadIp51122Category, search: searchIp51122 },
+    ]
+    let activeSourceKey = sources[0].key
+    let activeCategory = sources[0].categories[0]
+    let libraryPage = 1
+    let libraryQuery = String(initialQuery || '').trim()
+    let napp03Filters = { sort: '综合', category: '', area: '', year: '' }
+    let libraryCursor = ''
+    let libraryPaging = null
+    let loadingToken = 0
+    const resetLibraryPaging = () => {
+      libraryPage = 1
+      libraryCursor = ''
+      libraryPaging = null
     }
-    let json = { list: null }
-    try { json = await fetchJSON(source.api + '?ac=detail&ids=' + encodeURIComponent(detailId)) } catch {}
-    if (!json.list?.length) { try { json = await fetchJsonp(source.api + '?ac=detail&ids=' + encodeURIComponent(detailId)) } catch {} }
-    const item = json.list && json.list[0]
-    if (!item && name) {
-      const alt = await searchDetailFallback(source, name)
-      if (alt) return showEpisodePicker(alt, source.name)
+
+    const sourceByKey = key => sources.find(s => s.key === key) || sources[0]
+    const refreshSourceCategories = async (source) => {
+      if (!source?.loadCategories || source._categoriesLoaded) return source.categories
+      try {
+        const loaded = await withLibraryTimeout(source.loadCategories(), 12000)
+        if (Array.isArray(loaded) && loaded.length) source.categories = loaded
+        else if (loaded && Array.isArray(loaded.categories) && loaded.categories.length) {
+          source.categories = loaded.categories
+          if (Array.isArray(loaded.groups) && loaded.groups.length) source.groups = loaded.groups
+        }
+      } catch {}
+      source._categoriesLoaded = true
+      if (!source.categories.some(c => c.id === activeCategory?.id)) activeCategory = source.categories[0]
+      if (source.groups && !source.groups.some(group => group.id === source.activeGroupId)) source.activeGroupId = source.groups[0]?.id
+      return source.categories
     }
-    if (!item) { content.innerHTML = '<div class="tvbox-empty">' + escHtml(mt('movieNotFound')) + '</div>'; return }
-    await showEpisodePicker(item, source.name)
+    const originUrlForSource = source => source.key === 'a_napp03' ? NAPP03_BOOT_BASE : source.key === 'ip51122' ? IP51122_LIST_BASE : ''
+    const renderOriginFallback = (source, message = '') => {
+      const originUrl = originUrlForSource(source)
+      if (!originUrl) return ''
+      return '<div class="tvbox-empty tvbox-origin-fallback">' +
+        '<div class="tvbox-empty-icon">🌐</div>' +
+        '<div class="tvbox-empty-title">原站数据未接入成功</div>' +
+        '<div class="tvbox-empty-sub">' + escHtml(message || '当前站点需要原站 SPA/API 或浏览器防护会话，内嵌模式已停用，避免黑屏误导。') + '</div>' +
+        '<a class="tvbox-open-ext" href="' + escHtml(originUrl) + '" target="_blank" rel="noreferrer">打开原站验证</a>' +
+      '</div>'
+    }
+    const renderNapp03Filters = (source) => {
+      if (source.key !== 'a_napp03' || activeCategory?.unsupported || activeCategory?.typeId === 'home') return ''
+      return '<div class="tvbox-library-filters">' + NAPP03_FILTERS.map(group => {
+        const current = napp03Filters[group.key] || (group.key === 'sort' ? '综合' : '')
+        const values = group.key === 'category' ? [''].concat(group.values) : [''].concat(group.values)
+        return '<div class="tvbox-library-filter-row"><span>' + escHtml(group.label) + '</span>' + values.map(value => {
+          const label = value || (group.key === 'sort' ? '综合' : '全部')
+          const active = (value || (group.key === 'sort' ? '综合' : '')) === current
+          return '<button class="tvbox-library-filter' + (active ? ' active' : '') + '" data-filter="' + escHtml(group.key) + '" data-value="' + escHtml(value || (group.key === 'sort' ? '综合' : '')) + '">' + escHtml(label) + '</button>'
+        }).join('') + '</div>'
+      }).join('') + '</div>'
+    }
+    const renderShell = () => {
+      const source = sourceByKey(activeSourceKey)
+      content.innerHTML = '<div class="tvbox-library-workspace">' +
+        '<aside class="tvbox-library-sidebar">' +
+          '<div class="tvbox-library-side-title">星枢片库</div>' +
+          '<div class="tvbox-library-side-sub">实时资源站点</div>' +
+          sources.map(s => '<button class="tvbox-library-source' + (s.key === activeSourceKey ? ' active' : '') + '" data-source="' + escHtml(s.key) + '"><strong>' + escHtml(s.name) + '</strong><span>' + escHtml(s.desc) + '</span></button>').join('') +
+        '</aside>' +
+        '<main class="tvbox-library-main">' +
+          '<div class="tvbox-library-toolbar">' +
+            '<div><div class="tvbox-library-title">' + escHtml(source.name) + '</div><div class="tvbox-library-desc">' + escHtml(source.desc) + '</div></div>' +
+            '<div class="tvbox-library-search"><input id="library-search-input" placeholder="搜索星枢片库三站资源" value="' + escHtml(libraryQuery) + '" /><button id="library-search-btn">搜索</button>' + (originUrlForSource(source) ? '<button id="library-origin-btn" type="button">打开原站</button>' : '') + '</div>' +
+          '</div>' +
+          '<div class="tvbox-library-groups">' + (source.groups ? source.groups.map(group => '<button class="tvbox-library-group' + (group.id === (source.activeGroupId || source.groups[0]?.id) ? ' active' : '') + '" data-group="' + escHtml(group.id) + '">' + escHtml(group.name) + '</button>').join('') : '') + '</div>' +
+          '<div class="tvbox-library-cats">' + source.categories.filter(cat => !source.groups || cat.groupId === (source.activeGroupId || source.groups[0]?.id)).map(cat => '<button class="tvbox-library-cat' + (cat.id === activeCategory.id ? ' active' : '') + '" data-cat="' + escHtml(cat.id) + '">' + escHtml(cat.name) + '</button>').join('') + '</div>' +
+          renderNapp03Filters(source) +
+          '<div id="library-list" class="tvbox-library-list"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div></div>' +
+        '</main>' +
+      '</div>'
+      content.querySelector('#library-origin-btn')?.addEventListener('click', () => {
+        const originUrl = originUrlForSource(sourceByKey(activeSourceKey))
+        if (originUrl) window.open(originUrl, '_blank', 'noopener,noreferrer')
+      })
+      content.querySelectorAll('.tvbox-library-source').forEach(btn => btn.addEventListener('click', async () => {
+        activeSourceKey = btn.dataset.source
+        const next = sourceByKey(activeSourceKey)
+        activeCategory = next.categories[0]
+        napp03Filters = { sort: '综合', category: '', area: '', year: '' }
+        resetLibraryPaging()
+        libraryQuery = ''
+        renderShell()
+        await refreshSourceCategories(next)
+        renderShell()
+        loadLibraryList()
+      }))
+      content.querySelectorAll('.tvbox-library-group').forEach(btn => btn.addEventListener('click', () => {
+        const source = sourceByKey(activeSourceKey)
+        source.activeGroupId = btn.dataset.group
+        activeCategory = source.categories.find(c => c.groupId === source.activeGroupId) || source.categories[0]
+        napp03Filters = { sort: '综合', category: '', area: '', year: '' }
+        resetLibraryPaging()
+        libraryQuery = ''
+        renderShell()
+        loadLibraryList()
+      }))
+      content.querySelectorAll('.tvbox-library-cat').forEach(btn => btn.addEventListener('click', () => {
+        const source = sourceByKey(activeSourceKey)
+        activeCategory = source.categories.find(c => c.id === btn.dataset.cat) || source.categories[0]
+        napp03Filters = { sort: '综合', category: '', area: '', year: '' }
+        resetLibraryPaging()
+        libraryQuery = ''
+        renderShell()
+        loadLibraryList()
+      }))
+      content.querySelectorAll('.tvbox-library-filter').forEach(btn => btn.addEventListener('click', () => {
+        const key = btn.dataset.filter
+        if (!key) return
+        napp03Filters[key] = btn.dataset.value || ''
+        if (key !== 'sort' && napp03Filters[key] === '全部') napp03Filters[key] = ''
+        resetLibraryPaging()
+        libraryQuery = ''
+        renderShell()
+        loadLibraryList()
+      }))
+      content.querySelector('#library-search-btn')?.addEventListener('click', () => {
+        libraryQuery = content.querySelector('#library-search-input')?.value.trim() || ''
+        resetLibraryPaging()
+        loadLibraryList()
+      })
+      content.querySelector('#library-search-input')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          libraryQuery = e.currentTarget.value.trim()
+          resetLibraryPaging()
+          loadLibraryList()
+        }
+      })
+    }
+
+    const scrollLibraryTop = () => {
+      const main = content.querySelector('.tvbox-library-main')
+      const list = content.querySelector('#library-list')
+      try { (main || list || content).scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch {}
+      if (main) main.scrollTop = 0
+    }
+
+    const renderVodCard = (item, source) => {
+      const itemSourceName = item._librarySourceName || source.name
+      const itemSourceKey = item._librarySourceKey || source.key
+      const itemApi = item._libraryApi || ''
+      const title = escHtml(item.vod_name || item.name || mt('unnamed'))
+      const detailId = escHtml((itemSourceKey === 'ip51122' && item._detailUrl) ? item._detailUrl : (item.vod_id || item._detailUrl || ''))
+      const poster = renderPosterImg(item.vod_pic || '', item.vod_name || '', itemSourceKey, itemApi || (source.key === 'yinghua' ? YINGHUA_BASE : source.key === 'a_napp03' ? NAPP03_BASE : IP51122_DETAIL_BASE), '影')
+      const note = escHtml(item.vod_remarks || item.type_name || item.vod_year || '')
+      return '<article class="tvbox-library-vod" data-source="' + escHtml(source.key) + '" data-item-source="' + escHtml(itemSourceKey) + '" data-api="' + escHtml(itemApi) + '" data-source-name="' + escHtml(itemSourceName) + '" data-detail="' + detailId + '" data-action="' + escHtml(item._libraryAction || '') + '" data-name="' + title + '" data-pic="' + escHtml(item.vod_pic || '') + '">' +
+        '<button class="tvbox-library-vod-poster">' + poster + (note ? '<span>' + note + '</span>' : '') + '</button>' +
+        '<div class="tvbox-library-vod-title">' + title + '</div>' +
+        '<div class="tvbox-library-vod-meta">' + escHtml(itemSourceName) + '</div>' +
+      '</article>'
+    }
+
+    const renderCards = (items, source, result = {}) => {
+      if (!items.length) return '<div class="tvbox-empty"><div class="tvbox-empty-title">暂无可显示内容</div><div class="tvbox-empty-sub">该站点实时返回为空或防护未通过，没有使用离线兜底。</div></div>'
+      const currentPage = result.page || 1
+      const knownPage = Math.max(currentPage, Number(String(result.next || '').match(/page=(\d+)/i)?.[1] || currentPage))
+      const metaText = result.hasMore ? '第 ' + currentPage + ' 页 / 已知至少 ' + knownPage + ' 页 · 本页 ' + items.length + ' 条' : '第 ' + currentPage + ' 页 / 共 ' + currentPage + ' 页 · 本页 ' + items.length + ' 条'
+      const sectionsHtml = Array.isArray(result.sections) && result.sections.length
+        ? result.sections.map(section => '<section class="tvbox-library-section"><div class="tvbox-library-section-head"><h3>' + escHtml(section.title || '推荐') + '</h3><div>' + (section.url ? '<button class="tvbox-library-more" data-url="' + escHtml(section.url) + '" data-title="' + escHtml(section.title || '专题') + '">更多</button>' : '<span>' + escHtml(String((section.list || []).length)) + ' 条</span>') + '</div></div><div class="tvbox-library-card-grid">' + (section.list || []).map(item => renderVodCard(item, source)).join('') + '</div></section>').join('')
+        : '<div class="tvbox-library-card-grid">' + items.map(item => renderVodCard(item, source)).join('') + '</div>'
+      const pager = '<div class="tvbox-library-pager"><button id="library-prev" ' + (currentPage <= 1 ? 'disabled' : '') + '>上一页</button><span>' + escHtml(metaText) + '</span><label class="tvbox-library-jump">跳到 <input id="library-page-jump" type="number" min="1" value="' + escHtml(String(currentPage)) + '" /> 页</label><button id="library-page-go">跳转</button><button id="library-next" ' + (!result.hasMore ? 'disabled' : '') + '>下一页</button></div>'
+      return sectionsHtml + pager
+    }
+
+    const openLibraryDetail = async (card) => {
+      const source = sourceByKey(card.dataset.source)
+      const detail = card.dataset.detail
+      if (!detail) return alert('缺少详情地址')
+      if (card.dataset.action === 'napp03-url-list') {
+        const box = content.querySelector('#library-list')
+        if (!box) return
+        const title = card.dataset.name || '专题'
+        resetLibraryPaging()
+        libraryPaging = { mode: 'napp03-url-list', sourceKey: source.key, rawUrl: detail, title, items: [], nextCursor: '', exhausted: false }
+        await loadPagedLibraryResult(box, source)
+        return
+      }
+      try {
+        let resolved
+        if (source.key === 'a_napp03' || card.dataset.itemSource === 'a_napp03') resolved = await withLibraryTimeout(fetchPageApiDetail(sourceByKey('a_napp03'), detail, card.dataset.name, card.dataset.pic), 12000)
+        else if (card.dataset.api && card.dataset.source !== 'ip51122') resolved = await fetchCmsVodDetail(card.dataset.api, detail, card.dataset.name, card.dataset.pic)
+        else resolved = source.key === 'yinghua'
+          ? await withLibraryTimeout(openYinghuaDetail({ vod_id: detail, vod_name: card.dataset.name, vod_pic: card.dataset.pic, _detailUrl: `${YINGHUA_BASE}/index.php/vod/detail/id/${detail}.html` }), 12000)
+          : await withLibraryTimeout(fetchPageApiDetail(source, detail, card.dataset.name, card.dataset.pic), 12000)
+        if (!resolved) throw new Error('详情页未解析到播放列表')
+        return showEpisodePicker(resolved, card.dataset.sourceName || source.name)
+      } catch (e) {
+        const overlay = el.querySelector('#t-player-overlay')
+        const body = el.querySelector('#t-player-body')
+        const title = el.querySelector('#t-player-title')
+        if (overlay && body) {
+          if (title) title.textContent = card.dataset.name || '详情加载失败'
+          overlay.style.display = 'flex'
+          body.innerHTML = '<div class="tvbox-playback-error"><div class="tvbox-playback-error-title">' + escHtml(e.message || mt('loadFailed')) + '</div></div>'
+        } else {
+          alert(e.message || mt('loadFailed'))
+        }
+      }
+    }
+
+    const searchLibraryFallbackSources = async (keyword) => {
+      const results = []
+      const seen = new Set()
+      await Promise.allSettled(sources.map(async source => {
+        try {
+          const json = await source.search(keyword, libraryPage)
+          for (const item of (json?.list || [])) {
+            if (!movieNameMatches(item, keyword)) continue
+            const key = source.key + ':' + (item.vod_id || item._detailUrl || item.vod_name)
+            if (seen.has(key)) continue
+            seen.add(key)
+            results.push({ ...item, _librarySourceName: source.name, _librarySourceKey: source.key, _libraryApi: '' })
+          }
+        } catch {}
+      }))
+      return { list: results, total: results.length, page: libraryPage }
+    }
+
+    const withLibraryTimeout = (promise, ms = 15000) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('实时站点响应超时：当前源或代理链路较慢，请重新加载或稍后再试')), ms)),
+    ])
+
+    const bindLibraryResult = (box, source, result) => {
+      box.querySelectorAll('.tvbox-library-more').forEach(btn => btn.addEventListener('click', async () => {
+        const title = btn.dataset.title || '专题'
+        resetLibraryPaging()
+        libraryPaging = { mode: 'napp03-url-list', sourceKey: source.key, rawUrl: btn.dataset.url, title, items: [], nextCursor: '', exhausted: false }
+        await loadPagedLibraryResult(box, source)
+      }))
+      box.querySelectorAll('.tvbox-library-vod').forEach(card => card.addEventListener('click', () => openLibraryDetail(card)))
+      box.querySelector('#library-prev')?.addEventListener('click', async () => {
+        if (libraryPage <= 1) return
+        libraryPage--
+        await loadPagedLibraryResult(box, source)
+      })
+      box.querySelector('#library-next')?.addEventListener('click', async () => {
+        if (!result?.hasMore) return
+        libraryPage++
+        await loadPagedLibraryResult(box, source)
+      })
+      box.querySelector('#library-page-go')?.addEventListener('click', async () => {
+        await jumpLibraryPage(box, source, box.querySelector('#library-page-jump')?.value)
+      })
+      box.querySelector('#library-page-jump')?.addEventListener('keydown', async e => {
+        if (e.key === 'Enter') await jumpLibraryPage(box, source, e.currentTarget.value)
+      })
+    }
+
+    const loadPagedLibraryResult = async (box, source) => {
+      if (!libraryPaging) return loadLibraryList()
+      box.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在加载第 ' + libraryPage + ' 页...</span></div>'
+      try {
+        const needCount = libraryPage * 12
+        libraryPaging.items = libraryPaging.items || []
+        while (libraryPaging.items.length < needCount && !libraryPaging.exhausted) {
+          const cursor = libraryPaging.nextCursor || ''
+          const result = libraryPaging.mode === 'napp03-url-list'
+            ? await withLibraryTimeout(loadNapp03UrlList(libraryPaging.rawUrl, libraryPaging.title, cursor), 18000)
+            : await withLibraryTimeout(source.list(activeCategory, libraryPage, { ...napp03Filters, cursor }), 18000)
+          libraryPaging.items.push(...(result.list || []))
+          libraryPaging.nextCursor = result.next || ''
+          if (!result.hasMore || !result.next) libraryPaging.exhausted = true
+          if (!(result.list || []).length) break
+        }
+        const pageItems = libraryPaging.items.slice((libraryPage - 1) * 12, libraryPage * 12)
+        const result = {
+          list: pageItems,
+          page: libraryPage,
+          next: libraryPaging.nextCursor || '',
+          hasMore: libraryPaging.items.length > libraryPage * 12 || Boolean(libraryPaging.nextCursor),
+        }
+        if (libraryPaging.mode === 'napp03-url-list') box.innerHTML = '<div class="tvbox-library-subtitle">' + escHtml(libraryPaging.title) + '</div>' + renderCards(pageItems, source, result)
+        else box.innerHTML = renderCards(pageItems, source, result)
+        bindLibraryResult(box, source, result)
+        scrollLibraryTop()
+      } catch (e) {
+        box.innerHTML = renderOriginFallback(source, e.message || '该页面暂未接入') || '<div class="tvbox-empty tvbox-library-error"><div class="tvbox-empty-title">实时加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message || mt('loadFailed')) + '</div></div>'
+      }
+    }
+
+    const jumpLibraryPage = async (box, source, targetPage) => {
+      const target = Math.max(1, Number(targetPage) || 1)
+      if (!libraryPaging || target === libraryPage) return
+      libraryPage = target
+      await loadPagedLibraryResult(box, source)
+    }
+
+    const loadLibraryList = async () => {
+      const source = sourceByKey(activeSourceKey)
+      const box = content.querySelector('#library-list')
+      if (!box) return
+      box.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在加载实时片库...</span></div>'
+      try {
+        let result = libraryQuery ? { list: [], total: 0, page: libraryPage } : null
+        if (libraryQuery) {
+          result = source?.search
+            ? await withLibraryTimeout(source.search(libraryQuery, libraryPage), 18000).catch(() => searchLibraryFallbackSources(libraryQuery))
+            : await withLibraryTimeout(searchLibraryFallbackSources(libraryQuery), 18000).catch(() => ({ list: [] }))
+          result.page = libraryPage
+        } else if (source.key === 'a_napp03' && activeCategory?.typeId !== 'home') {
+          if (!libraryPaging || libraryPaging.mode !== 'napp03-category') {
+            libraryPaging = { mode: 'napp03-category', sourceKey: source.key, items: [], nextCursor: '', exhausted: false }
+          }
+          await loadPagedLibraryResult(box, source)
+          return
+        } else {
+          result = await withLibraryTimeout(source.list(activeCategory.typeId, libraryPage, {}), 18000)
+          result.page = libraryPage
+        }
+        const allItems = Array.isArray(result?.list) ? result.list : []
+        const start = (libraryPage - 1) * 12
+        const items = allItems.slice(start, start + 12)
+        const displayResult = { ...result, list: items, page: libraryPage, hasMore: allItems.length > start + 12 || Boolean(result?.hasMore) }
+        if (!items.length && result?.message) {
+          box.innerHTML = renderOriginFallback(source, result.message) || '<div class="tvbox-empty"><div class="tvbox-empty-title">暂无可显示内容</div><div class="tvbox-empty-sub">' + escHtml(result.message) + '</div></div>'
+          return
+        }
+        box.innerHTML = renderCards(items, source, displayResult)
+        bindLibraryResult(box, source, displayResult)
+        scrollLibraryTop()
+      } catch (e) {
+        box.innerHTML = '<div class="tvbox-empty tvbox-library-error"><div class="tvbox-empty-title">实时加载失败</div><div class="tvbox-empty-sub">' + escHtml(e.message || mt('loadFailed')) + '</div><button class="tvbox-library-retry" id="library-retry">重新加载</button></div>'
+        box.querySelector('#library-retry')?.addEventListener('click', loadLibraryList)
+      }
+    }
+
+    renderShell()
+    refreshSourceCategories(sourceByKey(activeSourceKey)).then(() => {
+      renderShell()
+      loadLibraryList()
+    })
   }
 
   async function showEpisodePicker(item, sourceName) {
@@ -1516,7 +3021,7 @@ function setDebug(msg, detail) {
     const body = el.querySelector('#t-player-body')
     el.querySelector('#t-player-title').textContent = item.vod_name
     el.querySelector('#t-ext-link').href = '#'
-    const episodes = parsePlaylist(item.vod_play_from, item.vod_play_url)
+    const episodes = item._episodes || parsePlaylist(item.vod_play_from, item.vod_play_url)
     const hist = getPlayHistory().find(h => h.id == item.vod_id && h.source === sourceName)
     playingEp = null
 
@@ -1546,7 +3051,10 @@ function setDebug(msg, detail) {
     const firstUrls = episodes[preferredSi]?.urls || []
     const siHtml = episodes.length > 1
       ? '<div style="margin-bottom:10px"><span style="font-size:12px;color:#666">' + escHtml(mt('selectSource')) + '</span>' +
-          episodes.map((e, i) => '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '">' + e.name + (i===preferredSi?' ★':'') + '</button>').join('') +
+          episodes.map((e, i) => {
+            const meta = [e.tag, e.tips, e.total ? `${e.total}集` : ''].filter(Boolean).join(' · ')
+            return '<button class="tvbox-tab' + (i===preferredSi?' active':'') + '" style="margin-right:6px;margin-bottom:6px" data-si="' + i + '" title="' + escHtml(meta || e.name) + '">' + escHtml(e.name) + (meta ? '<small style="margin-left:4px;opacity:.72">' + escHtml(meta) + '</small>' : '') + (i===preferredSi?' ★':'') + '</button>'
+          }).join('') +
         '</div>'
       : ''
 
@@ -1560,7 +3068,7 @@ function setDebug(msg, detail) {
         '<div class="tvbox-ep-desc">' + (item.vod_content || mt('noDescription')) + '</div>' +
       '</div>' +
       siHtml +
-      '<div class="tvbox-ep-list-title">' + escHtml(mt('episodeListCount', { count: firstUrls.length })) + '</div>' +
+      '<div class="tvbox-ep-list-title" id="t-ep-list-title">' + escHtml(mt('episodeListCount', { count: firstUrls.length })) + '</div>' +
       '<div class="tvbox-ep-grid" id="t-ep-grid">' +
         firstUrls.map((ep, i) => {
           const isResume = hist && hist.epName === ep.name
@@ -1589,6 +3097,8 @@ function setDebug(msg, detail) {
             'data-epname="' + escHtml(ep.name) + '" data-pic="' + escHtml(item.vod_pic) + '" ' +
             'data-id="' + escHtml(item.vod_id) + '" data-source="' + escHtml(sourceName) + '">' + escHtml(ep.name) + '</button>'
         ).join('')
+        const titleEl = body.querySelector('#t-ep-list-title')
+        if (titleEl) titleEl.textContent = mt('episodeListCount', { count: eps.length })
         body.querySelectorAll('[data-si]').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
       })
@@ -1621,18 +3131,25 @@ function setDebug(msg, detail) {
   }
 
   async function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress, allEps) {
-    // 优先使用独立 Tauri 窗口播放；失败时回退到内嵌播放器并给出可见反馈。
     if (!url || url === '#') return
-    playingEp = { id, source, epName, pic, epUrl: url, allUrls: fallbackUrls || [], allEps: allEps || null }
+    let playableUrl = url
+    let resolvedForStandalone = false
+    try {
+      playableUrl = await resolvePlayableUrl(url)
+      resolvedForStandalone = playableUrl !== url || isDirectVideoUrl(playableUrl)
+    } catch (e) {
+      console.warn('[movie] 播放页解析失败:', e?.message || e)
+    }
+    playingEp = { id, source, epName, pic, epUrl: playableUrl, allUrls: fallbackUrls || [], allEps: allEps || null }
     const resume = (typeof startProgress === 'number' && startProgress > 0 && startProgress < 999) ? startProgress : 0
-    const opened = await openStandalonePlayer({
-      url, title: name, resume,
+    const opened = resolvedForStandalone ? await openStandalonePlayer({
+      url: playableUrl, title: name, resume,
       allEps: allEps || [],
       allUrls: fallbackUrls || [url],
       playbackCtx: { id, source, epName },
       pic,
-    })
-    if (!opened) showEmbeddedPlayerFallback(name, url, resume, fallbackUrls || [url], allEps || [])
+    }) : false
+    if (!opened) showEmbeddedPlayerFallback(name, playableUrl, resume, fallbackUrls || [playableUrl], allEps || [])
   }
 
   async function openStandalonePlayer({ url, title, resume, allEps, allUrls, playbackCtx, pic }) {
@@ -1708,11 +3225,150 @@ function setDebug(msg, detail) {
       clearTimeout(showOtip._t); showOtip._t = setTimeout(() => tip.remove(), 1200)
     }
 
+    function buildEpisodeNav(allUrls) {
+      const urls = Array.isArray(allUrls) ? allUrls : []
+      if (!urls.length) return ''
+      return '<div class="tvbox-episode-nav">' +
+        '<button class="tvbox-ep-nav" id="t-prev-ep">' + escHtml(mt('previousEpisode')) + '</button>' +
+        '<button class="tvbox-ep-nav" id="t-ep-menu">' + escHtml(mt('episodeLabel')) + '</button>' +
+        '<button class="tvbox-ep-nav" id="t-next-ep">' + escHtml(mt('nextEpisode')) + '</button>' +
+        '<button class="tvbox-ep-nav" id="t-line-menu">' + escHtml(mt('lineLabel')) + '</button>' +
+        '<button class="tvbox-ep-nav" id="t-speed-menu">1.0x</button>' +
+        '<button class="tvbox-ep-nav" id="t-reload-url">刷新</button>' +
+        '<button class="tvbox-ep-nav" id="t-copy-url">复制链接</button>' +
+        '<label class="tvbox-ep-auto"><input id="t-auto-next" type="checkbox" checked /> ' + escHtml(mt('autoPlayNext')) + '</label>' +
+      '</div>'
+    }
+
+    function bindEpisodeNav(video, allUrls) {
+      const urls = Array.isArray(allUrls) ? allUrls : []
+      if (!urls.length) return
+      const prevBtn = body.querySelector('#t-prev-ep')
+      const nextBtn = body.querySelector('#t-next-ep')
+      const menuBtn = body.querySelector('#t-ep-menu')
+      const lineBtn = body.querySelector('#t-line-menu')
+      const speedBtn = body.querySelector('#t-speed-menu')
+      const reloadBtn = body.querySelector('#t-reload-url')
+      const copyBtn = body.querySelector('#t-copy-url')
+      const autoNext = body.querySelector('#t-auto-next')
+      const getCurrentIdx = () => Math.max(0, urls.indexOf(video.src || video.currentSrc || video.getAttribute('src') || ''))
+      const playAtIndex = (idx) => {
+        const nextUrl = urls[idx]
+        if (!nextUrl) return
+        const resume = 0
+        playingEp = playingEp ? { ...playingEp, epUrl: nextUrl, epName: playingEp.allEps?.[idx]?.epName || playingEp.allEps?.[idx]?.name || playingEp.epName } : playingEp
+        tryPlay(nextUrl, isDirectVideoUrl(nextUrl), resume)
+      }
+      prevBtn?.addEventListener('click', () => {
+        const idx = getCurrentIdx()
+        if (idx > 0) playAtIndex(idx - 1)
+      })
+      nextBtn?.addEventListener('click', () => {
+        const idx = getCurrentIdx()
+        if (idx >= 0 && idx < urls.length - 1) playAtIndex(idx + 1)
+      })
+      menuBtn?.addEventListener('click', (event) => {
+        event.stopPropagation()
+        showEmbeddedEpPicker(video, urls)
+      })
+      lineBtn?.addEventListener('click', () => showLinePicker(urls, video))
+      speedBtn?.addEventListener('click', () => {
+        const rates = [0.75, 1, 1.25, 1.5, 2]
+        const current = rates.includes(video.playbackRate) ? rates.indexOf(video.playbackRate) : 1
+        const next = rates[(current + 1) % rates.length]
+        video.playbackRate = next
+        speedBtn.textContent = next.toFixed(next % 1 ? 2 : 1).replace(/0$/, '') + 'x'
+        showOtip(video, '倍速 ' + speedBtn.textContent)
+      })
+      reloadBtn?.addEventListener('click', () => {
+        const current = video.currentSrc || video.src || urls[getCurrentIdx()]
+        if (current) tryPlay(current, isDirectVideoUrl(current), Math.max(0, video.currentTime || 0))
+      })
+      copyBtn?.addEventListener('click', async () => {
+        const current = video.currentSrc || video.src || urls[getCurrentIdx()]
+        try {
+          await navigator.clipboard?.writeText(current)
+          showOtip(video, '播放链接已复制')
+        } catch {
+          window.prompt('复制播放链接', current)
+        }
+      })
+      video.addEventListener('ended', () => {
+        if (autoNext?.checked) {
+          const idx = getCurrentIdx()
+          if (idx >= 0 && idx < urls.length - 1) playAtIndex(idx + 1)
+        }
+      })
+    }
+
+    function attachInlinePlayerControls(video, allUrls) {
+      const nav = buildEpisodeNav(allUrls)
+      if (!nav) return
+      body.insertAdjacentHTML('afterbegin', nav)
+      bindEpisodeNav(video, allUrls)
+    }
+
+    function showEmbeddedEpPicker(video, urls) {
+      const eps = Array.isArray(playingEp?.allEps) ? playingEp.allEps : []
+      const list = eps.length ? eps : (Array.isArray(urls) ? urls.map((url, i) => ({ name: mt('episodeOption', { number: i + 1 }), url })) : [])
+      if (!list.length) return
+      const old = document.getElementById('_embedded_ep_menu')
+      if (old) { old.remove(); return }
+      const menu = document.createElement('div')
+      menu.id = '_embedded_ep_menu'
+      menu.className = 'tvbox-embedded-ep-menu'
+      list.forEach((ep, i) => {
+        const epUrl = ep.url || urls[i]
+        const btn = document.createElement('button')
+        btn.type = 'button'
+        btn.textContent = ep.epName || ep.name || mt('episodeOption', { number: i + 1 })
+        if (epUrl === (video.currentSrc || video.src || playingEp?.epUrl)) btn.classList.add('active')
+        btn.addEventListener('click', () => {
+          if (!epUrl) return
+          playingEp = playingEp ? { ...playingEp, epUrl, epName: ep.epName || ep.name || playingEp.epName } : playingEp
+          tryPlay(epUrl, isDirectVideoUrl(epUrl), 0)
+          menu.remove()
+        })
+        menu.appendChild(btn)
+      })
+      body.appendChild(menu)
+      setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0)
+    }
+
+    function showLinePicker(urls, video) {
+      const list = Array.isArray(urls) ? urls : []
+      if (!list.length) return
+      const old = document.getElementById('_line_menu')
+      if (old) { old.remove(); return }
+      const menu = document.createElement('div')
+      menu.id = '_line_menu'
+      menu.style.cssText = 'position:absolute;bottom:72px;left:50%;transform:translateX(-50%);background:rgba(20,20,35,0.96);border:1px solid #444;border-radius:8px;padding:6px 0;z-index:999999;min-width:180px;max-height:260px;overflow-y:auto'
+      const current = video.currentSrc || video.src || ''
+      list.forEach((u, i) => {
+        const btn = document.createElement('button')
+        btn.textContent = (u === current ? '✅ ' : '') + mt('lineOption', { number: i + 1 })
+        btn.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;color:#ccc;font-size:12px;cursor:pointer'
+        btn.addEventListener('click', () => {
+          lineIdx = i
+          tryPlay(u, isDirectVideoUrl(u), 0)
+          menu.remove()
+        })
+        menu.appendChild(btn)
+      })
+      body.appendChild(menu)
+      setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0)
+    }
+
     function addPipBtn(vid) {
-      if (!document.pictureInPictureEnabled) return
-      const pip = Object.assign(document.createElement('button'), { textContent: '📺 PiP', title: '画中画' })
+      const pip = Object.assign(document.createElement('button'), { textContent: '📺 ' + mt('pipTitle'), title: mt('pipTitle') })
       pip.style.cssText = 'position:absolute;top:8px;right:180px;z-index:10;background:rgba(30,30,50,0.9);color:#fff;border:1px solid #444;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer'
-      pip.addEventListener('click', () => { vid.requestPictureInPicture().catch(() => {}) }, { once: true })
+      pip.addEventListener('click', async () => {
+        try {
+          if (vid && vid.webkitShowPlaybackTargetPicker) { vid.webkitShowPlaybackTargetPicker(); return }
+          if (document.pictureInPictureEnabled && vid.requestPictureInPicture) await vid.requestPictureInPicture()
+          else alert(mt('castNotSupported'))
+        } catch { alert(mt('castNotSupported')) }
+      })
       return pip
     }
 
@@ -1745,12 +3401,22 @@ function setDebug(msg, detail) {
     }
 
     function renderPlaybackError(url, message) {
-      body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a;margin-bottom:14px">' + escHtml(message || mt('playbackFailed')) + '</p><a href="' + escHtml(url) + '" target="_blank" class="tvbox-open-ext">' + escHtml(mt('openInBrowser')) + '</a></div>'
+      body.innerHTML = '<div class="tvbox-playback-error"><div class="tvbox-playback-error-title">' + escHtml(message || mt('playbackFailed')) + '</div><a href="' + escHtml(url) + '" target="_blank" class="tvbox-open-ext">↗ ' + escHtml(mt('openInBrowser')) + '</a></div>'
     }
 
     async function tryPlay(url, isM3u8, sp) {
-      syncEmbeddedEpisodeContext(url)
-      if (!url || url === '#') { body.innerHTML = '<div style="text-align:center;padding:40px"><p style="color:#6b6b8a">' + escHtml(mt('noPlaybackUrl')) + '</p></div>'; return }
+      let playableUrl = url
+      try { playableUrl = await resolvePlayableUrl(url) } catch (e) {
+        console.warn('[movie] 解析播放地址失败:', e?.message || e)
+        renderPlaybackError(url, e?.message || mt('playbackFailed'))
+        const switched = await tryNextLine(url)
+        if (!switched) renderPlaybackError(url, mt('allFallbackUnavailable', { target: fallbackTargetText() }))
+        return
+      }
+      syncEmbeddedEpisodeContext(playableUrl)
+      if (!playableUrl || playableUrl === '#') { body.innerHTML = '<div class="tvbox-playback-error"><div class="tvbox-playback-error-title">' + escHtml(mt('noPlaybackUrl')) + '</div></div>'; return }
+      isM3u8 = isDirectVideoUrl(playableUrl) ? playableUrl.includes('.m3u8') : isM3u8
+      url = playableUrl
 
       if (isM3u8) {
         await ensureHls()
@@ -1759,6 +3425,7 @@ function setDebug(msg, detail) {
           const video = document.createElement('video'); video.controls = true
           wrap.appendChild(video)
           body.innerHTML = ''; body.appendChild(wrap)
+          attachInlinePlayerControls(video, fallbackArr)
           const hls = new window.Hls({ autoStartLoad: true, startLevel: -1 })
           window._movieHls = hls
           hls.loadSource(url)
@@ -1804,6 +3471,7 @@ function setDebug(msg, detail) {
           })
           wrap.appendChild(video)
           body.innerHTML = ''; body.appendChild(wrap)
+          attachInlinePlayerControls(video, fallbackArr)
           if (sp > 0) video.currentTime = sp
           video.play().catch(() => {})
         }
@@ -1812,6 +3480,7 @@ function setDebug(msg, detail) {
         const video = document.createElement('video'); video.controls = true
         wrap.appendChild(video)
         body.innerHTML = ''; body.appendChild(wrap)
+          attachInlinePlayerControls(video, fallbackArr)
         const pipBtn = addPipBtn(video); if (pipBtn) wrap.appendChild(pipBtn)
         addTouchGesture(video)
         video.addEventListener('timeupdate', () => trackProgress(video))
@@ -1900,7 +3569,7 @@ function setDebug(msg, detail) {
     return null
   }
 
-  
+
   async function openFloatPlayer(name, url, id, source, epName, pic, allUrls, startProgress, allEps) {
     // 优先使用独立 Tauri 窗口播放；失败时回退到内嵌播放器并给出可见反馈。
     if (!url || url === '#') return
@@ -2110,13 +3779,16 @@ function pickDirectUrl(url) {
     video.addEventListener('pause', () => { if (playBtn) playBtn.textContent = '▶' })
     video.addEventListener('ended', () => {
       if (playBtn) playBtn.textContent = '▶'
-      // 自动下一集
       if (_floatState?.allUrls && _floatState.allUrls.length > 1) {
         const idx = _floatState.allUrls.indexOf(_floatState.currentUrl)
         if (idx >= 0 && idx < _floatState.allUrls.length - 1) {
           const next = _floatState.allUrls[idx + 1]
           switchFloatEpisode(next, 0)
         }
+      } else if (_floatState?.epList && _floatState.epList.length > 1) {
+        const idx = _floatState.epList.findIndex(ep => ep.url === _floatState.currentUrl)
+        const next = _floatState.epList[idx + 1]?.url
+        if (next) switchFloatEpisode(next, 0)
       }
     })
     video.addEventListener('timeupdate', () => {
@@ -2186,13 +3858,23 @@ function pickDirectUrl(url) {
       if (speedBtn) speedBtn.textContent = s + 'x'
     })
 
-    // 画中画
-    pipBtn?.addEventListener('click', () => {
-      if (document.pictureInPictureEnabled) video.requestPictureInPicture().catch(() => {})
+    // 投屏
+    const castBtn = document.getElementById('_fcast')
+    castBtn?.addEventListener('click', async () => {
+      try {
+        if (video && video.webkitShowPlaybackTargetPicker) {
+          video.webkitShowPlaybackTargetPicker()
+          return
+        }
+        if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
+          await video.requestPictureInPicture().catch(() => {})
+          return
+        }
+        alert(mt('castNotSupported'))
+      } catch {
+        alert(mt('castNotSupported'))
+      }
     })
-
-    // 选集
-    epBtn?.addEventListener('click', () => showFloatEpPicker())
 
     // 双击全屏
     video.addEventListener('dblclick', () => {
@@ -2204,13 +3886,14 @@ function pickDirectUrl(url) {
   }
 
   function showFloatEpPicker() {
-    if (!_floatState?.epList) return
+    if (!_floatState) return
     const existing = document.getElementById('_fepmenu')
     if (existing) { existing.remove(); return }
     const menu = document.createElement('div')
     menu.id = '_fepmenu'
-    menu.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:rgba(20,20,35,0.96);border:1px solid #444;border-radius:8px;padding:6px 0;z-index:999999;min-width:160px;max-height:220px;overflow-y:auto'
-    _floatState.epList.forEach(ep => {
+    menu.style.cssText = 'position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:rgba(20,20,35,0.96);border:1px solid #444;border-radius:8px;padding:6px 0;z-index:999999;min-width:180px;max-height:260px;overflow-y:auto'
+    const items = (_floatState.epList && _floatState.epList.length) ? _floatState.epList : (_floatState.allEps || []).map(ep => ({ name: ep.epName || ep.name, url: ep.url }))
+    items.forEach(ep => {
       const btn = document.createElement('button')
       btn.textContent = ep.epName || ep.name || ep.url
       btn.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;color:' + (ep.url === _floatState.currentUrl ? '#e74c3c' : '#ccc') + ';font-size:12px;cursor:pointer'
@@ -2220,7 +3903,8 @@ function pickDirectUrl(url) {
       })
       menu.appendChild(btn)
     })
-    document.getElementById('_fep')?.parentElement?.appendChild(menu)
+    const castBtn = document.getElementById('_fcast')
+    castBtn?.parentElement?.appendChild(menu)
     document.addEventListener('click', () => menu.remove(), { once: true })
   }
 

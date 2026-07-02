@@ -1,6 +1,6 @@
 [package]
 name = "XingShu"
-version = "4.3.0"
+version = "4.3.1"
 edition = "2021"
 description = "星枢OpenClaw - OpenClaw 可视化管理面板"
 authors = ["TuLu"]
@@ -30,6 +30,10 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 sha2 = "0.10"
 rand = "0.8"
 base64 = "0.22"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+hmac = "0.12"
+sha1 = "0.10"
 md5 = "0.8"
 url = "2"
 urlencoding = "2"

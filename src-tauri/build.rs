@@ -42,7 +42,7 @@ fn sync_runtime_dir(manifest_dir: &str) {
                     panic!("runtime copy produced no files for {}", target_key);
                 }
                 let sentinel = dst_root.join(".runtime-ready");
-                std::fs::write(&sentinel, target_key.as_bytes())
+                write_if_changed(&sentinel, target_key.as_bytes())
                     .expect("failed to write runtime resource sentinel");
                 println!("cargo:warning=runtime synced OK for {}", target_key);
             }
@@ -51,10 +51,10 @@ fn sync_runtime_dir(manifest_dir: &str) {
     } else if allow_runtime_placeholder() {
         std::fs::create_dir_all(&dst).expect("failed to create runtime placeholder dir");
         let placeholder = dst.join(".runtime-placeholder");
-        std::fs::write(&placeholder, target_key.as_bytes())
+        write_if_changed(&placeholder, target_key.as_bytes())
             .expect("failed to write runtime placeholder");
         let sentinel = dst_root.join(".runtime-ready");
-        std::fs::write(&sentinel, target_key.as_bytes())
+        write_if_changed(&sentinel, target_key.as_bytes())
             .expect("failed to write runtime resource sentinel");
         println!(
             "cargo:warning=runtime src NOT FOUND for {}; wrote placeholder for check-only build",
@@ -148,9 +148,28 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::
         let dst_path = dst.join(entry.file_name());
         if ty.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
-        } else {
+        } else if should_copy_file(&src_path, &dst_path)? {
             std::fs::copy(&src_path, &dst_path)?;
         }
     }
     Ok(())
+}
+
+fn should_copy_file(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<bool> {
+    if !dst.exists() {
+        return Ok(true);
+    }
+    let src_meta = std::fs::metadata(src)?;
+    let dst_meta = std::fs::metadata(dst)?;
+    if src_meta.len() != dst_meta.len() {
+        return Ok(true);
+    }
+    Ok(std::fs::read(src)? != std::fs::read(dst)?)
+}
+
+fn write_if_changed(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    if path.exists() && std::fs::read(path)? == bytes {
+        return Ok(());
+    }
+    std::fs::write(path, bytes)
 }

@@ -1,5 +1,11 @@
+use aes::Aes256;
 use base64::{engine::general_purpose, Engine as _};
+use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+use hmac::{Hmac, Mac};
 use serde::Serialize;
+use sha1::Sha1;
+type Aes256CbcDec = cbc::Decryptor<Aes256>;
+type HmacSha1 = Hmac<Sha1>;
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
 /// 仅在用户主动开启工具后由 AI 调用
@@ -657,18 +663,40 @@ pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String,
     }
 
     let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(30).clamp(3, 120));
-    let client = super::build_http_client(
-        timeout,
-        Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
-    )
-    .map_err(|e| format!("vod_fetch HTTP 客户端错误: {e}"))?;
+    let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+    let client = super::build_http_client(timeout, Some(user_agent))
+        .map_err(|e| format!("vod_fetch HTTP 客户端错误: {e}"))?;
 
-    let resp = client
-        .get(&url)
-        .header("Accept", "application/json, text/plain, */*")
-        .send()
-        .await
-        .map_err(|e| format!("vod_fetch 请求失败: {e}"))?;
+    let send_request = |client: &reqwest::Client| {
+        client
+            .get(&url)
+            .header("Accept", "application/json, text/html, text/plain, */*")
+            .send()
+    };
+
+    let resp_result = send_request(&client).await;
+    let resp = match resp_result {
+        Ok(resp) => resp,
+        Err(first_err) => {
+            let tls_compatible = url.contains("103.194.185.51:51122")
+                || url.contains("43.248.100.69:51080")
+                || url.contains("www.ncat21.com");
+            if tls_compatible {
+                let insecure_client = reqwest::Client::builder()
+                    .timeout(timeout)
+                    .gzip(true)
+                    .user_agent(user_agent)
+                    .danger_accept_invalid_certs(true)
+                    .build()
+                    .map_err(|e| format!("vod_fetch TLS 兼容客户端错误: {e}"))?;
+                send_request(&insecure_client)
+                    .await
+                    .map_err(|e| format!("vod_fetch 请求失败: {first_err}; TLS 兼容重试失败: {e}"))?
+            } else {
+                return Err(format!("vod_fetch 请求失败: {first_err}"));
+            }
+        }
+    };
 
     if !resp.status().is_success() {
         return Err(format!("vod_fetch HTTP {}", resp.status()));
@@ -688,6 +716,107 @@ pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String,
         }
     }
     Ok(utf8)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn napp03_api_fetch(path: String, query: Option<serde_json::Value>, timeout_secs: Option<u64>) -> Result<String, String> {
+    let clean_path = if path.starts_with('/') { path } else { format!("/{path}") };
+    let is_allowed_logic_path = clean_path == "/vod/search/query";
+    if clean_path.contains("..") || (!clean_path.ends_with(".capi") && !is_allowed_logic_path) {
+        return Err("napp03_api_fetch 只允许 .capi 接口或已确认的搜索接口".into());
+    }
+
+    let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(12).clamp(3, 60));
+    let client = super::build_http_client(timeout, Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"))
+        .map_err(|e| format!("napp03 HTTP 客户端错误: {e}"))?;
+
+    let params = query_to_pairs(query.as_ref())?;
+    let query_string = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let api_base = if is_allowed_logic_path { "https://vlogic.zmizr.cn" } else { "https://vcache.zmizr.cn" };
+    let api_url = if query_string.is_empty() {
+        format!("{api_base}{clean_path}")
+    } else {
+        format!("{api_base}{clean_path}?{query_string}")
+    };
+
+    let ts = chrono::Utc::now().timestamp_millis().to_string();
+    let device_id = "WteF-mqDn5fPmdAVIh4Jc";
+    let device_created_at = "1782931260400";
+    let st = "2";
+    let sorted_param = params
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    let sign_raw = format!(
+        "get|{clean_path}|{sorted_param}|{ts}|appId=ncat&deviceCreatedAt={device_created_at}&deviceId={device_id}&st={st}|"
+    );
+    let sign = hmac_sha1_hex("a1id2db7ced05pwnc323gezxyb", &sign_raw)?;
+
+    let resp = client
+        .get(&api_url)
+        .header("Accept", "application/octet-stream, application/json, */*")
+        .header("Referer", "https://a.napp03.com/")
+        .header("Origin", "https://a.napp03.com")
+        .header("os", "webapp")
+        .header("appId", "ncat")
+        .header("appVersion", "2.5.18")
+        .header("channelId", "c200000")
+        .header("package", "ncat")
+        .header("deviceId", device_id)
+        .header("deviceCreatedAt", device_created_at)
+        .header("st", st)
+        .header("ts", &ts)
+        .header("sign", sign)
+        .send()
+        .await
+        .map_err(|e| format!("napp03 请求失败: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("napp03 HTTP {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| format!("napp03 读取响应失败: {e}"))?;
+    let plain = Aes256CbcDec::new(
+        b"ayt5wy5afwmwrpb19k9s3psx3dymyd0n".into(),
+        b"b3t069ijy7pirw0j".into(),
+    )
+    .decrypt_padded_vec_mut::<Pkcs7>(&bytes)
+    .map_err(|e| format!("napp03 解密失败: {e}"))?;
+    String::from_utf8(plain).map_err(|e| format!("napp03 UTF-8 解码失败: {e}"))
+}
+
+#[cfg(target_os = "windows")]
+fn query_to_pairs(query: Option<&serde_json::Value>) -> Result<Vec<(String, String)>, String> {
+    let mut pairs = Vec::new();
+    if let Some(value) = query {
+        let obj = value.as_object().ok_or_else(|| "query 必须是对象".to_string())?;
+        for (key, val) in obj {
+            if key.is_empty() { continue; }
+            let text = match val {
+                serde_json::Value::Null => String::new(),
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                _ => return Err(format!("query.{key} 只允许字符串/数字/布尔")),
+            };
+            pairs.push((key.clone(), text));
+        }
+    }
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(pairs)
+}
+
+#[cfg(target_os = "windows")]
+fn hmac_sha1_hex(key: &str, data: &str) -> Result<String, String> {
+    let mut mac = HmacSha1::new_from_slice(key.as_bytes()).map_err(|e| format!("HMAC key 错误: {e}"))?;
+    mac.update(data.as_bytes());
+    let bytes = mac.finalize().into_bytes();
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// 抓取 URL 内容（通过 Jina Reader API）
