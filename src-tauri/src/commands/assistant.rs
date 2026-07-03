@@ -1,10 +1,16 @@
+#[cfg(target_os = "windows")]
 use aes::Aes256;
 use base64::{engine::general_purpose, Engine as _};
+#[cfg(target_os = "windows")]
 use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+#[cfg(target_os = "windows")]
 use hmac::{Hmac, Mac};
 use serde::Serialize;
+#[cfg(target_os = "windows")]
 use sha1::Sha1;
+#[cfg(target_os = "windows")]
 type Aes256CbcDec = cbc::Decryptor<Aes256>;
+#[cfg(target_os = "windows")]
 type HmacSha1 = Hmac<Sha1>;
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
