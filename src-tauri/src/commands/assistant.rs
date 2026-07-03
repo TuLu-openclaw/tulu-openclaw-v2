@@ -1162,7 +1162,16 @@ pub async fn open_player_window(
         .iter()
         .find(|path| path.exists())
         .cloned()
-        .ok_or_else(|| format!("未找到播放器文件 player.html，已查找: {}", html_candidates.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>().join(" | ")))?;
+        .ok_or_else(|| {
+            format!(
+                "未找到播放器文件 player.html，已查找: {}",
+                html_candidates
+                    .iter()
+                    .map(|p| p.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            )
+        })?;
 
     // 构建 player.html URL 参数
     let encoded_url = urlencoding_encode(&url);
