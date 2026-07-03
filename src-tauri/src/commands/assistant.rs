@@ -1201,16 +1201,13 @@ pub async fn open_player_window(
         encoded_pic,
     );
 
-    // 生成唯一窗口标签（避免重复）
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let window_label = format!("player_{}", ts);
+    let window_label = "player_window";
+    if let Some(existing) = app.get_webview_window(window_label) {
+        let _ = existing.close();
+    }
 
     // 创建播放器窗口
-    let win = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(player_url.into()))
+    let win = WebviewWindowBuilder::new(&app, window_label, WebviewUrl::App(player_url.into()))
         .title(&title)
         .inner_size(960.0, 600.0)
         .min_inner_size(640.0, 400.0)
