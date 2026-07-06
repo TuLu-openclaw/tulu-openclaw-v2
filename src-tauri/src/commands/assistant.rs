@@ -8,11 +8,13 @@ use hmac::{Hmac, Mac};
 use serde::Serialize;
 #[cfg(target_os = "windows")]
 use sha1::Sha1;
+#[cfg(target_os = "windows")]
 use tauri::Emitter;
 #[cfg(target_os = "windows")]
 type Aes256CbcDec = cbc::Decryptor<Aes256>;
 #[cfg(target_os = "windows")]
 type HmacSha1 = Hmac<Sha1>;
+#[cfg(target_os = "windows")]
 use std::net::SocketAddr;
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
@@ -128,6 +130,7 @@ fn parse_mac_output(bytes: &[u8]) -> Option<String> {
 }
 
 /// 确保数据目录及子目录存在，返回目录路径
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn assistant_ensure_data_dir() -> Result<String, String> {
     let base = data_dir();
@@ -661,6 +664,7 @@ pub async fn assistant_web_search(
     Ok(output)
 }
 
+#[cfg(target_os = "windows")]
 fn missav_resolve_overrides(host: &str) -> Option<&'static [&'static str]> {
     match host.to_ascii_lowercase().as_str() {
         "missav.live" => Some(&["104.26.6.107:443", "104.26.7.107:443", "172.67.72.106:443"]),
@@ -668,12 +672,14 @@ fn missav_resolve_overrides(host: &str) -> Option<&'static [&'static str]> {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn missav_host(url: &str) -> Option<String> {
     let parsed = reqwest::Url::parse(url).ok()?;
     let host = parsed.host_str()?.to_ascii_lowercase();
     missav_resolve_overrides(&host).map(|_| host)
 }
 
+#[cfg(target_os = "windows")]
 async fn vod_fetch_missav_with_curl(
     url: &str,
     timeout: std::time::Duration,
@@ -759,6 +765,7 @@ async fn vod_fetch_missav_with_curl(
     }
 }
 
+#[cfg(target_os = "windows")]
 fn build_vod_http_client(
     timeout: std::time::Duration,
     user_agent: &str,
@@ -1124,6 +1131,8 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
         }
     }
 
+    let token_re = regex::Regex::new(r#"\b[0-9a-z]+\b"#)
+        .map_err(|e| format!("MISSAV packed token 正则错误: {e}"))?;
     for cap in packed_video_re.captures_iter(html).take(10) {
         let payload = cap
             .get(1)
@@ -1142,8 +1151,6 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
             .unwrap_or("")
             .split('|')
             .collect::<Vec<_>>();
-        let token_re = regex::Regex::new(r#"\b[0-9a-z]+\b"#)
-            .map_err(|e| format!("MISSAV packed token 正则错误: {e}"))?;
         let unpacked = token_re
             .replace_all(&payload, |caps: &regex::Captures| {
                 let token = caps.get(0).map(|m| m.as_str()).unwrap_or("");
@@ -1864,7 +1871,7 @@ fn persist_player_progress(payload: &serde_json::Value) -> Result<(), String> {
         .get("currentTime")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    if !(current_time > 5.0) || (current_time - 999.0).abs() < f64::EPSILON {
+    if current_time <= 5.0 || (current_time - 999.0).abs() < f64::EPSILON {
         return Ok(());
     }
     let key = player_progress_key(
@@ -1981,11 +1988,7 @@ pub async fn open_player_window(
 
     let bridge_label = "player_bridge_window";
     if app.get_webview_window(bridge_label).is_none() {
-        let bridge_url = if cfg!(debug_assertions) {
-            "player-bridge.html"
-        } else {
-            "player-bridge.html"
-        };
+        let bridge_url = "player-bridge.html";
         let _ = WebviewWindowBuilder::new(&app, bridge_label, WebviewUrl::App(bridge_url.into()))
             .title("Player Bridge")
             .inner_size(1.0, 1.0)
