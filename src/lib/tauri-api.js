@@ -440,7 +440,7 @@ export const api = {
   installGateway: () => { invalidateInstallationCaches(); return invoke('install_gateway', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   uninstallGateway: () => { invalidateInstallationCaches(); return invoke('uninstall_gateway', {}, 60000).then(r => { invalidateInstallationCaches(); return r }) },
   openLobsterOffice: () => invoke('open_lobster_office'),
-  openGlobalBuiltinWindow: () => invoke('open_global_builtin_window'),
+  openGlobalBuiltinWindow: (url = null) => invoke('open_global_builtin_window', { url: url || null }),
   openXingshuChatWindow: () => invoke('open_xingshu_chat_window'),
   openXingshuSkillCenterWindow: () => invoke('open_xingshu_skill_center_window'),
   openXingshuSkillSecurityWindow: () => invoke('open_xingshu_skill_security_window'),

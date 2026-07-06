@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Player Bridge</title>
+</head>
+<body>
+<script>
+(function(){
+  function getInvoke(){
+    var tauri=window.__TAURI__||{}
+    return tauri.core&&tauri.core.invoke?tauri.core.invoke:tauri.invoke
+  }
+  function getEvent(){
+    var tauri=window.__TAURI__||{}
+    return tauri.event&&tauri.event.emit?tauri.event.emit:null
+  }
+  async function handle(payload){
+    if(!payload||payload.channel!=='xingshu-player-progress')return
+    var data=payload.data||{}
+    try{
+      var invoke=getInvoke()
+      if(invoke&&data.type==='playerProgress'){
+        await invoke('movie_player_report_progress',{
+          url:data.url||'',
+          title:data.title||'',
+          currentTime:Number(data.currentTime)||0,
+          duration:Number(data.duration)||0,
+          playbackCtx:JSON.stringify(data.playbackCtx||{})
+        })
+      }
+    }catch(e){console.warn('[player-bridge] report failed',e)}
+    try{
+      var emit=getEvent()
+      if(emit)await emit('player-event',data)
+    }catch(e){console.warn('[player-bridge] emit failed',e)}
+  }
+  window.addEventListener('message',function(e){handle(e.data)})
+  window.name='xingshu-player-bridge'
+  document.body.textContent='player bridge ready'
+})()
+</script>
+</body>
+</html>

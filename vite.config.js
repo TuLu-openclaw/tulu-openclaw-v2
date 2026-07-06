@@ -104,6 +104,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'lobster-office': path.resolve(__dirname, 'lobster-office.html'),
+        'player-bridge': path.resolve(__dirname, 'player-bridge.html'),
       },
       output: {
         manualChunks(id) {

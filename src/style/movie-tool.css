@@ -1667,3 +1667,255 @@
   .tvbox-line-panel { min-height: auto !important; }
   .tvbox-line-tabs { flex-direction: row !important; overflow-x: auto !important; max-height: none !important; }
 }
+
+/* structured private library redesign */
+.tvbox-missav-app { min-height:calc(100vh - 150px); display:flex; flex-direction:column; gap:16px; color:#eef2ff; margin:-12px -14px -24px; padding:18px 20px 28px; background:radial-gradient(circle at 18% -10%, rgba(244,63,94,.34), transparent 32%), radial-gradient(circle at 84% 4%, rgba(59,130,246,.28), transparent 30%), linear-gradient(180deg,#0b1020 0%,#111827 42%,#f4f6fb 42%,#f4f6fb 100%); }
+.tvbox-missav-topbar { display:grid; grid-template-columns:minmax(320px,1fr) minmax(360px,520px); align-items:end; gap:22px; padding:26px 28px; border:1px solid rgba(255,255,255,.12); border-radius:28px; background:linear-gradient(135deg,rgba(15,23,42,.88),rgba(88,28,135,.58)), linear-gradient(90deg,rgba(236,72,153,.20),rgba(59,130,246,.14)); box-shadow:0 28px 70px rgba(15,23,42,.34); overflow:hidden; position:relative; }
+.tvbox-missav-topbar:before { content:""; position:absolute; inset:-40% -12% auto auto; width:420px; height:260px; background:radial-gradient(circle,rgba(236,72,153,.35),transparent 65%); filter:blur(12px); }
+.tvbox-missav-hero-copy, .tvbox-missav-hero-actions { position:relative; z-index:1; }
+.tvbox-missav-kicker { color:#f9a8d4; font-size:12px; font-weight:900; letter-spacing:.18em; margin-bottom:8px; }
+.tvbox-missav-title { display:flex; align-items:baseline; gap:14px; min-width:max-content; }
+.tvbox-missav-title strong { font-size:42px; line-height:1; letter-spacing:-.04em; color:#fff; }
+.tvbox-missav-title span { color:#cbd5e1; font-size:13px; font-weight:800; }
+.tvbox-missav-hero-copy p { margin:12px 0 0; max-width:560px; color:#cbd5e1; font-size:14px; }
+.tvbox-missav-hero-actions { display:flex; flex-direction:column; gap:12px; }
+.tvbox-missav-search { display:flex; align-items:center; gap:8px; padding:6px; border:1px solid rgba(255,255,255,.16); border-radius:18px; background:rgba(255,255,255,.10); backdrop-filter:blur(16px); }
+.tvbox-missav-search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:#fff; padding:12px 12px; font-size:14px; }
+.tvbox-missav-search input::placeholder { color:#cbd5e1; }
+.tvbox-missav-search button { border:0; border-radius:14px; padding:11px 18px; background:linear-gradient(135deg,#ec4899,#8b5cf6); color:#fff; font-weight:900; cursor:pointer; box-shadow:0 12px 28px rgba(236,72,153,.28); }
+.tvbox-missav-overview { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.tvbox-missav-overview span { display:block; padding:10px 8px; border:1px solid rgba(255,255,255,.14); border-radius:14px; background:rgba(255,255,255,.08); color:#e2e8f0; text-align:center; font-size:12px; font-weight:900; }
+.tvbox-missav-layout { display:grid; grid-template-columns:220px minmax(0,1fr); gap:18px; min-height:calc(100vh - 290px); color:#0f172a; }
+.tvbox-missav-nav { padding:14px; border:1px solid rgba(148,163,184,.18); border-radius:24px; background:rgba(255,255,255,.86); box-shadow:0 18px 45px rgba(15,23,42,.08); overflow:auto; }
+.tvbox-missav-nav section + section { margin-top:18px; }
+.tvbox-missav-nav h3 { margin:0 0 8px; padding:0 6px; color:#94a3b8; font-size:12px; font-weight:950; letter-spacing:.12em; }
+.tvbox-missav-nav-item { width:100%; display:flex; align-items:center; border:0; border-radius:14px; padding:11px 12px; margin:3px 0; background:transparent; color:#475569; text-align:left; cursor:pointer; font-size:14px; font-weight:850; transition:all .18s ease; }
+.tvbox-missav-nav-item:hover { background:#f8fafc; color:#111827; transform:translateX(2px); }
+.tvbox-missav-nav-item.active { background:linear-gradient(135deg,#fdf2f8,#ede9fe); color:#db2777; box-shadow:inset 3px 0 0 #ec4899; }
+.tvbox-missav-content { min-width:0; display:flex; flex-direction:column; gap:14px; }
+.tvbox-missav-subnav { display:block; }
+.tvbox-missav-subnav:empty { display:none; }
+.tvbox-missav-subnav-title { margin:0 0 8px; color:#64748b; font-size:12px; font-weight:950; letter-spacing:.08em; }
+.tvbox-missav-subnav-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:8px; padding:12px; border:1px solid rgba(148,163,184,.18); border-radius:22px; background:rgba(255,255,255,.84); box-shadow:0 14px 34px rgba(15,23,42,.06); }
+.tvbox-missav-subnav-grid button { min-width:0; border:1px solid rgba(226,232,240,.95); border-radius:14px; padding:10px 12px; background:#fff; color:#475569; cursor:pointer; font-weight:900; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tvbox-missav-subnav-grid button:hover, .tvbox-missav-subnav-grid button.active { border-color:#ec4899; color:#db2777; background:#fdf2f8; }
+.tvbox-missav-list-head { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:16px 18px; border:1px solid rgba(148,163,184,.16); border-radius:24px; background:rgba(255,255,255,.88); box-shadow:0 18px 45px rgba(15,23,42,.07); }
+.tvbox-missav-list-head h2 { margin:0; color:#0f172a; font-size:24px; letter-spacing:-.02em; }
+.tvbox-missav-list-head p { margin:5px 0 0; color:#64748b; font-size:13px; }
+.tvbox-missav-breadcrumb { margin-bottom:4px; color:#db2777; font-size:12px; font-weight:950; letter-spacing:.06em; }
+.tvbox-missav-head-actions button, .tvbox-missav-list-head > button { border:0; border-radius:999px; padding:10px 17px; background:#0f172a; color:#fff; cursor:pointer; font-weight:900; box-shadow:0 12px 24px rgba(15,23,42,.16); }
+.tvbox-missav-list { min-height:420px; }
+.tvbox-missav-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:18px; }
+.tvbox-missav-card { overflow:hidden; border:1px solid rgba(148,163,184,.16); border-radius:22px; background:#fff; box-shadow:0 18px 40px rgba(15,23,42,.10); transition:transform .18s ease, box-shadow .18s ease; }
+.tvbox-missav-card:hover { transform:translateY(-4px); box-shadow:0 26px 58px rgba(15,23,42,.16); }
+.tvbox-missav-poster { position:relative; display:block; width:100%; padding:0; border:0; background:#0f172a; cursor:pointer; overflow:hidden; aspect-ratio:16/9; }
+.tvbox-missav-poster img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .28s ease; }
+.tvbox-missav-card:hover .tvbox-missav-poster img { transform:scale(1.045); }
+.tvbox-missav-poster:after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,transparent 42%,rgba(15,23,42,.64)); pointer-events:none; }
+.tvbox-missav-duration { position:absolute; right:10px; bottom:10px; z-index:2; padding:5px 8px; border-radius:999px; background:rgba(15,23,42,.82); color:#fff; font-size:12px; font-weight:900; }
+.tvbox-missav-playmark { position:absolute; left:10px; bottom:10px; z-index:2; padding:5px 10px; border-radius:999px; background:linear-gradient(135deg,#ec4899,#8b5cf6); color:#fff; font-size:12px; font-weight:950; }
+.tvbox-missav-card-body { padding:12px 12px 14px; }
+.tvbox-missav-card-title { min-height:42px; color:#111827; font-size:14px; line-height:1.45; font-weight:850; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.tvbox-missav-card-actions { display:flex; gap:8px; margin-top:12px; }
+.tvbox-missav-card-actions button { flex:1; border:1px solid #e2e8f0; border-radius:12px; padding:9px 10px; background:#f8fafc; color:#334155; font-weight:900; cursor:pointer; }
+.tvbox-missav-card-actions button:first-child { border-color:transparent; background:#0f172a; color:#fff; }
+.tvbox-missav-pager { display:block; }
+.tvbox-missav-pager:empty { display:none; }
+.tvbox-missav-pager-main { display:flex; flex-wrap:wrap; align-items:center; gap:9px; padding:14px; border:1px solid rgba(148,163,184,.16); border-radius:22px; background:#fff; color:#64748b; font-size:12px; box-shadow:0 14px 32px rgba(15,23,42,.06); }
+.tvbox-missav-pager-main button { border:0; border-radius:999px; padding:9px 15px; background:#0f172a; color:#fff; cursor:pointer; font-weight:950; }
+.tvbox-missav-pager-main button:disabled { opacity:.4; cursor:not-allowed; }
+.tvbox-missav-pager-main input { width:72px; border:1px solid #cbd5e1; border-radius:12px; padding:7px 9px; background:#fff; color:#0f172a; }
+[data-theme="dark"] .tvbox-missav-app { background:radial-gradient(circle at 18% -10%, rgba(244,63,94,.28), transparent 32%), radial-gradient(circle at 84% 4%, rgba(59,130,246,.24), transparent 30%), linear-gradient(180deg,#050816 0%,#0f172a 46%,#0b1020 46%,#0b1020 100%); }
+[data-theme="dark"] .tvbox-missav-nav, [data-theme="dark"] .tvbox-missav-subnav-scroll, [data-theme="dark"] .tvbox-missav-list-head, [data-theme="dark"] .tvbox-missav-card, [data-theme="dark"] .tvbox-missav-pager-main { background:rgba(15,23,42,.84); color:#e2e8f0; border-color:rgba(255,255,255,.10); }
+[data-theme="dark"] .tvbox-missav-list-head h2, [data-theme="dark"] .tvbox-missav-card-title { color:#f8fafc; }
+[data-theme="dark"] .tvbox-missav-card-actions button { background:#111827; color:#cbd5e1; border-color:rgba(255,255,255,.10); }
+@media (max-width: 1080px) { .tvbox-missav-topbar { grid-template-columns:1fr; } .tvbox-missav-layout { grid-template-columns:1fr; } .tvbox-missav-nav { max-height:280px; } }
+@media (max-width: 720px) { .tvbox-missav-app { margin:-12px -14px -24px; padding:14px; } .tvbox-missav-title strong { font-size:34px; } .tvbox-missav-overview { grid-template-columns:repeat(2,minmax(0,1fr)); } .tvbox-missav-grid { grid-template-columns:1fr; } }
+
+/* ── 精品专区授权验证 ── */
+.tvbox-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 18, 32, 0.42);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.tvbox-auth-dialog {
+  position: relative;
+  width: min(460px, calc(100vw - 48px));
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,249,255,0.96));
+  box-shadow: 0 28px 80px rgba(15, 35, 75, 0.28), 0 8px 24px rgba(10, 89, 247, 0.14);
+  padding: 26px;
+  color: var(--text-primary);
+  animation: tvboxAuthIn .18s ease-out;
+}
+
+[data-theme="dark"] .tvbox-auth-dialog {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(25,30,40,0.98), rgba(15,19,27,0.96));
+  box-shadow: 0 28px 80px rgba(0,0,0,0.56), 0 8px 24px rgba(49,122,247,0.16);
+}
+
+.tvbox-auth-glow {
+  position: absolute;
+  right: -90px;
+  top: -90px;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(10, 89, 247, 0.22), rgba(10, 89, 247, 0));
+  pointer-events: none;
+}
+
+.tvbox-auth-head {
+  position: relative;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.tvbox-auth-logo {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgba(10, 89, 247, 0.32);
+}
+
+.tvbox-auth-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.tvbox-auth-head h3 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.tvbox-auth-head p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tvbox-auth-field label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tvbox-auth-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  padding: 5px 6px 5px 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+  transition: border-color .16s, box-shadow .16s;
+}
+
+.tvbox-auth-input-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(10, 89, 247, 0.13);
+}
+
+.tvbox-auth-input-wrap input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  letter-spacing: .04em;
+}
+
+.tvbox-auth-input-wrap button {
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: rgba(10, 89, 247, 0.09);
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tvbox-auth-error {
+  min-height: 20px;
+  margin-top: 8px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tvbox-auth-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tvbox-auth-foot button {
+  min-width: 96px;
+  height: 42px;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s, background .12s;
+}
+
+.tvbox-auth-foot button:active { transform: translateY(1px); }
+
+.tvbox-auth-cancel {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.tvbox-auth-submit {
+  border: 0;
+  background: var(--accent-gradient);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(10, 89, 247, 0.26);
+}
+
+.tvbox-auth-shake .tvbox-auth-dialog { animation: tvboxAuthShake .22s ease-in-out; }
+
+@keyframes tvboxAuthIn {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes tvboxAuthShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  75% { transform: translateX(7px); }
+}

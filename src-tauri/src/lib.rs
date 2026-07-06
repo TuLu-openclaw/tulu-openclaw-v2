@@ -10,10 +10,151 @@ use commands::{
     hermes_providers, logs, memory, messaging, music, openmontage, pairing, proxy, service, skills,
     tvbox, update,
 };
+use tauri::Manager;
 
 const CODEX_PROMPT_USAGE_TEXT: &str =
     include_str!("../resources/codex提示词/codex提示词使用方法.txt");
 const CODEX_INSTRUCTION_TEXT: &str = include_str!("../resources/codex提示词/instruction.md");
+
+fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'static str), String> {
+    let parsed = url::Url::parse(target).map_err(|_| "bad url".to_string())?;
+    if parsed.scheme() != "https" {
+        return Err("bad scheme".to_string());
+    }
+    let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+    let allowed = host == "surrit.com" || host.ends_with(".surrit.com") || host == "fourhoi.com" || host.ends_with(".fourhoi.com");
+    if !allowed {
+        return Err("blocked host".to_string());
+    }
+
+    let output = std::process::Command::new("curl.exe")
+        .args([
+            "-k",
+            "-L",
+            "-sS",
+            "--compressed",
+            "--max-time",
+            "25",
+            "-A",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "-H",
+            "Accept: */*",
+            "-H",
+            "Origin: https://missav.live",
+            "-H",
+            "Referer: https://missav.live/",
+            target,
+        ])
+        .output()
+        .map_err(|e| format!("fetch failed: {e}"))?;
+
+    if !output.status.success() {
+        return Err("upstream failed".to_string());
+    }
+
+    let lower_path = parsed.path().to_ascii_lowercase();
+    if lower_path.contains(".m3u8") {
+        let text = String::from_utf8_lossy(&output.stdout).to_string();
+        let mut rewritten = String::with_capacity(text.len() + 256);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                rewritten.push_str(line);
+                rewritten.push('\n');
+                continue;
+            }
+            if trimmed.starts_with('#') {
+                if (trimmed.contains("URI=\"") || trimmed.contains("URI='")) && !trimmed.starts_with("#EXT-X-STREAM-INF") {
+                    let mut next_line = line.to_string();
+                    for quote in ["\"", "'"] {
+                        let needle = format!("URI={quote}");
+                        if let Some(start) = next_line.find(&needle) {
+                            let value_start = start + needle.len();
+                            if let Some(end_rel) = next_line[value_start..].find(quote) {
+                                let value_end = value_start + end_rel;
+                                let raw = &next_line[value_start..value_end];
+                                if let Ok(next) = parsed.join(raw) {
+                                    let proxied = format!("{}{}", proxy_prefix, urlencoding::encode(next.as_str()));
+                                    next_line.replace_range(value_start..value_end, &proxied);
+                                }
+                            }
+                        }
+                    }
+                    rewritten.push_str(&next_line);
+                    rewritten.push('\n');
+                } else {
+                    rewritten.push_str(line);
+                    rewritten.push('\n');
+                }
+                continue;
+            }
+            let next = parsed.join(trimmed).map(|u| u.to_string()).unwrap_or_else(|_| trimmed.to_string());
+            rewritten.push_str(proxy_prefix);
+            rewritten.push_str(&urlencoding::encode(&next));
+            rewritten.push('\n');
+        }
+        Ok((rewritten.into_bytes(), "application/vnd.apple.mpegurl"))
+    } else if lower_path.ends_with(".ts") {
+        Ok((output.stdout, "video/mp2t"))
+    } else if lower_path.ends_with(".m4s") {
+        Ok((output.stdout, "video/iso.segment"))
+    } else if lower_path.ends_with(".mp4") {
+        Ok((output.stdout, "video/mp4"))
+    } else {
+        Ok((output.stdout, "application/octet-stream"))
+    }
+}
+
+fn start_hls_proxy_server() {
+    std::thread::spawn(|| {
+        let listener = match std::net::TcpListener::bind("127.0.0.1:18188") {
+            Ok(listener) => listener,
+            Err(e) => {
+                eprintln!("[hls-proxy] bind failed: {e}");
+                return;
+            }
+        };
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let _ = handle_hls_proxy_client(stream);
+            });
+        }
+    });
+}
+
+fn handle_hls_proxy_client(mut stream: std::net::TcpStream) -> std::io::Result<()> {
+    use std::io::{Read, Write};
+    let mut buf = [0u8; 8192];
+    let n = stream.read(&mut buf)?;
+    let request = String::from_utf8_lossy(&buf[..n]);
+    let first_line = request.lines().next().unwrap_or("");
+    let path = first_line.split_whitespace().nth(1).unwrap_or("");
+    let target = path
+        .split('?')
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .find_map(|part| part.strip_prefix("u="))
+        .and_then(|value| urlencoding::decode(value).ok().map(|v| v.to_string()))
+        .unwrap_or_default();
+
+    let (status, content_type, body) = if path.starts_with("/hls-proxy") && !target.is_empty() {
+        match hls_proxy_fetch(&target, "http://127.0.0.1:18188/hls-proxy?u=") {
+            Ok((body, content_type)) => ("200 OK", content_type, body),
+            Err(_) => ("502 Bad Gateway", "text/plain; charset=utf-8", b"Playback unavailable".to_vec()),
+        }
+    } else {
+        ("404 Not Found", "text/plain; charset=utf-8", b"Not Found".to_vec())
+    };
+
+    let header = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(header.as_bytes())?;
+    stream.write_all(&body)?;
+    Ok(())
+}
 
 fn sync_codex_prompt_workspace_folder() -> Result<(), String> {
     let target_dir = commands::openclaw_dir()
@@ -111,6 +252,25 @@ pub fn run() {
     builder
         .register_uri_scheme_protocol("tauri", move |ctx, request| {
             let uri_path = request.uri().path();
+            if uri_path == "/hls-proxy" {
+                let query = request.uri().query().unwrap_or("");
+                let target = query
+                    .split('&')
+                    .find_map(|part| part.strip_prefix("u="))
+                    .and_then(|value| urlencoding::decode(value).ok().map(|v| v.to_string()))
+                    .unwrap_or_default();
+                return match hls_proxy_fetch(&target, "tauri://localhost/hls-proxy?u=") {
+                    Ok((body, content_type)) => tauri::http::Response::builder()
+                        .header(tauri::http::header::CONTENT_TYPE, content_type)
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(body)
+                        .unwrap(),
+                    Err(_) => tauri::http::Response::builder()
+                        .status(tauri::http::StatusCode::BAD_GATEWAY)
+                        .body(b"Playback unavailable".to_vec())
+                        .unwrap(),
+                };
+            }
             let path = if uri_path == "/" || uri_path.is_empty() {
                 "index.html"
             } else {
@@ -131,7 +291,29 @@ pub fn run() {
                 }
             }
 
-            // 2. 回退到内嵌资源
+            // 2. 播放器资源可从运行目录/资源目录读取，用于内部代理播放同源加载。
+            if path == "player.html" {
+                let mut player_candidates = Vec::new();
+                if let Ok(exe_path) = std::env::current_exe() {
+                    if let Some(base_dir) = exe_path.parent() {
+                        player_candidates.push(base_dir.join("player.html"));
+                        player_candidates.push(base_dir.join("resources").join("player.html"));
+                    }
+                }
+                if let Ok(res_dir) = ctx.app_handle().path().resource_dir() {
+                    player_candidates.push(res_dir.join("player.html"));
+                }
+                if let Some(player_file) = player_candidates.into_iter().find(|p| p.is_file()) {
+                    if let Ok(data) = std::fs::read(&player_file) {
+                        return tauri::http::Response::builder()
+                            .header(tauri::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
+                            .body(data)
+                            .unwrap();
+                    }
+                }
+            }
+
+            // 3. 回退到内嵌资源
             if let Some(asset) = ctx.app_handle().asset_resolver().get(path.to_string()) {
                 let builder = tauri::http::Response::builder()
                     .header(tauri::http::header::CONTENT_TYPE, &asset.mime_type);
@@ -150,6 +332,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            start_hls_proxy_server();
             start_install_shutdown_watcher(app.handle().clone());
             service::start_backend_guardian(app.handle().clone());
             if let Err(e) = sync_codex_prompt_workspace_folder() {
@@ -298,6 +481,12 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::fetch_page_js,
             #[cfg(target_os = "windows")]
+            assistant::movie_player_report_progress,
+            #[cfg(target_os = "windows")]
+            assistant::movie_player_get_resume,
+            #[cfg(target_os = "windows")]
+            assistant::player_report_event,
+            #[cfg(target_os = "windows")]
             assistant::open_player_window,
             #[cfg(target_os = "windows")]
             assistant::open_lobster_office,
@@ -317,8 +506,10 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::vod_fetch,
             #[cfg(target_os = "windows")]
+            assistant::missav_api_fetch,
+            #[cfg(target_os = "windows")]
             assistant::napp03_api_fetch,
-            // 数据目录 & 图片存储
+            #[cfg(target_os = "windows")]            // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,
             assistant::assistant_load_image,

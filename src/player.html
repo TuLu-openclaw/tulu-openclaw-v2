@@ -5,147 +5,109 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-i18n="playerTitle">Player</title>
 <style>
-:root{--bg:#0d0d0d;--surface:rgba(20,20,28,0.82);--accent:#317af7;--text:#e8e8f0;--text-dim:#8888a0}
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;background:var(--bg);overflow:hidden;font-family:'HarmonyOS Sans SC','HarmonyOS Sans','Segoe UI',system-ui,-apple-system,sans-serif}
-body{display:flex;flex-direction:column;user-select:none;background:#000}
-#bg{position:fixed;inset:0;z-index:0;background-size:cover;background-position:center;filter:blur(28px) brightness(0.22) saturate(1.5);transition:background-image 0.6s ease}
-#bg::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.78) 0%,rgba(0,0,0,0.2) 40%,rgba(0,0,0,0.5) 100%)}
-.top-bar{position:absolute;left:0;right:0;top:0;z-index:10;background:linear-gradient(to bottom,rgba(0,0,0,0.78),rgba(0,0,0,0));padding:12px 18px 42px;display:flex;align-items:center;gap:12px;pointer-events:none}
-#poster{width:34px;height:48px;border-radius:5px;object-fit:cover;box-shadow:0 4px 18px rgba(0,0,0,0.55);flex-shrink:0;display:none;opacity:.88}
-.top-info{flex:1;min-width:0}
-.top-title{color:#fff;font-size:16px;font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;text-shadow:0 2px 10px rgba(0,0,0,.8)}
-.top-sub{color:rgba(255,255,255,.68);font-size:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.top-badge{background:rgba(49,122,247,.92);color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:600;letter-spacing:0.03em}
-.ctrl-top-right{display:flex;gap:8px;align-items:center;flex-shrink:0}
-.sel-group{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.sel-group select{background:var(--surface);color:var(--text);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:5px 10px;font-size:13px;outline:none;cursor:pointer;backdrop-filter:blur(12px)}
-.sel-group select:focus{border-color:var(--accent)}
-.sel-label{color:var(--text-dim);font-size:12px;flex-shrink:0}
-.video-wrap{position:absolute;inset:0;overflow:hidden;z-index:1;display:flex;align-items:center;justify-content:center;background:#000}
-video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;height:100%;object-fit:contain;background:#000}
-.overlay-msg{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);color:var(--text);gap:14px;pointer-events:none}
-.overlay-msg.show{display:flex}
-.spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,0.1);border-top-color:var(--accent);border-radius:50%;animation:spin 0.75s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.msg-text{font-size:14px;color:var(--text-dim)}
-.err-icon{font-size:44px;color:#f87171}
-.err-text{color:#f87171;font-size:14px;text-align:center;max-width:340px}
-.retry-btn{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 22px;font-size:14px;cursor:pointer;pointer-events:all}
-.retry-btn:hover{background:#ff2020}
-.ctrl-bar{position:absolute;left:0;right:0;bottom:0;z-index:10;background:linear-gradient(to top,rgba(0,0,0,0.92) 0%,rgba(0,0,0,0.68) 45%,transparent 100%);padding:54px 22px 16px;display:flex;flex-direction:column;gap:8px}
-.seek-row{display:flex;align-items:center;gap:10px;padding:8px 0 0}
-.time{color:rgba(255,255,255,0.7);font-size:12px;min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
-.seek-wrap{flex:1;height:20px;display:flex;align-items:center;cursor:pointer;position:relative}
-.seek-track{position:absolute;left:0;right:0;height:4px;background:rgba(255,255,255,0.14);border-radius:3px}
-.seek-buffer{position:absolute;left:0;height:100%;background:rgba(255,255,255,0.25);border-radius:3px;transition:width 0.4s}
-.seek-fill{position:absolute;left:0;height:100%;background:var(--accent);border-radius:3px;pointer-events:none}
-.seek-thumb{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;background:#fff;border-radius:50%;box-shadow:0 0 8px rgba(0,0,0,0.5);pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.1s}
-.seek-wrap:hover .seek-thumb{opacity:1}
-.seek-wrap:active .seek-thumb{transform:translate(-50%,-50%) scale(1.25)}
-.seek-tooltip{position:absolute;bottom:24px;transform:translateX(-50%);background:rgba(0,0,0,0.88);color:#fff;font-size:11px;padding:3px 8px;border-radius:4px;pointer-events:none;white-space:nowrap;display:none}
-.seek-wrap:hover .seek-tooltip{display:block}
-.btn-row{display:flex;align-items:center;justify-content:space-between}
-.btn-group{display:flex;align-items:center;gap:2px}
-.ctrl-btn{background:transparent;color:rgba(255,255,255,0.86);border:none;border-radius:8px;width:40px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.15s,color 0.15s,transform 0.1s;font-size:15px;flex-shrink:0}
-.ctrl-btn:hover{background:rgba(255,255,255,0.1);color:#fff}
-.ctrl-btn:active{transform:scale(0.92)}
-.ctrl-btn.active{color:var(--accent)}
-.ctrl-btn.priority{color:var(--accent)}
-.ctrl-btn.danger:hover{background:rgba(49,122,247,0.2);color:var(--accent)}
-.divider{width:1px;height:20px;background:rgba(255,255,255,0.1);margin:0 6px}
-.vol-group{display:flex;align-items:center;gap:4px}
-.vol-slider-wrap{width:0;overflow:hidden;transition:width 0.2s ease}
-.vol-group:hover .vol-slider-wrap{width:70px}
-.vol-slider{width:70px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;position:relative;cursor:pointer}
-.vol-fill{height:100%;background:rgba(255,255,255,0.8);border-radius:2px;pointer-events:none}
-.popup-panel{display:none;position:absolute;bottom:calc(100% + 10px);background:var(--surface);border:1px solid rgba(255,255,255,0.1);border-radius:10px;overflow:hidden;z-index:20;backdrop-filter:blur(20px);min-width:96px;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
-.popup-panel.open{display:block}
-.popup-panel button{display:block;width:100%;padding:9px 16px;background:none;border:none;color:var(--text);font-size:13px;text-align:left;cursor:pointer;transition:background 0.1s}
-.popup-panel button:hover{background:rgba(255,255,255,0.08)}
-.popup-panel button.active{color:var(--accent);font-weight:600}
-#shortcuts{display:none;position:absolute;bottom:calc(100% + 10px);right:8px;background:var(--surface);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px 18px;min-width:230px;z-index:20;backdrop-filter:blur(20px);color:var(--text);font-size:12px;line-height:1.8;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
-#shortcuts.open{display:block}
-#shortcuts h4{font-size:11px;color:var(--text-dim);margin-bottom:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase}
-.shortcut-row{display:flex;justify-content:space-between;gap:18px}
-.shortcut-key{background:rgba(255,255,255,0.1);border-radius:4px;padding:1px 7px;font-size:11px;color:rgba(255,255,255,0.85);font-family:Consolas,monospace}
-.shortcut-desc{color:var(--text-dim)}
-:fullscreen .ctrl-bar{padding-bottom:28px}
-:fullscreen .top-bar{padding-top:24px}
+:root{--text:#f7f8fa;--muted:#a7b0bf;--soft:#d9e1ee;--glass:rgba(20,25,34,.62);--glass2:rgba(9,12,18,.82);--line:rgba(255,255,255,.12);--brand:#e60012;--accent:#63d297;--danger:#e84040;--btn:rgba(255,255,255,.10);--btn-hover:rgba(255,255,255,.18)}
+*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#05070a;overflow:hidden;font-family:'HarmonyOS Sans','Segoe UI','Microsoft YaHei',system-ui,sans-serif;color:var(--text)}body{user-select:none;background:#05070a}#bg{position:absolute;inset:-40px;z-index:0;background-size:cover;background-position:center;filter:blur(34px) saturate(1.12);opacity:.28;transform:scale(1.08)}body:before{content:'';position:absolute;inset:0;z-index:0;background:radial-gradient(circle at 12% 8%,rgba(230,0,18,.18),transparent 28%),radial-gradient(circle at 88% 8%,rgba(99,210,151,.12),transparent 28%),linear-gradient(180deg,rgba(9,13,20,.84),rgba(5,7,10,.96))}
+.player-shell{position:absolute;inset:0;z-index:1;display:block;padding:26px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.18))}.side-panel{position:absolute;left:50%;bottom:148px;z-index:28;width:min(1040px,calc(100% - 96px));height:var(--drawer-max,360px);max-height:var(--drawer-max,360px);transform:translateX(-50%) translateY(18px);border:1px solid var(--line);border-radius:28px;background:linear-gradient(180deg,rgba(25,31,42,.88),rgba(9,12,18,.92));box-shadow:0 30px 90px rgba(0,0,0,.56);overflow:hidden;display:none;grid-template-columns:var(--drawer-left,170px) minmax(0,1fr);grid-template-rows:minmax(0,var(--drawer-top,250px)) minmax(0,1fr);backdrop-filter:blur(22px);opacity:0;transition:opacity .18s ease,transform .18s ease}.side-panel.open{display:grid;opacity:1;transform:translateX(-50%) translateY(0)}.poster-card{grid-column:1;grid-row:1/3;padding:clamp(12px,1.3vw,18px);border-right:1px solid var(--line);border-bottom:0;min-height:0;overflow:auto;scrollbar-width:thin}#poster{display:block;width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:20px;background:rgba(255,255,255,.06);box-shadow:0 18px 42px rgba(0,0,0,.42)}.left-mini{margin-top:12px;display:grid;gap:8px}.left-kicker,.left-ep{min-height:34px;display:flex;align-items:center;justify-content:center;padding:7px 8px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);font-size:12px;font-weight:800;color:#eaf0f8;text-align:center;line-height:1.25}.left-ep{color:#b8ffd8}.poster-fallback{display:none;width:100%;aspect-ratio:3/4;border-radius:20px;background:linear-gradient(135deg,#1b2432,#0b1018);place-items:center;color:#64748b;font-size:44px}.meta-card{grid-column:2;grid-row:1;padding:clamp(14px,1.5vw,20px) clamp(16px,1.7vw,20px) 10px;min-width:0;min-height:0;overflow:hidden}.kicker{display:none;align-items:center;margin-bottom:10px;padding:5px 11px;border:1px solid rgba(230,0,18,.28);border-radius:999px;background:rgba(230,0,18,.12);color:#ffd7db;font-size:12px}.top-title{font-size:22px;font-weight:900;line-height:1.28;color:#fff;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.top-sub{display:none;margin-top:8px;color:var(--soft);font-size:13px;line-height:1.5}.drawer-desc{margin-top:10px;color:#c9d3e1;font-size:clamp(12px,1.1vw,13px);line-height:1.58;display:-webkit-box;-webkit-line-clamp:var(--drawer-desc-lines,3);-webkit-box-orient:vertical;overflow:hidden}.drawer-stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.drawer-stats span{padding:5px 9px;border:1px solid rgba(255,255,255,.10);border-radius:999px;background:rgba(255,255,255,.06);color:#dce6f4;font-size:12px}.side-panel.compact .drawer-stats{display:none}.side-panel.compact .kicker{margin-bottom:6px}.side-panel.compact .top-title{font-size:18px}.side-panel.compact #poster{border-radius:16px}.side-panel.compact .episode-card,.side-panel.compact .line-card{min-height:44px}.now-playing{display:block;color:#b8ffd8}.side-tabs{display:none!important}.side-tab{width:100%;height:44px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.07);color:#d6deea;font-size:14px;font-weight:900;cursor:pointer}.side-tab.active{border-color:rgba(230,0,18,.58);background:linear-gradient(135deg,rgba(230,0,18,.38),rgba(230,0,18,.16));color:#fff}.side-section{grid-column:2;grid-row:2;display:none;min-height:0;height:auto;max-height:none;overflow:auto;padding:16px 20px 20px;scrollbar-gutter:stable;align-content:start}.side-section.active{display:grid;grid-template-columns:repeat(auto-fit,minmax(clamp(118px,13vw,160px),1fr));gap:10px}.side-empty{grid-column:1/-1;padding:16px;border:1px dashed var(--line);border-radius:16px;color:var(--muted);font-size:12px;text-align:center}.episode-card,.line-card{border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.07);color:#eaf0f8;min-height:clamp(48px,6vh,58px);padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;cursor:pointer;text-align:left}.episode-card:hover,.line-card:hover{border-color:rgba(230,0,18,.56);background:rgba(255,255,255,.12)}.episode-card.active,.line-card.active{border-color:rgba(99,210,151,.76);background:linear-gradient(135deg,rgba(18,111,68,.48),rgba(16,70,50,.34));color:#e8fff3}.episode-card strong,.line-card strong{font-size:13px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal;word-break:break-word}.episode-card small,.line-card small{color:#b7c7de;font-size:11px;white-space:nowrap;align-self:center}.main-stage{position:absolute;inset:26px;min-width:0;border:1px solid rgba(255,255,255,.10);border-radius:30px;overflow:hidden;background:#000;box-shadow:0 34px 110px rgba(0,0,0,.58)}.top-bar{position:absolute;left:0;right:0;top:0;z-index:10;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 28px 70px;background:linear-gradient(to bottom,rgba(0,0,0,.74),rgba(0,0,0,0));pointer-events:none;transition:opacity .18s ease}.top-info:before{content:attr(data-title);display:block;font-size:21px;font-weight:900;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.8);max-width:780px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.top-badge{display:inline-flex;margin-top:8px;padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.14);font-size:12px;color:#dbe7f7;backdrop-filter:blur(16px)}.video-wrap{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}video{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#000;outline:none}.overlay-msg{position:absolute;inset:0;z-index:5;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.58);color:var(--text);gap:12px;pointer-events:none}.overlay-msg.show{display:flex}.spinner{width:38px;height:38px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.msg-text{font-size:13px;color:var(--muted)}.err-icon{font-size:36px;color:#ff6b6b}.err-text{color:#ffc4c4;font-size:13px;text-align:center;max-width:360px}.retry-btn{background:#fff;color:#111;border:none;border-radius:12px;padding:9px 18px;font-size:13px;cursor:pointer;pointer-events:all}.ctrl-bar{position:absolute;left:0;right:0;bottom:0;z-index:12;display:flex;flex-direction:column;gap:12px;padding:70px 28px 22px;background:linear-gradient(to top,rgba(0,0,0,.86),rgba(0,0,0,.46) 58%,rgba(0,0,0,0));transition:opacity .18s ease}.seek-row{display:flex;align-items:center;gap:12px}.time{min-width:52px;text-align:center;color:#d4deec;font-size:12px;font-variant-numeric:tabular-nums}.seek-wrap{flex:1;height:20px;display:flex;align-items:center;position:relative;cursor:pointer}.seek-track{position:absolute;left:0;right:0;height:5px;border-radius:999px;background:rgba(255,255,255,.22)}.seek-buffer{position:absolute;left:0;height:100%;border-radius:999px;background:rgba(255,255,255,.18)}.seek-fill{position:absolute;left:0;height:100%;border-radius:999px;background:linear-gradient(90deg,#e60012,#ff7a8a)}.seek-thumb{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:#fff;transform:translate(-50%,-50%);opacity:0;box-shadow:0 2px 8px rgba(0,0,0,.6);pointer-events:none}.seek-wrap:hover .seek-thumb{opacity:1}.seek-tooltip{position:absolute;bottom:24px;transform:translateX(-50%);display:none;padding:4px 8px;border-radius:8px;background:rgba(0,0,0,.82);font-size:11px;color:#fff;white-space:nowrap}.seek-wrap:hover .seek-tooltip{display:block}.btn-row-secondary{display:none}.btn-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.btn-group{display:flex;align-items:center;gap:10px}.ctrl-btn{height:44px;min-width:44px;padding:0 16px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:var(--btn);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;font-weight:850;transition:transform .14s ease,background .14s ease,border-color .14s ease;backdrop-filter:blur(18px)}.ctrl-btn:hover{transform:translateY(-1px);background:var(--btn-hover);border-color:rgba(255,255,255,.24)}.ctrl-btn.active,.ctrl-btn.priority{background:#fff;color:#111}.ctrl-btn:disabled{opacity:.36;cursor:not-allowed;transform:none}.ctrl-btn.danger{background:rgba(230,0,18,.70);border-color:rgba(255,120,130,.28);color:#fff}.ctrl-btn.subtle{background:rgba(255,255,255,.08)}.divider{width:1px;height:22px;background:rgba(255,255,255,.14);margin:0 2px}.vol-group{display:flex;align-items:center;gap:8px}.vol-slider-wrap{width:78px;overflow:hidden}.vol-slider{width:78px;height:5px;border-radius:999px;background:rgba(255,255,255,.26);cursor:pointer}.vol-fill{height:100%;border-radius:999px;background:#fff}.sel-group{display:none}.sel-group select{display:none}.popup-panel{display:none;position:absolute;bottom:calc(100% + 8px);z-index:22;min-width:126px;overflow:hidden;border-radius:16px;background:rgba(18,24,34,.94);border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 48px rgba(0,0,0,.46);backdrop-filter:blur(20px)}.popup-panel.open{display:block}.popup-panel button{display:block;width:100%;padding:11px 15px;background:none;border:0;color:#fff;text-align:left;font-size:13px;cursor:pointer}.popup-panel button:hover,.popup-panel button.active{background:rgba(255,255,255,.12)}#shortcuts{display:none;position:absolute;right:0;bottom:calc(100% + 8px);z-index:36;width:260px;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(18,24,34,.96);box-shadow:0 18px 52px rgba(0,0,0,.5);backdrop-filter:blur(20px)}#shortcuts.open{display:block}.shortcut-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;color:#dce6f4;font-size:12px}.shortcut-key{font-weight:900;color:#fff}.shortcut-desc{color:#b9c5d6;text-align:right}.settings-panel{display:none;position:absolute;right:28px;bottom:112px;z-index:34;width:380px;max-height:min(620px,calc(100% - 150px));overflow:auto;padding:18px;border:1px solid rgba(255,255,255,.12);border-radius:24px;background:rgba(18,24,34,.94);box-shadow:0 24px 70px rgba(0,0,0,.52);backdrop-filter:blur(24px)}.settings-panel.open{display:block}.settings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.settings-head strong{font-size:17px}.settings-close{border:0;background:rgba(255,255,255,.10);color:#fff;border-radius:12px;width:32px;height:32px;cursor:pointer}.settings-group{border-top:1px solid rgba(255,255,255,.10);padding:13px 0}.settings-group:first-of-type{border-top:0}.settings-title{font-size:12px;color:#aab6c8;margin-bottom:8px}.settings-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:9px 0;color:#eef3fa;font-size:13px}.settings-row input,.settings-row select{width:144px;height:34px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:#0b1018;color:#fff;padding:0 9px}.settings-row input[type=checkbox]{width:auto;height:auto}.settings-hint{font-size:12px;color:#aab6c8;line-height:1.5}body.idle .top-bar,body.idle .ctrl-bar{opacity:0;pointer-events:none}:fullscreen .player-shell{padding:0}:fullscreen .main-stage{inset:0;border-radius:0;border:0}:fullscreen .ctrl-bar{padding-bottom:26px}:fullscreen .side-panel{bottom:150px}@media(max-width:980px){.player-shell{padding:10px}.main-stage{inset:10px;border-radius:22px}.side-panel{width:calc(100% - 28px);bottom:132px}.poster-card{padding:12px}.side-section.active{grid-template-columns:repeat(auto-fit,minmax(104px,1fr))}.ctrl-bar{padding-left:14px;padding-right:14px}.ctrl-btn{height:38px;min-width:38px;padding:0 10px}.vol-slider-wrap,.vol-slider{width:52px}.settings-panel{right:14px;left:14px;width:auto}}
 </style>
 </head>
 <body>
 <div id="bg"></div>
-<div class="top-bar">
-  <img id="poster" alt="poster">
-  <div class="top-info">
-    <div class="top-title" id="titleEl" data-i18n="videoTitleFallback">Video</div>
-    <div class="top-sub" id="topSub"></div>
-  </div>
-  <div class="ctrl-top-right">
-    <div class="sel-group" id="epGroup" style="display:none"><span class="sel-label" data-i18n="episodeLabel">Episode</span><select id="epSelect"><option data-i18n="loading">Loading...</option></select></div>
-    <div class="sel-group" id="urlGroup" style="display:none"><span class="sel-label" data-i18n="lineLabel">Line</span><select id="urlSelect"><option data-i18n="loading">Loading...</option></select></div>
-  </div>
-</div>
-<div class="video-wrap" id="wrap">
-  <video id="vid" playsinline></video>
-  <div class="overlay-msg" id="overlay">
-    <div class="spinner" id="spinEl"></div>
-    <div class="err-icon" id="errIcon" style="display:none">!</div>
-    <div class="msg-text" id="msgEl" data-i18n="loadingActive">Loading...</div>
-    <div class="err-text" id="errEl" style="display:none"></div>
-    <button class="retry-btn" id="retryBtn" style="display:none" data-i18n="retry">Retry</button>
-  </div>
-</div>
-<div class="ctrl-bar" id="ctrlBar">
-  <div class="seek-row">
-    <span class="time" id="curEl">0:00</span>
-    <div class="seek-wrap" id="seekWrap">
-      <div class="seek-track"><div class="seek-buffer" id="bufEl"></div><div class="seek-fill" id="fillEl"></div><div class="seek-thumb" id="thumbEl"></div></div>
-      <div class="seek-tooltip" id="seekTip">0:00</div>
+<div class="player-shell">
+  <aside class="side-panel" id="sidePanel">
+    <div class="poster-card">
+      <img id="poster" alt="poster">
+      <div class="poster-fallback" id="posterFallback">影</div>
+      <div class="left-mini" id="leftMiniInfo"><div class="left-kicker">独立播放器</div><div class="left-ep">正在播放</div></div>
     </div>
-    <span class="time" id="totEl">0:00</span>
-  </div>
-  <div class="btn-row">
-    <div class="btn-group">
-      <button class="ctrl-btn" id="prevBtn" title="Previous line (P)">&lt;</button>
-      <button class="ctrl-btn" id="playBtn" title="Play/Pause (Space)" data-i18n-title="playPauseTitle">&#9654;</button>
-      <button class="ctrl-btn" id="nextBtn" title="Next line (N)">&gt;</button>
-      <div class="divider"></div>
-      <div class="vol-group">
-        <button class="ctrl-btn" id="muteBtn" title="Mute (M)" data-i18n-title="muteTitle">&#128266;</button>
-        <div class="vol-slider-wrap"><div class="vol-slider" id="volSlider"><div class="vol-fill" id="volFill"></div></div></div>
+    <div class="meta-card">
+      <div class="kicker">独立播放器</div>
+      <div class="top-title" id="titleEl" data-i18n="videoTitleFallback">Video</div>
+      <div class="top-sub" id="topSub"></div>
+      <div class="drawer-desc" id="drawerDesc"></div>
+      <div class="drawer-stats" id="drawerStats"></div>
+    </div>
+    <div class="side-tabs">
+      <button class="side-tab active" data-panel="episodes">选集</button>
+      <button class="side-tab" data-panel="lines">线路</button>
+    </div>
+    <div class="side-section" id="episodePanel"><div class="side-empty">暂无选集数据</div></div>
+    <div class="side-section" id="linePanel"><div class="side-empty">暂无线路数据</div></div>
+  </aside>
+  <main class="main-stage">
+    <div class="top-bar">
+      <div class="top-info" id="topInfo"><div class="top-badge">正在播放</div></div>
+    </div>
+    <div class="video-wrap" id="wrap">
+      <video id="vid" playsinline></video>
+      <div class="overlay-msg" id="overlay">
+        <div class="spinner" id="spinEl"></div>
+        <div class="err-icon" id="errIcon" style="display:none">!</div>
+        <div class="msg-text" id="msgEl" data-i18n="loadingActive">Loading...</div>
+        <div class="err-text" id="errEl" style="display:none"></div>
+        <button class="retry-btn" id="retryBtn" style="display:none" data-i18n="retry">Retry</button>
       </div>
-      <div class="divider"></div>
-      <button class="ctrl-btn" id="speedBtn" title="Speed (S)" data-i18n-title="speedTitle">1x</button>
-      <div class="popup-panel" id="speedMenu"></div>
     </div>
-    <div class="btn-group">
-      <button class="ctrl-btn" id="qualityBtn" title="Quality" data-i18n-title="qualityTitle">&#9881;</button>
-      <div class="popup-panel" id="qualityMenu"></div>
-      <div style="position:relative">
-        <button class="ctrl-btn" id="shortcutsBtn" title="Shortcuts (Shift+/)" data-i18n-title="shortcutsTitle">?</button>
-        <div id="shortcuts">
-          <h4 data-i18n="shortcutsHeading">Shortcuts</h4>
-          <div class="shortcut-row"><span class="shortcut-key">Space</span><span class="shortcut-desc" data-i18n="shortcutPlayPause">Play / Pause</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">← →</span><span class="shortcut-desc" data-i18n="shortcutSeek">Rewind / Forward 10s</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">↑ ↓</span><span class="shortcut-desc" data-i18n="shortcutVolume">Adjust volume</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc" data-i18n="shortcutFullscreen">Fullscreen</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc" data-i18n="shortcutMute">Mute</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc" data-i18n="shortcutSpeed">Speed menu</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">I</span><span class="shortcut-desc" data-i18n="shortcutPip">Picture in picture</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc" data-shortcut="pn">Previous line / Next line</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">X</span><span class="shortcut-desc" data-i18n="shortcutScreenshot">Screenshot</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">Shift + /</span><span class="shortcut-desc" data-i18n="shortcutTogglePanel">Show/hide this panel</span></div>
-          <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc" data-i18n="shortcutExitClose">Exit / Close</span></div>
+    <div class="ctrl-bar" id="ctrlBar">
+      <div class="seek-row">
+        <span class="time" id="curEl">0:00</span>
+        <div class="seek-wrap" id="seekWrap">
+          <div class="seek-track"><div class="seek-buffer" id="bufEl"></div><div class="seek-fill" id="fillEl"></div><div class="seek-thumb" id="thumbEl"></div></div>
+          <div class="seek-tooltip" id="seekTip">0:00</div>
+        </div>
+        <span class="time" id="totEl">0:00</span>
+      </div>
+      <div class="btn-row-secondary">
+        <div class="sel-group" id="epGroup" style="display:none"><span class="sel-label" data-i18n="episodeLabel">选集</span><select id="epSelect"><option data-i18n="loading">Loading...</option></select></div>
+        <div class="sel-group" id="urlGroup" style="display:none"><span class="sel-label" data-i18n="lineLabel">线路</span><select id="urlSelect"><option data-i18n="loading">Loading...</option></select></div>
+      </div>
+      <div class="btn-row">
+        <div class="btn-group">
+          <button class="ctrl-btn" id="prevBtn" title="上一集/上一线路 (P)">上集</button>
+          <button class="ctrl-btn" id="playBtn" title="Play/Pause (Space)" data-i18n-title="playPauseTitle">播放</button>
+          <button class="ctrl-btn" id="nextBtn" title="下一集/下一线路 (N)">下集</button>
+          <div class="divider"></div>
+          <div class="vol-group"><button class="ctrl-btn" id="muteBtn" title="Mute (M)" data-i18n-title="muteTitle">音量</button><div class="vol-slider-wrap"><div class="vol-slider" id="volSlider"><div class="vol-fill" id="volFill"></div></div></div></div>
+          <div class="divider"></div>
+          <button class="ctrl-btn" id="speedBtn" title="Speed (S)" data-i18n-title="speedTitle">1x</button>
+          <button class="ctrl-btn subtle" id="episodeToggleBtn" title="选集">选集</button>
+          <button class="ctrl-btn subtle" id="lineToggleBtn" title="线路">线路</button>
+          <div class="popup-panel" id="speedMenu"></div>
+        </div>
+        <div class="btn-group">
+          <button class="ctrl-btn" id="qualityBtn" title="Quality" data-i18n-title="qualityTitle" style="display:none">清晰度</button>
+          <div class="popup-panel" id="qualityMenu"></div>
+          <div style="position:relative"><button class="ctrl-btn" id="shortcutsBtn" title="快捷键" data-i18n-title="shortcutsTitle">键</button><div id="shortcuts"><h4 data-i18n="shortcutsHeading">Shortcuts</h4><div class="shortcut-row"><span class="shortcut-key">Space</span><span class="shortcut-desc" data-i18n="shortcutPlayPause">Play / Pause</span></div><div class="shortcut-row"><span class="shortcut-key">← →</span><span class="shortcut-desc" data-i18n="shortcutSeek">Rewind / Forward 10s</span></div><div class="shortcut-row"><span class="shortcut-key">↑ ↓</span><span class="shortcut-desc" data-i18n="shortcutVolume">Adjust volume</span></div><div class="shortcut-row"><span class="shortcut-key">F</span><span class="shortcut-desc" data-i18n="shortcutFullscreen">Fullscreen</span></div><div class="shortcut-row"><span class="shortcut-key">M</span><span class="shortcut-desc" data-i18n="shortcutMute">Mute</span></div><div class="shortcut-row"><span class="shortcut-key">S</span><span class="shortcut-desc" data-i18n="shortcutSpeed">Speed menu</span></div><div class="shortcut-row"><span class="shortcut-key">I</span><span class="shortcut-desc" data-i18n="shortcutPip">Picture in picture</span></div><div class="shortcut-row"><span class="shortcut-key">P / N</span><span class="shortcut-desc" data-shortcut="pn">Previous line / Next line</span></div><div class="shortcut-row"><span class="shortcut-key">X</span><span class="shortcut-desc" data-i18n="shortcutScreenshot">Screenshot</span></div><div class="shortcut-row"><span class="shortcut-key">Shift + /</span><span class="shortcut-desc" data-i18n="shortcutTogglePanel">Show/hide this panel</span></div><div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc" data-i18n="shortcutExitClose">Exit / Close</span></div></div></div>
+          <button class="ctrl-btn" id="castBtn" title="投屏" style="display:none">投屏</button>
+          <button class="ctrl-btn" id="settingsBtn" title="播放器设置">设置</button>
+          <button class="ctrl-btn" id="fsBtn" title="全屏 (F)">全屏</button>
+          <button class="ctrl-btn" id="pipBtn" title="Picture in picture (I)" data-i18n-title="pipTitle">小窗</button>
+          <button class="ctrl-btn" id="pipWinBtn" title="Pin window on top" data-i18n-title="pinWindowTitle" style="display:none">&#8983;</button>
+          <button class="ctrl-btn" id="ssBtn" title="Screenshot (X)" data-i18n-title="screenshotTitle" style="display:none">&#128247;</button>
         </div>
       </div>
-      <button class="ctrl-btn" id="pipBtn" title="Picture in picture (I)" data-i18n-title="pipTitle">PiP</button>
-      <button class="ctrl-btn" id="pipWinBtn" title="Pin window on top" data-i18n-title="pinWindowTitle">&#9103;</button>
-      <button class="ctrl-btn" id="ssBtn" title="Screenshot (X)" data-i18n-title="screenshotTitle">&#128247;</button>
-      <button class="ctrl-btn danger" id="closeBtn" title="Close" data-i18n-title="close">&#10005;</button>
     </div>
-  </div>
+    <div class="settings-panel" id="settingsPanel">
+      <div class="settings-head"><strong>播放器设置</strong><button class="settings-close" id="settingsClose">×</button></div>
+      <div class="settings-group">
+        <div class="settings-title">跳过片头 / 片尾</div>
+        <label class="settings-row"><span>自动跳片头</span><input id="skipIntroEnabled" type="checkbox"></label>
+        <label class="settings-row"><span>片头秒数</span><input id="skipIntroSeconds" type="number" min="0" max="600" value="0"></label>
+        <label class="settings-row"><span>自动跳片尾</span><input id="skipOutroEnabled" type="checkbox"></label>
+        <label class="settings-row"><span>片尾秒数</span><input id="skipOutroSeconds" type="number" min="0" max="600" value="0"></label>
+      </div>
+      <div class="settings-group">
+        <div class="settings-title">播放内核 / 画面</div>
+        <label class="settings-row"><span>解码模式</span><select id="decoderSelect"><option value="auto">自动</option><option value="hlsjs">HLS.js</option><option value="native">系统原生</option></select></label>
+        <label class="settings-row"><span>画面比例</span><select id="fitSelect"><option value="contain">适应窗口</option><option value="cover">填满裁切</option><option value="fill">拉伸填充</option></select></label>
+        <label class="settings-row"><span>清晰度</span><select id="qualitySelect"><option value="auto">自动</option></select></label>
+      </div>
+      <div class="settings-group">
+        <div class="settings-title">播放行为</div>
+        <label class="settings-row"><span>自动下一集</span><input id="autoNextEnabled" type="checkbox" checked></label>
+        <div class="settings-hint">清晰度仅在当前 HLS 源提供多码率时可切换；投屏没有真实协议能力时不会显示。</div>
+      </div>
+    </div>
+  </main>
 </div>
 <script>
 (function(){
@@ -167,21 +129,34 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   document.querySelectorAll('[data-i18n]').forEach(function(el){el.textContent=tr(el.getAttribute('data-i18n'))})
   document.querySelectorAll('[data-i18n-title]').forEach(function(el){el.title=tr(el.getAttribute('data-i18n-title'))})
   var title = decodeURIComponent(params.get('title') || tr('videoTitleFallback'))
-  var resume = parseFloat(params.get('resume') || '0')
+  var resume = 0
   var picRaw = params.get('pic') || ''
   var playbackCtx = null
+  var reportBadgeEl = null
+  var resumeBadgeEl = null
   try{playbackCtx=JSON.parse(params.get('playbackCtx')||params.get('playback_ctx')||'null')}catch(e){try{playbackCtx=JSON.parse(decodeURIComponent(params.get('playbackCtx')||params.get('playback_ctx')||'null'))}catch(e){}}
   var allEps=[]
   try{var r=params.get('allEps')||params.get('all_eps');if(r)allEps=JSON.parse(r)}catch(e){try{allEps=JSON.parse(decodeURIComponent(r))}catch(e){}}
   var allUrls=[]
   try{var r=params.get('allUrls')||params.get('all_urls');if(r)allUrls=JSON.parse(r)}catch(e){try{allUrls=JSON.parse(decodeURIComponent(r))}catch(e){}}
+  var allLines=[]
+  try{var lr=params.get('allLines')||params.get('all_lines');if(lr)allLines=JSON.parse(lr)}catch(e){try{allLines=JSON.parse(decodeURIComponent(lr))}catch(e){}}
   if(!allUrls.length&&url)allUrls=[url]
+  if(!allEps.length&&url)allEps=[{epName:title||tr('episodeOption',{number:1}),url:url}]
   var pic=picRaw?decodeURIComponent(picRaw):''
   var curUrlIdx=url?allUrls.indexOf(url):0
   if(curUrlIdx<0)curUrlIdx=0
   var vid=document.getElementById('vid')
   var bg=document.getElementById('bg')
+  var sidePanel=document.getElementById('sidePanel')
+  var topInfo=document.getElementById('topInfo')
+  var drawerDesc=document.getElementById('drawerDesc')
+  var drawerStats=document.getElementById('drawerStats')
+  var leftMiniInfo=document.getElementById('leftMiniInfo')
   var poster=document.getElementById('poster')
+  var posterFallback=document.getElementById('posterFallback')
+  var episodePanel=document.getElementById('episodePanel')
+  var linePanel=document.getElementById('linePanel')
   var titleEl=document.getElementById('titleEl')
   var topSub=document.getElementById('topSub')
   var epGroup=document.getElementById('epGroup')
@@ -193,14 +168,29 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   var nextBtn=document.getElementById('nextBtn')
   var muteBtn=document.getElementById('muteBtn')
   var speedBtn=document.getElementById('speedBtn')
+  var episodeToggleBtn=document.getElementById('episodeToggleBtn')
+  var lineToggleBtn=document.getElementById('lineToggleBtn')
+  var settingsBtn=document.getElementById('settingsBtn')
+  var settingsPanel=document.getElementById('settingsPanel')
+  var settingsClose=document.getElementById('settingsClose')
+  var skipIntroEnabled=document.getElementById('skipIntroEnabled')
+  var skipIntroSeconds=document.getElementById('skipIntroSeconds')
+  var skipOutroEnabled=document.getElementById('skipOutroEnabled')
+  var skipOutroSeconds=document.getElementById('skipOutroSeconds')
+  var decoderSelect=document.getElementById('decoderSelect')
+  var fitSelect=document.getElementById('fitSelect')
+  var qualitySelect=document.getElementById('qualitySelect')
+  var autoNextEnabled=document.getElementById('autoNextEnabled')
   var qualityBtn=document.getElementById('qualityBtn')
   var qualityMenu=document.getElementById('qualityMenu')
   var shortcutsBtn=document.getElementById('shortcutsBtn')
   var shortcuts=document.getElementById('shortcuts')
+  var castBtn=document.getElementById('castBtn')
+  var fsBtn=document.getElementById('fsBtn')
   var pipBtn=document.getElementById('pipBtn')
   var pipWinBtn=document.getElementById('pipWinBtn')
   var ssBtn=document.getElementById('ssBtn')
-  var closeBtn=document.getElementById('closeBtn')
+
   var seekWrap=document.getElementById('seekWrap')
   var fillEl=document.getElementById('fillEl')
   var bufEl=document.getElementById('bufEl')
@@ -217,9 +207,33 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   var msgEl=document.getElementById('msgEl')
   var errEl=document.getElementById('errEl')
   var retryBtn=document.getElementById('retryBtn')
-  titleEl.textContent=title
-  document.title=title
-  if(pic){poster.src=pic;poster.style.display='block';bg.style.backgroundImage='url('+pic+')'}
+  function cleanTitle(rawTitle){
+    var text=String(rawTitle||tr('videoTitleFallback')).replace(/\s+/g,' ').trim()
+    return text.replace(/(第\s*[0-9一二三四五六七八九十百千万]+\s*集)(\s+\1)+$/,'$1')
+  }
+  function displayTitle(base, ep){
+    var cleanBase=cleanTitle(base||title||tr('videoTitleFallback'))
+    var cleanEp=String(ep||'').trim()
+    return cleanEp&&cleanBase.indexOf(cleanEp)===-1?cleanBase+' · '+cleanEp:cleanBase
+  }
+  function setWindowTitle(text){
+    var cleaned=cleanTitle(text)
+    titleEl.textContent=cleaned
+    document.title=cleaned
+  }
+  setWindowTitle(title)
+  function absolutizeMediaUrl(src){
+    if(!src)return ''
+    try{src=decodeURIComponent(src)}catch(e){}
+    if(/^https?:\/\//i.test(src)||/^data:/i.test(src)||/^file:/i.test(src))return src
+    if(src.indexOf('//')===0)return 'https:'+src
+    return src
+  }
+  function setPoster(src){
+    if(src){var fixed=absolutizeMediaUrl(src);poster.src=fixed;poster.style.display='block';posterFallback.style.display='none';bg.style.backgroundImage='url('+fixed+')'}
+    else{poster.style.display='none';posterFallback.style.display='grid'}
+  }
+  setPoster(pic)
   function getEpisodeByUrl(epUrl){
     if(!epUrl||!allEps||!allEps.length)return null
     for(var i=0;i<allEps.length;i++){
@@ -227,6 +241,13 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       if(ep&&ep.url===epUrl)return ep
     }
     return null
+  }
+  function currentEpisodeIndex(){
+    var ep=getEpisodeByUrl(activeUrl||url)
+    var idx=ep?allEps.indexOf(ep):-1
+    if(idx>=0)return idx
+    var uidx=allUrls.indexOf(activeUrl||url)
+    return uidx>=0?uidx:0
   }
   function isEpisodeUrlList(){
     if(!allUrls.length||!allEps.length)return false
@@ -241,36 +262,155 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   function syncNavCopy(){
     prevBtn.title=navPrevText()+' (P)'
     nextBtn.title=navNextText()+' (N)'
+    prevBtn.textContent=urlsAreEpisodes?'上集':'上条'
+    nextBtn.textContent=urlsAreEpisodes?'下集':'下条'
     var pn=shortcuts&&shortcuts.querySelector('[data-shortcut=pn]')
     if(pn)pn.textContent=navPrevText()+' / '+navNextText()
+  }
+
+  function fitDrawerLayout(){
+    if(!sidePanel)return
+    var shell=document.querySelector('.main-stage')||document.body
+    var control=document.getElementById('ctrlBar')||document.querySelector('.ctrl-bar')
+    var seek=document.querySelector('.seek-row')||document.getElementById('seekWrap')
+    var shellRect=shell.getBoundingClientRect()
+    var guardRect=(seek||control||shell).getBoundingClientRect()
+    var shellBottom=shellRect.bottom
+    var guardTop=guardRect.top
+    var reserved=Math.max(18, shellBottom-guardTop+22)
+    var topSafe=window.innerHeight<700?70:92
+    var usableBottom=guardTop-18
+    var usableTop=shellRect.top+topSafe
+    var available=Math.floor(usableBottom-usableTop)
+    var compact=available<300
+    var maxH=Math.max(178, Math.min(available, compact?270:390))
+    var headerW=window.innerWidth<820?116:170
+    var topRow=Math.max(compact?118:148, Math.min(maxH-(compact?72:88), Math.round(headerW*1.10)+28))
+    sidePanel.style.bottom=reserved+'px'
+    sidePanel.style.height=maxH+'px'
+    sidePanel.style.maxHeight=maxH+'px'
+    sidePanel.style.setProperty('--drawer-max',maxH+'px')
+    sidePanel.style.setProperty('--drawer-left',headerW+'px')
+    sidePanel.style.setProperty('--drawer-top',topRow+'px')
+    sidePanel.style.setProperty('--drawer-desc-lines', compact?'1':(maxH<310?'2':'3'))
+    sidePanel.style.gridTemplateColumns=headerW+'px minmax(0,1fr)'
+    sidePanel.style.gridTemplateRows='minmax(0,'+topRow+'px) minmax(0,1fr)'
+    sidePanel.classList.toggle('compact',compact)
+  }
+  function hideSidePanel(){sidePanel.classList.remove('open');clearTimeout(drawerTimer)}
+  function scheduleDrawerHide(ms){clearTimeout(drawerTimer);drawerTimer=setTimeout(function(){hideSidePanel()},ms||3000)}
+  function cancelDrawerHide(){clearTimeout(drawerTimer)}
+  function setSidePanel(name){
+    cancelDrawerHide();fitDrawerLayout();sidePanel.classList.add('open')
+    document.querySelectorAll('.side-tab').forEach(function(btn){btn.classList.toggle('active',btn.getAttribute('data-panel')===name)})
+    episodePanel.classList.toggle('active',name==='episodes')
+    linePanel.classList.toggle('active',name==='lines')
+  }
+  document.querySelectorAll('.side-tab').forEach(function(btn){btn.addEventListener('click',function(e){e.stopPropagation();setSidePanel(btn.getAttribute('data-panel'))})})
+  function normalizeEpisodeName(ep,i){return (ep&&(ep.epName||ep.name))||tr('episodeOption',{number:i+1})}
+  function getCurrentLineIndex(){
+    var lines=(Array.isArray(allLines)?allLines:[]).filter(function(line){return line&&Array.isArray(line.urls)&&line.urls.length})
+    for(var i=0;i<lines.length;i++){if(lines[i].urls.some(function(ep){return ep&&ep.url===activeUrl}))return i}
+    return 0
+  }
+  function getCurrentEpisodeIndex(){
+    var lines=(Array.isArray(allLines)?allLines:[]).filter(function(line){return line&&Array.isArray(line.urls)&&line.urls.length})
+    for(var li=0;li<lines.length;li++){for(var ei=0;ei<lines[li].urls.length;ei++){if(lines[li].urls[ei]&&lines[li].urls[ei].url===activeUrl)return ei}}
+    var idx=allEps.findIndex(function(ep){return ep&&ep.url===activeUrl})
+    return idx>=0?idx:0
+  }
+  function setCurrentLine(line){
+    if(!line||!Array.isArray(line.urls)||!line.urls.length)return
+    allEps=line.urls.map(function(ep){return {epName:ep.epName||ep.name,url:ep.url,pic:ep.pic}})
+    allUrls=allEps.map(function(ep){return ep.url}).filter(Boolean)
+    urlsAreEpisodes=true
+  }
+  function refreshLegacySelects(){
+    if(epSelect&&allEps.length){epSelect.textContent='';allEps.forEach(function(e,i){var opt=document.createElement('option');opt.value=String(i);opt.textContent=normalizeEpisodeName(e,i);if(e&&e.url===activeUrl)opt.selected=true;epSelect.appendChild(opt)})}
+    if(urlSelect&&allUrls.length){urlSelect.textContent='';allUrls.forEach(function(u,i){var opt=document.createElement('option');opt.value=String(i);var ep=getEpisodeByUrl(u);opt.textContent=urlsAreEpisodes?normalizeEpisodeName(ep,i):tr('lineOption',{number:i+1});if(u===activeUrl)opt.selected=true;urlSelect.appendChild(opt)})}
+  }
+  function renderSidePanels(){
+    episodePanel.innerHTML=''
+    linePanel.innerHTML=''
+    var normalizedLines=(Array.isArray(allLines)?allLines:[]).filter(function(line){return line&&Array.isArray(line.urls)&&line.urls.length})
+    if(normalizedLines.length&&!allEps.length)setCurrentLine(normalizedLines[getCurrentLineIndex()]||normalizedLines[0])
+    if(!allEps.length&&activeUrl)allEps=[{epName:title||tr('episodeOption',{number:1}),url:activeUrl,pic:pic}]
+    if(allEps.length){
+      if(allEps.length===1){var hint=document.createElement('div');hint.className='side-empty';hint.textContent='当前入口只拿到 1 集，请从详情页重新进入以加载完整选集';episodePanel.appendChild(hint)}
+      allEps.forEach(function(ep,i){
+        var btn=document.createElement('button')
+        btn.type='button';btn.className='episode-card'
+        btn.innerHTML='<strong>'+normalizeEpisodeName(ep,i)+'</strong><small>'+(i+1)+'/'+allEps.length+'</small>'
+        if(ep&&ep.url===activeUrl)btn.classList.add('active')
+        btn.addEventListener('click',function(){if(!ep||!ep.url)return;hideSidePanel();playUrl(ep.url,syncEpisodeContext(ep.url,ep.epName||ep.name),ep.pic||pic)})
+        episodePanel.appendChild(btn)
+      })
+    }else episodePanel.innerHTML='<div class="side-empty">暂无选集数据</div>'
+    if(normalizedLines.length){
+      var epIdx=getCurrentEpisodeIndex()
+      normalizedLines.forEach(function(line,i){
+        var target=(line.urls[epIdx]&&line.urls[epIdx].url)?line.urls[epIdx]:line.urls[0]
+        var isActive=line.urls.some(function(ep){return ep&&ep.url===activeUrl})
+        var btn=document.createElement('button')
+        btn.type='button';btn.className='line-card'
+        btn.innerHTML='<strong>'+(line.name||tr('lineOption',{number:i+1}))+'</strong><small>'+(isActive?'当前':(line.urls.length+' 集'))+'</small>'
+        if(isActive)btn.classList.add('active')
+        btn.addEventListener('click',function(){if(!target||!target.url)return;hideSidePanel();setCurrentLine(line);refreshLegacySelects();playUrl(target.url,syncEpisodeContext(target.url,target.epName||target.name||title),target.pic||pic)})
+        linePanel.appendChild(btn)
+      })
+    }else{
+      var lineList=allUrls.length?allUrls:(activeUrl?[activeUrl]:[url].filter(Boolean))
+      if(lineList.length){
+        lineList.forEach(function(u,i){
+          var ep=getEpisodeByUrl(u)
+          var btn=document.createElement('button')
+          btn.type='button';btn.className='line-card'
+          btn.innerHTML='<strong>'+(urlsAreEpisodes?normalizeEpisodeName(ep,i):tr('lineOption',{number:i+1}))+'</strong><small>'+(u===activeUrl?'当前':'可切换')+'</small>'
+          if(u===activeUrl)btn.classList.add('active')
+          btn.addEventListener('click',function(){hideSidePanel();playUrl(u,syncEpisodeContext(u,title),pic)})
+          linePanel.appendChild(btn)
+        })
+      }else linePanel.innerHTML='<div class="side-empty">暂无线路数据</div>'
+    }
   }
   function syncEpisodeContext(epUrl,fallbackTitle){
     var ep=getEpisodeByUrl(epUrl)
     var nextTitle=(ep&&ep.epName)||fallbackTitle||title
     if(ep&&playbackCtx){playbackCtx.epName=ep.epName||playbackCtx.epName}
-    if(ep&&ep.pic&&!poster.src){poster.src=ep.pic;poster.style.display='block';bg.style.backgroundImage='url('+ep.pic+')'}
+    if(ep&&ep.pic&&!poster.src){setPoster(ep.pic)}
     var eidx=ep?allEps.indexOf(ep):-1
     if(eidx>=0&&epSelect.options[eidx])epSelect.selectedIndex=eidx
-    if(nextTitle&&topSub)setTopSub(nextTitle)
+    if(nextTitle&&topSub)setTopSub(nextTitle);syncLeftMiniInfo()
     return nextTitle
+  }
+  function getTauriInvoke(){
+    var tauri=window.__TAURI__
+    return tauri&&((tauri.core&&tauri.core.invoke)||tauri.invoke)
   }
   function setTopSub(text){
     topSub.textContent=''
-    var badge=document.createElement('span')
-    badge.className='top-badge'
-    badge.textContent=tr('standaloneWindowBadge')
     var label=document.createElement('span')
-    label.textContent=text||tr('videoTitleFallback')
-    topSub.appendChild(badge)
+    label.className='now-playing'
+    label.textContent=displayTitle(title, text)
     topSub.appendChild(label)
-    if(resume>0){
-      var resumeBadge=document.createElement('span')
-      resumeBadge.className='top-badge'
-      resumeBadge.textContent='续播 ' + fmtTime(resume)
-      topSub.appendChild(resumeBadge)
-    }
+    resumeBadgeEl=null
+  }
+  function syncLeftMiniInfo(){
+    if(!leftMiniInfo)return
+    var ep=(playbackCtx&&playbackCtx.epName)||title||'正在播放'
+    leftMiniInfo.innerHTML='<div class="left-kicker">影视播放</div><div class="left-ep">'+String(ep).replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c]})+'</div>'
+  }
+  function renderDrawerInfo(){
+    var desc=(playbackCtx&&playbackCtx.desc)||''
+    drawerDesc.textContent=desc||'暂无简介'
+    var stats=[]
+    if(Array.isArray(allLines)&&allLines.length)stats.push(allLines.length+' 条线路')
+    if(Array.isArray(allEps)&&allEps.length)stats.push(allEps.length+' 集')
+    ;['year','area','type'].forEach(function(k){if(playbackCtx&&playbackCtx[k])stats.push(playbackCtx[k])})
+    drawerStats.innerHTML=stats.map(function(t){return '<span>'+String(t).replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c]})+'</span>'}).join('')
   }
   setTopSub(title)
+  renderDrawerInfo()
   syncNavCopy()
   if(allEps.length>1){
     epGroup.style.display='flex'
@@ -308,8 +448,8 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     })
   }
   var hls=null
-  var wantResume=resume
-  var resumeTarget=resume
+  var wantResume=0
+  var resumeTarget=0
   var resumeApplied=false
   var resumeSeekTimer=null
   function clearResumeSeekTimer(){if(resumeSeekTimer){clearInterval(resumeSeekTimer);resumeSeekTimer=null}}
@@ -327,18 +467,75 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   function armResumeSeek(){
     if(!(resumeTarget>0))return
     clearResumeSeekTimer()
-    vid.addEventListener('loadedmetadata',function(){applyResume(true)},{once:true})
-    vid.addEventListener('durationchange',function(){applyResume(true)},{once:true})
     vid.addEventListener('canplay',function(){applyResume(true)},{once:true})
     vid.addEventListener('playing',function(){applyResume(true)},{once:true})
     var tries=0
-    resumeSeekTimer=setInterval(function(){tries++; if(applyResume(true)||tries>=32)clearResumeSeekTimer()},250)
-    setTimeout(function(){applyResume(true)},80)
+    setTimeout(function(){
+      resumeSeekTimer=setInterval(function(){tries++; if(applyResume(true)||tries>=20)clearResumeSeekTimer()},500)
+    },1000)
   }
+  var playerSettingsKey='xingshu_player_settings_v2'
+  var currentHlsInstance=null
+  function loadPlayerSettings(){
+    try{return JSON.parse(localStorage.getItem(playerSettingsKey)||'{}')}catch(e){return {}}
+  }
+  function savePlayerSettings(){
+    var data={skipIntroEnabled:!!skipIntroEnabled.checked,skipIntroSeconds:Number(skipIntroSeconds.value)||0,skipOutroEnabled:!!skipOutroEnabled.checked,skipOutroSeconds:Number(skipOutroSeconds.value)||0,decoder:decoderSelect.value||'auto',fit:fitSelect.value||'contain',autoNext:!!autoNextEnabled.checked}
+    try{localStorage.setItem(playerSettingsKey,JSON.stringify(data))}catch(e){}
+  }
+  function applyPlayerSettings(){
+    var data=loadPlayerSettings()
+    skipIntroEnabled.checked=!!data.skipIntroEnabled
+    skipIntroSeconds.value=Number(data.skipIntroSeconds)||0
+    skipOutroEnabled.checked=!!data.skipOutroEnabled
+    skipOutroSeconds.value=Number(data.skipOutroSeconds)||0
+    decoderSelect.value=data.decoder||'auto'
+    fitSelect.value=data.fit||'contain'
+    autoNextEnabled.checked=data.autoNext!==false
+    vid.style.objectFit=fitSelect.value||'contain'
+  }
+  function bindSettingInputs(){
+    ;[skipIntroEnabled,skipIntroSeconds,skipOutroEnabled,skipOutroSeconds,fitSelect,autoNextEnabled].forEach(function(node){node.addEventListener('change',function(){savePlayerSettings();vid.style.objectFit=fitSelect.value||'contain'})})
+    decoderSelect.addEventListener('change',function(){savePlayerSettings();playUrl(activeUrl||vid._lastUrl||url,title,pic,true,true)})
+    settingsBtn.addEventListener('click',function(e){e.stopPropagation();settingsPanel.classList.toggle('open')})
+    settingsClose.addEventListener('click',function(){settingsPanel.classList.remove('open')})
+    settingsPanel.addEventListener('click',function(e){e.stopPropagation()})
+    episodeToggleBtn.addEventListener('click',function(e){e.stopPropagation();setSidePanel('episodes')})
+    lineToggleBtn.addEventListener('click',function(e){e.stopPropagation();setSidePanel('lines')})
+    sidePanel.addEventListener('click',function(e){e.stopPropagation();cancelDrawerHide()})
+    sidePanel.addEventListener('mouseenter',cancelDrawerHide)
+    sidePanel.addEventListener('mouseleave',function(){scheduleDrawerHide(3000)})
+  }
+  function applySkipRules(){
+    if(!vid.duration)return
+    var intro=Number(skipIntroSeconds.value)||0
+    if(skipIntroEnabled.checked&&intro>0&&vid.currentTime>0.1&&vid.currentTime<intro){vid.currentTime=Math.min(intro,Math.max(0,vid.duration-1))}
+    var outro=Number(skipOutroSeconds.value)||0
+    if(skipOutroEnabled.checked&&autoNextEnabled.checked&&outro>0&&vid.duration>outro&&vid.currentTime>=vid.duration-outro){playNextFromCurrent()}
+  }
+  function rebuildQualitySelect(hlsInstance){
+    qualitySelect.innerHTML=''
+    var auto=document.createElement('option');auto.value='auto';auto.textContent='自动';qualitySelect.appendChild(auto)
+    var levels=hlsInstance&&hlsInstance.levels?hlsInstance.levels:[]
+    levels.forEach(function(lv,i){var opt=document.createElement('option');opt.value=String(i);opt.textContent=lv.height?(lv.height+'p'):tr('qualityLevel',{number:i+1});qualitySelect.appendChild(opt)})
+    qualitySelect.disabled=levels.length<=1
+  }
+  qualitySelect.addEventListener('change',function(){if(!currentHlsInstance)return;currentHlsInstance.currentLevel=qualitySelect.value==='auto'?-1:Number(qualitySelect.value);buildQualityMenu(currentHlsInstance)})
+  function playNextFromCurrent(){var idx=currentUrlIndex();if(idx>=0&&idx<allUrls.length-1){var nextUrl=allUrls[idx+1];playUrl(nextUrl,syncEpisodeContext(nextUrl,title),pic)}}
+  applyPlayerSettings()
+  bindSettingInputs()
   var retryCount=0
   var activeUrl=''
   var lastEndedSent=false
   var cleanupDone=false
+  var idleTimer=null
+  var drawerTimer=null
+  function showChrome(){
+    document.body.classList.remove('idle')
+    clearTimeout(idleTimer)
+    if(!vid.paused&&!overlay.classList.contains('show'))idleTimer=setTimeout(function(){document.body.classList.add('idle')},2600)
+  }
+  ['mousemove','mousedown','keydown','touchstart'].forEach(function(evt){document.addEventListener(evt,showChrome,{passive:true})})
   var failedUrls={}
   var loadTimer=null
   function clearLoadTimer(){if(loadTimer){clearTimeout(loadTimer);loadTimer=null}}
@@ -350,7 +547,19 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     },20000)
   }
   function currentUrlIndex(){var idx=allUrls.indexOf(activeUrl||vid._lastUrl||url);return idx}
+  function getFailureCandidates(curIdx){
+    var current=activeUrl||vid._lastUrl||url
+    var candidates=[]
+    if(urlsAreEpisodes&&Array.isArray(allLines)&&allLines.length){
+      var epIdx=getCurrentEpisodeIndex()
+      allLines.forEach(function(line){var ep=line&&Array.isArray(line.urls)?line.urls[epIdx]:null;if(ep&&ep.url)candidates.push(ep.url)})
+      candidates=candidates.filter(function(u,i,a){return u&&a.indexOf(u)===i})
+      if(candidates.length>1&&candidates.indexOf(current)>=0)return candidates
+    }
+    return allUrls.slice()
+  }
   function getReportUrl(){return activeUrl||vid.currentSrc||vid.src||vid._lastUrl||url}
+  // play-progress-only: keep UI updates realtime; report overview progress.
   function markPlaybackStarted(){lastEndedSent=false;cleanupDone=false}
   function showOverlay(msg,isErr){
     spinEl.style.display=isErr?'none':'block'
@@ -378,6 +587,8 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   }
   async function playUrl(newUrl,newTitle,newPic,isRetry,keepFailures){
     if(!newUrl)return
+    qualityBtn.style.display='none'
+    qualityMenu.classList.remove('open')
     activeUrl=newUrl
     vid._lastUrl=newUrl
     var effectiveTitle=syncEpisodeContext(newUrl,newTitle)
@@ -390,10 +601,11 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     showOverlay(tr('loadingActive'))
     if(hls){hls.destroy();hls=null}
     vid.src=''
-    if(effectiveTitle){titleEl.textContent=effectiveTitle;document.title=effectiveTitle}
-    if(newPic){poster.src=newPic;poster.style.display='block';bg.style.backgroundImage='url('+newPic+')'}
+    if(effectiveTitle)setWindowTitle(displayTitle(title,effectiveTitle))
+    if(newPic){setPoster(newPic)}
     var uidx=allUrls.indexOf(newUrl)
     if(uidx>=0&&urlSelect.options[uidx])urlSelect.selectedIndex=uidx
+    refreshLegacySelects();renderSidePanels()
     var isM3u8New=newUrl.indexOf('.m3u8')!==-1
     if(isM3u8New){
       try{
@@ -404,16 +616,14 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         return
       }
       scheduleLoadTimeout(uidx)
-      if(window.Hls&&window.Hls.isSupported()){
-        hls=new window.Hls({enableWorker:true,lowLatencyMode:false,startPosition:resumeTarget>0?resumeTarget:-1})
+      if(decoderSelect.value!=='native'&&window.Hls&&window.Hls.isSupported()){
+        hls=new window.Hls({enableWorker:true,lowLatencyMode:false,startPosition:-1});currentHlsInstance=hls;rebuildQualitySelect(hls)
         hls.loadSource(newUrl)
         hls.attachMedia(vid)
-        if(resumeTarget>0){try{hls.startLoad(resumeTarget)}catch(e){}}
         hls.on(window.Hls.Events.MANIFEST_PARSED,function(){
-          hideOverlay();buildQualityMenu(hls)
+          hideOverlay();buildQualityMenu(hls);rebuildQualitySelect(hls);updateNavButtons()
           armResumeSeek()
-          applyResume(true)
-          vid.play().catch(function(){setTimeout(function(){applyResume(true)},300)})
+          vid.play().catch(function(){setTimeout(function(){applyResume(true)},500)})
         })
         hls.on(window.Hls.Events.ERROR,function(evt,data){
           if(data.fatal){
@@ -432,10 +642,9 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         vid.src=newUrl
         vid.load()
         vid.addEventListener('loadedmetadata',function(){
-          hideOverlay()
+          hideOverlay();updateNavButtons()
           armResumeSeek()
-          applyResume(true)
-          vid.play().catch(function(){setTimeout(function(){applyResume(true)},300)})
+          vid.play().catch(function(){setTimeout(function(){applyResume(true)},500)})
         },{once:true})
         vid.addEventListener('error',function(){
           showOverlay(tr('nativeHlsFailedSwitching',{action:switchActionText()}),true)
@@ -450,10 +659,9 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       vid.src=newUrl
       vid.load()
       vid.addEventListener('loadedmetadata',function(){
-        hideOverlay()
+        hideOverlay();updateNavButtons()
         armResumeSeek()
-        applyResume(true)
-        vid.play().catch(function(){setTimeout(function(){applyResume(true)},300)})
+        vid.play().catch(function(){setTimeout(function(){applyResume(true)},500)})
       },{once:true})
       vid.addEventListener('error',function(){
         showOverlay(tr('videoLoadFailedSwitching',{action:switchActionText()}),true)
@@ -487,18 +695,18 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   function buildQualityMenu(hlsInstance){
     qualityMenu.innerHTML=''
     var levels=hlsInstance.levels||[]
-    if(levels.length<=1){qualityBtn.style.display='';return}
+    if(levels.length<=1){qualityBtn.style.display='none';return}
     qualityBtn.style.display=''
     var autoItem=document.createElement('button')
     autoItem.textContent=tr('autoQuality')
     autoItem.className='active'
-    autoItem.addEventListener('click',function(){hlsInstance.currentLevel=-1;setActive(qualityMenu,autoItem);qualityMenu.classList.remove('open')})
+    autoItem.addEventListener('click',function(){hlsInstance.currentLevel=-1;qualitySelect.value='auto';setActive(qualityMenu,autoItem);qualityMenu.classList.remove('open')})
     qualityMenu.appendChild(autoItem)
     levels.forEach(function(lv,i){
       var btn=document.createElement('button')
       btn.textContent=lv.height?(lv.height+'p'):tr('qualityLevel',{number:i+1})
       if(i===hlsInstance.currentLevel)btn.classList.add('active')
-      btn.addEventListener('click',function(){hlsInstance.currentLevel=i;setActive(qualityMenu,btn);qualityMenu.classList.remove('open')})
+      btn.addEventListener('click',function(){hlsInstance.currentLevel=i;qualitySelect.value=String(i);setActive(qualityMenu,btn);qualityMenu.classList.remove('open')})
       qualityMenu.appendChild(btn)
     })
   }
@@ -508,7 +716,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     activeBtn.classList.add('active')
   }
   qualityBtn.addEventListener('click',function(e){e.stopPropagation();qualityMenu.classList.toggle('open');shortcuts.classList.remove('open')})
-  document.addEventListener('click',function(){qualityMenu.classList.remove('open');shortcuts.classList.remove('open')})
+  document.addEventListener('click',function(){qualityMenu.classList.remove('open');shortcuts.classList.remove('open');settingsPanel.classList.remove('open');hideSidePanel()})
   var speeds=[0.5,0.75,1,1.25,1.5,2,3]
   var speedIdx=2
   speeds.forEach(function(s,i){
@@ -525,11 +733,23 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   })
   speedBtn.addEventListener('click',function(e){e.stopPropagation();speedMenu.classList.toggle('open');shortcuts.classList.remove('open')})
   document.addEventListener('click',function(){speedMenu.classList.remove('open')})
+  function updateNavButtons(){
+    var idx=currentUrlIndex()
+    var hasPrev=idx>0
+    var hasNext=idx>=0&&idx<allUrls.length-1
+    prevBtn.disabled=!hasPrev
+    nextBtn.disabled=!hasNext
+    prevBtn.style.opacity=prevBtn.disabled?'.38':''
+    nextBtn.style.opacity=nextBtn.disabled?'.38':''
+    prevBtn.textContent=hasPrev?(urlsAreEpisodes?'上集':'上条'):(urlsAreEpisodes?'无上集':'无上条')
+    nextBtn.textContent=hasNext?(urlsAreEpisodes?'下集':'下条'):(urlsAreEpisodes?'无下集':'无下条')
+  }
   playBtn.addEventListener('click',function(){vid.paused?vid.play().catch(function(){}):vid.pause()})
   prevBtn.addEventListener('click',function(){var idx=currentUrlIndex();if(idx>0){var nextUrl=allUrls[idx-1];playUrl(nextUrl,syncEpisodeContext(nextUrl,title),pic)}})
   nextBtn.addEventListener('click',function(){var idx=currentUrlIndex();if(idx>=0&&idx<allUrls.length-1){var nextUrl=allUrls[idx+1];playUrl(nextUrl,syncEpisodeContext(nextUrl,title),pic)}})
-  muteBtn.addEventListener('click',function(){vid.muted=!vid.muted;muteBtn.innerHTML=vid.muted||vid.volume===0?'&#128263;':'&#128266;'})
-  vid.addEventListener('volumechange',function(){volFill.style.width=(vid.volume*100)+'%';muteBtn.innerHTML=vid.muted||vid.volume===0?'&#128263;':'&#128266;'})
+  function syncMuteLabel(){muteBtn.textContent=vid.muted||vid.volume===0?'静音':'音量'}
+  muteBtn.addEventListener('click',function(){vid.muted=!vid.muted;syncMuteLabel()})
+  vid.addEventListener('volumechange',function(){volFill.style.width=(vid.volume*100)+'%';syncMuteLabel()})
   volSlider.addEventListener('click',function(e){var r=volSlider.getBoundingClientRect();vid.volume=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));vid.muted=false})
   vid.addEventListener('wheel',function(e){e.preventDefault();vid.volume=Math.max(0,Math.min(1,vid.volume+(e.deltaY<0?0.05:-0.05)))},{passive:false})
   vid.volume=0.8;volFill.style.width='80%'
@@ -543,6 +763,9 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
   })
   function updateBuffer(){if(!vid.buffered.length||!vid.duration)return;var end=vid.buffered.end(vid.buffered.length-1);bufEl.style.width=Math.round((end/vid.duration)*100)+'%'}
   vid.addEventListener('progress',updateBuffer)
+  var lastPeriodicSaveAt=0
+  var lastProgressReportAt=0
+  // play-progress-only: keep UI updates realtime; report overview progress.
   vid.addEventListener('timeupdate',function(){
     if(!vid.duration)return
     var pct=(vid.currentTime/vid.duration)*100
@@ -550,16 +773,91 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
     thumbEl.style.left=pct+'%'
     curEl.textContent=fmtTime(vid.currentTime)
     totEl.textContent=fmtTime(vid.duration)
-    reportProgress(vid.currentTime,vid.duration)
+    var now=Date.now()
+    applySkipRules()
+    if(now-lastProgressReportAt>2000){lastProgressReportAt=now;reportPlaybackProgress(vid.currentTime,vid.duration)}
   })
   vid.addEventListener('loadedmetadata',function(){totEl.textContent=fmtTime(vid.duration)})
-  vid.addEventListener('play',function(){playBtn.innerHTML='&#9208;';playBtn.classList.add('active')})
-  vid.addEventListener('pause',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active')})
-  vid.addEventListener('ended',function(){playBtn.innerHTML='&#9654;';playBtn.classList.remove('active');reportEnded()})
-  function reportProgress(ct,dur){var reportUrl=getReportUrl();if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')}}
-  function reportEnded(){if(lastEndedSent)return;lastEndedSent=true;var reportUrl=getReportUrl();if(window.__TAURI__&&window.__TAURI__.event){window.__TAURI__.event.emit('player-event',{type:'playerEnded',url:reportUrl,title:titleEl.textContent,duration:vid.duration||0,playbackCtx:playbackCtx}).catch(function(){})}else if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'playerEnded',url:reportUrl,title:titleEl.textContent,duration:vid.duration||0,playbackCtx:playbackCtx},'*')}}
+  vid.addEventListener('play',function(){playBtn.textContent='暂停';playBtn.classList.add('active');showChrome()})
+  vid.addEventListener('pause',function(){playBtn.textContent='播放';playBtn.classList.remove('active');showChrome()})
+  vid.addEventListener('ended',function(){playBtn.textContent='播放';playBtn.classList.remove('active');reportEnded();if(autoNextEnabled.checked)playNextFromCurrent()})
+  var bridgeFrame=null
+  function ensureProgressBridge(){
+    try{
+      if(bridgeFrame&&bridgeFrame.contentWindow)return bridgeFrame
+      bridgeFrame=document.createElement('iframe')
+      bridgeFrame.src='http://localhost:1420/player-bridge.html'
+      bridgeFrame.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;top:-9999px;border:0;opacity:0;pointer-events:none;'
+      document.body.appendChild(bridgeFrame)
+      return bridgeFrame
+    }catch(e){return null}
+  }
+  function postToProgressBridge(payload){
+    try{
+      var frame=ensureProgressBridge()
+      if(frame&&frame.contentWindow)frame.contentWindow.postMessage({channel:'xingshu-player-progress',data:payload}, '*')
+    }catch(e){}
+  }
+  function postPlayerEvent(payload){
+    var tauri=window.__TAURI__
+    var fallback=function(){
+      try{if(tauri&&tauri.event&&typeof tauri.event.emit==='function'){tauri.event.emit('player-event',payload).catch(function(){})}}catch(e){}
+      try{if(window.opener&&!window.opener.closed){window.opener.postMessage(payload,'*')}}catch(e){}
+    }
+    try{
+      if(location.protocol!=='file:'){
+        var invoke=tauri&&((tauri.core&&tauri.core.invoke)||tauri.invoke)
+        if(typeof invoke==='function'){
+          invoke('player_report_event',{payload:payload}).catch(function(){fallback()})
+          return
+        }
+      }
+    }catch(e){}
+    fallback()
+  }
+  function makeProgressPayload(ct,dur){
+    return {type:'playerProgress',url:getReportUrl(),title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}
+  }
+  function reportPlaybackProgress(ct,dur){
+    if(!(ct>5)||ct===999)return
+    var payload=makeProgressPayload(ct,dur)
+    postToProgressBridge(payload)
+    postPlayerEvent(payload)
+  }
+  function reportProgress(ct,dur){
+    reportPlaybackProgress(ct,dur)
+  }
+  function reportEnded(){if(lastEndedSent)return;lastEndedSent=true;var reportUrl=getReportUrl();postPlayerEvent({type:'playerEnded',url:reportUrl,title:titleEl.textContent,duration:vid.duration||0,playbackCtx:playbackCtx})}
   shortcutsBtn.addEventListener('click',function(e){e.stopPropagation();shortcuts.classList.toggle('open')})
   shortcuts.addEventListener('click',function(e){e.stopPropagation()})
+  function updateFullscreenButton(){
+    var on=!!document.fullscreenElement
+    fsBtn.textContent=on?'退出全屏':'全屏'
+    fsBtn.classList.toggle('active',on)
+  }
+  document.addEventListener('fullscreenchange',updateFullscreenButton)
+  async function requestFullscreen(){
+    try{
+      var tauri=window.__TAURI__
+      var winApi=tauri&&(tauri.window||tauri.webviewWindow)
+      var cur=winApi&&((winApi.getCurrentWindow&&winApi.getCurrentWindow())||(winApi.getCurrentWebviewWindow&&winApi.getCurrentWebviewWindow()))
+      if(cur&&cur.setFullscreen&&cur.isFullscreen){var on=await cur.isFullscreen();await cur.setFullscreen(!on);return}
+    }catch(e){}
+    try{
+      if(document.fullscreenElement){await document.exitFullscreen();updateFullscreenButton();return}
+      var target=document.querySelector('.main-stage')||document.documentElement
+      if(target.requestFullscreen)await target.requestFullscreen();else if(vid.requestFullscreen)await vid.requestFullscreen();updateFullscreenButton()
+    }catch(e){try{if(vid.webkitEnterFullscreen)vid.webkitEnterFullscreen()}catch(e2){}}
+  }
+  fsBtn.addEventListener('click',requestFullscreen)
+  async function requestCast(){
+    try{if(vid.remote&&typeof vid.remote.prompt==='function'){await vid.remote.prompt();return}}catch(e){}
+    try{if(window.PresentationRequest){var req=new PresentationRequest([getReportUrl()]);await req.start();return}}catch(e){}
+    alert('当前 WebView/系统不支持投屏协议，无法发现可投屏设备。')
+  }
+  function hasCastCapability(){return false}
+  castBtn.style.display='none'
+  castBtn.addEventListener('click',requestCast)
   pipBtn.addEventListener('click',function(){try{if(document.pictureInPictureElement)document.exitPictureInPicture();else if(vid.requestPictureInPicture)vid.requestPictureInPicture()}catch(e){}})
   var winMode=false
   pipWinBtn.addEventListener('click',function(){
@@ -578,30 +876,32 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       link.click()
     }catch(e){}
   })
-  closeBtn.addEventListener('click',function(){try{cleanupAndClose()}catch(e){window.close()}})
+
   // ── 清理函数（统一入口）──
-  function doCleanup() {
+  function doCleanup(saveResume) {
     if(cleanupDone)return
     cleanupDone=true
-    clearResumeSeekTimer()
+    var ct=0, dur=0
+    try { ct = Number(vid.currentTime) || 0; dur = Number(vid.duration) || 0 } catch(e) {}
+    try { if (saveResume) reportProgress(ct,dur||0) } catch(e) {}
     try { vid.pause() } catch(e) {}
     try { if(hls){ hls.destroy(); hls=null } } catch(e) {}
-    try {
-      var ct = vid.currentTime || 0, dur = vid.duration || 0, reportUrl=getReportUrl()
-      if (window.__TAURI__&&window.__TAURI__.event) {
-        if (dur > 0) window.__TAURI__.event.emit('player-event',{type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx}).catch(function(){})
-      } else if (window.opener && !window.opener.closed) {
-        if (dur > 0) window.opener.postMessage({type:'playerProgress',url:reportUrl,title:titleEl.textContent,currentTime:ct,duration:dur,playbackCtx:playbackCtx},'*')
-      }
-    } catch(e) {}
   }
 
   function cleanupAndClose() {
-    doCleanup()
-    window.close()
+    doCleanup(true)
+    setTimeout(function(){try{window.close()}catch(e){}},80)
   }
-  window.addEventListener('beforeunload',function(){ doCleanup() })
-  window.addEventListener('pagehide',function(){ doCleanup() })
+  window.addEventListener('beforeunload',function(){ doCleanup(true) })
+  window.addEventListener('pagehide',function(){ doCleanup(true) })
+  try{
+    var tauriEvent=window.__TAURI__&&window.__TAURI__.event
+    if(tauriEvent&&typeof tauriEvent.listen==='function'){
+      tauriEvent.listen('player-close-event',function(){
+        try{doCleanup(true)}catch(e){}
+      }).catch(function(){})
+    }
+  }catch(e){}
   vid.addEventListener('dblclick',function(){try{if(document.fullscreenElement)document.exitFullscreen();else vid.requestFullscreen().catch(function(){})}catch(e){}})
   document.addEventListener('keydown',function(e){
     if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return
@@ -611,7 +911,7 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
       case'ArrowRight':e.preventDefault();vid.currentTime=Math.min(vid.duration||0,vid.currentTime+10);break
       case'ArrowUp':e.preventDefault();vid.volume=Math.min(1,vid.volume+0.05);break
       case'ArrowDown':e.preventDefault();vid.volume=Math.max(0,vid.volume-0.05);break
-      case'f':case'F':try{vid.requestFullscreen().catch(function(){})}catch(e){};break
+      case'f':case'F':requestFullscreen();break
       case'm':case'M':vid.muted=!vid.muted;break
       case'i':case'I':try{if(document.pictureInPictureElement)document.exitPictureInPicture();else vid.requestPictureInPicture()}catch(e){};break
       case'p':case'P':var idx=currentUrlIndex();if(idx>0){var nextUrl=allUrls[idx-1];playUrl(nextUrl,syncEpisodeContext(nextUrl,title),pic)};break
@@ -622,9 +922,13 @@ video{max-width:100%;max-height:100%;outline:none;display:block;width:100%;heigh
         if(e.shiftKey)shortcuts.classList.toggle('open');
         break
       case'x':case'X':try{var c=document.createElement('canvas');c.width=vid.videoWidth;c.height=vid.videoHeight;c.getContext('2d').drawImage(vid,0,0);var link=document.createElement('a');link.download=title+'_'+fmtTime(vid.currentTime).replace(/:/g,'-')+'.png';link.href=c.toDataURL('image/png');link.click()}catch(e){};break
-      case'Escape':try{if(document.fullscreenElement)document.exitFullscreen();else if(shortcuts.classList.contains('open'))shortcuts.classList.remove('open');else cleanupAndClose()}catch(e){};break
+      case'Escape':try{if(sidePanel.classList.contains('open'))hideSidePanel();else if(document.fullscreenElement)document.exitFullscreen();else if(shortcuts.classList.contains('open'))shortcuts.classList.remove('open');else cleanupAndClose()}catch(e){};break
     }
   })
+  setTopSub(title)
+  syncNavCopy()
+  updateNavButtons()
+  showChrome()
   if(url)playUrl(url,title,pic)
 })()
 </script>
