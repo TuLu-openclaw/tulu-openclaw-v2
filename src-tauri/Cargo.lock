@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "XingShu"
-version = "4.3.6"
+version = "4.3.7"
 dependencies = [
  "aes",
  "async-recursion",

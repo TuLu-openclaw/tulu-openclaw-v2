@@ -1815,14 +1815,21 @@ function filterSearchResults(list, kw) {
 
 function getVodSourceBase(itemSrcKey, itemApi) {
   if (itemApi) return itemApi.replace(/\/api\.php.*$/, '')
-  const key = itemSrcKey || VOD_SOURCES[src]?.key
-  const s = VOD_SOURCES.find(s => s.key === key)
-  return s?.api ? s.api.replace(/\/api\.php.*$/, '') : ''
+  const key = itemSrcKey || getActiveTvboxKey() || VOD_SOURCES[0]?.key || ''
+  const source = VOD_SOURCES.find(item => item.key === key) || VOD_SOURCES[0]
+  return source?.api ? source.api.replace(/\/api\.php.*$/, '') : ''
+}
+
+function normalizePosterValue(url) {
+  return decodeHtmlEntities(String(url || ''))
+    .split(/[,$|]/)
+    .map(item => item.trim())
+    .find(Boolean) || ''
 }
 
 function fixPosterUrl(url, itemSrcKey, itemApi) {
   if (!url) return ''
-  const raw = String(url || '').trim()
+  const raw = normalizePosterValue(url)
   if (!raw) return ''
   if (/^https?:\/\//i.test(raw)) return raw
   if (raw.startsWith('//')) return 'https:' + raw
@@ -1831,7 +1838,7 @@ function fixPosterUrl(url, itemSrcKey, itemApi) {
 }
 
 function buildPicCandidates(url, itemSrcKey, itemApi) {
-  const raw = String(url || '').trim()
+  const raw = normalizePosterValue(url)
   if (!raw) return []
   const base = getVodSourceBase(itemSrcKey, itemApi)
   const direct = fixPosterUrl(raw, itemSrcKey, itemApi)
@@ -1875,8 +1882,8 @@ function normalizeVodItem(item, source) {
     type_name: item?.type_name || item?.type || item?.class || '影视',
     vod_actor: item?.vod_actor || item?.actor || item?.stars || '',
     vod_content: item?.vod_content || item?.content || item?.desc || item?.des || item?.vod_blurb || '',
-    _srcKey: item?._srcKey || source?.key || VOD_SOURCES[src]?.key,
-    _srcName: item?._srcName || source?.name || VOD_SOURCES[src]?.name,
+    _srcKey: item?._srcKey || source?.key || getActiveTvboxKey() || VOD_SOURCES[0]?.key || '',
+    _srcName: item?._srcName || source?.name || VOD_SOURCES.find(s => s.key === getActiveTvboxKey())?.name || VOD_SOURCES[0]?.name || '',
     _api: item?._api || source?.api || '',
   }
 }
@@ -2000,6 +2007,41 @@ const MISSAV_LOCAL_TRANSLATE = {
   'Chinese subtitle': '中文字幕', Uncensored: '无码', Subtitles: '字幕', Featured: '推荐', Popular: '热门', Latest: '最新',
 }
 
+const MYAVLIVE_BASE = 'https://zh.myavlive.com'
+const MYAVLIVE_FRONT_VERSION = '11.8.27'
+const MYAVLIVE_CATEGORIES = [
+  { id: 'girls', name: '女主播', primaryTag: 'girls' },
+  { id: 'girls/recommended', name: '推荐', primaryTag: 'girls', filter: item => item.isRecommended },
+  { id: 'girls/new', name: '新主播', primaryTag: 'girls', filter: item => item.isNew },
+  { id: 'girls/hd', name: '高清', primaryTag: 'girls', filter: item => item.isHd },
+  { id: 'girls/vr', name: 'VR 摄像头', primaryTag: 'girls', filter: item => item.isVr },
+  { id: 'girls/mobile', name: '移动直播', primaryTag: 'girls', filter: item => item.isMobile },
+  { id: 'girls/interactive-toys', name: '互动玩具', primaryTag: 'girls', filter: item => item.isLovense || item.isKiiroo },
+  { id: 'girls/chinese', name: '中文主播', primaryTag: 'girls', filter: item => String(item.country || '').toLowerCase() === 'cn' },
+  { id: 'girls/korean', name: '韩语', primaryTag: 'girls', filter: item => String(item.country || '').toLowerCase() === 'kr' },
+  { id: 'girls/ukrainian', name: '乌克兰女主播', primaryTag: 'girls', filter: item => String(item.country || '').toLowerCase() === 'ua' },
+  { id: 'girls/asian', name: '亚洲人', primaryTag: 'girls' },
+  { id: 'girls/teens', name: '少女 18+', primaryTag: 'girls' },
+  { id: 'girls/young', name: '鲜嫩青年 22+', primaryTag: 'girls' },
+  { id: 'girls/milfs', name: '熟女', primaryTag: 'girls' },
+  { id: 'girls/mature', name: '成熟', primaryTag: 'girls' },
+  { id: 'girls/ebony', name: '黑珍珠', primaryTag: 'girls' },
+  { id: 'girls/latin', name: '拉丁人', primaryTag: 'girls' },
+  { id: 'girls/white', name: '白人', primaryTag: 'girls' },
+  { id: 'girls/petite', name: '娇小', primaryTag: 'girls' },
+  { id: 'girls/athletic', name: '运动型', primaryTag: 'girls' },
+  { id: 'girls/curvy', name: '曲线', primaryTag: 'girls' },
+  { id: 'girls/bbw', name: '大号美女', primaryTag: 'girls' },
+  { id: 'girls/blondes', name: '金发', primaryTag: 'girls' },
+  { id: 'girls/black-hair', name: '黑发', primaryTag: 'girls' },
+  { id: 'girls/brunettes', name: '棕发', primaryTag: 'girls' },
+  { id: 'girls/redheads', name: '红发', primaryTag: 'girls' },
+  { id: 'girls/group-sex', name: '群交', primaryTag: 'girls', filter: item => /group/i.test(item.gender || item.broadcastGender || '') },
+  { id: 'couples', name: '情侣', primaryTag: 'couples' },
+  { id: 'men', name: '男主播', primaryTag: 'men' },
+  { id: 'trans', name: '跨性别', primaryTag: 'trans' },
+]
+
 function missavUrl(path = '/', base = MISSAV_ACTIVE_BASE) {
   const raw = String(path || '/').trim() || '/'
   const activeBase = String(base || MISSAV_ACTIVE_BASE || MISSAV_BASES[0]).replace(/\/+$/, '')
@@ -2017,6 +2059,191 @@ function translateMissavLocal(text) {
   let out = String(text || '')
   for (const [from, to] of Object.entries(MISSAV_LOCAL_TRANSLATE)) out = out.replace(new RegExp('\\b' + from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), to)
   return out
+}
+
+function myAvLiveUrl(path = '/', query = {}) {
+  const url = new URL(String(path || '/'), MYAVLIVE_BASE)
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value))
+  })
+  return url.href
+}
+
+function myAvLivePlayableUrl(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const streamId = (raw.match(/\/hls\/([^/]+)/i) || [])[1] || (raw.match(/\/([0-9]+)(?:_\d+p)?\.m3u8/i) || [])[1]
+  if (streamId && /\/master\/[^/?#]+_\d+p\.m3u8/i.test(raw)) {
+    return raw.replace(/\/master\/[^/?#]+_\d+p\.m3u8/i, '/master/' + streamId + '.m3u8')
+  }
+  return raw
+}
+
+function myAvLivePreviewUrl(model) {
+  const direct = model?.previewUrl || model?.previewUrlThumbBig
+  if (direct) return normalizeMyAvLiveImage(direct)
+  const small = String(model?.previewUrlThumbSmall || '').trim()
+  if (small) return normalizeMyAvLiveImage(small.replace('-thumb-small', '-thumb-big'))
+  return ''
+}
+
+function myAvLiveNoCacheUrl(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    parsed.searchParams.set('_live_ts', String(Date.now()))
+    return parsed.href
+  } catch {
+    return raw
+  }
+}
+
+function myAvLiveStreamUrl(model) {
+  const direct = String(model?.hlsPlaylist || '').trim()
+  if (direct) return direct
+  const streamName = String(model?.streamName || model?.id || '').trim()
+  return streamName ? 'https://edge-hls.doppiocdn.com/hls/' + encodeURIComponent(streamName) + '/master/' + encodeURIComponent(streamName) + '_240p.m3u8' : ''
+}
+
+function normalizeMyAvLiveImage(url) {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try { return new URL(raw, MYAVLIVE_BASE).href } catch { return raw }
+}
+
+async function fetchMyAvLiveText(url, options = {}) {
+  const requestUrl = String(url || '').trim()
+  if (!requestUrl) return ''
+  const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+  if (invoke) return await invoke('vod_fetch', { url: requestUrl, timeoutSecs: options.timeoutSecs || 18 })
+  const resp = await fetch(requestUrl, { cache: 'no-store' })
+  if (!resp.ok) throw new Error('MyAvLive HTTP ' + resp.status)
+  return await resp.text()
+}
+
+async function validateMyAvLiveLiveUrl(url) {
+  const masterText = await fetchMyAvLiveText(url, { timeoutSecs: 18 })
+  if (/EXT-X-MOUFLON/i.test(masterText)) {
+    const mediaUrl = masterText.split(/\r?\n/).map(line => line.trim()).find(line => /^https?:\/\//i.test(line))
+    if (mediaUrl) {
+      const mediaText = await fetchMyAvLiveText(mediaUrl, { timeoutSecs: 18 })
+      if (/EXT-X-MOUFLON-ADVERT|\/cpa\/v\d+\//i.test(mediaText)) {
+        return url
+      }
+      if (/EXT-X-PLAYLIST-TYPE:VOD/i.test(mediaText) && /EXT-X-ENDLIST/i.test(mediaText)) {
+        throw new Error('当前地址返回 VOD 片段，不是实时直播链。')
+      }
+    }
+  }
+  return url
+}
+
+async function fetchMyAvLiveApi(path, query = {}, options = {}) {
+  const requestUrl = myAvLiveUrl(path, query)
+  const fetchUrl = options.noCache === false ? requestUrl : requestUrl + (requestUrl.includes('?') ? '&' : '?') + '_ts=' + Date.now()
+  const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
+  let text = ''
+  if (invoke) {
+    text = await invoke('vod_fetch', { url: fetchUrl, timeoutSecs: options.timeoutSecs || 25 })
+  } else {
+    const resp = await fetch(fetchUrl, {
+      headers: {
+        Accept: 'application/json',
+        'Front-Version': MYAVLIVE_FRONT_VERSION,
+      },
+      cache: 'no-store',
+    })
+    if (!resp.ok) throw new Error('MyAvLive HTTP ' + resp.status)
+    text = await resp.text()
+  }
+  const json = JSON.parse(text)
+  return json
+}
+
+function normalizeMyAvLiveModel(model) {
+  const username = String(model?.username || model?.displayName || model?.name || '').trim()
+  const streamName = String(model?.streamName || model?.id || '').trim()
+  return {
+    id: String(model?.id || streamName || username),
+    username,
+    title: username || ('直播间 ' + (streamName || '')),
+    status: String(model?.status || ''),
+    streamName,
+    hlsPlaylist: String(model?.hlsPlaylist || ''),
+    viewers: Number(model?.viewersCount || model?.viewers || 0) || 0,
+    avatar: normalizeMyAvLiveImage(model?.avatarUrl),
+    preview: myAvLivePreviewUrl(model),
+    country: String(model?.country || ''),
+    primaryTag: String(model?.primaryTag || model?.genderGroup || ''),
+    gender: String(model?.gender || ''),
+    broadcastGender: String(model?.broadcastGender || ''),
+    isHd: !!model?.isHd,
+    isVr: !!model?.isVr,
+    isNew: !!model?.isNew,
+    isMobile: !!model?.isMobile,
+    isRecommended: !!model?.isRecommended,
+    isLovense: !!model?.isLovense,
+    isKiiroo: !!model?.isKiiroo,
+    presets: Array.isArray(model?.presets) ? model.presets.map(x => String(x || '').trim()).filter(Boolean) : [],
+    presets265: Array.isArray(model?.presets265) ? model.presets265.map(x => String(x || '').trim()).filter(Boolean) : [],
+    presetsAv1: Array.isArray(model?.presetsAv1) ? model.presetsAv1.map(x => String(x || '').trim()).filter(Boolean) : [],
+    tags: Array.isArray(model?.tags) ? model.tags.slice(0, 6).map(x => String(x?.name || x || '').trim()).filter(Boolean) : [],
+    raw: model,
+  }
+}
+
+async function fetchMyAvLiveModels(category, search = '') {
+  const q = String(search || '').trim()
+  const primaryTag = category?.primaryTag || 'girls'
+  const pageSize = 96
+  const maxPages = 5
+  const pages = []
+  for (let page = 0; page < maxPages; page++) {
+    const baseQuery = { primaryTag, limit: pageSize, offset: page * pageSize }
+    if (q) baseQuery.search = q
+    const data = await fetchMyAvLiveApi('/api/front/models', baseQuery, { timeoutSecs: 25 })
+    const rows = Array.isArray(data?.models) ? data.models : []
+    pages.push(...rows)
+    if (rows.length < pageSize) break
+  }
+  const seen = new Set()
+  let models = pages
+    .map(item => normalizeMyAvLiveModel({ ...item, primaryTag }))
+    .filter(item => {
+      const key = item.streamName || item.username || item.id
+      if (!item.username || item.status !== 'public' || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  if (typeof category?.filter === 'function') models = models.filter(category.filter)
+  return q ? models.filter(item => (item.username + ' ' + item.title + ' ' + item.tags.join(' ')).toLowerCase().includes(q.toLowerCase())) : models
+}
+
+async function resolveMyAvLiveLiveUrl(model) {
+  const username = String(model?.username || '').trim()
+  const streamName = String(model?.streamName || model?.id || '').trim()
+  const primaryTags = [...new Set([String(model?.primaryTag || '').trim(), 'girls', 'couples', 'men', 'trans'].filter(Boolean))]
+  let latest = null
+  for (const primaryTag of primaryTags) {
+    for (const offset of [0, 48, 96]) {
+      const data = await fetchMyAvLiveApi('/api/front/models', { primaryTag, limit: 48, offset }, { timeoutSecs: 25 })
+      const models = Array.isArray(data?.models) ? data.models : []
+      latest = models
+        .map(item => normalizeMyAvLiveModel({ ...item, primaryTag }))
+        .find(item => (username && item.username.toLowerCase() === username.toLowerCase()) || (streamName && item.streamName === streamName))
+      if (latest || models.length < 48) break
+    }
+    if (latest) break
+  }
+  const live = latest || model
+  if (String(live?.status || '') !== 'public') {
+    throw new Error('当前主播不是公开直播状态，已阻止播放广告/付费预热视频。请刷新列表选择公开直播主播。')
+  }
+  const directUrl = myAvLiveStreamUrl(live)
+  if (!directUrl) throw new Error('未解析到实时直播 m3u8 地址')
+  await validateMyAvLiveLiveUrl(directUrl)
+  return { ...live, directUrl, playableUrl: myAvLivePlayableUrl(directUrl) }
 }
 
 function privateChannelName(name, path = '') {
@@ -2216,6 +2443,7 @@ function initApp(el) {
         <button class="tvbox-mode-tab" data-mode="vod">${escHtml(mt('vodMode'))}</button>
         <button class="tvbox-mode-tab" data-mode="crawl">${escHtml(mt('crawlMode'))}</button>
         <button class="tvbox-mode-tab" data-mode="missav">精品专区</button>
+        <button class="tvbox-mode-tab" data-mode="myavlive">实时直播</button>
       </div>
     </nav>
 
@@ -2325,7 +2553,7 @@ function initApp(el) {
     btn.addEventListener('click', async () => {
       let newMode = btn.dataset.mode
       if (newMode === 'live' || newMode === 'tvboxjson') newMode = 'library'
-      if (newMode === 'missav' && !await ensureMissavUnlocked()) return
+      if ((newMode === 'missav' || newMode === 'myavlive') && !await ensureMissavUnlocked()) return
       if (newMode === mode) return
       mode = newMode
       el.classList.toggle('tvbox-library-mode', mode === 'library')
@@ -2351,6 +2579,10 @@ function initApp(el) {
         el.querySelector('#t-catbar').innerHTML = ''
         el.querySelector('#t-srcbar').innerHTML = ''
         showMissavHome()
+      } else if (mode === 'myavlive') {
+        el.querySelector('#t-catbar').innerHTML = ''
+        el.querySelector('#t-srcbar').innerHTML = ''
+        showMyAvLiveHome()
       } else {
         renderCatBar()
         renderSrcBar()
@@ -2360,6 +2592,7 @@ function initApp(el) {
       else if (mode === 'tvboxjson') loadTvboxList()
       else if (mode === 'crawl') { /* 等待用户输入 */ }
       else if (mode === 'missav') { /* showMissavHome 已加载 */ }
+      else if (mode === 'myavlive') { /* showMyAvLiveHome 已加载 */ }
       else if (getPlayHistory().length > 0 && !query) showPlayHistory()
       else loadData()
     })
@@ -2386,6 +2619,7 @@ function initApp(el) {
     _viewStack = []
     if (mode === 'library') showLibraryHome(query)
     else if (mode === 'missav') showMissavHome(query)
+    else if (mode === 'myavlive') showMyAvLiveHome(query)
     else loadData()
   }
 
@@ -2723,7 +2957,8 @@ function setDebug(msg, detail) {
     // 标记超时源（>5s）
     if (_sourceHealth[source.api] > 5000) renderSrcBar()
     setDebug(mt('debugResultCount', { count: json.total || count }), 'list.len=' + count)
-    const normalized = (json.list || []).map(item => normalizeVodItem(item, source))
+    let normalized = (json.list || []).map(item => normalizeVodItem(item, source))
+    normalized = await enrichVodListPosters(source.api, normalized)
     renderVodGrid(normalized, json.total || count)
   }
 
@@ -2753,7 +2988,7 @@ function setDebug(msg, detail) {
         } catch {}
         if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
         if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
-        const items = (json.list || []).map(item => normalizeVodItem(item, source))
+        const items = await enrichVodListPosters(source.api, (json.list || []).map(item => normalizeVodItem(item, source)))
         let added = 0
         for (const item of items) {
           if (!movieNameMatches(item, q)) continue
@@ -2807,7 +3042,7 @@ function setDebug(msg, detail) {
       // 兜底：直接 fetch 搜索（部分源搜索接口不同）
       try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + q) } catch {}
     }
-    const filtered = filterSearchResults((json.list || []).map(item => normalizeVodItem(item, source)), query)
+    const filtered = await enrichVodListPosters(source.api, filterSearchResults((json.list || []).map(item => normalizeVodItem(item, source)), query))
     const total = filtered.length
     setDebug(total > 0 ? mt('exactResultCount', { count: total }) : mt('noSearchResult'), 'list.len=' + (json.list?.length || 0) + ' filtered=' + total)
     if (!total && source.key === 'a_napp03' && json.message) {
@@ -3141,6 +3376,26 @@ function setDebug(msg, detail) {
       }, 10000)
     }
   }
+
+async function enrichVodListPosters(api, list) {
+  const items = Array.isArray(list) ? list : []
+  const ids = items.filter(item => !normalizePosterValue(item.vod_pic) && item.vod_id).slice(0, 36).map(item => item.vod_id)
+  if (!api || !ids.length) return items
+  try {
+    const detailUrl = api + (api.includes('?') ? '&' : '?') + 'ac=detail&ids=' + encodeURIComponent(ids.join(','))
+    const json = await fetchJSONFast(detailUrl)
+    const details = Array.isArray(json?.list) ? json.list : []
+    const byId = new Map(details.map(item => [String(item.vod_id || item.id || ''), item]))
+    return items.map(item => {
+      if (normalizePosterValue(item.vod_pic)) return item
+      const detail = byId.get(String(item.vod_id || ''))
+      const pic = detail?.vod_pic || detail?.pic || detail?.thumb || detail?.cover || detail?.poster || detail?.image || detail?.img || ''
+      return pic ? { ...item, vod_pic: pic } : item
+    })
+  } catch {
+    return items
+  }
+}
 
 async function fetchCmsVodDetail(api, detailId, fallbackName, fallbackPic) {
   if (!api || !detailId) throw new Error('缺少详情接口')
@@ -5193,6 +5448,200 @@ function pickDirectUrl(url) {
     loadMissavPath(currentPath)
   }
 
+  async function showMyAvLiveHome(initialSearch = '') {
+    const content = el.querySelector('#t-content')
+    let activeCategory = MYAVLIVE_CATEGORIES[0]
+    let queryText = String(initialSearch || '').trim()
+    let currentModels = []
+    let previewRefreshTimer = null
+
+    const stopMyAvLivePreviews = () => {
+      if (previewRefreshTimer) clearInterval(previewRefreshTimer)
+      previewRefreshTimer = null
+    }
+
+    const startMyAvLivePreviews = () => {
+      stopMyAvLivePreviews()
+      let lastListRefreshAt = 0
+      let refreshingList = false
+      const refresh = async () => {
+        const now = Date.now()
+        if (!refreshingList && now - lastListRefreshAt > 12000) {
+          refreshingList = true
+          lastListRefreshAt = now
+          try {
+            const latestModels = await fetchMyAvLiveModels(activeCategory, queryText)
+            const latestByKey = new Map(latestModels.map(item => [String(item.streamName || item.username || item.id), item]))
+            currentModels = currentModels.map(item => latestByKey.get(String(item.streamName || item.username || item.id)) || item)
+            currentModels.forEach((item, index) => {
+              const card = listBox.querySelector('[data-myavlive-index="' + index + '"]')
+              if (!card) return
+              const img = card.querySelector('img[data-myavlive-preview-img]')
+              if (img && item.preview) {
+                img.dataset.myavlivePreviewImg = item.preview
+                img.src = myAvLiveNoCacheUrl(item.preview)
+              }
+              const viewers = card.querySelector('.tvbox-myavlive-viewers')
+              if (viewers) viewers.textContent = item.viewers ? item.viewers.toLocaleString() + ' 人观看' : '实时在线'
+            })
+            metaBox.textContent = '在线房间 ' + currentModels.length + ' 个 · 实时画面更新 ' + new Date().toLocaleTimeString()
+          } catch (e) {
+          } finally {
+            refreshingList = false
+          }
+        }
+        listBox.querySelectorAll('img[data-myavlive-preview-img]').forEach(img => {
+          const src = img.dataset.myavlivePreviewImg || ''
+          if (src) img.src = myAvLiveNoCacheUrl(src)
+        })
+      }
+      refresh()
+      previewRefreshTimer = setInterval(refresh, 3000)
+    }
+
+    content.innerHTML = '<div class="tvbox-missav-app tvbox-myavlive-app">' +
+      '<header class="tvbox-missav-topbar">' +
+        '<div class="tvbox-missav-hero-copy"><div class="tvbox-missav-kicker">LIVE STREAM</div><div class="tvbox-missav-title"><strong>实时直播</strong><span id="myavlive-active-source">MyAvLive</span></div><p>每次刷新列表与点击播放都会实时请求最新直播间和最新 m3u8，不使用旧播放地址。</p></div>' +
+        '<div class="tvbox-missav-hero-actions"><div class="tvbox-missav-search"><input id="myavlive-search-input" type="search" autocomplete="off" placeholder="搜索主播昵称" value="' + escHtml(queryText) + '" /><button id="myavlive-search-btn">搜索</button></div><div class="tvbox-missav-overview"><span>实时列表</span><span>播放前重解</span><span>HLS直播</span><span>高速代理</span></div></div>' +
+      '</header>' +
+      '<div class="tvbox-missav-layout tvbox-myavlive-layout">' +
+        '<aside class="tvbox-missav-nav" id="myavlive-channel-nav"></aside>' +
+        '<main class="tvbox-missav-content">' +
+          '<section class="tvbox-missav-list-head"><div><div id="myavlive-breadcrumb" class="tvbox-missav-breadcrumb">直播 / 推荐</div><h2 id="myavlive-view-title">推荐女主播</h2><p id="myavlive-view-meta">正在读取实时在线房间</p></div><div class="tvbox-missav-head-actions"><button id="myavlive-refresh-btn">实时刷新</button></div></section>' +
+          '<section id="myavlive-list" class="tvbox-missav-list"><div class="tvbox-missav-loading"><div></div><strong>加载中</strong><span>正在实时读取直播列表</span></div></section>' +
+        '</main>' +
+      '</div>' +
+    '</div>'
+
+    const navBox = content.querySelector('#myavlive-channel-nav')
+    const listBox = content.querySelector('#myavlive-list')
+    const titleBox = content.querySelector('#myavlive-view-title')
+    const metaBox = content.querySelector('#myavlive-view-meta')
+    const breadcrumbBox = content.querySelector('#myavlive-breadcrumb')
+    const searchInput = content.querySelector('#myavlive-search-input')
+
+    const renderChannels = () => {
+      navBox.innerHTML = '<section><h3>直播频道</h3>' + MYAVLIVE_CATEGORIES.map(cat => '<button class="tvbox-missav-nav-item" data-myavlive-cat="' + escHtml(cat.id) + '"><span>' + escHtml(cat.name) + '</span></button>').join('') + '</section>'
+      navBox.querySelectorAll('[data-myavlive-cat]').forEach(btn => btn.addEventListener('click', () => {
+        activeCategory = MYAVLIVE_CATEGORIES.find(cat => cat.id === btn.dataset.myavliveCat) || MYAVLIVE_CATEGORIES[0]
+        queryText = ''
+        searchInput.value = ''
+        loadMyAvLive()
+      }))
+    }
+
+    const setActiveCategory = () => {
+      navBox.querySelectorAll('[data-myavlive-cat]').forEach(btn => btn.classList.toggle('active', btn.dataset.myavliveCat === activeCategory.id))
+      titleBox.textContent = activeCategory.name
+      breadcrumbBox.textContent = '实时直播 / ' + activeCategory.name
+      content.querySelector('#myavlive-active-source').textContent = 'MyAvLive · ' + activeCategory.name
+    }
+
+    const showMyAvLiveInlineNotice = (message, type = 'warn') => {
+      const old = content.querySelector('.tvbox-myavlive-inline-notice')
+      if (old) old.remove()
+      const notice = document.createElement('div')
+      notice.className = 'tvbox-myavlive-inline-notice tvbox-myavlive-inline-notice-' + type
+      notice.style.cssText = 'margin:10px 0;padding:10px 12px;border-radius:12px;background:' + (type === 'error' ? 'rgba(239,68,68,.12)' : 'rgba(245,158,11,.14)') + ';color:' + (type === 'error' ? '#ef4444' : '#b45309') + ';font-size:13px;line-height:1.5'
+      notice.textContent = message
+      listBox.parentNode.insertBefore(notice, listBox)
+      setTimeout(() => { if (notice.isConnected) notice.remove() }, 4500)
+    }
+
+    const renderModels = () => {
+      stopMyAvLivePreviews()
+      if (!currentModels.length) {
+        listBox.innerHTML = '<div class="tvbox-empty">当前没有解析到在线直播间，请稍后点“实时刷新”。</div>'
+        return
+      }
+      listBox.innerHTML = currentModels.map((item, index) => {
+        const previewUrl = item.preview || ''
+        const previewImg = previewUrl ? myAvLiveNoCacheUrl(previewUrl) : ''
+        const viewers = item.viewers ? item.viewers.toLocaleString() + ' 人观看' : '实时在线'
+        const tags = [item.status === 'public' ? '现场直播' : item.status, viewers].filter(Boolean)
+        return '<article class="tvbox-missav-card tvbox-myavlive-live-card" data-myavlive-index="' + index + '">' +
+          '<button class="tvbox-missav-poster tvbox-myavlive-live-cover" type="button" data-myavlive-play="' + index + '">' + (previewImg ? '<img src="' + escHtml(previewImg) + '" data-myavlive-preview-img="' + escHtml(previewUrl) + '" alt="' + escHtml(item.title) + ' 直播画面" loading="eager" decoding="async" referrerpolicy="no-referrer" />' : '<div class="tvbox-myavlive-live-empty"><span>LIVE</span><small>等待实时画面</small></div>') + '<span class="tvbox-myavlive-device">▯</span><span class="tvbox-myavlive-live-signal"><i></i>LIVE</span><span class="tvbox-myavlive-new">NEW</span><span class="tvbox-myavlive-viewers">' + escHtml(viewers) + '</span><div class="tvbox-myavlive-live-caption"><strong>' + escHtml(item.title) + '</strong><small>' + escHtml(tags.join(' · ')) + '</small></div></button>' +
+          '<div class="tvbox-missav-card-body"><div class="tvbox-missav-card-title">' + escHtml(item.title) + '</div><div class="tvbox-missav-meta">' + escHtml(tags.join(' · ')) + '</div><div class="tvbox-missav-card-actions"><button type="button" data-myavlive-play="' + index + '">进入直播间</button></div></div>' +
+        '</article>'
+      }).join('')
+      listBox.querySelectorAll('[data-myavlive-play]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); openMyAvLivePlayer(Number(btn.dataset.myavlivePlay || 0)) }))
+      listBox.querySelectorAll('[data-myavlive-index]').forEach(card => card.addEventListener('click', () => openMyAvLivePlayer(Number(card.dataset.myavliveIndex || 0))))
+      startMyAvLivePreviews()
+    }
+
+    const loadMyAvLive = async () => {
+      setActiveCategory()
+      listBox.innerHTML = '<div class="tvbox-missav-loading"><div></div><strong>实时刷新中</strong><span>正在读取最新在线房间</span></div>'
+      metaBox.textContent = '正在实时请求 ' + new Date().toLocaleTimeString()
+      try {
+        currentModels = await fetchMyAvLiveModels(activeCategory, queryText)
+        metaBox.textContent = '在线房间 ' + currentModels.length + ' 个 · 更新时间 ' + new Date().toLocaleTimeString()
+        renderModels()
+      } catch (err) {
+        currentModels = []
+        listBox.innerHTML = '<div class="tvbox-playback-error"><div class="tvbox-playback-error-title">实时直播列表读取失败</div><div>' + escHtml(err?.message || '未知错误') + '</div></div>'
+        metaBox.textContent = '读取失败'
+      }
+    }
+
+    const openMyAvLivePlayer = async (index) => {
+      const model = currentModels[index]
+      if (!model) return
+      const card = listBox.querySelector('[data-myavlive-index="' + index + '"]')
+      const actionBtn = card?.querySelector('.tvbox-missav-card-actions [data-myavlive-play]')
+      const oldText = actionBtn?.textContent || ''
+      if (actionBtn) {
+        actionBtn.disabled = true
+        actionBtn.textContent = '解析中...'
+      }
+      try {
+        stopMyAvLivePreviews()
+        const resolved = await resolveMyAvLiveLiveUrl(model)
+        const eps = [{ name: '实时直播', url: resolved.playableUrl }]
+        closePlayer()
+        await playCrawlVideo(resolved.title || model.title, resolved.playableUrl, 0, eps, [resolved.playableUrl], true, {
+          playerKind: 'myavlive-mmp',
+          source: 'myavlive',
+          id: resolved.username || resolved.streamName || resolved.playableUrl,
+          epName: '实时直播',
+          desc: 'MyAvLive 实时直播 · MMP/Mouflon',
+          pic: resolved.preview || model.preview || '',
+          mmpPresets: resolved.presets || model.presets || [],
+          mmpPresets265: resolved.presets265 || model.presets265 || [],
+          mmpPresetsAv1: resolved.presetsAv1 || model.presetsAv1 || [],
+        })
+      } catch (err) {
+        closePlayer()
+        const message = err?.message || '实时直播解析失败，请刷新列表后重试。'
+        showMyAvLiveInlineNotice(message, 'warn')
+        if (/不是公开直播状态|广告|付费预热视频/.test(message)) {
+          currentModels = currentModels.filter((_, itemIndex) => itemIndex !== index)
+          renderModels()
+          metaBox.textContent = '该主播状态已变化，已从列表移除 · 更新时间 ' + new Date().toLocaleTimeString()
+          setTimeout(() => loadMyAvLive(), 1200)
+        }
+      } finally {
+        if (actionBtn && actionBtn.isConnected) {
+          actionBtn.disabled = false
+          actionBtn.textContent = oldText || '进入播放器'
+        }
+        startMyAvLivePreviews()
+      }
+    }
+
+    const doSearch = () => {
+      queryText = searchInput.value.trim()
+      if (queryText) addSearchHistory(queryText)
+      loadMyAvLive()
+    }
+
+    renderChannels()
+    content.querySelector('#myavlive-refresh-btn')?.addEventListener('click', () => loadMyAvLive())
+    content.querySelector('#myavlive-search-btn')?.addEventListener('click', doSearch)
+    searchInput?.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch() })
+    loadMyAvLive()
+  }
+
   function showCrawlInput() {
     const content = el.querySelector('#t-content')
     content.innerHTML = `
@@ -5714,9 +6163,9 @@ function pickDirectUrl(url) {
   }
 
   // playCrawlVideo: 独立窗口播放（不影响主界面）
-  async function playCrawlVideo(name, url, resume = 0, allEps, allUrls, strictStandalone = false) {
+  async function playCrawlVideo(name, url, resume = 0, allEps, allUrls, strictStandalone = false, extraCtx = {}) {
     resume = 0
-    const ctx = { id: url.startsWith('tauri://localhost/hls-proxy') ? name : url, source: 'crawl', epName: name }
+    const ctx = { id: url.startsWith('tauri://localhost/hls-proxy') ? name : url, source: 'crawl', epName: name, ...extraCtx }
     const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
     if (invoke) {
       try {
@@ -5727,7 +6176,7 @@ function pickDirectUrl(url) {
           allUrls: JSON.stringify(allUrls || [url]),
           allLines: JSON.stringify([]),
           playbackCtx: JSON.stringify(ctx),
-          pic: '',
+          pic: extraCtx.pic || '',
         })
       } catch (e) {
         if (strictStandalone) throw e

@@ -10,6 +10,8 @@ use commands::{
     hermes_providers, logs, memory, messaging, music, openmontage, pairing, proxy, service, skills,
     tvbox, update,
 };
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use tauri::Manager;
 
 const CODEX_PROMPT_USAGE_TEXT: &str =
@@ -25,12 +27,33 @@ fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'stati
     let allowed = host == "surrit.com"
         || host.ends_with(".surrit.com")
         || host == "fourhoi.com"
-        || host.ends_with(".fourhoi.com");
+        || host.ends_with(".fourhoi.com")
+        || host == "doppiocdn.com"
+        || host.ends_with(".doppiocdn.com")
+        || host == "doppiocdn1.com"
+        || host.ends_with(".doppiocdn1.com")
+        || host == "doppiocdn.media"
+        || host.ends_with(".doppiocdn.media")
+        || host == "doppiocdn.net"
+        || host.ends_with(".doppiocdn.net")
+        || host == "doppiocdn.org"
+        || host.ends_with(".doppiocdn.org")
+        || host == "doppiocdn.live"
+        || host.ends_with(".doppiocdn.live");
     if !allowed {
         return Err("blocked host".to_string());
     }
 
-    let output = std::process::Command::new("curl.exe")
+    let (origin, referer) = if host.contains("doppiocdn") {
+        ("https://zh.myavlive.com", "https://zh.myavlive.com/")
+    } else {
+        ("https://missav.live", "https://missav.live/")
+    };
+
+    let mut command = std::process::Command::new("curl.exe");
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x08000000);
+    let output = command
         .args([
             "-k",
             "-L",
@@ -43,9 +66,9 @@ fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'stati
             "-H",
             "Accept: */*",
             "-H",
-            "Origin: https://missav.live",
+            &format!("Origin: {origin}"),
             "-H",
-            "Referer: https://missav.live/",
+            &format!("Referer: {referer}"),
             target,
         ])
         .output()

@@ -1445,12 +1445,32 @@ pub async fn missav_api_fetch(
     }
 
     let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(30).clamp(5, 120));
-    let html = vod_fetch_missav_with_curl(
-        url.as_str(),
-        timeout,
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    )
-    .await?;
+    let user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+    let html = match build_vod_http_client(timeout, user_agent, url.as_str()) {
+        Ok(client) => {
+            match client
+                .get(url.as_str())
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                )
+                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7")
+                .send()
+                .await
+            {
+                Ok(resp) if resp.status().is_success() => resp
+                    .bytes()
+                    .await
+                    .map(|b| String::from_utf8_lossy(&b).to_string())
+                    .map_err(|e| format!("MISSAV 读取响应失败: {e}"))?,
+                Ok(resp) => vod_fetch_missav_with_curl(url.as_str(), timeout, user_agent)
+                    .await
+                    .map_err(|e| format!("MISSAV HTTP {}，curl 兜底也失败: {e}", resp.status()))?,
+                Err(_) => vod_fetch_missav_with_curl(url.as_str(), timeout, user_agent).await?,
+            }
+        }
+        Err(_) => vod_fetch_missav_with_curl(url.as_str(), timeout, user_agent).await?,
+    };
     if html.contains("Just a moment") || html.contains("cf-challenge") {
         return Err("MISSAV 官网返回 Cloudflare 防护页".to_string());
     }
@@ -1922,13 +1942,17 @@ pub async fn open_player_window(
         .ok_or_else(|| String::from("无法获取程序目录"))?;
     let cwd = std::env::current_dir().unwrap_or_else(|_| base_dir.to_path_buf());
     let mut html_candidates = vec![
+        cwd.join("src").join("player.html"),
+        cwd.join("src-tauri").join("resources").join("player.html"),
+        cwd.join("src-tauri").join("player.html"),
+        cwd.join("player.html"),
+        base_dir.join("src").join("player.html"),
         base_dir.join("player.html"),
         base_dir.join("resources").join("player.html"),
-        cwd.join("player.html"),
     ];
     if let Ok(res_dir) = app.path().resource_dir() {
-        html_candidates.push(res_dir.join("player.html"));
         html_candidates.push(res_dir.join("src").join("player.html"));
+        html_candidates.push(res_dir.join("player.html"));
     }
     let html_path = html_candidates
         .iter()
