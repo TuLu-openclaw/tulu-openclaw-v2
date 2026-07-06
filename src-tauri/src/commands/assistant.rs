@@ -20,7 +20,6 @@ type HmacSha1 = Hmac<Sha1>;
 #[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-#[cfg(target_os = "windows")]
 use std::net::SocketAddr;
 use tauri::Manager;
 
@@ -680,43 +679,68 @@ async fn vod_fetch_missav_with_curl(
     timeout: std::time::Duration,
     user_agent: &str,
 ) -> Result<String, String> {
-    let host = missav_host(url).ok_or_else(|| "非 MISSAV 允许域名".to_string())?;
-    let addrs = missav_resolve_overrides(&host).ok_or_else(|| "MISSAV 域名未配置解析覆盖".to_string())?;
-    let first_addr = addrs.first().ok_or_else(|| "MISSAV 解析覆盖为空".to_string())?;
-    let ip = first_addr.split(':').next().ok_or_else(|| "MISSAV 解析覆盖格式错误".to_string())?;
-    let max_time = timeout.as_secs().max(3).to_string();
-    let resolve_arg = format!("{host}:443:{ip}");
+    #[cfg(target_os = "windows")]
+    {
+        let host = missav_host(url).ok_or_else(|| "非 MISSAV 允许域名".to_string())?;
+        let addrs = missav_resolve_overrides(&host).ok_or_else(|| "MISSAV 域名未配置解析覆盖".to_string())?;
+        let first_addr = addrs.first().ok_or_else(|| "MISSAV 解析覆盖为空".to_string())?;
+        let ip = first_addr.split(':').next().ok_or_else(|| "MISSAV 解析覆盖格式错误".to_string())?;
+        let max_time = timeout.as_secs().max(3).to_string();
+        let resolve_arg = format!("{host}:443:{ip}");
 
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    let output = tokio::process::Command::new("curl.exe")
-        .args([
-            "-k",
-            "-L",
-            "-sS",
-            "--compressed",
-            "--max-time",
-            &max_time,
-            "--resolve",
-            &resolve_arg,
-            "-A",
-            user_agent,
-            "-H",
-            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "-H",
-            "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7",
-            url,
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .await
-        .map_err(|e| format!("vod_fetch curl 启动失败: {e}"))?;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let output = tokio::process::Command::new("curl.exe")
+            .args([
+                "-k",
+                "-L",
+                "-sS",
+                "--compressed",
+                "--max-time",
+                &max_time,
+                "--resolve",
+                &resolve_arg,
+                "-A",
+                user_agent,
+                "-H",
+                "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "-H",
+                "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7",
+                url,
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+            .map_err(|e| format!("vod_fetch curl 启动失败: {e}"))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format!("vod_fetch curl 失败: {}", if stderr.is_empty() { output.status.to_string() } else { stderr }));
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(format!("vod_fetch curl 失败: {}", if stderr.is_empty() { output.status.to_string() } else { stderr }));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    #[cfg(not(target_os = "windows"))]
+    {
+        let client = build_vod_http_client(timeout, user_agent, url)?;
+        let resp = client
+            .get(url)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7")
+            .send()
+            .await
+            .map_err(|e| format!("vod_fetch MISSAV 请求失败: {e}"))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("vod_fetch MISSAV HTTP {}", resp.status()));
+        }
+
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("vod_fetch MISSAV 读取响应失败: {e}"))?;
+        Ok(String::from_utf8_lossy(&bytes).to_string())
+    }
 }
 
 fn build_vod_http_client(
