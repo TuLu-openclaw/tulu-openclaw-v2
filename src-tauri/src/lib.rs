@@ -22,7 +22,10 @@ fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'stati
         return Err("bad scheme".to_string());
     }
     let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
-    let allowed = host == "surrit.com" || host.ends_with(".surrit.com") || host == "fourhoi.com" || host.ends_with(".fourhoi.com");
+    let allowed = host == "surrit.com"
+        || host.ends_with(".surrit.com")
+        || host == "fourhoi.com"
+        || host.ends_with(".fourhoi.com");
     if !allowed {
         return Err("blocked host".to_string());
     }
@@ -64,7 +67,9 @@ fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'stati
                 continue;
             }
             if trimmed.starts_with('#') {
-                if (trimmed.contains("URI=\"") || trimmed.contains("URI='")) && !trimmed.starts_with("#EXT-X-STREAM-INF") {
+                if (trimmed.contains("URI=\"") || trimmed.contains("URI='"))
+                    && !trimmed.starts_with("#EXT-X-STREAM-INF")
+                {
                     let mut next_line = line.to_string();
                     for quote in ["\"", "'"] {
                         let needle = format!("URI={quote}");
@@ -74,7 +79,11 @@ fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'stati
                                 let value_end = value_start + end_rel;
                                 let raw = &next_line[value_start..value_end];
                                 if let Ok(next) = parsed.join(raw) {
-                                    let proxied = format!("{}{}", proxy_prefix, urlencoding::encode(next.as_str()));
+                                    let proxied = format!(
+                                        "{}{}",
+                                        proxy_prefix,
+                                        urlencoding::encode(next.as_str())
+                                    );
                                     next_line.replace_range(value_start..value_end, &proxied);
                                 }
                             }
@@ -88,7 +97,10 @@ fn hls_proxy_fetch(target: &str, proxy_prefix: &str) -> Result<(Vec<u8>, &'stati
                 }
                 continue;
             }
-            let next = parsed.join(trimmed).map(|u| u.to_string()).unwrap_or_else(|_| trimmed.to_string());
+            let next = parsed
+                .join(trimmed)
+                .map(|u| u.to_string())
+                .unwrap_or_else(|_| trimmed.to_string());
             rewritten.push_str(proxy_prefix);
             rewritten.push_str(&urlencoding::encode(&next));
             rewritten.push('\n');
@@ -141,10 +153,18 @@ fn handle_hls_proxy_client(mut stream: std::net::TcpStream) -> std::io::Result<(
     let (status, content_type, body) = if path.starts_with("/hls-proxy") && !target.is_empty() {
         match hls_proxy_fetch(&target, "http://127.0.0.1:18188/hls-proxy?u=") {
             Ok((body, content_type)) => ("200 OK", content_type, body),
-            Err(_) => ("502 Bad Gateway", "text/plain; charset=utf-8", b"Playback unavailable".to_vec()),
+            Err(_) => (
+                "502 Bad Gateway",
+                "text/plain; charset=utf-8",
+                b"Playback unavailable".to_vec(),
+            ),
         }
     } else {
-        ("404 Not Found", "text/plain; charset=utf-8", b"Not Found".to_vec())
+        (
+            "404 Not Found",
+            "text/plain; charset=utf-8",
+            b"Not Found".to_vec(),
+        )
     };
 
     let header = format!(
@@ -306,7 +326,10 @@ pub fn run() {
                 if let Some(player_file) = player_candidates.into_iter().find(|p| p.is_file()) {
                     if let Ok(data) = std::fs::read(&player_file) {
                         return tauri::http::Response::builder()
-                            .header(tauri::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
+                            .header(
+                                tauri::http::header::CONTENT_TYPE,
+                                "text/html; charset=utf-8",
+                            )
                             .body(data)
                             .unwrap();
                     }
@@ -509,7 +532,7 @@ pub fn run() {
             assistant::missav_api_fetch,
             #[cfg(target_os = "windows")]
             assistant::napp03_api_fetch,
-            #[cfg(target_os = "windows")]            // 数据目录 & 图片存储
+            #[cfg(target_os = "windows")] // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,
             assistant::assistant_load_image,

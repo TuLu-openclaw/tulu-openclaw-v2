@@ -13,6 +13,7 @@ use tauri::Emitter;
 type Aes256CbcDec = cbc::Decryptor<Aes256>;
 #[cfg(target_os = "windows")]
 type HmacSha1 = Hmac<Sha1>;
+use std::net::SocketAddr;
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
 /// 仅在用户主动开启工具后由 AI 调用
@@ -20,7 +21,6 @@ type HmacSha1 = Hmac<Sha1>;
 #[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use std::net::SocketAddr;
 use tauri::Manager;
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
@@ -682,9 +682,15 @@ async fn vod_fetch_missav_with_curl(
     #[cfg(target_os = "windows")]
     {
         let host = missav_host(url).ok_or_else(|| "非 MISSAV 允许域名".to_string())?;
-        let addrs = missav_resolve_overrides(&host).ok_or_else(|| "MISSAV 域名未配置解析覆盖".to_string())?;
-        let first_addr = addrs.first().ok_or_else(|| "MISSAV 解析覆盖为空".to_string())?;
-        let ip = first_addr.split(':').next().ok_or_else(|| "MISSAV 解析覆盖格式错误".to_string())?;
+        let addrs = missav_resolve_overrides(&host)
+            .ok_or_else(|| "MISSAV 域名未配置解析覆盖".to_string())?;
+        let first_addr = addrs
+            .first()
+            .ok_or_else(|| "MISSAV 解析覆盖为空".to_string())?;
+        let ip = first_addr
+            .split(':')
+            .next()
+            .ok_or_else(|| "MISSAV 解析覆盖格式错误".to_string())?;
         let max_time = timeout.as_secs().max(3).to_string();
         let resolve_arg = format!("{host}:443:{ip}");
 
@@ -714,7 +720,14 @@ async fn vod_fetch_missav_with_curl(
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            return Err(format!("vod_fetch curl 失败: {}", if stderr.is_empty() { output.status.to_string() } else { stderr }));
+            return Err(format!(
+                "vod_fetch curl 失败: {}",
+                if stderr.is_empty() {
+                    output.status.to_string()
+                } else {
+                    stderr
+                }
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -725,7 +738,10 @@ async fn vod_fetch_missav_with_curl(
         let client = build_vod_http_client(timeout, user_agent, url)?;
         let resp = client
             .get(url)
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
             .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7")
             .send()
             .await
@@ -1006,7 +1022,12 @@ fn is_missav_allowed_nav_path(path: &str) -> bool {
 
 #[cfg(target_os = "windows")]
 fn missav_nav_name_from_path(path: &str) -> String {
-    let tail = path.trim_end_matches('/').rsplit('/').next().unwrap_or(path).trim();
+    let tail = path
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .trim();
     let cleaned = tail.split('?').next().unwrap_or(tail);
     urlencoding::decode(cleaned)
         .map(|s| s.to_string())
@@ -1022,16 +1043,21 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
         .map_err(|e| format!("MISSAV href 正则错误: {e}"))?;
     let img_tag_re = regex::Regex::new(r#"(?is)<img\b[^>]*>"#)
         .map_err(|e| format!("MISSAV 图片标签正则错误: {e}"))?;
-    let img_src_re = regex::Regex::new(r#"(?is)\b(data-src|data-original|src)=['\"]([^'\"]+)['\"]"#)
-        .map_err(|e| format!("MISSAV 图片地址正则错误: {e}"))?;
+    let img_src_re =
+        regex::Regex::new(r#"(?is)\b(data-src|data-original|src)=['\"]([^'\"]+)['\"]"#)
+            .map_err(|e| format!("MISSAV 图片地址正则错误: {e}"))?;
     let img_alt_re = regex::Regex::new(r#"(?is)<img\b[^>]*alt=["']([^"']+)["'][^>]*>"#)
         .map_err(|e| format!("MISSAV 图片标题正则错误: {e}"))?;
-    let duration_re = regex::Regex::new(r#"(?is)<span\b[^>]*>(\s*\d{1,2}:\d{2}(?::\d{2})?\s*)</span>"#)
-        .map_err(|e| format!("MISSAV 时长正则错误: {e}"))?;
-    let video_re = regex::Regex::new(r#"(?is)(?:data-src|src|href)=[\"']([^\"']+\.(?:m3u8|mp4)(?:[^\"']*)?)[\"']"#)
-        .map_err(|e| format!("MISSAV 视频正则错误: {e}"))?;
-    let direct_video_re = regex::Regex::new(r#"(?is)https?://[^'\"<>\\]+\.(?:m3u8|mp4)(?:[^'\"<>\\]*)?"#)
-        .map_err(|e| format!("MISSAV 明文视频正则错误: {e}"))?;
+    let duration_re =
+        regex::Regex::new(r#"(?is)<span\b[^>]*>(\s*\d{1,2}:\d{2}(?::\d{2})?\s*)</span>"#)
+            .map_err(|e| format!("MISSAV 时长正则错误: {e}"))?;
+    let video_re = regex::Regex::new(
+        r#"(?is)(?:data-src|src|href)=[\"']([^\"']+\.(?:m3u8|mp4)(?:[^\"']*)?)[\"']"#,
+    )
+    .map_err(|e| format!("MISSAV 视频正则错误: {e}"))?;
+    let direct_video_re =
+        regex::Regex::new(r#"(?is)https?://[^'\"<>\\]+\.(?:m3u8|mp4)(?:[^'\"<>\\]*)?"#)
+            .map_err(|e| format!("MISSAV 明文视频正则错误: {e}"))?;
     let packed_video_re = regex::Regex::new(r#"(?is)eval\(function\(p,a,c,k,e,d\).*?\('((?:\\'|[^'])*)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'([^']*)'\.split\('\|'\)"#)
         .map_err(|e| format!("MISSAV packed 视频正则错误: {e}"))?;
     let page_re = regex::Regex::new(r#"(?is)<a\b([^>]*)>(.*?)</a>"#)
@@ -1066,9 +1092,21 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
             continue;
         }
         let label = missav_html_text(cap.get(2).map(|m| m.as_str()).unwrap_or(""));
-        let page_num = url.query_pairs().find(|(k, _)| k == "page").map(|(_, v)| v.to_string()).unwrap_or_default();
-        let name = if label.is_empty() { format!("第 {page_num} 页") } else { label };
-        let path = if let Some(q) = url.query() { format!("{}?{}", url.path(), q) } else { url.path().to_string() };
+        let page_num = url
+            .query_pairs()
+            .find(|(k, _)| k == "page")
+            .map(|(_, v)| v.to_string())
+            .unwrap_or_default();
+        let name = if label.is_empty() {
+            format!("第 {page_num} 页")
+        } else {
+            label
+        };
+        let path = if let Some(q) = url.query() {
+            format!("{}?{}", url.path(), q)
+        } else {
+            url.path().to_string()
+        };
         if page_seen.insert(path.clone()) {
             pages.push(serde_json::json!({ "name": name, "path": path, "url": url.to_string() }));
         }
@@ -1077,23 +1115,48 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
     for cap in direct_video_re.find_iter(html).take(30) {
         let url = cap.as_str().trim().to_string();
         if play_seen.insert(url.clone()) {
-            let name = if url.to_ascii_lowercase().contains("preview") { "预览" } else { "播放地址" };
+            let name = if url.to_ascii_lowercase().contains("preview") {
+                "预览"
+            } else {
+                "播放地址"
+            };
             play_urls.push(serde_json::json!({ "name": name, "url": url }));
         }
     }
 
     for cap in packed_video_re.captures_iter(html).take(10) {
-        let payload = cap.get(1).map(|m| m.as_str()).unwrap_or("").replace("\\'", "'").replace("\\/", "/");
-        let radix = cap.get(2).and_then(|m| m.as_str().parse::<u32>().ok()).unwrap_or(36).clamp(2, 36);
-        let words = cap.get(4).map(|m| m.as_str()).unwrap_or("").split('|').collect::<Vec<_>>();
-        let token_re = regex::Regex::new(r#"\b[0-9a-z]+\b"#).map_err(|e| format!("MISSAV packed token 正则错误: {e}"))?;
-        let unpacked = token_re.replace_all(&payload, |caps: &regex::Captures| {
-            let token = caps.get(0).map(|m| m.as_str()).unwrap_or("");
-            match usize::from_str_radix(token, radix).ok().and_then(|idx| words.get(idx)).filter(|v| !v.is_empty()) {
-                Some(value) => value.to_string(),
-                None => token.to_string(),
-            }
-        }).to_string();
+        let payload = cap
+            .get(1)
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .replace("\\'", "'")
+            .replace("\\/", "/");
+        let radix = cap
+            .get(2)
+            .and_then(|m| m.as_str().parse::<u32>().ok())
+            .unwrap_or(36)
+            .clamp(2, 36);
+        let words = cap
+            .get(4)
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .split('|')
+            .collect::<Vec<_>>();
+        let token_re = regex::Regex::new(r#"\b[0-9a-z]+\b"#)
+            .map_err(|e| format!("MISSAV packed token 正则错误: {e}"))?;
+        let unpacked = token_re
+            .replace_all(&payload, |caps: &regex::Captures| {
+                let token = caps.get(0).map(|m| m.as_str()).unwrap_or("");
+                match usize::from_str_radix(token, radix)
+                    .ok()
+                    .and_then(|idx| words.get(idx))
+                    .filter(|v| !v.is_empty())
+                {
+                    Some(value) => value.to_string(),
+                    None => token.to_string(),
+                }
+            })
+            .to_string();
         for video in direct_video_re.find_iter(&unpacked).take(10) {
             let url = video.as_str().trim().to_string();
             if play_seen.insert(url.clone()) {
@@ -1117,9 +1180,16 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
         if raw.is_empty() {
             continue;
         }
-        let url = base.join(raw).map(|u| u.to_string()).unwrap_or_else(|_| raw.to_string());
+        let url = base
+            .join(raw)
+            .map(|u| u.to_string())
+            .unwrap_or_else(|_| raw.to_string());
         if play_seen.insert(url.clone()) {
-            let name = if url.to_ascii_lowercase().contains("preview") { "预览" } else { "播放地址" };
+            let name = if url.to_ascii_lowercase().contains("preview") {
+                "预览"
+            } else {
+                "播放地址"
+            };
             play_urls.push(serde_json::json!({ "name": name, "url": url }));
         }
     }
@@ -1142,7 +1212,11 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
             .ok()
             .map(|u| u.path().to_string())
             .unwrap_or_default();
-        if path.contains("/genres/") || path.contains("/makers/") || path.contains("/actresses/") || path == "/genres/VR" {
+        if path.contains("/genres/")
+            || path.contains("/makers/")
+            || path.contains("/actresses/")
+            || path == "/genres/VR"
+        {
             if path == base.path() {
                 continue;
             }
@@ -1152,9 +1226,33 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
             let blocked_category_text = text.is_empty()
                 || text.contains("條影片")
                 || text.chars().all(|c| c.is_ascii_digit())
-                || ["註冊", "注册", "简体中文", "繁體中文", "所有", "單人作品", "多人作品", "中文字幕", "發行日期", "发行日期", "最近更新", "收藏數", "收藏数", "今日瀏覽數", "今日浏览数", "本週瀏覽數", "本周浏览数", "本月瀏覽數", "本月浏览数", "總瀏覽數", "总浏览数", "下一頁", "下一页"]
-                    .iter()
-                    .any(|bad| text.contains(bad));
+                || [
+                    "註冊",
+                    "注册",
+                    "简体中文",
+                    "繁體中文",
+                    "所有",
+                    "單人作品",
+                    "多人作品",
+                    "中文字幕",
+                    "發行日期",
+                    "发行日期",
+                    "最近更新",
+                    "收藏數",
+                    "收藏数",
+                    "今日瀏覽數",
+                    "今日浏览数",
+                    "本週瀏覽數",
+                    "本周浏览数",
+                    "本月瀏覽數",
+                    "本月浏览数",
+                    "總瀏覽數",
+                    "总浏览数",
+                    "下一頁",
+                    "下一页",
+                ]
+                .iter()
+                .any(|bad| text.contains(bad));
             if blocked_category_text {
                 continue;
             }
@@ -1217,10 +1315,25 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
             .filter_map(|tag| {
                 let attrs = img_src_re
                     .captures_iter(tag.as_str())
-                    .filter_map(|c| Some((c.get(1)?.as_str().to_ascii_lowercase(), c.get(2)?.as_str().trim().to_string())))
+                    .filter_map(|c| {
+                        Some((
+                            c.get(1)?.as_str().to_ascii_lowercase(),
+                            c.get(2)?.as_str().trim().to_string(),
+                        ))
+                    })
                     .collect::<Vec<_>>();
-                attrs.iter().find(|(k, v)| (k == "data-src" || k == "data-original") && !v.starts_with("data:") && !v.is_empty())
-                    .or_else(|| attrs.iter().find(|(_, v)| !v.starts_with("data:") && !v.is_empty()))
+                attrs
+                    .iter()
+                    .find(|(k, v)| {
+                        (k == "data-src" || k == "data-original")
+                            && !v.starts_with("data:")
+                            && !v.is_empty()
+                    })
+                    .or_else(|| {
+                        attrs
+                            .iter()
+                            .find(|(_, v)| !v.starts_with("data:") && !v.is_empty())
+                    })
                     .map(|(_, v)| v.clone())
             })
             .last()
@@ -1228,7 +1341,9 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
         let pic = if pic_raw.is_empty() {
             String::new()
         } else {
-            base.join(&pic_raw).map(|u| u.to_string()).unwrap_or(pic_raw)
+            base.join(&pic_raw)
+                .map(|u| u.to_string())
+                .unwrap_or(pic_raw)
         };
 
         let title = {
@@ -1251,7 +1366,12 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
             .last()
             .and_then(|c| c.get(1).map(|m| m.as_str().trim().to_string()))
             .unwrap_or_else(|| "MISSAV".to_string());
-        let id = url.trim_end_matches('/').rsplit('/').next().unwrap_or(&url).to_string();
+        let id = url
+            .trim_end_matches('/')
+            .rsplit('/')
+            .next()
+            .unwrap_or(&url)
+            .to_string();
         items.push(serde_json::json!({
             "vod_id": id,
             "vod_name": title,
@@ -1264,26 +1384,40 @@ fn parse_missav_cards_json(html: &str, base_url: &str) -> Result<serde_json::Val
     }
 
     let total = items.len();
-    Ok(serde_json::json!({ "list": items, "total": total, "categories": categories, "channels": channels, "pages": pages, "play_urls": play_urls }))
+    Ok(
+        serde_json::json!({ "list": items, "total": total, "categories": categories, "channels": channels, "pages": pages, "play_urls": play_urls }),
+    )
 }
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn missav_api_fetch(path: String, query: Option<serde_json::Value>, timeout_secs: Option<u64>) -> Result<String, String> {
-    let (clean_path, embedded_query) = if path.starts_with("http://") || path.starts_with("https://") {
-        let parsed = reqwest::Url::parse(&path).map_err(|e| format!("MISSAV URL 错误: {e}"))?;
-        if parsed.host_str() != Some("missav.live") {
-            return Err("MISSAV 只允许官网 missav.live".to_string());
-        }
-        (parsed.path().to_string(), parsed.query().map(|q| q.to_string()))
-    } else {
-        let raw = if path.starts_with('/') { path } else { format!("/{path}") };
-        if let Some((path_part, query_part)) = raw.split_once('?') {
-            (path_part.to_string(), Some(query_part.to_string()))
+pub async fn missav_api_fetch(
+    path: String,
+    query: Option<serde_json::Value>,
+    timeout_secs: Option<u64>,
+) -> Result<String, String> {
+    let (clean_path, embedded_query) =
+        if path.starts_with("http://") || path.starts_with("https://") {
+            let parsed = reqwest::Url::parse(&path).map_err(|e| format!("MISSAV URL 错误: {e}"))?;
+            if parsed.host_str() != Some("missav.live") {
+                return Err("MISSAV 只允许官网 missav.live".to_string());
+            }
+            (
+                parsed.path().to_string(),
+                parsed.query().map(|q| q.to_string()),
+            )
         } else {
-            (raw, None)
-        }
-    };
+            let raw = if path.starts_with('/') {
+                path
+            } else {
+                format!("/{path}")
+            };
+            if let Some((path_part, query_part)) = raw.split_once('?') {
+                (path_part.to_string(), Some(query_part.to_string()))
+            } else {
+                (raw, None)
+            }
+        };
     if clean_path.contains("..") {
         return Err("MISSAV path 不允许包含 ..".to_string());
     }
@@ -1295,18 +1429,30 @@ pub async fn missav_api_fetch(path: String, query: Option<serde_json::Value>, ti
     }
     if let Some(obj) = query.as_ref().and_then(|v| v.as_object()) {
         for (key, val) in obj {
-            let value = val.as_str().map(String::from).unwrap_or_else(|| val.to_string());
+            let value = val
+                .as_str()
+                .map(String::from)
+                .unwrap_or_else(|| val.to_string());
             url.query_pairs_mut().append_pair(key, &value);
         }
     }
 
     let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(30).clamp(5, 120));
-    let html = vod_fetch_missav_with_curl(url.as_str(), timeout, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36").await?;
+    let html = vod_fetch_missav_with_curl(
+        url.as_str(),
+        timeout,
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    )
+    .await?;
     if html.contains("Just a moment") || html.contains("cf-challenge") {
         return Err("MISSAV 官网返回 Cloudflare 防护页".to_string());
     }
     let data = parse_missav_cards_json(&html, url.as_str())?;
-    Ok(format!("{{\"code\":200,\"message\":\"ok\",\"source\":{},\"data\":{}}}", missav_json_escape(url.as_str()), data))
+    Ok(format!(
+        "{{\"code\":200,\"message\":\"ok\",\"source\":{},\"data\":{}}}",
+        missav_json_escape(url.as_str()),
+        data
+    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -1859,14 +2005,14 @@ pub async fn open_player_window(
     } else {
         WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(player_url.into()))
     }
-        .title(&title)
-        .inner_size(960.0, 600.0)
-        .min_inner_size(640.0, 400.0)
-        .resizable(true)
-        .decorations(true)
-        .center()
-        .build()
-        .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+    .title(&title)
+    .inner_size(960.0, 600.0)
+    .min_inner_size(640.0, 400.0)
+    .resizable(true)
+    .decorations(true)
+    .center()
+    .build()
+    .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
 
     let _win_label = win.label().to_string();
 
