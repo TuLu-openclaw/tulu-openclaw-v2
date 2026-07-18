@@ -40,10 +40,16 @@ struct BrowserUseStatus {
 }
 
 fn hidden_command(program: &Path) -> Command {
-    let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
-    command.creation_flags(0x08000000);
-    command
+    {
+        let mut command = Command::new(program);
+        command.creation_flags(0x08000000);
+        command
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new(program)
+    }
 }
 
 fn runtime_dir() -> PathBuf {
