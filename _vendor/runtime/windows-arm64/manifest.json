@@ -1,0 +1,23 @@
+{
+  "platform": "windows-arm64",
+  "version": 1,
+  "node": {
+    "displayName": "Bundled Node.js",
+    "bundledVersion": "v22.22.3",
+    "archive": "node-v22.22.3-win-arm64.zip",
+    "source": "http://124.220.22.11:9002/runtime/node-v22.22.3-win-arm64.zip",
+    "expectedEntry": "node/node.exe",
+    "archiveSha256": "00be129a09e8872cd52d3bb8bba12412c5733d2224123a482a2dca4a6fbf2586",
+    "officialSource": "https://nodejs.org/dist/v22.22.3/node-v22.22.3-win-arm64.zip",
+    "prepared": true
+  },
+  "git": {
+    "displayName": "Bundled MinGit for Windows",
+    "bundledVersion": "2.54.0.windows.1",
+    "archive": "MinGit-2.54.0-arm64.zip",
+    "source": "http://124.220.22.11:9002/runtime/MinGit-2.54.0-arm64.zip",
+    "expectedEntry": "git/cmd/git.exe",
+    "officialSource": "https://github.com/git-for-windows/git/releases/download/v2.54.0.windows.1/MinGit-2.54.0-arm64.zip",
+    "prepared": true
+  }
+}

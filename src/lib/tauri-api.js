@@ -508,6 +508,11 @@ export const api = {
   cliAnythingInstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_install_tool', { name }, 600000) },
   cliAnythingUninstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_uninstall_tool', { name }, 300000) },
   cliAnythingMatrixPreflight: (name) => invoke('cli_anything_matrix_preflight', { name }, 120000),
+  browserUseStatus: () => cachedInvoke('browser_use_status', {}, 8000),
+  browserUseInstall: () => { invalidate('browser_use_status'); return invoke('browser_use_install', {}, 600000) },
+  browserUseConfigure: (permissions) => { invalidate('browser_use_status'); return invoke('browser_use_configure', { permissions }, 30000) },
+  browserUseUnregister: () => { invalidate('browser_use_status'); return invoke('browser_use_unregister', {}, 30000) },
+  browserUseUninstall: () => { invalidate('browser_use_status'); return invoke('browser_use_uninstall', {}, 120000) },
 
   // 日志（短缓存）
   readLogTail: (logName, lines = 100) => cachedInvoke('read_log_tail', { logName, lines }, 5000),

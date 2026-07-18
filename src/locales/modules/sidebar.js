@@ -46,6 +46,7 @@ export default {
   movieTool: _('星枢影视', 'Xingshu Movies'),
   openmontage: _('视频工厂', 'Video Factory'),
   cliAnything: _('AI 工具中枢', 'AI Tool Hub'),
+  browserUse: _('浏览器自动化', 'Browser Automation'),
   xingshuChatroom: _('星枢聊天室', 'Xingshu Chatroom'),
   lobsterOffice: _('龙虾办公室', 'Lobster Office'),
   globalBuiltin: _('全球内置', 'Global Built-in'),

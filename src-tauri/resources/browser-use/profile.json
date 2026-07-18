@@ -1,0 +1,18 @@
+{
+  "browser_profile": {
+    "default": {
+      "id": "xingshu-isolated",
+      "default": true,
+      "headless": false,
+      "user_data_dir": "~/.openclaw/browser-use/profile",
+      "downloads_path": "~/.openclaw/browser-use/downloads",
+      "file_system_path": "~/.openclaw/browser-use/files",
+      "block_ip_addresses": true,
+      "disable_security": false,
+      "enable_default_extensions": false,
+      "keep_alive": false
+    }
+  },
+  "llm": {},
+  "agent": {}
+}

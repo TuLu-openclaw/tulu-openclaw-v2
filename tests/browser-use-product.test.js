@@ -1,0 +1,57 @@
+import fs from 'node:fs'
+import test from 'node:test'
+import assert from 'node:assert/strict'
+
+const page = fs.readFileSync(new URL('../src/pages/browser-use.js', import.meta.url), 'utf8')
+const guard = fs.readFileSync(new URL('../src-tauri/resources/browser-use/browser_use_guard.py', import.meta.url), 'utf8')
+const backend = fs.readFileSync(new URL('../src-tauri/src/commands/browser_use.rs', import.meta.url), 'utf8')
+const main = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+const sidebar = fs.readFileSync(new URL('../src/components/sidebar.js', import.meta.url), 'utf8')
+
+test('browser-use is exposed as a customer-facing route', () => {
+  assert.match(main, /registerRoute\('\/browser-use'/)
+  assert.match(main, /browser-use\.css/)
+  assert.match(sidebar, /route: '\/browser-use'/)
+  assert.match(page, /客户使用教程/)
+  assert.match(page, /故障排查/)
+  assert.match(page, /安装并开始使用/)
+  assert.match(page, /quick-start/)
+  assert.doesNotMatch(page, /runtimeDir/)
+})
+
+test('browser-use install is pinned and isolated', () => {
+  assert.match(backend, /BROWSER_USE_VERSION: &str = "0\.13\.6"/)
+  assert.match(backend, /MCP_VERSION: &str = "1\.26\.0"/)
+  assert.match(backend, /PLAYWRIGHT_BROWSERS_PATH/)
+  assert.match(backend, /"install"\.into\(\),\s*"chromium"\.into\(\)/s)
+  assert.match(guard, /args=\["-m", "browser_use\.mcp"\]/)
+  assert.doesNotMatch(backend, /hermes::ensure_uv/)
+  assert.match(backend, /fn ensure_uv\(\)/)
+  assert.match(backend, /"venv"\.into\(\),\s*"--python"\.into\(\),\s*"3\.11"\.into\(\)/s)
+  assert.doesNotMatch(page, /检查 Python 3\.11/)
+  assert.match(backend, /join\("downloads"\)/)
+  assert.match(backend, /join\("profile"\)/)
+})
+
+test('browser-use permissions are deny-by-default and private networks stay blocked', () => {
+  assert.match(guard, /INTERACTION_TOOLS = \{"browser_click", "browser_type"\}/)
+  assert.match(guard, /AUTONOMOUS_TOOLS = \{"retry_with_browser_use_agent"\}/)
+  assert.match(guard, /if any\(not address\.is_global/)
+  assert.match(guard, /Destination is outside the configured domain allowlist/)
+  assert.match(backend, /mcpServers/)
+  assert.match(backend, /XINGSHU_BROWSER_ALLOW_INTERACTION/)
+  assert.match(backend, /XINGSHU_BROWSER_ALLOW_AUTONOMOUS/)
+  assert.match(backend, /permissions\.allow_interaction/)
+  assert.match(backend, /permissions\.allow_autonomous/)
+  assert.match(backend, /开启自主浏览器代理前必须至少配置一个域名白名单/)
+})
+
+test('browser-use has register, pause and complete uninstall paths', () => {
+  assert.match(page, /browserUseConfigure/)
+  assert.match(page, /browserUseUnregister/)
+  assert.match(page, /browserUseUninstall/)
+  assert.match(backend, /pub async fn browser_use_unregister/)
+  assert.match(backend, /pub async fn browser_use_uninstall/)
+  assert.match(backend, /fs::remove_dir_all\(&root\)/)
+  assert.match(backend, /allow_interaction,\n            allow_autonomous,\n            allowed_domains/)
+})

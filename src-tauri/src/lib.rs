@@ -6,7 +6,7 @@ mod utils;
 mod windows_proxy;
 
 use commands::{
-    agency_agents, agent, assistant, cli_anything, config, device, extensions, hermes,
+    agency_agents, agent, assistant, browser_use, cli_anything, config, device, extensions, hermes,
     hermes_providers, logs, memory, messaging, music, openmontage, pairing, proxy, service, skills,
     tvbox, update,
 };
@@ -489,6 +489,12 @@ pub fn run() {
             cli_anything::cli_anything_install_tool,
             cli_anything::cli_anything_uninstall_tool,
             cli_anything::cli_anything_matrix_preflight,
+            // browser-use 浏览器自动化（隔离运行时 + 全局 MCP 安全代理）
+            browser_use::browser_use_status,
+            browser_use::browser_use_install,
+            browser_use::browser_use_configure,
+            browser_use::browser_use_unregister,
+            browser_use::browser_use_uninstall,
             // Agent 管理
             agent::list_agents,
             agent::get_agent_detail,
