@@ -730,8 +730,12 @@ async function autoConnectWebSocket() {
     console.debug(`[main] 自动连接 WebSocket (实例: ${inst.name})...`)
     const config = await api.readOpenclawConfig()
     const port = config?.gateway?.port || 18789
-    const rawToken = config?.gateway?.auth?.token ?? config?.gateway?.authToken
+    const authConfig = config?.gateway?.auth || {}
+    const rawToken = authConfig.token ?? config?.gateway?.authToken
     const token = (typeof rawToken === 'string') ? rawToken : ''
+    const password = authConfig.mode === 'password' && typeof authConfig.password === 'string'
+      ? authConfig.password
+      : ''
 
     let host
     const inst2 = getActiveInstance()
@@ -748,7 +752,7 @@ async function autoConnectWebSocket() {
 
     // 启动时优先直连，避免被预修复流程阻塞；握手失败后再走 ws-client 内置自动修复
     boostGatewayPolling()
-    wsClient.connect(host, token)
+    wsClient.connect(host, { mode: authConfig.mode || 'token', token, password })
     console.debug(`[main] WebSocket 连接已启动 -> ${host}`)
 
     // 非阻塞后台修补：仅用于提升后续稳定性，不阻塞首连速度

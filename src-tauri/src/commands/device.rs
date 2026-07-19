@@ -92,7 +92,25 @@ mod hex {
 
 /// 生成 Gateway connect 帧（含 Ed25519 签名）
 #[tauri::command]
-pub fn create_connect_frame(nonce: String, gateway_token: String) -> Result<Value, String> {
+pub fn create_connect_frame(
+    nonce: String,
+    gateway_token: String,
+    gateway_password: String,
+    min_protocol: Option<u16>,
+    max_protocol: Option<u16>,
+) -> Result<Value, String> {
+    if nonce.trim().is_empty() {
+        return Err("Gateway connect.challenge nonce 不能为空".into());
+    }
+    if !gateway_token.is_empty() && !gateway_password.is_empty() {
+        return Err("Gateway token 和 password 不能同时发送".into());
+    }
+    let min_protocol = min_protocol.unwrap_or(3);
+    let max_protocol = max_protocol.unwrap_or(4);
+    if min_protocol > max_protocol {
+        return Err("Gateway 协议范围无效".into());
+    }
+
     let (device_id, pub_b64, signing_key) = get_or_create_key()?;
     let signed_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -113,13 +131,23 @@ pub fn create_connect_frame(nonce: String, gateway_token: String) -> Result<Valu
     let signature = signing_key.sign(payload_str.as_bytes());
     let sig_b64 = base64_url_encode(&signature.to_bytes());
 
+    let mut auth = serde_json::Map::new();
+    if !gateway_token.is_empty() {
+        auth.insert("token".into(), Value::String(gateway_token));
+    }
+    if !gateway_password.is_empty() {
+        auth.insert("password".into(), Value::String(gateway_password));
+    }
+
     let frame = serde_json::json!({
         "type": "req",
         "id": format!("connect-{:08x}-{:04x}", signed_at as u32, rand::random::<u16>()),
         "method": "connect",
         "params": {
-            "minProtocol": 3,
-            "maxProtocol": 3,
+            // OpenClaw 2026.7+ uses operator protocol v4 while older Gateways
+            // still accept v3. The Gateway selects the highest overlap.
+            "minProtocol": min_protocol,
+            "maxProtocol": max_protocol,
             "client": {
                 "id": "openclaw-control-ui",
                 "version": env!("CARGO_PKG_VERSION"),
@@ -130,7 +158,7 @@ pub fn create_connect_frame(nonce: String, gateway_token: String) -> Result<Valu
             "role": "operator",
             "scopes": SCOPES,
             "caps": ["tool-events"],
-            "auth": { "token": gateway_token },
+            "auth": auth,
             "device": {
                 "id": device_id,
                 "publicKey": pub_b64,

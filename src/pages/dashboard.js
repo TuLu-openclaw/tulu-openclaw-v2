@@ -80,6 +80,9 @@ async function ensureDashboardWebSocket() {
     const port = config?.gateway?.port || 18789
     const rawToken = config?.gateway?.auth?.token ?? config?.gateway?.authToken
     const token = typeof rawToken === 'string' ? rawToken : ''
+    const password = config?.gateway?.auth?.mode === 'password' && typeof config.gateway.auth.password === 'string'
+      ? config.gateway.auth.password
+      : ''
     const inst = getActiveInstance()
     let host
     if (inst?.type !== 'local' && inst?.endpoint) {
@@ -93,7 +96,7 @@ async function ensureDashboardWebSocket() {
       host = `127.0.0.1:${port}`
     }
     boostGatewayPolling()
-    wsClient.connect(host, token)
+    wsClient.connect(host, { mode: config?.gateway?.auth?.mode || 'token', token, password })
   } catch (e) {
     console.warn('[dashboard] ensure websocket failed:', e)
   } finally {

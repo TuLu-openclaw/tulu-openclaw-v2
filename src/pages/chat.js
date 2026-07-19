@@ -1730,8 +1730,9 @@ async function connectGateway() {
     const config = await api.readOpenclawConfig()
     const gw = config?.gateway || {}
     const host = isTauriRuntime() ? `127.0.0.1:${gw.port || 18789}` : location.host
-    const token = gw.auth?.token || gw.authToken || ''
-    wsClient.connect(host, token)
+    const token = typeof (gw.auth?.token ?? gw.authToken) === 'string' ? (gw.auth?.token ?? gw.authToken) : ''
+    const password = gw.auth?.mode === 'password' && typeof gw.auth.password === 'string' ? gw.auth.password : ''
+    wsClient.connect(host, { mode: gw.auth?.mode || 'token', token, password })
   } catch (e) {
     toast(`${t('common.loadFailed')}: ${e.message}`, 'error')
   }

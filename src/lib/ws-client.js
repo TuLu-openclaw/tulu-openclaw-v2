@@ -30,10 +30,12 @@ const MESSAGE_CACHE_SIZE = 100
 const INITIAL_RECONNECT_DELAY = 1000
 
 export class WsClient {
-  constructor() {
+  constructor(options = {}) {
+    this._invoke = options.invoke || invoke
     this._ws = null
     this._url = ''
     this._token = ''
+    this._password = ''
     this._pending = new Map()
     this._eventListeners = []
     this._statusListeners = []
@@ -120,19 +122,24 @@ export class WsClient {
     return () => { this._readyCallbacks = this._readyCallbacks.filter(cb => cb !== fn) }
   }
 
-  connect(host, token, opts = {}) {
+  connect(host, credentials = '', opts = {}) {
     this._intentionalClose = false
     this._autoPairAttempts = 0
     this._authRefreshAttempts = 0
-    const nextToken = token || ''
+    const auth = typeof credentials === 'string'
+      ? { mode: 'token', token: credentials, password: '' }
+      : (credentials || {})
+    const nextToken = typeof auth.token === 'string' ? auth.token : ''
+    const nextPassword = typeof auth.password === 'string' ? auth.password : ''
     const shouldUseSecure = opts.secure ?? (
       typeof location !== 'undefined' && location.protocol === 'https:'
     )
     const proto = shouldUseSecure ? 'wss' : 'ws'
-    const nextUrl = `${proto}://${host}/ws?token=${encodeURIComponent(nextToken)}`
-    if ((this._connecting || this._handshaking || this._gatewayReady) && this._url === nextUrl) return
+    const nextUrl = `${proto}://${host}/ws${nextToken ? `?token=${encodeURIComponent(nextToken)}` : ''}`
+    const sameCredentials = this._token === nextToken && this._password === nextPassword
+    if ((this._connecting || this._handshaking || this._gatewayReady) && this._url === nextUrl && sameCredentials) return
     if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) {
-      if (this._url === nextUrl) return
+      if (this._url === nextUrl && sameCredentials) return
       this._stopPing()
       this._stopHeartbeat()
       this._clearReconnectTimer()
@@ -141,6 +148,7 @@ export class WsClient {
       this._closeWs()
     }
     this._token = nextToken
+    this._password = nextPassword
     this._url = nextUrl
     this._lastConnectedAt = Date.now()
     this._doConnect()
@@ -200,15 +208,18 @@ export class WsClient {
       this._startHeartbeat()
       this._setConnected(true, 'connected', '网关连接已建立，正在等待握手')
       this._startPing()
-      // 优先等待 Gateway 发 connect.challenge；若超时则主动降级发起 connect
+      // OpenClaw requires every device-auth connect frame to sign the
+      // server-provided nonce. Never fall back to an unsigned/empty nonce.
       this._status = '等待握手指令'
       this._statusDetail = '等待网关下发 connect.challenge'
       this._challengeTimer = setTimeout(() => {
         if (!this._handshaking && !this._gatewayReady) {
-          console.warn('[ws] 等待 challenge 超时，主动发起 connect')
-          this._status = '握手超时，正在主动补发连接'
-          this._statusDetail = '网关未及时返回握手指令，客户端正在主动发起连接'
-          this._sendConnectFrame('')
+          console.warn('[ws] 等待 connect.challenge 超时，重新连接')
+          this._status = '握手指令超时'
+          this._statusDetail = '未收到网关 challenge，正在重新连接'
+          this._setConnected(false, 'reconnecting', this._statusDetail)
+          this._closeWs()
+          if (!this._intentionalClose) this._scheduleReconnect()
         }
       }, CHALLENGE_TIMEOUT)
     }
@@ -379,12 +390,14 @@ export class WsClient {
   }
 
   async _refreshTokenAndReconnect(reason = '') {
-    const config = await invoke('read_openclaw_config')
+    const config = await this._invoke('read_openclaw_config')
     const gw = config?.gateway || {}
+    const authMode = gw.auth?.mode || 'token'
     const rawFreshToken = gw.auth?.token ?? gw.authToken ?? ''
-    const freshToken = typeof rawFreshToken === 'string' ? rawFreshToken : ''
-    if (!freshToken || freshToken === this._token) {
-      throw new Error(reason || 'Gateway Token 未变化')
+    const freshToken = authMode === 'password' ? '' : (typeof rawFreshToken === 'string' ? rawFreshToken : '')
+    const freshPassword = authMode === 'password' && typeof gw.auth?.password === 'string' ? gw.auth.password : ''
+    if ((!freshToken && !freshPassword) || (freshToken === this._token && freshPassword === this._password)) {
+      throw new Error(reason || 'Gateway 认证凭据未变化')
     }
     const configuredHost = typeof location !== 'undefined' && location.host
       ? location.host
@@ -394,7 +407,8 @@ export class WsClient {
     if (!host) throw new Error('无法从当前 WebSocket URL 解析 Gateway 地址')
     const secure = (this._url || '').startsWith('wss://')
     this._token = freshToken
-    this._url = `${secure ? 'wss' : 'ws'}://${host}/ws?token=${encodeURIComponent(this._token)}`
+    this._password = freshPassword
+    this._url = `${secure ? 'wss' : 'ws'}://${host}/ws${freshToken ? `?token=${encodeURIComponent(freshToken)}` : ''}`
     this._status = 'Gateway Token 已刷新'
     this._statusDetail = '已读取最新本地 token，正在重连'
     this._intentionalClose = false
@@ -416,12 +430,12 @@ export class WsClient {
       console.log('[ws] 执行自动配对（第', this._autoPairAttempts, '次）...')
       this._status = '正在自动修复连接'
       this._statusDetail = `正在执行自动配对（第 ${this._autoPairAttempts} 次）`
-      const result = await invoke('auto_pair_device')
+      const result = await this._invoke('auto_pair_device')
       console.log('[ws] 配对结果:', result)
 
       // 配对后需要 reload Gateway 使 allowedOrigins 生效
       try {
-        await invoke('reload_gateway')
+        await this._invoke('reload_gateway')
         console.log('[ws] Gateway 已重载')
       } catch (e) {
         console.warn('[ws] reloadGateway 失败（非致命）:', e)
@@ -446,11 +460,25 @@ export class WsClient {
   }
 
   async _sendConnectFrame(nonce) {
+    if (typeof nonce !== 'string' || !nonce.trim()) {
+      this._handshaking = false
+      this._status = '握手信息无效'
+      this._statusDetail = '网关未提供有效的 challenge nonce'
+      this._setConnected(false, 'error', this._statusDetail)
+      if (!this._intentionalClose) this._scheduleReconnect()
+      return
+    }
     this._handshaking = true
-    this._status = nonce ? '正在发送握手信息' : '未收到握手指令，主动发送连接信息'
-    this._statusDetail = nonce ? '正在发送带签名的 connect frame' : '网关未返回 challenge，客户端主动发起连接'
+    this._status = '正在发送握手信息'
+    this._statusDetail = '正在发送带签名的 connect frame'
     try {
-      const frame = await invoke('create_connect_frame', { nonce, gatewayToken: this._token })
+      const frame = await this._invoke('create_connect_frame', {
+        nonce,
+        gatewayToken: this._token,
+        gatewayPassword: this._password,
+        minProtocol: 3,
+        maxProtocol: 4,
+      })
       if (this._ws && this._ws.readyState === WebSocket.OPEN) {
         console.log('[ws] 发送 connect frame')
         this._ws.send(JSON.stringify(frame))

@@ -104,13 +104,20 @@ async function reconnectMainWsFromLatestConfig(delayMs = 300) {
   const latestGw = latestConfig?.gateway || {}
   const rawToken = latestGw.auth?.token ?? latestGw.authToken ?? ''
   const latestToken = typeof rawToken === 'string' ? rawToken : ''
-  if (!latestToken) return false
+  const latestPassword = latestGw.auth?.mode === 'password' && typeof latestGw.auth.password === 'string'
+    ? latestGw.auth.password
+    : ''
+  if (!latestToken && !latestPassword) return false
   const latestHost = isTauriRuntime() ? `127.0.0.1:${latestGw.port || 18789}` : location.host
   wsClient.disconnect()
   if (_mainReconnectTimer) clearTimeout(_mainReconnectTimer)
   _mainReconnectTimer = setTimeout(() => {
     _mainReconnectTimer = null
-    wsClient.connect(latestHost, latestToken)
+    wsClient.connect(latestHost, {
+      mode: latestGw.auth?.mode || 'token',
+      token: latestToken,
+      password: latestPassword,
+    })
   }, delayMs)
   return true
 }
@@ -174,7 +181,10 @@ async function loadDebugInfo(page) {
   try {
     const rawToken = info.config?.gateway?.auth?.token
     const token = (typeof rawToken === 'string') ? rawToken : ''
-    info.connectFrame = await api.createConnectFrame('test-nonce', token)
+    const password = info.config?.gateway?.auth?.mode === 'password' && typeof info.config.gateway.auth.password === 'string'
+      ? info.config.gateway.auth.password
+      : ''
+    info.connectFrame = await api.createConnectFrame('test-nonce', token, password)
   } catch (e) {
     info.connectFrameError = String(e)
   }
@@ -460,10 +470,12 @@ function testWebSocket(page) {
   // 读取配置
   api.readOpenclawConfig().then(config => {
     const port = config?.gateway?.port || 18789
-    const rawToken = config?.gateway?.auth?.token
+    const auth = config?.gateway?.auth || {}
+    const rawToken = auth.token
     const token = (typeof rawToken === 'string') ? rawToken : ''
+    const password = auth.mode === 'password' && typeof auth.password === 'string' ? auth.password : ''
     const wsHost = isTauriRuntime() ? `127.0.0.1:${port}` : location.host
-    const url = `ws://${wsHost}/ws?token=${encodeURIComponent(token)}`
+    const url = `ws://${wsHost}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`
 
     addLog(`${icon('radio', 14)} ${t('chatDebug.wsAddress', { url: maskWsUrl(url) })}`)
     addLog(`${icon('key', 14)} ${t('chatDebug.wsToken', { token: token ? '***' : t('chatDebug.empty') })}`)
@@ -488,7 +500,7 @@ function testWebSocket(page) {
             addLog(`${icon('lock', 14)} ${t('chatDebug.wsReceivedChallenge')}: ${nonce}`)
             addLog(`${icon('clock', 14)} ${t('chatDebug.wsGeneratingFrame')}`)
 
-            api.createConnectFrame(nonce, token).then(frame => {
+            api.createConnectFrame(nonce, token, password).then(frame => {
               addLog(`${statusIcon('ok', 14)} ${t('chatDebug.wsFrameGenerated')}`)
               addLog(`${icon('send', 14)} ${t('chatDebug.wsSendingFrame')}`)
               testWs.send(JSON.stringify(frame))
@@ -704,10 +716,12 @@ async function fixPairing(page) {
     addLog(`${icon('plug', 14)} ${t('chatDebug.fixTestingWs')}`)
     const config = await api.readOpenclawConfig()
     const port = config?.gateway?.port || 18789
-    const rawToken = config?.gateway?.auth?.token
+    const auth = config?.gateway?.auth || {}
+    const rawToken = auth.token
     const token = (typeof rawToken === 'string') ? rawToken : ''
+    const password = auth.mode === 'password' && typeof auth.password === 'string' ? auth.password : ''
     const wsHost = isTauriRuntime() ? `127.0.0.1:${port}` : location.host
-    const url = `ws://${wsHost}/ws?token=${encodeURIComponent(token)}`
+    const url = `ws://${wsHost}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`
 
     const ws = new WebSocket(url)
 
@@ -722,7 +736,7 @@ async function fixPairing(page) {
           addLog(`${statusIcon('ok', 14)} ${t('chatDebug.fixReceivedChallenge')}`)
           const nonce = msg.payload?.nonce || ''
 
-          api.createConnectFrame(nonce, token).then(frame => {
+          api.createConnectFrame(nonce, token, password).then(frame => {
             ws.send(JSON.stringify(frame))
             addLog(`${icon('send', 14)} ${t('chatDebug.fixFrameSent')}`)
           })
