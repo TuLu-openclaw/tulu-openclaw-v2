@@ -344,6 +344,84 @@ async fn gateway_service_status() -> Result<Option<ServiceStatus>, String> {
     Ok(services.into_iter().next())
 }
 
+fn gateway_error_log_tail(max_lines: usize) -> String {
+    let path = crate::commands::openclaw_dir()
+        .join("logs")
+        .join("gateway.err.log");
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|content| {
+            content
+                .lines()
+                .rev()
+                .take(max_lines)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
+}
+
+fn requires_startup_migration_repair(message: &str) -> bool {
+    message.contains("OpenClaw startup migrations did not complete cleanly")
+        && message.contains("openclaw doctor --fix")
+}
+
+#[cfg(test)]
+mod startup_migration_tests {
+    use super::requires_startup_migration_repair;
+
+    #[test]
+    fn detects_explicit_startup_migration_repair_instruction() {
+        let message = r#"OpenClaw startup migrations did not complete cleanly; refusing to report the gateway ready.
+Run "openclaw doctor --fix" against the mounted state/config, then restart the container."#;
+        assert!(requires_startup_migration_repair(message));
+    }
+
+    #[test]
+    fn ignores_migration_lock_contention() {
+        let message = "OpenClaw startup migrations are already running for this state directory";
+        assert!(!requires_startup_migration_repair(message));
+    }
+
+    #[test]
+    fn ignores_unrelated_gateway_failure() {
+        assert!(!requires_startup_migration_repair(
+            "Gateway startup failed because the configured port is already in use"
+        ));
+    }
+}
+
+async fn run_startup_migration_repair() -> Result<(), String> {
+    let output = tokio::time::timeout(
+        Duration::from_secs(120),
+        crate::utils::openclaw_command_async()
+            .args(["doctor", "--fix"])
+            .output(),
+    )
+    .await
+    .map_err(|_| "openclaw doctor --fix 执行超时 (120s)".to_string())?
+    .map_err(|err| format!("执行 openclaw doctor --fix 失败: {err}"))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let detail = if !stderr.is_empty() { stderr } else { stdout };
+    Err(if detail.is_empty() {
+        format!(
+            "openclaw doctor --fix 失败，退出码 {:?}",
+            output.status.code()
+        )
+    } else {
+        format!("openclaw doctor --fix 失败: {detail}")
+    })
+}
+
 async fn guardian_tick(app: &tauri::AppHandle) {
     let snapshot = match gateway_service_status().await {
         Ok(Some(svc)) => svc,
@@ -421,11 +499,18 @@ async fn guardian_tick(app: &tauri::AppHandle) {
             return;
         }
 
-        state.consecutive_failures = state.consecutive_failures.saturating_add(1);
-        guardian_log(&format!(
-            "Gateway 状态检测失败 ({}/{})，先保持现状不重启，避免低配机器瞬时抖动触发重连",
-            state.consecutive_failures, GUARDIAN_FAILURE_THRESHOLD
-        ));
+        state.consecutive_failures = state
+            .consecutive_failures
+            .saturating_add(1)
+            .min(GUARDIAN_FAILURE_THRESHOLD);
+        if state.consecutive_failures < GUARDIAN_FAILURE_THRESHOLD
+            || state.last_seen_running == Some(true)
+        {
+            guardian_log(&format!(
+                "Gateway 状态检测失败 ({}/{})，先保持现状不重启，避免低配机器瞬时抖动触发重连",
+                state.consecutive_failures, GUARDIAN_FAILURE_THRESHOLD
+            ));
+        }
 
         if state.consecutive_failures < GUARDIAN_FAILURE_THRESHOLD {
             return;
@@ -484,13 +569,27 @@ async fn guardian_tick(app: &tauri::AppHandle) {
 
 async fn start_service_impl_internal(label: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    {
-        platform::start_service_impl(label)?;
-    }
+    let first_start = platform::start_service_impl(label);
     #[cfg(not(target_os = "macos"))]
-    {
+    let first_start = platform::start_service_impl(label).await;
+
+    if let Err(start_err) = first_start {
+        let log_tail = gateway_error_log_tail(120);
+        let evidence = format!("{start_err}\n{log_tail}");
+        if !requires_startup_migration_repair(&evidence) {
+            return Err(start_err);
+        }
+
+        guardian_log("Gateway 启动被 OpenClaw 状态迁移阻断，按上游提示执行一次 doctor --fix");
+        run_startup_migration_repair().await?;
+        guardian_log("doctor --fix 已完成，重试启动 Gateway");
+
+        #[cfg(target_os = "macos")]
+        platform::start_service_impl(label)?;
+        #[cfg(not(target_os = "macos"))]
         platform::start_service_impl(label).await?;
     }
+
     wait_for_gateway_running(label, Duration::from_secs(300)).await
 }
 

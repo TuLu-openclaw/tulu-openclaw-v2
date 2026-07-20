@@ -41,17 +41,24 @@ fn default_openclaw_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_default().join(".openclaw")
 }
 
-fn normalize_custom_openclaw_dir(raw: &str) -> Option<PathBuf> {
-    let trimmed = raw.trim();
+/// Resolve a configured filesystem path exactly once.
+///
+/// Absolute paths remain absolute; only paths explicitly using `~` are expanded
+/// against the user's home directory. Other relative paths are relative to the
+/// current process directory and must not be joined to the OpenClaw state dir.
+pub(crate) fn resolve_configured_path(value: &str) -> Option<PathBuf> {
+    let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;
     }
 
-    let expanded = if let Some(rest) = trimmed
+    let expanded = if trimmed == "~" {
+        dirs::home_dir()?
+    } else if let Some(rest) = trimmed
         .strip_prefix("~/")
         .or_else(|| trimmed.strip_prefix("~\\"))
     {
-        dirs::home_dir().unwrap_or_default().join(rest)
+        dirs::home_dir()?.join(rest)
     } else {
         PathBuf::from(trimmed)
     };
@@ -61,6 +68,10 @@ fn normalize_custom_openclaw_dir(raw: &str) -> Option<PathBuf> {
     } else {
         std::env::current_dir().ok().map(|cwd| cwd.join(expanded))
     }
+}
+
+fn normalize_custom_openclaw_dir(raw: &str) -> Option<PathBuf> {
+    resolve_configured_path(raw)
 }
 
 pub fn openclaw_search_paths() -> Vec<PathBuf> {
@@ -109,6 +120,41 @@ pub fn gateway_listen_port() -> u16 {
         *cache = (port, std::time::Instant::now());
     }
     port
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::resolve_configured_path;
+
+    #[test]
+    fn expands_home_directory_once() {
+        let home = dirs::home_dir().expect("home directory is available");
+        assert_eq!(resolve_configured_path("~"), Some(home.clone()));
+        assert_eq!(
+            resolve_configured_path("~/.openclaw/workspace"),
+            Some(home.join(".openclaw/workspace"))
+        );
+    }
+
+    #[test]
+    fn keeps_absolute_paths_outside_state_dir() {
+        let configured = if cfg!(windows) {
+            r"C:\Users\User\custom-workspace"
+        } else {
+            "/tmp/custom-workspace"
+        };
+        let resolved = resolve_configured_path(configured).expect("absolute path resolves");
+        assert_eq!(resolved.to_string_lossy(), configured);
+    }
+
+    #[test]
+    fn resolves_relative_paths_once_against_process_directory() {
+        let cwd = std::env::current_dir().expect("current directory is available");
+        assert_eq!(
+            resolve_configured_path("workspace"),
+            Some(cwd.join("workspace"))
+        );
+    }
 }
 
 fn read_gateway_port_from_config() -> u16 {

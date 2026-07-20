@@ -492,6 +492,8 @@ fn configure_git_https_rules() -> usize {
     success
 }
 
+const OPENCLAW_IMAGE_DEPENDENCY: &str = "sharp@latest";
+
 fn apply_git_install_env(cmd: &mut Command) {
     if let Some(custom_git) = configured_git_path() {
         let git_path = PathBuf::from(&custom_git);
@@ -3197,6 +3199,117 @@ fn npm_global_modules_dir() -> Option<PathBuf> {
     }
 }
 
+fn openclaw_package_dir(modules_dir: &std::path::Path, source: &str) -> PathBuf {
+    if source == "official" {
+        modules_dir.join("openclaw")
+    } else {
+        modules_dir.join("@qingchencloud").join("openclaw-zh")
+    }
+}
+
+fn verify_openclaw_image_dependency_at(
+    package_dir: &std::path::Path,
+    node_executable: &std::path::Path,
+) -> Result<(), String> {
+    if !package_dir.exists() {
+        return Err(format!(
+            "OpenClaw 安装目录不存在: {}",
+            package_dir.display()
+        ));
+    }
+
+    let mut command = Command::new(node_executable);
+    command
+        .args([
+            "--input-type=module",
+            "-e",
+            "import('sharp').then(() => process.exit(0)).catch((error) => { console.error(error?.message || error); process.exit(1); })",
+        ])
+        .current_dir(package_dir)
+        .env("PATH", super::enhanced_path());
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x08000000);
+
+    let output = command
+        .output()
+        .map_err(|error| format!("无法验证 OpenClaw 图片处理依赖 sharp: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        "OpenClaw 图片处理依赖 sharp 未正确安装".to_string()
+    } else {
+        format!("OpenClaw 图片处理依赖 sharp 未正确安装: {detail}")
+    })
+}
+
+fn verify_openclaw_image_dependency(source: &str) -> Result<(), String> {
+    let modules_dir = npm_global_modules_dir().ok_or("无法确定 npm 全局 node_modules 目录")?;
+    verify_openclaw_image_dependency_at(
+        &openclaw_package_dir(&modules_dir, source),
+        std::path::Path::new("node"),
+    )
+}
+
+fn verify_standalone_image_dependency(install_dir: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let node_executable = install_dir.join("node.exe");
+    #[cfg(not(target_os = "windows"))]
+    let node_executable = install_dir.join("node");
+
+    if !node_executable.exists() {
+        return Err(format!(
+            "standalone 缺少内置 Node.js: {}",
+            node_executable.display()
+        ));
+    }
+
+    let modules_dir = install_dir.join("node_modules");
+    let package_dir = [
+        openclaw_package_dir(&modules_dir, "chinese"),
+        openclaw_package_dir(&modules_dir, "official"),
+    ]
+    .into_iter()
+    .find(|path| path.exists())
+    .ok_or_else(|| {
+        format!(
+            "standalone 中未找到 OpenClaw 包目录: {}",
+            modules_dir.display()
+        )
+    })?;
+
+    verify_openclaw_image_dependency_at(&package_dir, &node_executable)
+        .map_err(|error| format!("standalone 归档缺少可用的图片附件处理依赖 sharp: {error}"))
+}
+
+fn install_openclaw_image_dependency(registry: &str) -> Result<(), String> {
+    let output = npm_command_elevated()
+        .args([
+            "install",
+            "-g",
+            OPENCLAW_IMAGE_DEPENDENCY,
+            "--registry",
+            registry,
+        ])
+        .output()
+        .map_err(|error| format!("安装 OpenClaw 图片处理依赖 sharp 失败: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if detail.is_empty() {
+        format!(
+            "安装 OpenClaw 图片处理依赖 sharp 失败，退出码 {:?}",
+            output.status.code()
+        )
+    } else {
+        format!("安装 OpenClaw 图片处理依赖 sharp 失败: {detail}")
+    })
+}
+
 /// npm 全局 bin 目录
 #[allow(dead_code)]
 pub(crate) fn npm_global_bin_dir() -> Option<PathBuf> {
@@ -3430,6 +3543,8 @@ async fn try_standalone_install(
     if !openclaw_bin.exists() {
         return Err("standalone 解压后未找到 openclaw 可执行文件".into());
     }
+    verify_standalone_image_dependency(&install_dir)?;
+    let _ = app.emit("upgrade-log", "standalone 图片附件处理依赖 sharp 已验证");
 
     // 7. 添加到 PATH（Windows 用户 PATH，Unix 创建 symlink）
     #[cfg(target_os = "windows")]
@@ -3798,6 +3913,10 @@ async fn try_r2_install(
     // 清理临时文件
     let _ = std::fs::remove_file(&archive_path);
 
+    let _ = app.emit("upgrade-log", "正在安装并验证图片附件处理依赖 sharp...");
+    install_openclaw_image_dependency("https://registry.npmjs.org")?;
+    verify_openclaw_image_dependency(source)?;
+
     let _ = app.emit("upgrade-progress", 95);
     Ok(cdn_version.to_string())
 }
@@ -3949,6 +4068,7 @@ async fn upgrade_openclaw_inner(
         "install",
         "-g",
         &pkg,
+        OPENCLAW_IMAGE_DEPENDENCY,
         "--force",
         "--registry",
         registry,
@@ -4013,6 +4133,7 @@ async fn upgrade_openclaw_inner(
                 "install",
                 "-g",
                 &pkg,
+                OPENCLAW_IMAGE_DEPENDENCY,
                 "--force",
                 "--registry",
                 fallback,
@@ -4088,6 +4209,10 @@ async fn upgrade_openclaw_inner(
             return Err(format!("升级失败，exit code: {code}\n{tail}"));
         }
     }
+
+    let _ = app.emit("upgrade-log", "正在验证图片附件处理依赖 sharp...");
+    verify_openclaw_image_dependency(&source)?;
+    let _ = app.emit("upgrade-log", "图片附件处理依赖 sharp 已就绪");
 
     // 安装成功后再卸载旧包（确保 CLI 始终可用）
     if need_uninstall_old {

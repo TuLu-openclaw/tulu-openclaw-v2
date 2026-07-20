@@ -291,8 +291,9 @@ pub async fn list_agents() -> Result<Value, String> {
 
             // 检测 workspace 状态
             if let Some(ws_str) = agent.get("workspace").and_then(|w| w.as_str()) {
-                let ws_path = std::path::Path::new(ws_str);
-                let check_result = check_workspace_status(ws_path);
+                let ws_path =
+                    super::resolve_configured_path(ws_str).unwrap_or_else(|| PathBuf::from(ws_str));
+                let check_result = check_workspace_status(&ws_path);
 
                 // 添加 workspaceStatus 字段
                 agent.as_object_mut().map(|o| {
@@ -676,7 +677,9 @@ pub async fn add_agent(
     workspace: Option<String>,
 ) -> Result<Value, String> {
     let ws = match workspace {
-        Some(ref w) if !w.is_empty() => std::path::PathBuf::from(w),
+        Some(ref w) if !w.trim().is_empty() => {
+            super::resolve_configured_path(w).ok_or_else(|| "workspace 路径无效".to_string())?
+        }
         _ => super::openclaw_dir()
             .join("agents")
             .join(&name)
@@ -924,7 +927,9 @@ pub async fn update_agent_identity(
 
     // 删除 IDENTITY.md 文件，让配置文件生效
     if let Some(ws_str) = workspace_path {
-        let identity_file = std::path::PathBuf::from(ws_str).join("IDENTITY.md");
+        let identity_file = super::resolve_configured_path(&ws_str)
+            .unwrap_or_else(|| PathBuf::from(ws_str))
+            .join("IDENTITY.md");
         if identity_file.exists() {
             let _ = fs::remove_file(&identity_file);
         }
@@ -1075,28 +1080,9 @@ fn resolve_agent_workspace(id: &str, config: &Value) -> String {
         })
 }
 
-fn expand_user_path(raw: &str) -> std::path::PathBuf {
-    let trimmed = raw.trim();
-    let path = if let Some(rest) = trimmed
-        .strip_prefix("~/")
-        .or_else(|| trimmed.strip_prefix("~\\"))
-    {
-        dirs::home_dir().unwrap_or_default().join(rest)
-    } else {
-        std::path::PathBuf::from(trimmed)
-    };
-
-    if path.is_absolute() {
-        path
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(&path))
-            .unwrap_or(path)
-    }
-}
-
 fn resolve_agent_workspace_path(id: &str, config: &Value) -> std::path::PathBuf {
-    expand_user_path(&resolve_agent_workspace(id, config))
+    super::resolve_configured_path(&resolve_agent_workspace(id, config))
+        .unwrap_or_else(|| super::openclaw_dir().join("workspace"))
 }
 
 fn normalize_workspace_relative_path(raw: &str) -> Result<PathBuf, String> {

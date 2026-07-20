@@ -670,6 +670,8 @@ async function _tryStandaloneInstall(version, logs, overrideBaseUrl = null) {
   if (!fs.existsSync(path.join(installDir, binFile))) {
     throw new Error('standalone 解压后未找到 openclaw 可执行文件')
   }
+  verifyStandaloneImageDependency(installDir)
+  logs.push('standalone 图片附件处理依赖 sharp 已验证')
 
   logs.push(`✅ standalone 安装完成 (${remoteVersion})`)
   logs.push(`安装目录: ${installDir}`)
@@ -831,8 +833,62 @@ function recommendedVersionFor(source = 'chinese') {
     || null
 }
 
+const OPENCLAW_IMAGE_DEPENDENCY = 'sharp@latest'
+
 function npmPackageName(source = 'chinese') {
   return source === 'official' ? 'openclaw' : '@qingchencloud/openclaw-zh'
+}
+
+function npmGlobalModulesDir() {
+  const npmBin = isWindows ? 'npm.cmd' : 'npm'
+  return execSync(`${npmBin} root -g`, {
+    encoding: 'utf8',
+    timeout: 10000,
+    windowsHide: true,
+  }).trim()
+}
+
+function verifyImageDependencyAt(packageDir, nodeExecutable) {
+  if (!fs.existsSync(packageDir)) {
+    throw new Error(`OpenClaw 安装目录不存在: ${packageDir}`)
+  }
+  const result = spawnSync(nodeExecutable, [
+    '--input-type=module',
+    '-e',
+    "import('sharp').then(() => process.exit(0)).catch((error) => { console.error(error?.message || error); process.exit(1) })",
+  ], {
+    cwd: packageDir,
+    encoding: 'utf8',
+    timeout: 20000,
+    windowsHide: true,
+  })
+  if (result.status !== 0) {
+    throw new Error(`OpenClaw 图片处理依赖 sharp 未正确安装: ${(result.stderr || result.error?.message || 'unknown error').trim()}`)
+  }
+}
+
+function verifyOpenclawImageDependency(source = 'chinese') {
+  verifyImageDependencyAt(path.join(npmGlobalModulesDir(), npmPackageName(source)), process.execPath)
+}
+
+function verifyStandaloneImageDependency(installDir) {
+  const nodeExecutable = path.join(installDir, isWindows ? 'node.exe' : 'node')
+  if (!fs.existsSync(nodeExecutable)) {
+    throw new Error(`standalone 缺少内置 Node.js: ${nodeExecutable}`)
+  }
+  const modulesDir = path.join(installDir, 'node_modules')
+  const packageDir = [
+    path.join(modulesDir, npmPackageName('chinese')),
+    path.join(modulesDir, npmPackageName('official')),
+  ].find(candidate => fs.existsSync(candidate))
+  if (!packageDir) {
+    throw new Error(`standalone 中未找到 OpenClaw 包目录: ${modulesDir}`)
+  }
+  try {
+    verifyImageDependencyAt(packageDir, nodeExecutable)
+  } catch (error) {
+    throw new Error(`standalone 归档缺少可用的图片附件处理依赖 sharp: ${error.message}`)
+  }
 }
 
 function getConfiguredNpmRegistry() {
@@ -5509,7 +5565,7 @@ const handlers = {
     const gitEnv = buildGitInstallEnv()
     logs.push(`Git HTTPS 规则已就绪 (${gitConfigured}/${GIT_HTTPS_REWRITES.length})`)
     const runInstall = (targetRegistry) => execSync(
-      `${npmBin} install -g ${pkg}@${ver} --force --registry ${targetRegistry} --verbose 2>&1`,
+      `${npmBin} install -g ${pkg}@${ver} ${OPENCLAW_IMAGE_DEPENDENCY} --force --registry ${targetRegistry} --verbose 2>&1`,
       { timeout: 120000, windowsHide: true, env: gitEnv }
     ).toString()
     try {
@@ -5524,6 +5580,8 @@ const handlers = {
           throw e
         }
       }
+      verifyOpenclawImageDependency(source)
+      logs.push('图片附件处理依赖 sharp 已就绪')
       if (needUninstallOld) {
         try { execSync(`${npmBin} uninstall -g ${oldPkg} 2>&1`, { timeout: 60000, windowsHide: true }) } catch {}
       }

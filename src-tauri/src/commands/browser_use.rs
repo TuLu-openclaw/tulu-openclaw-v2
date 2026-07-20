@@ -190,13 +190,43 @@ fn install_assets(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
     Ok((guard, profile))
 }
 
-fn run_checked(program: &Path, args: &[String]) -> Result<String, String> {
-    let output = hidden_command(program)
+fn run_checked_with_timeout(
+    program: &Path,
+    args: &[String],
+    timeout: Duration,
+) -> Result<String, String> {
+    let mut child = hidden_command(program)
         .args(args)
         .env("PYTHONUTF8", "1")
         .env("PLAYWRIGHT_BROWSERS_PATH", runtime_dir().join("chromium"))
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("执行 {} 失败: {e}", program.display()))?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Ok(None) => {
+                terminate_health_process(&mut child);
+                return Err(format!(
+                    "执行 {} 超时（{} 秒）",
+                    program.display(),
+                    timeout.as_secs()
+                ));
+            }
+            Err(error) => {
+                terminate_health_process(&mut child);
+                return Err(format!("读取 {} 执行状态失败: {error}", program.display()));
+            }
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("读取 {} 执行结果失败: {e}", program.display()))?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if output.status.success() {
@@ -204,6 +234,10 @@ fn run_checked(program: &Path, args: &[String]) -> Result<String, String> {
     } else {
         Err(if stderr.is_empty() { stdout } else { stderr })
     }
+}
+
+fn run_checked(program: &Path, args: &[String]) -> Result<String, String> {
+    run_checked_with_timeout(program, args, Duration::from_secs(600))
 }
 
 fn server_config(config: &Value) -> Option<&Value> {
@@ -512,17 +546,17 @@ fn register_config(app: &AppHandle, permissions: BrowserUsePermissions) -> Resul
     super::config::write_mcp_config(config)
 }
 
-#[tauri::command]
-pub fn browser_use_status() -> Result<Value, String> {
+fn browser_use_status_sync() -> Result<Value, String> {
     let python = venv_python();
     let version = if python.is_file() {
-        run_checked(
+        run_checked_with_timeout(
             &python,
             &[
                 "-c".into(),
                 "import importlib.metadata; print(importlib.metadata.version('browser-use'))"
                     .into(),
             ],
+            Duration::from_secs(10),
         )
         .ok()
     } else {
@@ -531,12 +565,13 @@ pub fn browser_use_status() -> Result<Value, String> {
     let assets_ready = runtime_dir().join("browser_use_guard.py").is_file()
         && runtime_dir().join("profile.json").is_file();
     let playwright_ready = python.is_file()
-        && run_checked(
+        && run_checked_with_timeout(
             &python,
             &[
                 "-c".into(),
                 "import browser_use, mcp; from browser_use.browser.watchdogs.local_browser_watchdog import LocalBrowserWatchdog; assert LocalBrowserWatchdog._find_installed_browser_path() is not None; print('ready')".into(),
             ],
+            Duration::from_secs(15),
         )
         .is_ok();
     let health_error = if python.is_file() && assets_ready && playwright_ready {
@@ -567,6 +602,13 @@ pub fn browser_use_status() -> Result<Value, String> {
         allowed_domains,
     })
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_use_status() -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(browser_use_status_sync)
+        .await
+        .map_err(|error| format!("browser-use 状态检测任务异常结束: {error}"))?
 }
 
 #[tauri::command]
@@ -621,7 +663,7 @@ pub async fn browser_use_install(app: AppHandle) -> Result<Value, String> {
         },
     )?;
     super::config::do_reload_gateway(&app).await?;
-    browser_use_status()
+    browser_use_status().await
 }
 
 #[tauri::command]
@@ -631,7 +673,7 @@ pub async fn browser_use_configure(
 ) -> Result<Value, String> {
     register_config(&app, permissions)?;
     super::config::do_reload_gateway(&app).await?;
-    browser_use_status()
+    browser_use_status().await
 }
 
 fn remove_registration() -> Result<(), String> {
@@ -646,7 +688,7 @@ fn remove_registration() -> Result<(), String> {
 pub async fn browser_use_unregister(app: AppHandle) -> Result<Value, String> {
     remove_registration()?;
     super::config::do_reload_gateway(&app).await?;
-    browser_use_status()
+    browser_use_status().await
 }
 
 #[tauri::command]
@@ -657,5 +699,5 @@ pub async fn browser_use_uninstall(app: AppHandle) -> Result<Value, String> {
         fs::remove_dir_all(&root).map_err(|e| format!("删除 browser-use 运行时失败: {e}"))?;
     }
     super::config::do_reload_gateway(&app).await?;
-    browser_use_status()
+    browser_use_status().await
 }

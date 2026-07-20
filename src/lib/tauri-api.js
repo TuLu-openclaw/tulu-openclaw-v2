@@ -205,7 +205,7 @@ export function clearRequestLogs() {
   _requestLogs.length = 0
 }
 
-function cachedInvoke(cmd, args = {}, ttl = CACHE_TTL) {
+function cachedInvoke(cmd, args = {}, ttl = CACHE_TTL, timeoutMs = 0) {
   const key = cmd + JSON.stringify(args)
   const cached = _cache.get(key)
   if (cached && Date.now() - cached.ts < ttl) {
@@ -217,7 +217,7 @@ function cachedInvoke(cmd, args = {}, ttl = CACHE_TTL) {
   if (_inflight.has(key)) {
     return _inflight.get(key)
   }
-  const p = invoke(cmd, args, ttl).then(val => {
+  const p = invoke(cmd, args, timeoutMs).then(val => {
     // invalidate() may run while this request is still in flight. In that case
     // the response was started against stale state, so it must not repopulate
     // the cache after the write-side invalidation has already completed.
@@ -508,7 +508,7 @@ export const api = {
   cliAnythingInstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_install_tool', { name }, 600000) },
   cliAnythingUninstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_uninstall_tool', { name }, 300000) },
   cliAnythingMatrixPreflight: (name) => invoke('cli_anything_matrix_preflight', { name }, 120000),
-  browserUseStatus: () => cachedInvoke('browser_use_status', {}, 8000),
+  browserUseStatus: () => cachedInvoke('browser_use_status', {}, 8000, 70000),
   browserUseInstall: () => { invalidate('browser_use_status'); return invoke('browser_use_install', {}, 600000) },
   browserUseConfigure: (permissions) => { invalidate('browser_use_status'); return invoke('browser_use_configure', { permissions }, 30000) },
   browserUseUnregister: () => { invalidate('browser_use_status'); return invoke('browser_use_unregister', {}, 30000) },
