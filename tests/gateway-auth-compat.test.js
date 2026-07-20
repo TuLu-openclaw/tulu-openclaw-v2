@@ -118,6 +118,31 @@ test('password changes create a new connection even though URL is unchanged', ()
   cleanup(client)
 })
 
+test('protocol mismatch is surfaced as a terminal actionable error', async () => {
+  reset()
+  const client = createClient()
+  const readyErrors = []
+  client.onReady((hello, sessionKey, error) => { if (error) readyErrors.push(error) })
+  client.connect('127.0.0.1:18789', 'token')
+  sockets[0].open()
+  client._handleMessage({ type: 'event', event: 'connect.challenge', payload: { nonce: 'nonce-protocol' } })
+  await Promise.resolve()
+  client._handleMessage({
+    type: 'res',
+    id: 'connect-protocol',
+    ok: false,
+    error: {
+      code: 'PROTOCOL_MISMATCH',
+      message: 'protocol mismatch',
+      details: { expectedProtocol: 4, clientMinProtocol: 3, clientMaxProtocol: 4 },
+    },
+  })
+  assert.equal(client.getConnectionInfo().status, '协议版本不兼容', JSON.stringify(client.getConnectionInfo()))
+  assert.equal(client.getConnectionInfo().reconnectState, 'idle', JSON.stringify(client.getConnectionInfo()))
+  assert.equal(readyErrors[0]?.code, 'PROTOCOL_MISMATCH', JSON.stringify(readyErrors))
+  cleanup(client)
+})
+
 test('missing challenge nonce never invokes connect frame generation', async () => {
   reset()
   const client = createClient()

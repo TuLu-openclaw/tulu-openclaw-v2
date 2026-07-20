@@ -9,13 +9,29 @@
   },
   "default": {
     "official": {
-      "recommended": "2026.3.13"
+      "recommended": "2026.7.1-2"
     },
     "chinese": {
-      "recommended": "2026.3.13-zh.1"
+      "recommended": "2026.7.1-2-zh.1"
     }
   },
   "panels": {
+    "4.4.1": {
+      "official": {
+        "recommended": "2026.7.1-2"
+      },
+      "chinese": {
+        "recommended": "2026.7.1-2-zh.1"
+      }
+    },
+    "4.4.0": {
+      "official": {
+        "recommended": "2026.7.1-2"
+      },
+      "chinese": {
+        "recommended": "2026.7.1-2-zh.1"
+      }
+    },
     "0.9.0": {
       "official": {
         "recommended": "2026.3.13"

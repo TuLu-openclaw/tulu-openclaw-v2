@@ -22,10 +22,12 @@ function renderBody() {
   return `
     <div class="bu-status-grid">
       <div class="bu-status-item"><span>browser-use</span><strong>${esc(s.version || '未安装')}</strong>${stateBadge(s.installed, '版本已固定', '需要安装')}</div>
-      <div class="bu-status-item"><span>隔离运行时</span><strong>${s.runtimeReady ? '可用' : '未就绪'}</strong>${stateBadge(s.runtimeReady)}</div>
-      <div class="bu-status-item"><span>OpenClaw 全局 Agent 工具</span><strong>${s.registered ? '已注册' : '未注册'}</strong>${stateBadge(s.registered, '已连接', '已暂停')}</div>
-      <div class="bu-status-item"><span>默认权限</span><strong>${s.allowInteraction ? '允许交互' : '只读浏览'}</strong>${stateBadge(!s.allowAutonomous, '自主代理受控', '自主代理已授权')}</div>
+      <div class="bu-status-item"><span>隔离运行时与 MCP</span><strong>${s.runtimeReady ? '握手正常' : '未就绪'}</strong>${stateBadge(s.runtimeReady, '真实调用可用', '健康检查失败')}</div>
+      <div class="bu-status-item"><span>OpenClaw 全局 Agent 工具</span><strong>${s.registered ? '已连接' : (s.runtimeReady ? '未连接' : '等待运行时')}</strong>${stateBadge(s.registered, '已连接', s.runtimeReady ? '需要修复' : '运行时未就绪')}</div>
+      <div class="bu-status-item"><span>权限状态</span><strong>${s.allowAutonomous ? '自主代理已授权' : (s.allowInteraction ? '允许页面交互' : '只读浏览')}</strong>${stateBadge(!s.allowInteraction && !s.allowAutonomous, '安全默认值', s.allowAutonomous ? '高风险权限已开' : '交互权限已开')}</div>
     </div>
+
+    ${s.healthError ? `<div class="bu-error">健康检查失败：${esc(s.healthError)}</div>` : ''}
 
     <section class="bu-section bu-setup">
       <div>
@@ -58,7 +60,7 @@ function renderBody() {
         </label>
       </div>
       <div class="bu-actions">
-        <button class="btn btn-primary" data-action="save" ${!s.installed || busy ? 'disabled' : ''}>保存权限配置</button>
+        <button class="btn btn-primary" data-action="save" ${!s.installed || !s.runtimeReady || busy ? 'disabled' : ''}>保存权限配置</button>
         <button class="btn btn-secondary" data-action="unregister" ${!s.registered || busy ? 'disabled' : ''}>暂停全局工具接入</button>
       </div>
       <div class="bu-policy">始终阻止 localhost、私网、链路本地和保留地址；URL 中嵌入账号密码也会被拒绝。下载、用户数据和文件访问均限制在独立目录。</div>
@@ -151,6 +153,7 @@ async function savePermissions() {
   busy = true
   try {
     status = await api.browserUseConfigure(permissions)
+    if (!status?.registered) throw new Error('运行时检查未通过，Gateway 未重新接入 browser-use')
     toast('browser-use 权限配置已保存', 'success')
   } catch (error) {
     toast(error?.message || error, 'error', { duration: 6000 })

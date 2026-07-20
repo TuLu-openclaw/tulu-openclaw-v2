@@ -2,13 +2,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 const UV_VERSION: &str = "0.7.12";
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt as UnixCommandExt;
 #[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
+use std::os::windows::process::CommandExt as WindowsCommandExt;
 
 const BROWSER_USE_VERSION: &str = "0.13.6";
 const MCP_VERSION: &str = "1.26.0";
@@ -31,6 +34,7 @@ struct BrowserUseStatus {
     installed: bool,
     runtime_ready: bool,
     registered: bool,
+    health_error: Option<String>,
     version: Option<String>,
     runtime_dir: String,
     python: Option<String>,
@@ -119,6 +123,40 @@ fn bundled_asset(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("缺少 browser-use 资源文件: {name}"))
 }
 
+fn isolated_browser_executable() -> Option<PathBuf> {
+    let root = runtime_dir().join("chromium");
+    let executable_names: &[&str] = if cfg!(target_os = "windows") {
+        &["chrome.exe"]
+    } else if cfg!(target_os = "macos") {
+        &["Chromium"]
+    } else {
+        &["chrome", "chromium"]
+    };
+    let mut pending = vec![root.clone()];
+    let mut matches = Vec::new();
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| executable_names.contains(&name))
+                && path.starts_with(&root)
+                && !path.to_string_lossy().contains("headless_shell")
+            {
+                matches.push(path);
+            }
+        }
+    }
+    matches.sort();
+    matches.pop()
+}
+
 fn install_assets(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
     let root = runtime_dir();
     fs::create_dir_all(&root).map_err(|e| format!("创建 browser-use 目录失败: {e}"))?;
@@ -141,6 +179,9 @@ fn install_assets(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
         json!(root.join("downloads").to_string_lossy());
     value["browser_profile"]["default"]["file_system_path"] =
         json!(root.join("files").to_string_lossy());
+    let browser = isolated_browser_executable().ok_or("隔离 Chromium 未安装或可执行文件缺失")?;
+    value["browser_profile"]["default"]["executable_path"] = json!(browser.to_string_lossy());
+    value["browser_profile"]["default"]["channel"] = Value::Null;
     fs::write(
         &profile,
         serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?,
@@ -261,6 +302,124 @@ async fn ensure_uv() -> Result<PathBuf, String> {
     }
 }
 
+fn profile_matches_runtime() -> bool {
+    let Ok(contents) = fs::read_to_string(runtime_dir().join("profile.json")) else {
+        return false;
+    };
+    let Ok(profile) = serde_json::from_str::<Value>(&contents) else {
+        return false;
+    };
+    let configured = profile["browser_profile"]["default"]["executable_path"].as_str();
+    isolated_browser_executable()
+        .is_some_and(|path| configured == Some(path.to_string_lossy().as_ref()))
+}
+
+fn config_matches_runtime(server: Option<&Value>) -> bool {
+    let Some(server) = server else { return false };
+    let command = server.get("command").and_then(Value::as_str);
+    let args = server.get("args").and_then(Value::as_array);
+    let cwd = server.get("cwd").and_then(Value::as_str);
+    let env = server.get("env").and_then(Value::as_object);
+    command == Some(venv_python().to_string_lossy().as_ref())
+        && args.is_some_and(|items| {
+            items.len() == 1
+                && items[0].as_str()
+                    == Some(
+                        runtime_dir()
+                            .join("browser_use_guard.py")
+                            .to_string_lossy()
+                            .as_ref(),
+                    )
+        })
+        && cwd == Some(runtime_dir().to_string_lossy().as_ref())
+        && env.is_some_and(|vars| {
+            vars.get("BROWSER_USE_CONFIG_PATH").and_then(Value::as_str)
+                == Some(
+                    runtime_dir()
+                        .join("profile.json")
+                        .to_string_lossy()
+                        .as_ref(),
+                )
+                && vars.get("PLAYWRIGHT_BROWSERS_PATH").and_then(Value::as_str)
+                    == Some(runtime_dir().join("chromium").to_string_lossy().as_ref())
+        })
+}
+
+fn terminate_health_process(child: &mut std::process::Child) {
+    let process_id = child.id().to_string();
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &process_id, "/T", "/F"])
+            .creation_flags(0x08000000)
+            .status();
+    }
+    #[cfg(unix)]
+    {
+        let _ = Command::new("kill")
+            .args(["-TERM", &format!("-{process_id}")])
+            .status();
+        std::thread::sleep(Duration::from_millis(250));
+        let _ = Command::new("kill")
+            .args(["-KILL", &format!("-{process_id}")])
+            .status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn runtime_health_error(python: &Path) -> Option<String> {
+    let mut command = hidden_command(python);
+    #[cfg(unix)]
+    command.process_group(0);
+    command
+        .args([
+            runtime_dir()
+                .join("browser_use_guard.py")
+                .to_string_lossy()
+                .to_string(),
+            "--health-check".into(),
+        ])
+        .env("PYTHONUTF8", "1")
+        .env(
+            "BROWSER_USE_CONFIG_PATH",
+            runtime_dir().join("profile.json"),
+        )
+        .env("PLAYWRIGHT_BROWSERS_PATH", runtime_dir().join("chromium"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => return Some(format!("启动 browser-use MCP 健康检查失败: {error}")),
+    };
+    let deadline = Instant::now() + Duration::from_secs(45);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Ok(None) => {
+                terminate_health_process(&mut child);
+                return Some("browser-use MCP 与隔离 Chromium 健康检查超时".into());
+            }
+            Err(error) => {
+                terminate_health_process(&mut child);
+                return Some(format!("读取 browser-use MCP 健康检查状态失败: {error}"));
+            }
+        }
+    }
+    match child.wait_with_output() {
+        Ok(output) if output.status.success() => None,
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Some(if stderr.is_empty() { stdout } else { stderr })
+        }
+        Err(error) => Some(format!("读取 browser-use MCP 健康检查结果失败: {error}")),
+    }
+}
+
 fn read_permissions(server: Option<&Value>) -> (bool, bool, Vec<String>) {
     let env = server.and_then(|value| value.get("env"));
     let interaction = env
@@ -369,24 +528,33 @@ pub fn browser_use_status() -> Result<Value, String> {
     } else {
         None
     };
-    let runtime_ready = python.is_file()
+    let assets_ready = runtime_dir().join("browser_use_guard.py").is_file()
+        && runtime_dir().join("profile.json").is_file();
+    let playwright_ready = python.is_file()
         && run_checked(
             &python,
             &[
                 "-c".into(),
-                "import os; import browser_use, mcp; from playwright.sync_api import sync_playwright; p=sync_playwright().start(); path=p.chromium.executable_path; p.stop(); assert os.path.isfile(path); print('ready')".into(),
+                "import browser_use, mcp; from browser_use.browser.watchdogs.local_browser_watchdog import LocalBrowserWatchdog; assert LocalBrowserWatchdog._find_installed_browser_path() is not None; print('ready')".into(),
             ],
         )
-        .is_ok()
-        && runtime_dir().join("browser_use_guard.py").is_file()
-        && runtime_dir().join("profile.json").is_file();
+        .is_ok();
+    let health_error = if python.is_file() && assets_ready && playwright_ready {
+        runtime_health_error(&python)
+    } else {
+        Some("browser-use 隔离运行时或 Chromium 未就绪".into())
+    };
+    let runtime_ready = health_error.is_none();
     let config = super::config::read_mcp_config().unwrap_or_else(|_| json!({}));
     let server = server_config(&config);
+    let config_ready = config_matches_runtime(server) && profile_matches_runtime();
     let (allow_interaction, allow_autonomous, allowed_domains) = read_permissions(server);
+    let installed = version.as_deref() == Some(BROWSER_USE_VERSION);
     serde_json::to_value(BrowserUseStatus {
-        installed: version.as_deref() == Some(BROWSER_USE_VERSION),
+        installed,
         runtime_ready,
-        registered: server.is_some(),
+        registered: installed && runtime_ready && config_ready,
+        health_error,
         version,
         runtime_dir: runtime_dir().to_string_lossy().to_string(),
         python: if python.is_file() {
@@ -430,9 +598,10 @@ pub async fn browser_use_install(app: AppHandle) -> Result<Value, String> {
         ],
     )?;
     run_checked(
-        &venv_python(),
+        Path::new(&uv),
         &[
-            "-m".into(),
+            "tool".into(),
+            "run".into(),
             "playwright".into(),
             "install".into(),
             "chromium".into(),

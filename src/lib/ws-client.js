@@ -314,6 +314,23 @@ export class WsClient {
           console.warn('[ws] 自动修复已尝试过，不再重试')
         }
 
+        if (this._isProtocolMismatch(errMsg, errCode, msg.error?.details)) {
+          const details = msg.error?.details || {}
+          const expected = Number(details.expectedProtocol)
+          this._status = '协议版本不兼容'
+          this._reconnectState = 'idle'
+          this._pendingReconnect = false
+          this._statusDetail = Number.isInteger(expected)
+            ? `Gateway 要求协议 v${expected}，当前客户端支持 v3-v4。请使用与本客户端绑定的 Gateway 版本。`
+            : 'Gateway 与当前售卖版本的协议不兼容，请通过星枢OpenClaw升级 Gateway 后重试'
+          this._setConnected(false, 'protocol_mismatch', this._statusDetail)
+          this._readyCallbacks.forEach(fn => {
+            try { fn(null, null, { error: true, code: 'PROTOCOL_MISMATCH', message: this._statusDetail, details }) } catch {}
+          })
+          this._intentionalClose = true
+          return
+        }
+
         if (this._isAuthTokenError(errMsg, errCode) && this._tryRefreshTokenAndReconnect(errMsg)) return
 
         this._status = '握手失败'
@@ -366,6 +383,13 @@ export class WsClient {
         try { fn(msg) } catch (e) { console.error('[ws] handler error:', e) }
       })
     }
+  }
+
+  _isProtocolMismatch(message = '', code = '', details = {}) {
+    const text = `${code || ''} ${message || ''}`
+    return code === 'PROTOCOL_MISMATCH'
+      || /protocol.?mismatch|协议版本|协议不兼容/i.test(text)
+      || Number.isInteger(Number(details?.expectedProtocol)) && Number.isInteger(Number(details?.clientMaxProtocol))
   }
 
   _isAuthTokenError(message = '', code = '') {
@@ -476,6 +500,9 @@ export class WsClient {
         nonce,
         gatewayToken: this._token,
         gatewayPassword: this._password,
+        // v3 is supported by OpenClaw 2026.5.x; v4 is required by
+        // OpenClaw 2026.7.x operator clients. The Gateway selects the
+        // highest mutually supported protocol.
         minProtocol: 3,
         maxProtocol: 4,
       })

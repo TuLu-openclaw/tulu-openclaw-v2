@@ -106,16 +106,32 @@ class GuardedBrowserUseServer:
             assert self.upstream is not None
             return (await self.upstream.call_tool(name, payload)).content
 
-    async def run(self) -> None:
+    async def connect_upstream(self, stack: AsyncExitStack) -> None:
         params = StdioServerParameters(
             command=sys.executable,
             args=["-m", "browser_use.mcp"],
             env=dict(os.environ),
         )
+        read, write = await stack.enter_async_context(stdio_client(params))
+        self.upstream = await stack.enter_async_context(ClientSession(read, write))
+        await self.upstream.initialize()
+
+    async def health_check(self) -> None:
         async with AsyncExitStack() as stack:
-            read, write = await stack.enter_async_context(stdio_client(params))
-            self.upstream = await stack.enter_async_context(ClientSession(read, write))
-            await self.upstream.initialize()
+            await self.connect_upstream(stack)
+            result = await self.upstream.list_tools()
+            upstream_names = {tool.name for tool in result.tools}
+            missing = READ_ONLY_TOOLS - upstream_names
+            if missing:
+                raise RuntimeError(f"browser-use MCP is missing required tools: {sorted(missing)}")
+            state = await self.upstream.call_tool("browser_get_state", {"include_screenshot": False})
+            if state.isError:
+                raise RuntimeError(f"browser-use browser launch failed: {state.content}")
+            print("ready", flush=True)
+
+    async def run(self) -> None:
+        async with AsyncExitStack() as stack:
+            await self.connect_upstream(stack)
             client_read, client_write = await stack.enter_async_context(mcp.server.stdio.stdio_server())
             await self.server.run(
                 client_read,
@@ -132,4 +148,5 @@ class GuardedBrowserUseServer:
 
 
 if __name__ == "__main__":
-    asyncio.run(GuardedBrowserUseServer().run())
+    server = GuardedBrowserUseServer()
+    asyncio.run(server.health_check() if "--health-check" in sys.argv else server.run())

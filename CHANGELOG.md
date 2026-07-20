@@ -5,6 +5,19 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [4.4.1] - 2026-07-20
+
+### 修复 (Fixes)
+
+- **browser-use 隔离运行时** — 固定安装 `browser-use==0.13.6`、`mcp==1.26.0` 和 `uv==0.7.12`，通过独立目录安装 Chromium，并将运行配置明确绑定到隔离 Chromium，不再回退到系统 Edge。
+- **browser-use 真实健康检查** — 后端状态检查现在会启动安全守卫 MCP，完成 `initialize`、`tools/list` 并调用 `browser_get_state` 验证真实浏览器启动；配置、依赖、浏览器或握手任一失败均不再误报已连接。
+- **browser-use 超时与清理** — MCP 和 Chromium 健康检查增加 45 秒硬超时，异常或安全软件导致挂起时会终止并回收子进程。
+- **Gateway 协议兼容** — connect frame 支持协议 v3-v4，保留 `connect.challenge` 与 Ed25519 设备签名；Gateway 返回 `PROTOCOL_MISMATCH` 时显示明确兼容错误并停止无效重连。
+
+### 安全 (Security)
+
+- **MCP 权限守卫** — 保留默认只读工具集、公网 URL 校验、域名白名单、本地及保留地址阻断；自主代理模式要求非空域名白名单。
+
 ## [0.11.5] - 2026-04-07
 
 ### 新功能 (Features)
