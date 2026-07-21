@@ -1074,19 +1074,23 @@ function updateSessionRuntimeCache(sessions, defaults = null) {
     // 优先取“当前上下文占用”类字段（会随压缩下降）；contextUsedTokens/usedTokens/
     // promptTokens 都是当前 prompt 长度。totalTokens 是累计花费（只增不减），
     // 不能当上下文占用，只在没有真实占用字段时兵底。
+    // 网关 sessions.list 实际下发 inputTokens（当前 prompt 输入量，会随压缩下降），
+    // 优先用它作为“当前上下文占用”。其余字段作为兼容层，totalTokens 仅兜底。
     const liveCtx = Number(
+      item.inputTokens ?? item.input_tokens ??
       item.contextUsedTokens ?? item.context_used_tokens ?? item.usedTokens ?? item.used_tokens ??
       item.promptTokens ?? item.prompt_tokens ??
+      runtime.inputTokens ?? runtime.input_tokens ??
       runtime.contextUsedTokens ?? runtime.context_used_tokens ?? runtime.usedTokens ?? runtime.used_tokens ??
       runtime.promptTokens ?? runtime.prompt_tokens ?? 0
     ) || 0
     if (liveCtx > 0) {
       _sessionTokenTotals.set(key, liveCtx)
     } else {
-      // 没有真实占用字段时，不用累计 totalTokens 覆盖已有的准确值（
-      // 比如 final 事件刚写入的当轮 input）；仅在完全无值时才兵底。
-      const cumulative = Number(item.totalTokens ?? item.total_tokens ?? runtime.totalTokens ?? runtime.total_tokens ?? 0) || 0
-      if (cumulative > 0 && !_sessionTokenTotals.has(key)) _sessionTokenTotals.set(key, cumulative)
+      // 没有 inputTokens 时兜底 totalTokens（网关当前它也是“当前上下文”语义、
+      // 带 totalTokensFresh）；且不覆盖 final 事件刚写入的更准确的当轮 input。
+      const fallback = Number(item.totalTokens ?? item.total_tokens ?? runtime.totalTokens ?? runtime.total_tokens ?? 0) || 0
+      if (fallback > 0 && !_sessionTokenTotals.has(key)) _sessionTokenTotals.set(key, fallback)
     }
   }
 }
@@ -3529,6 +3533,15 @@ function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   const files = c?.files || []
   const tools = c?.tools || []
   if (!text && !images.length && !videos.length && !audios.length && !files.length && !tools.length) return
+  // 群聊成员回复也用本轮真实上下文输入量更新该成员会话的占用，
+  // 与前台 final 分支保持一致（群聊不走 final 分支）。
+  {
+    const gUsage = extractMessageUsage(payload.message || payload)
+    if (gUsage && sessionKey) {
+      const gCtxUsed = (gUsage.input || 0) + (gUsage.cacheRead || 0) + (gUsage.cacheWrite || 0)
+      if (gCtxUsed > 0) _sessionTokenTotals.set(sessionKey, gCtxUsed)
+    }
+  }
   const shouldRender = options.render !== false
   if (shouldRender) appendAiMessage(text, new Date(), images, videos, audios, files, tools, { agentLabel: label, sessionKey, model: extractMessageModel(payload.message || {}) || getSessionRuntimeModel(sessionKey), contextWindow: getContextWindow(sessionKey) })
   const stored = {
@@ -4553,9 +4566,12 @@ function handleChatEvent(payload) {
       // 不能用累计花费（会一直累加，远超窗口）来当上下文占用。
       if (usage) {
         const ctxUsed = (usage.input || 0) + (usage.cacheRead || 0) + (usage.cacheWrite || 0)
-        if (ctxUsed > 0 && _sessionKey) _sessionTokenTotals.set(_sessionKey, ctxUsed)
+        // 用事件自带的 eventSessionKey（而非当前前台 _sessionKey），
+        // 这样后台/群聊成员/其他 agent 的回复也各自更新自己的真实占用。
+        const usageKey = eventSessionKey || _sessionKey
+        if (ctxUsed > 0 && usageKey) _sessionTokenTotals.set(usageKey, ctxUsed)
       }
-      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true, showTranslate: true })
+      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(eventSessionKey || _sessionKey), showCopy: true, showTranslate: true })
       wrapper.appendChild(meta)
     }
     const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
