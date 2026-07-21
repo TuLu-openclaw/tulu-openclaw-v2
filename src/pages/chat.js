@@ -4428,6 +4428,11 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'delta') {
+    // 过滤推理/思考内容 delta：网关会把 Claude extended thinking 或其他模型的
+    // reasoning 增量以 isReasoning/isReasoningSnapshot=true 的 payload 推送过来。
+    // 这些内容是模型的内部思考过程，不属于最终回复，不能渲染到对话气泡。
+    // 修复「对话气泡中混入大量英文推理文本」问题。
+    if (payload.isReasoning === true || payload.isReasoningSnapshot === true) return
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 delta，避免串流:', runId, 'current:', _currentRunId)
@@ -4456,6 +4461,8 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'final') {
+    // 纯 reasoning 的 final payload 不作为正式回复渲染。
+    if (payload.isReasoning === true || payload.isReasoningSnapshot === true) return
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 final，避免覆盖当前流:', runId, 'current:', _currentRunId)
@@ -4711,6 +4718,15 @@ function extractChatContent(message) {
   if (Array.isArray(content)) {
     const texts = [], images = [], videos = [], audios = [], files = []
     for (const block of content) {
+      // 跳过 reasoning/thinking 类型的内容块（Claude extended thinking、
+      // redacted_thinking、OpenAI reasoning 等），不当作正文。
+      const blockType = block?.type
+      if (
+        blockType === 'thinking' ||
+        blockType === 'redacted_thinking' ||
+        blockType === 'reasoning' ||
+        block?.isReasoning === true
+      ) continue
       if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
       else if (block.type === 'image' && !block.omitted) {
         if (block.data) images.push({ mediaType: block.mimeType || 'image/png', data: block.data })
@@ -4792,6 +4808,13 @@ function stripThinkingTags(text) {
   const safe = stripAnsi(text)
   return safe
     .replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, '')
+    // OpenClaw 网关在流式预览里把 reasoning 内容作为 markdown 引用块推送：
+    // "> Thinking\n> 思考内容..." 或多行 "> ..."。
+    // 修复：头部连续的 >引用块（以 Thinking 标题开头）流入正文气泡。
+    .replace(/^>\s*Thinking\b[^\n]*(?:\n>\s*[^\n]*)*\n?/gim, '')
+    // 兼容 DeepSeek R1 的 <think>...</think>（已由上方处理）和纯推理文本块：
+    // 随着 Thinking... 行起头的段落（防备无标签缓冲区残漏）
+    .replace(/^Thinking\.\.\.\s*\n[\s\S]*?(?=\n\S|$)/gim, '')
     .replace(/Conversation info \(untrusted metadata\):\s*```json[\s\S]*?```\s*/gi, '')
     .replace(/\[Queued messages while agent was busy\]\s*---\s*Queued #\d+\s*/gi, '')
     .trim()
