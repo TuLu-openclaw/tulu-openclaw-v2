@@ -268,6 +268,132 @@ pub(crate) fn standalone_install_dir() -> Option<PathBuf> {
     }
 }
 
+/// npm 全局安装目录（prefix）。用于保护，避免把 npm 全局目录当成 standalone 残留删除。
+/// Windows 默认是 %APPDATA%\npm；其余平台优先查询 `npm config get prefix`。
+pub(crate) fn npm_global_prefix() -> Option<PathBuf> {
+    // 1. 优先查询 npm 实际配置的 prefix
+    if let Ok(o) = npm_command().args(["config", "get", "prefix"]).output() {
+        if o.status.success() {
+            let prefix = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if !prefix.is_empty() && prefix != "undefined" {
+                return Some(PathBuf::from(prefix));
+            }
+        }
+    }
+    // 2. 回退到平台默认
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return Some(PathBuf::from(appdata).join("npm"));
+        }
+    }
+    None
+}
+
+/// 判断路径是否为受保护的系统/工具链目录，绝不允许 remove_dir_all。
+/// 覆盖 npm 全局目录、用户 HOME、APPDATA/LOCALAPPDATA 根、系统盘根等。
+pub(crate) fn is_protected_system_dir(dir: &Path) -> bool {
+    let canon = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+
+    // npm 全局目录及其上级（node_modules 所在处）
+    if let Some(prefix) = npm_global_prefix() {
+        let prefix_canon = prefix.canonicalize().unwrap_or(prefix);
+        if canon == prefix_canon || canon.starts_with(&prefix_canon) {
+            return true;
+        }
+    }
+
+    // 用户 HOME 根目录本身
+    if let Some(home) = dirs::home_dir() {
+        let home_canon = home.canonicalize().unwrap_or(home);
+        if canon == home_canon {
+            return true;
+        }
+    }
+
+    // 各类环境变量指向的根目录（不能整目录删）
+    let protected_env = [
+        "APPDATA",
+        "LOCALAPPDATA",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramData",
+        "SystemRoot",
+        "windir",
+        "USERPROFILE",
+        "HOME",
+    ];
+    for key in protected_env {
+        if let Ok(val) = std::env::var(key) {
+            if val.trim().is_empty() {
+                continue;
+            }
+            let base = PathBuf::from(&val);
+            let base_canon = base.canonicalize().unwrap_or(base);
+            if canon == base_canon {
+                return true;
+            }
+        }
+    }
+
+    // 路径过短（如盘符根 C:\ 或 /）
+    if canon.parent().is_none() {
+        return true;
+    }
+
+    false
+}
+
+/// 校验目录是否确实是 OpenClaw standalone 安装目录。
+/// standalone 安装器会在根目录写入 VERSION（含 openclaw_version=）以及 openclaw 可执行文件；
+/// npm 全局目录只有 npm 生成的 openclaw.cmd shim，不含 VERSION 标记，可据此区分。
+pub(crate) fn is_valid_standalone_dir(dir: &Path) -> bool {
+    if !dir.exists() {
+        return false;
+    }
+    // 绝不碰受保护目录
+    if is_protected_system_dir(dir) {
+        return false;
+    }
+    // VERSION 标记文件（standalone 安装器写入，npm 全局目录没有）
+    let version_file = dir.join("VERSION");
+    if let Ok(content) = std::fs::read_to_string(&version_file) {
+        if content.contains("openclaw_version=") {
+            return true;
+        }
+    }
+    // 专用二进制 + 目录名符合 standalone 命名约定
+    let looks_like_openclaw_dir = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.eq_ignore_ascii_case("OpenClaw") || n == ".openclaw-bin")
+        .unwrap_or(false);
+    if looks_like_openclaw_dir {
+        #[cfg(target_os = "windows")]
+        let has_bin =
+            dir.join("openclaw.exe").exists() || dir.join("VERSION").exists();
+        #[cfg(not(target_os = "windows"))]
+        let has_bin = dir.join("openclaw").exists() || dir.join("VERSION").exists();
+        if has_bin {
+            return true;
+        }
+    }
+    false
+}
+
+/// 安全删除 standalone 目录：只有通过合法性校验才执行 remove_dir_all。
+/// 返回 Ok(true) 表示已删除，Ok(false) 表示跳过（非 standalone 或受保护），Err 表示删除出错。
+pub(crate) fn remove_standalone_dir_safe(dir: &Path) -> Result<bool, String> {
+    if !dir.exists() {
+        return Ok(false);
+    }
+    if !is_valid_standalone_dir(dir) {
+        return Ok(false);
+    }
+    std::fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 /// 所有可能的 standalone 安装位置（用于检测和卸载）
 pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
@@ -291,6 +417,9 @@ pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
         }
         dirs.push(PathBuf::from("/opt/openclaw"));
     }
+    // 过滤掉受保护的系统/工具链目录（如 npm 全局目录被误配到 openclawStandaloneInstallDir 的情况），
+    // 避免后续清理逻辑把它们整目录删除。
+    dirs.retain(|d| !is_protected_system_dir(d));
     dirs
 }
 
@@ -4223,13 +4352,34 @@ async fn upgrade_openclaw_inner(
 
         // 清理 standalone 安装目录（不论从 standalone 切走还是切到 standalone，
         // npm 路径已经安装了新 CLI，standalone 残留会干扰源检测）
+        // 注意：必须校验目录确实是 OpenClaw standalone 安装，绝不能误删
+        // npm 全局目录（%APPDATA%\npm）等系统/工具链目录。
         for sa_dir in all_standalone_dirs() {
-            if sa_dir.exists() {
-                let _ = app.emit(
-                    "upgrade-log",
-                    format!("清理 standalone 残留: {}", sa_dir.display()),
-                );
-                let _ = std::fs::remove_dir_all(&sa_dir);
+            if !sa_dir.exists() {
+                continue;
+            }
+            match remove_standalone_dir_safe(&sa_dir) {
+                Ok(true) => {
+                    let _ = app.emit(
+                        "upgrade-log",
+                        format!("清理 standalone 残留: {}", sa_dir.display()),
+                    );
+                }
+                Ok(false) => {
+                    let _ = app.emit(
+                        "upgrade-log",
+                        format!(
+                            "跳过非 standalone 目录（保护，不删除）: {}",
+                            sa_dir.display()
+                        ),
+                    );
+                }
+                Err(e) => {
+                    let _ = app.emit(
+                        "upgrade-log",
+                        format!("⚠️ 清理 standalone 残留失败: {} ({e})", sa_dir.display()),
+                    );
+                }
             }
         }
     }
@@ -4337,19 +4487,36 @@ async fn uninstall_openclaw_inner(
     }
 
     // 3. 清理 standalone 安装（所有可能的位置）
+    // 注意：必须校验目录确实是 OpenClaw standalone 安装，绝不能误删
+    // npm 全局目录（%APPDATA%\npm）等系统/工具链目录。
     for sa_dir in &all_standalone_dirs() {
-        if sa_dir.exists() {
-            let _ = app.emit(
-                "upgrade-log",
-                format!("清理 standalone 安装: {}", sa_dir.display()),
-            );
-            if let Err(e) = std::fs::remove_dir_all(sa_dir) {
+        if !sa_dir.exists() {
+            continue;
+        }
+        match remove_standalone_dir_safe(sa_dir) {
+            Ok(true) => {
                 let _ = app.emit(
                     "upgrade-log",
-                    format!("⚠️ 清理 standalone 失败: {e}（可能需要管理员权限）"),
+                    format!("standalone 安装已清理: {}", sa_dir.display()),
                 );
-            } else {
-                let _ = app.emit("upgrade-log", "standalone 安装已清理 ✓");
+            }
+            Ok(false) => {
+                let _ = app.emit(
+                    "upgrade-log",
+                    format!(
+                        "跳过非 standalone 目录（保护，不删除）: {}",
+                        sa_dir.display()
+                    ),
+                );
+            }
+            Err(e) => {
+                let _ = app.emit(
+                    "upgrade-log",
+                    format!(
+                        "⚠️ 清理 standalone 失败: {} ({e}，可能需要管理员权限）",
+                        sa_dir.display()
+                    ),
+                );
             }
         }
     }

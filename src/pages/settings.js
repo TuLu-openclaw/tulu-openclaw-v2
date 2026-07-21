@@ -66,13 +66,64 @@ function dedupeOpenclawInstallations(list = []) {
   return [...map.values()]
 }
 
+/**
+ * 判断路径是否为受保护的系统/工具链目录，不应被当成 OpenClaw standalone 安装目录。
+ * 覆盖 npm 全局目录、用户 %APPDATA%/%LOCALAPPDATA% 根、系统目录等。
+ */
+function isProtectedSystemDir(dir) {
+  if (!dir || typeof dir !== 'string') return false
+  const normalized = dir.replace(/\\/g, '/').toLowerCase()
+  
+  // npm 全局目录特征：结尾是 /npm 且父目录是 appdata/roaming 或 .nvm/.npm-global 等
+  if (/\/npm$/i.test(normalized)) {
+    if (/roaming\/npm$/i.test(normalized) || /appdata\/npm$/i.test(normalized)) {
+      return true // Windows %APPDATA%\npm
+    }
+    if (/\.nvm.*\/npm$/i.test(normalized) || /\.npm-global$/i.test(normalized)) {
+      return true // nvm/fnm 等 npm 全局目录
+    }
+  }
+  
+  // 用户 HOME/APPDATA/LOCALAPPDATA 根目录本身
+  const protectedRoots = [
+    /^\/users\/[^\/]+$/i,           // /Users/xxx (macOS)
+    /^\/home\/[^\/]+$/i,            // /home/xxx (Linux)
+    /^[a-z]:\/users\/[^\/]+$/i,    // C:/Users/xxx (Windows)
+    /^[a-z]:\/users\/[^\/]+\/appdata$/i,           // appdata 根
+    /^[a-z]:\/users\/[^\/]+\/appdata\/roaming$/i, // roaming 根
+    /^[a-z]:\/users\/[^\/]+\/appdata\/local$/i,   // local 根
+  ]
+  if (protectedRoots.some(re => re.test(normalized))) {
+    return true
+  }
+  
+  // 系统级目录
+  if (/^(c:\/windows|c:\/program files|\/(bin|usr|opt|etc|var|sys))$/i.test(normalized)) {
+    return true
+  }
+  
+  // 路径过短（盘符根或 /）
+  if (/^[a-z]:$/i.test(normalized) || normalized === '/') {
+    return true
+  }
+  
+  return false
+}
+
 function inferOpenclawInstallDir(cliPath) {
   const raw = String(cliPath || '').trim()
   if (!raw) return ''
   const normalized = raw.replace(/\\/g, '/')
   const withoutExe = normalized.replace(/\/openclaw(?:\.cmd|\.exe|\.ps1)?$/i, '')
   const withoutBin = withoutExe.replace(/\/bin$/i, '')
-  return withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
+  const result = withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
+  
+  // 拒绝受保护的系统/工具链目录（如 npm 全局目录 %APPDATA%\npm）
+  if (isProtectedSystemDir(result)) {
+    return ''
+  }
+  
+  return result
 }
 
 const REGISTRIES = [

@@ -54,13 +54,58 @@ function parseOpenclawSearchPaths(raw) {
   return values
 }
 
+/**
+ * 判断路径是否为受保护的系统/工具链目录，不应被当成 OpenClaw standalone 安装目录。
+ * 覆盖 npm 全局目录、用户 HOME/%APPDATA% 根、系统目录等。
+ */
+function isProtectedSystemDir(dir) {
+  if (!dir || typeof dir !== 'string') return false
+  const normalized = dir.replace(/\\/g, '/').toLowerCase()
+
+  // npm 全局目录特征：结尾是 /npm 且父目录是 appdata/roaming 或 nvm/.npm-global 等
+  if (/\/npm$/i.test(normalized)) {
+    if (/roaming\/npm$/i.test(normalized) || /appdata\/npm$/i.test(normalized)) {
+      return true // Windows %APPDATA%\npm
+    }
+    if (/\.nvm.*\/npm$/i.test(normalized) || /\.npm-global$/i.test(normalized)) {
+      return true // nvm/fnm 等工具链 npm 全局目录
+    }
+  }
+
+  // 用户 HOME/APPDATA/LOCALAPPDATA 根目录本身
+  const protectedRoots = [
+    /^\/users\/[^\/]+$/i,
+    /^\/home\/[^\/]+$/i,
+    /^[a-z]:\/users\/[^\/]+$/i,
+    /^[a-z]:\/users\/[^\/]+\/appdata$/i,
+    /^[a-z]:\/users\/[^\/]+\/appdata\/roaming$/i,
+    /^[a-z]:\/users\/[^\/]+\/appdata\/local$/i,
+  ]
+  if (protectedRoots.some(re => re.test(normalized))) return true
+
+  // 系统级目录
+  if (/^(c:\/windows|c:\/program files|\/(bin|usr|opt|etc|var|sys))$/i.test(normalized)) return true
+
+  // 路径过短（盘符根或 /）
+  if (/^[a-z]:$/i.test(normalized) || normalized === '/') return true
+
+  return false
+}
+
 function inferStandaloneInstallDir(cliPath) {
   const raw = String(cliPath || '').trim()
   if (!raw) return ''
   const normalized = raw.replace(/\\/g, '/')
   const withoutCli = normalized.replace(/\/openclaw(?:\.cmd|\.exe|\.ps1)?$/i, '')
   const withoutBin = withoutCli.replace(/\/bin$/i, '')
-  return withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
+  const result = withoutBin.replace(/\//g, raw.includes('\\') ? '\\' : '/')
+
+  // 拒绝受保护的系统/工具链目录（如 npm 全局目录 %APPDATA%\npm）
+  if (isProtectedSystemDir(result)) {
+    return ''
+  }
+
+  return result
 }
 
 async function refreshInstallDetectionCaches() {
