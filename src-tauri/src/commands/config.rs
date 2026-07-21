@@ -370,8 +370,7 @@ pub(crate) fn is_valid_standalone_dir(dir: &Path) -> bool {
         .unwrap_or(false);
     if looks_like_openclaw_dir {
         #[cfg(target_os = "windows")]
-        let has_bin =
-            dir.join("openclaw.exe").exists() || dir.join("VERSION").exists();
+        let has_bin = dir.join("openclaw.exe").exists() || dir.join("VERSION").exists();
         #[cfg(not(target_os = "windows"))]
         let has_bin = dir.join("openclaw").exists() || dir.join("VERSION").exists();
         if has_bin {
@@ -3458,7 +3457,9 @@ fn install_openclaw_image_dependency_with_timeout(
                 if Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err(format!("安装 OpenClaw 图片处理依赖 sharp 超时（{timeout_secs}s）"));
+                    return Err(format!(
+                        "安装 OpenClaw 图片处理依赖 sharp 超时（{timeout_secs}s）"
+                    ));
                 }
                 std::thread::sleep(Duration::from_millis(500));
             }
@@ -3713,7 +3714,10 @@ async fn try_standalone_install(
             let _ = app.emit("upgrade-log", "standalone 图片附件处理依赖 sharp 已验证 ✓");
         }
         Err(e) => {
-            let _ = app.emit("upgrade-log", format!("⚠️ standalone sharp 验证失败（不影响核心功能）: {e}"));
+            let _ = app.emit(
+                "upgrade-log",
+                format!("⚠️ standalone sharp 验证失败（不影响核心功能）: {e}"),
+            );
         }
     }
 
@@ -4091,7 +4095,10 @@ async fn try_r2_install(
             let _ = app.emit("upgrade-log", "图片附件处理依赖 sharp 已就绪 ✓");
         }
         Err(e) => {
-            let _ = app.emit("upgrade-log", format!("⚠️ sharp 安装失败（不影响核心功能）: {e}"));
+            let _ = app.emit(
+                "upgrade-log",
+                format!("⚠️ sharp 安装失败（不影响核心功能）: {e}"),
+            );
         }
     }
 
@@ -4393,7 +4400,10 @@ async fn upgrade_openclaw_inner(
             let _ = app.emit("upgrade-log", "图片附件处理依赖 sharp 已就绪 ✓");
         }
         Err(e) => {
-            let _ = app.emit("upgrade-log", format!("⚠️ sharp 安装未完成（不影响核心功能）: {e}"));
+            let _ = app.emit(
+                "upgrade-log",
+                format!("⚠️ sharp 安装未完成（不影响核心功能）: {e}"),
+            );
         }
     }
 
