@@ -5773,11 +5773,15 @@ fn provider_model_from_full<'a>(
     let providers = config
         .pointer("/models/providers")
         .and_then(|v| v.as_object())?;
+
+    // Pass 1：精确 provider key 匹配（最优先）
     if let Some((provider_key, model_id)) = full.split_once('/') {
         if let Some(provider) = providers.get(provider_key) {
             return Some((provider_key.to_string(), provider, model_id.to_string()));
         }
     }
+
+    // Pass 2：遍历所有 provider，完整 full 字符串或 provider/id 组合匹配
     for (provider_key, provider) in providers {
         for item in provider
             .get("models")
@@ -5794,6 +5798,30 @@ fn provider_model_from_full<'a>(
             }
         }
     }
+
+    // Pass 3：provider 前缀漂移兜底——仅用 '/' 后的模型 ID 在所有 provider 中查找。
+    // 修复：运行时会话模型字符串（如 "星枢包月-claude/claude-opus-4-8"）可能携带
+    // 已过时或与 openclaw.json 实际 key（"星枢余额-Claude"）不一致的 provider 前缀，
+    // 导致 Pass 1/2 全部失败。此时按模型 ID 唯一锚点查找，确保翻译/调用不报错。
+    if let Some((_, model_id)) = full.split_once('/') {
+        for (provider_key, provider) in providers {
+            for item in provider
+                .get("models")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+            {
+                let id = item
+                    .as_str()
+                    .or_else(|| item.get("id").and_then(|v| v.as_str()))
+                    .unwrap_or("");
+                if id == model_id {
+                    return Some((provider_key.to_string(), provider, model_id.to_string()));
+                }
+            }
+        }
+    }
+
     None
 }
 
