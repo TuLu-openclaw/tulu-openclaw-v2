@@ -986,9 +986,10 @@ function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cos
     const ctxBase = Number(contextWindow) || 0
     const ctxUsed = u.input + u.cacheRead + u.cacheWrite
     if (ctxBase > 0 && ctxUsed > 0) {
-      const pct = Math.min(Math.round((ctxUsed / ctxBase) * 100), 100)
-      const cls = pct >= 90 ? 'msg-context msg-context-danger' : pct >= 75 ? 'msg-context msg-context-warn' : 'msg-context'
-      parts.push(`<span class="${cls}" title="${escapeAttr(t('chat.contextUsage'))}">${escapeHtml(t('chat.contextPercent', { percent: pct }))}</span>`)
+      // 不封顶：真实反映占用，超 100% 时用户能看到超限程度。
+      const pct = Math.round((ctxUsed / ctxBase) * 100)
+      const cls = pct > 100 ? 'msg-context msg-context-over' : pct >= 90 ? 'msg-context msg-context-danger' : pct >= 75 ? 'msg-context msg-context-warn' : 'msg-context'
+      parts.push(`<span class="${cls}" title="${escapeAttr(t('chat.contextUsage'))} · ${compactNumber(ctxUsed)} / ${compactNumber(ctxBase)}">${escapeHtml(t('chat.contextPercent', { percent: pct }))}</span>`)
     }
   }
   const totalCost = normalizeCost(cost)
@@ -1070,8 +1071,23 @@ function updateSessionRuntimeCache(sessions, defaults = null) {
     else _sessionModels.delete(key)
     const ctx = Number(item.contextTokens ?? item.context_tokens ?? item.contextWindow ?? item.context_window ?? runtime.contextTokens ?? runtime.context_tokens ?? runtime.contextWindow ?? runtime.context_window ?? defaultCtx ?? 0) || 0
     if (ctx > 0) _sessionContextTokens.set(key, ctx)
-    const total = Number(item.totalTokens ?? item.total_tokens ?? item.contextUsedTokens ?? item.usedTokens ?? runtime.totalTokens ?? runtime.total_tokens ?? runtime.contextUsedTokens ?? runtime.usedTokens ?? 0) || 0
-    if (total > 0) _sessionTokenTotals.set(key, total)
+    // 优先取“当前上下文占用”类字段（会随压缩下降）；contextUsedTokens/usedTokens/
+    // promptTokens 都是当前 prompt 长度。totalTokens 是累计花费（只增不减），
+    // 不能当上下文占用，只在没有真实占用字段时兵底。
+    const liveCtx = Number(
+      item.contextUsedTokens ?? item.context_used_tokens ?? item.usedTokens ?? item.used_tokens ??
+      item.promptTokens ?? item.prompt_tokens ??
+      runtime.contextUsedTokens ?? runtime.context_used_tokens ?? runtime.usedTokens ?? runtime.used_tokens ??
+      runtime.promptTokens ?? runtime.prompt_tokens ?? 0
+    ) || 0
+    if (liveCtx > 0) {
+      _sessionTokenTotals.set(key, liveCtx)
+    } else {
+      // 没有真实占用字段时，不用累计 totalTokens 覆盖已有的准确值（
+      // 比如 final 事件刚写入的当轮 input）；仅在完全无值时才兵底。
+      const cumulative = Number(item.totalTokens ?? item.total_tokens ?? runtime.totalTokens ?? runtime.total_tokens ?? 0) || 0
+      if (cumulative > 0 && !_sessionTokenTotals.has(key)) _sessionTokenTotals.set(key, cumulative)
+    }
   }
 }
 
@@ -1867,8 +1883,8 @@ function renderSessionCard(s) {
   const taskInfo = getCurrentTaskRoundInfo(key, model)
   const ctxTokens = Number(s.contextTokens ?? s.context_tokens ?? s.contextWindow ?? _sessionContextTokens.get(key) ?? _defaultContextTokens ?? 0) || 0
   const totalTokens = Number(s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? _sessionTokenTotals.get(key) ?? 0) || 0
-  const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
-  const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
+  const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.round((totalTokens / ctxTokens) * 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
+  const ctxClass = percentUsed > 100 ? ' over' : percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
   const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key) ? ' selected' : ''
   const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" title="${t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
@@ -4531,6 +4547,14 @@ function handleChatEvent(payload) {
       const usage = extractMessageUsage(finalMetaSource)
       const cost = extractMessageCost(finalMetaSource)
       const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
+      // 用本轮回复的实际上下文输入量（input + 缓存读/写）更新会话的当前
+      // 上下文占用。这才是判断是否接近窗口、是否需要压缩的正确指标：
+      // 它反映“本次发给模型的 prompt 总长”，压缩后会下降。
+      // 不能用累计花费（会一直累加，远超窗口）来当上下文占用。
+      if (usage) {
+        const ctxUsed = (usage.input || 0) + (usage.cacheRead || 0) + (usage.cacheWrite || 0)
+        if (ctxUsed > 0 && _sessionKey) _sessionTokenTotals.set(_sessionKey, ctxUsed)
+      }
       meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true, showTranslate: true })
       wrapper.appendChild(meta)
     }
