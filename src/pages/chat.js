@@ -1886,7 +1886,10 @@ function renderSessionCard(s) {
   const model = getSessionDisplayModel(key, s)
   const taskInfo = getCurrentTaskRoundInfo(key, model)
   const ctxTokens = Number(s.contextTokens ?? s.context_tokens ?? s.contextWindow ?? _sessionContextTokens.get(key) ?? _defaultContextTokens ?? 0) || 0
-  const totalTokens = Number(s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? _sessionTokenTotals.get(key) ?? 0) || 0
+  // 上下文占用统一以 _sessionTokenTotals 为单一可信源：它已由
+  // updateSessionRuntimeCache（inputTokens 优先）和 final/群聊事件实时维护。
+  // 优先读它，避免与原始 s.totalTokens 双源不一致；再退回原始字段兜底。
+  const totalTokens = Number(_sessionTokenTotals.get(key) ?? s.inputTokens ?? s.input_tokens ?? s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? 0) || 0
   const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.round((totalTokens / ctxTokens) * 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
   const ctxClass = percentUsed > 100 ? ' over' : percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
