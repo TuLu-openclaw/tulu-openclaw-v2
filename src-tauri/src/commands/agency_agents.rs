@@ -250,7 +250,16 @@ pub async fn agency_agent_install(
         .join("workspace");
     let copied = copy_agent_workspace(&src, &dest, overwrite)?;
     let config_changed = ensure_agent_config_entry(&agent, overwrite)?;
-    let _ = super::config::do_reload_gateway(&app).await;
+    // 网关重载放到后台执行，不阻塞安装返回。
+    // 修复「安装卡在准备中」：do_reload_gateway 在 HTTP 热重载失败时会回退到进程重启，
+    // 最长阻塞约 5 分钟（wait_for_gateway_running 300s），导致前端安装窗口一直卡住。
+    // 文件复制与配置写入此时已完成，安装本身即已成功，重载失败也不影响结果。
+    let app_bg = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = super::config::do_reload_gateway(&app_bg).await {
+            eprintln!("[agency_agent_install] 后台网关重载失败（不影响安装结果）: {e}");
+        }
+    });
     Ok(serde_json::json!({
         "success": true,
         "id": agent.id,
@@ -304,7 +313,13 @@ pub async fn agency_agents_install_bulk(
         }
     }
 
-    let _ = super::config::do_reload_gateway(&app).await;
+    // 批量安装同样后台重载，不阻塞返回。
+    let app_bg = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = super::config::do_reload_gateway(&app_bg).await {
+            eprintln!("[agency_agents_install_bulk] 后台网关重载失败（不影响安装结果）: {e}");
+        }
+    });
     Ok(serde_json::json!({
         "success": errors.is_empty(),
         "installed": installed,

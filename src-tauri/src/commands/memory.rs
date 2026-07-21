@@ -39,7 +39,7 @@ fn is_unsafe_path(path: &str) -> bool {
 async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
     // 先查缓存
     {
-        let cache = WORKSPACE_CACHE.lock().unwrap();
+        let cache = WORKSPACE_CACHE.lock().unwrap_or_else(|p| p.into_inner());
         if cache.is_fresh() {
             if let Some(ws) = cache.map.get(agent_id) {
                 return Ok(ws.clone());
@@ -108,7 +108,7 @@ async fn agent_workspace(agent_id: &str) -> Result<PathBuf, String> {
 
     let result = new_map.get(agent_id).cloned();
     {
-        let mut cache = WORKSPACE_CACHE.lock().unwrap();
+        let mut cache = WORKSPACE_CACHE.lock().unwrap_or_else(|p| p.into_inner());
         cache.map = new_map;
         cache.fetched_at = now;
     }

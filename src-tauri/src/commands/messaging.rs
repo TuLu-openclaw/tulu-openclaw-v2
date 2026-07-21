@@ -3624,7 +3624,7 @@ pub async fn install_qqbot_plugin(
         if let Some(pipe) = stderr {
             for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = app2.emit("plugin-log", &line);
-                qqbot_stderr_clone.lock().unwrap().push(line);
+                qqbot_stderr_clone.lock().unwrap_or_else(|p| p.into_inner()).push(line);
             }
         }
     });
@@ -3653,7 +3653,7 @@ pub async fn install_qqbot_plugin(
 
     // 检测 native binding 缺失（macOS/Linux 上 OpenClaw CLI 自身启动失败）
     let all_output = {
-        let stderr_guard = qqbot_stderr_lines.lock().unwrap();
+        let stderr_guard = qqbot_stderr_lines.lock().unwrap_or_else(|p| p.into_inner());
         let mut combined = qqbot_stdout_lines.join("\n");
         combined.push('\n');
         combined.push_str(&stderr_guard.join("\n"));
@@ -3684,7 +3684,7 @@ pub async fn install_qqbot_plugin(
     }
 
     if !status.success() {
-        let all_stderr = qqbot_stderr_lines.lock().unwrap().join("\n");
+        let all_stderr = qqbot_stderr_lines.lock().unwrap_or_else(|p| p.into_inner()).join("\n");
         let is_host_version_issue = all_stderr.contains("minHostVersion")
             || all_stderr.contains("minimum host version")
             || all_stderr.contains("requires OpenClaw")

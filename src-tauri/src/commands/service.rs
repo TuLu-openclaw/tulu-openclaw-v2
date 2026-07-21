@@ -281,7 +281,9 @@ fn guardian_log(message: &str) {
 }
 
 fn guardian_snapshot() -> GuardianStatus {
-    let state = guardian_state().lock().expect("guardian mutex poisoned");
+    let state = guardian_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     GuardianStatus {
         backend_managed: true,
         paused: state.pause_reason.is_some(),
@@ -292,7 +294,9 @@ fn guardian_snapshot() -> GuardianStatus {
 }
 
 pub(crate) fn guardian_mark_manual_stop() {
-    let mut state = guardian_state().lock().expect("guardian mutex poisoned");
+    let mut state = guardian_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     state.manual_hold = true;
     state.give_up = false;
     state.auto_restart_count = 0;
@@ -303,7 +307,9 @@ pub(crate) fn guardian_mark_manual_stop() {
 }
 
 pub(crate) fn guardian_mark_manual_start() {
-    let mut state = guardian_state().lock().expect("guardian mutex poisoned");
+    let mut state = guardian_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     state.manual_hold = false;
     state.give_up = false;
     state.auto_restart_count = 0;
@@ -314,14 +320,18 @@ pub(crate) fn guardian_mark_manual_start() {
 }
 
 pub(crate) fn guardian_pause(reason: &str) {
-    let mut state = guardian_state().lock().expect("guardian mutex poisoned");
+    let mut state = guardian_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     state.pause_reason = Some(reason.to_string());
     state.give_up = false;
     guardian_log(&format!("后端守护已暂停: {reason}"));
 }
 
 pub(crate) fn guardian_resume(reason: &str) {
-    let mut state = guardian_state().lock().expect("guardian mutex poisoned");
+    let mut state = guardian_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     state.pause_reason = None;
     state.running_since = None;
     guardian_log(&format!("后端守护已恢复: {reason}"));
@@ -436,7 +446,9 @@ async fn guardian_tick(app: &tauri::AppHandle) {
     let running = snapshot.running;
     let now = Instant::now();
     let (restart_attempt, emit_give_up) = {
-        let mut state = guardian_state().lock().unwrap();
+        let mut state = guardian_state()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut restart_attempt = None::<u32>;
         let mut emit_give_up = None::<String>;
 
@@ -620,7 +632,16 @@ pub fn start_backend_guardian(app: tauri::AppHandle) {
     guardian_log("后端守护循环已启动");
     tauri::async_runtime::spawn(async move {
         loop {
-            guardian_tick(&app).await;
+            // 单次 tick 的 panic 不得杀死整个守护循环，否则守护失效且无人拉起 Gateway。
+            let tick = std::panic::AssertUnwindSafe(guardian_tick(&app));
+            if let Err(e) = futures_util::future::FutureExt::catch_unwind(tick).await {
+                let msg = e
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| e.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                guardian_log(&format!("守护 tick 发生 panic，已处理并继续: {msg}"));
+            }
             tokio::time::sleep(GUARDIAN_INTERVAL).await;
         }
     });
@@ -994,7 +1015,7 @@ mod platform {
                     // 只杀我们自己的 PID，不杀记录中的"已知好进程"
                     let our_pid = *LAST_KNOWN_GATEWAY_PID
                         .lock()
-                        .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     if Some(pid) != our_pid {
                         kill_process_tree(pid);
                     }
@@ -1263,7 +1284,7 @@ mod platform {
             // 端口不通，先清空已知的僵死 PID
             let mut known = LAST_KNOWN_GATEWAY_PID
                 .lock()
-                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             *known = None;
             return (false, None);
         }
@@ -1339,7 +1360,9 @@ mod platform {
         let child = cmd.spawn().map_err(|e| format!("启动 Gateway 失败: {e}"))?;
         let spawned_pid = child.id();
         {
-            let mut active = ACTIVE_GATEWAY_CHILD.lock().unwrap();
+            let mut active = ACTIVE_GATEWAY_CHILD
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             *active = Some(spawned_pid);
         }
 
@@ -1377,13 +1400,13 @@ mod platform {
             {
                 let mut known = LAST_KNOWN_GATEWAY_PID
                     .lock()
-                    .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 *known = None;
             }
             {
                 let mut active = ACTIVE_GATEWAY_CHILD
                     .lock()
-                    .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 *active = None;
             }
             return Ok(());
@@ -1401,11 +1424,11 @@ mod platform {
                 cleanup_legacy_gateway_window();
                 let mut known = LAST_KNOWN_GATEWAY_PID
                     .lock()
-                    .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 *known = None;
                 let mut active = ACTIVE_GATEWAY_CHILD
                     .lock()
-                    .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 *active = None;
                 return Ok(());
             }
@@ -1416,10 +1439,10 @@ mod platform {
         let pids_to_kill: Vec<u32> = {
             let active = ACTIVE_GATEWAY_CHILD
                 .lock()
-                .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let known = LAST_KNOWN_GATEWAY_PID
                 .lock()
-                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             [active.as_ref(), known.as_ref()]
                 .into_iter()
                 .flatten()
@@ -1447,11 +1470,11 @@ mod platform {
             // 清空记录
             let mut known = LAST_KNOWN_GATEWAY_PID
                 .lock()
-                .expect("LAST_KNOWN_GATEWAY_PID mutex poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             *known = None;
             let mut active = ACTIVE_GATEWAY_CHILD
                 .lock()
-                .expect("ACTIVE_GATEWAY_CHILD mutex poisoned");
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             *active = None;
             Ok(())
         } else {
