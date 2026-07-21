@@ -309,6 +309,18 @@ pub fn apply_proxy_env_tokio(cmd: &mut tokio::process::Command) {
 /// 使用 RwLock 替代 OnceLock，支持运行时刷新缓存
 static ENHANCED_PATH_CACHE: RwLock<Option<String>> = RwLock::new(None);
 
+thread_local! {
+    static BUILDING_ENHANCED_PATH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+struct EnhancedPathBuildGuard;
+
+impl Drop for EnhancedPathBuildGuard {
+    fn drop(&mut self) {
+        BUILDING_ENHANCED_PATH.with(|building| building.set(false));
+    }
+}
+
 /// Tauri 应用启动时 PATH 可能不完整：
 /// - macOS 从 Finder 启动时 PATH 只有 /usr/bin:/bin:/usr/sbin:/sbin
 /// - Windows 上安装 Node.js 到非默认路径、或安装后未重启进程
@@ -321,6 +333,20 @@ pub fn enhanced_path() -> String {
             return cached.clone();
         }
     }
+    // 防止未来新增的路径探测间接回调 enhanced_path 时再次耗尽线程栈。
+    let entered = BUILDING_ENHANCED_PATH.with(|building| {
+        if building.get() {
+            false
+        } else {
+            building.set(true);
+            true
+        }
+    });
+    if !entered {
+        return std::env::var("PATH").unwrap_or_default();
+    }
+    let _build_guard = EnhancedPathBuildGuard;
+
     // 缓存为空，重新构建
     let path = build_enhanced_path();
     if let Ok(mut guard) = ENHANCED_PATH_CACHE.write() {
@@ -331,6 +357,18 @@ pub fn enhanced_path() -> String {
 
 /// 刷新 enhanced_path 缓存，使新设置的 Node.js 路径立即生效（无需重启应用）
 pub fn refresh_enhanced_path() {
+    let entered = BUILDING_ENHANCED_PATH.with(|building| {
+        if building.get() {
+            false
+        } else {
+            building.set(true);
+            true
+        }
+    });
+    if !entered {
+        return;
+    }
+    let _build_guard = EnhancedPathBuildGuard;
     let new_path = build_enhanced_path();
     if let Ok(mut guard) = ENHANCED_PATH_CACHE.write() {
         *guard = Some(new_path);
@@ -374,7 +412,7 @@ fn build_enhanced_path() -> String {
             extra.push(format!("{}/bin", prefix));
         }
         // standalone 安装目录（集中管理，避免多处硬编码）
-        for sa_dir in config::all_standalone_dirs() {
+        for sa_dir in config::standalone_dir_candidates() {
             extra.push(sa_dir.to_string_lossy().into_owned());
         }
         // 扫描 nvm 实际安装的版本目录（兼容无 current 符号链接的情况）
@@ -458,7 +496,7 @@ fn build_enhanced_path() -> String {
             extra.push(format!("{}/bin", prefix));
         }
         // standalone 安装目录（集中管理，避免多处硬编码）
-        for sa_dir in config::all_standalone_dirs() {
+        for sa_dir in config::standalone_dir_candidates() {
             extra.push(sa_dir.to_string_lossy().into_owned());
         }
         // NVM_DIR 环境变量（用户可能自定义了 nvm 安装目录）
@@ -700,7 +738,7 @@ fn build_enhanced_path() -> String {
         // standalone 安装后通过注册表写入用户 PATH，但当前进程的 PATH 环境变量不会
         // 实时更新，需要显式添加到 enhanced_path 以确保 resolve_openclaw_cli_path()
         // 能找到 standalone 安装的 openclaw.cmd
-        for sa_dir in config::all_standalone_dirs() {
+        for sa_dir in config::standalone_dir_candidates() {
             extra.push(sa_dir.to_string_lossy().into_owned());
         }
 
@@ -745,7 +783,7 @@ fn build_enhanced_path() -> String {
 
 #[cfg(test)]
 mod path_tests {
-    use super::resolve_configured_path;
+    use super::{resolve_configured_path, BUILDING_ENHANCED_PATH};
 
     #[test]
     fn expands_home_directory_once() {
@@ -775,5 +813,14 @@ mod path_tests {
             resolve_configured_path("workspace"),
             Some(cwd.join("workspace"))
         );
+    }
+
+    #[test]
+    fn enhanced_path_reentry_falls_back_to_process_path() {
+        let expected = std::env::var("PATH").unwrap_or_default();
+        BUILDING_ENHANCED_PATH.with(|building| building.set(true));
+        let actual = super::enhanced_path();
+        BUILDING_ENHANCED_PATH.with(|building| building.set(false));
+        assert_eq!(actual, expected);
     }
 }

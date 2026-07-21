@@ -65,6 +65,10 @@ jobs:
             exit 1
           fi
 
+      - name: Test enhanced PATH recursion guard
+        run: cargo test --manifest-path src-tauri/Cargo.toml path_tests --release
+        shell: powershell
+
       - name: Build Tauri app
         run: |
           choco install mingw -y --no-progress --ignore-checksums

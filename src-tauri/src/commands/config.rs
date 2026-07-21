@@ -394,8 +394,11 @@ pub(crate) fn remove_standalone_dir_safe(dir: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-/// 所有可能的 standalone 安装位置（用于检测和卸载）
-pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
+/// 所有可能的 standalone 安装位置。
+///
+/// 此函数只枚举候选路径，不执行依赖 npm/PATH 的安全检查。PATH 构建过程会调用它，
+/// 因此这里必须保持无副作用，避免形成 enhanced_path -> npm_command -> enhanced_path 的递归。
+pub(crate) fn standalone_dir_candidates() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(custom) = standalone_install_dir() {
         dirs.push(custom);
@@ -417,8 +420,13 @@ pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
         }
         dirs.push(PathBuf::from("/opt/openclaw"));
     }
-    // 过滤掉受保护的系统/工具链目录（如 npm 全局目录被误配到 openclawStandaloneInstallDir 的情况），
-    // 避免后续清理逻辑把它们整目录删除。
+    dirs
+}
+
+/// 所有可用于检测和卸载的 standalone 安装位置。
+pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
+    let mut dirs = standalone_dir_candidates();
+    // 删除路径必须过滤受保护的系统/工具链目录（如误配的 npm 全局目录）。
     dirs.retain(|d| !is_protected_system_dir(d));
     dirs
 }
