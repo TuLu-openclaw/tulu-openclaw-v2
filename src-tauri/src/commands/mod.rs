@@ -122,41 +122,6 @@ pub fn gateway_listen_port() -> u16 {
     port
 }
 
-#[cfg(test)]
-mod path_tests {
-    use super::resolve_configured_path;
-
-    #[test]
-    fn expands_home_directory_once() {
-        let home = dirs::home_dir().expect("home directory is available");
-        assert_eq!(resolve_configured_path("~"), Some(home.clone()));
-        assert_eq!(
-            resolve_configured_path("~/.openclaw/workspace"),
-            Some(home.join(".openclaw/workspace"))
-        );
-    }
-
-    #[test]
-    fn keeps_absolute_paths_outside_state_dir() {
-        let configured = if cfg!(windows) {
-            r"C:\Users\User\custom-workspace"
-        } else {
-            "/tmp/custom-workspace"
-        };
-        let resolved = resolve_configured_path(configured).expect("absolute path resolves");
-        assert_eq!(resolved.to_string_lossy(), configured);
-    }
-
-    #[test]
-    fn resolves_relative_paths_once_against_process_directory() {
-        let cwd = std::env::current_dir().expect("current directory is available");
-        assert_eq!(
-            resolve_configured_path("workspace"),
-            Some(cwd.join("workspace"))
-        );
-    }
-}
-
 fn read_gateway_port_from_config() -> u16 {
     let config_path = openclaw_dir().join("openclaw.json");
     if let Ok(content) = std::fs::read_to_string(&config_path) {
@@ -775,5 +740,40 @@ fn build_enhanced_path() -> String {
             parts.push(&current);
         }
         parts.join(";")
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::resolve_configured_path;
+
+    #[test]
+    fn expands_home_directory_once() {
+        let home = dirs::home_dir().expect("home directory is available");
+        assert_eq!(resolve_configured_path("~"), Some(home.clone()));
+        assert_eq!(
+            resolve_configured_path("~/.openclaw/workspace"),
+            Some(home.join(".openclaw/workspace"))
+        );
+    }
+
+    #[test]
+    fn keeps_absolute_paths_outside_state_dir() {
+        let configured = if cfg!(windows) {
+            r"C:\Users\User\custom-workspace"
+        } else {
+            "/tmp/custom-workspace"
+        };
+        let resolved = resolve_configured_path(configured).expect("absolute path resolves");
+        assert_eq!(resolved.to_string_lossy(), configured);
+    }
+
+    #[test]
+    fn resolves_relative_paths_once_against_process_directory() {
+        let cwd = std::env::current_dir().expect("current directory is available");
+        assert_eq!(
+            resolve_configured_path("workspace"),
+            Some(cwd.join("workspace"))
+        );
     }
 }

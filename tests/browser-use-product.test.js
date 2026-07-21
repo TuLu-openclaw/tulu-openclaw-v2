@@ -67,7 +67,7 @@ test('browser-use permissions are deny-by-default and private networks stay bloc
 })
 
 test('browser-use operations allow the real health check to reach its terminal result', () => {
-  const backendTimeout = Number(backend.match(/Duration::from_secs\((\d+)\)/)?.[1]) * 1000
+  const backendTimeout = Number(backend.match(/let deadline = Instant::now\(\) \+ Duration::from_secs\((\d+)\)/)?.[1]) * 1000
   const timeoutFor = command => Number(api.match(new RegExp(`invoke\\('${command}'[^\\n]+?, (\\d+)\\)`))?.[1]
     || api.match(new RegExp(`cachedInvoke\\('${command}'[^\\n]+?, (\\d+)\\)`))?.[1])
   assert.equal(backendTimeout, 45000)
