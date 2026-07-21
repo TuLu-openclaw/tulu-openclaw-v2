@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 const page = fs.readFileSync(new URL('../src/pages/browser-use.js', import.meta.url), 'utf8')
 const guard = fs.readFileSync(new URL('../src-tauri/resources/browser-use/browser_use_guard.py', import.meta.url), 'utf8')
 const backend = fs.readFileSync(new URL('../src-tauri/src/commands/browser_use.rs', import.meta.url), 'utf8')
+const api = fs.readFileSync(new URL('../src/lib/tauri-api.js', import.meta.url), 'utf8')
 const main = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
 const sidebar = fs.readFileSync(new URL('../src/components/sidebar.js', import.meta.url), 'utf8')
 
@@ -63,6 +64,20 @@ test('browser-use permissions are deny-by-default and private networks stay bloc
   assert.match(page, /运行时未就绪/)
   assert.match(page, /运行时检查未通过，Gateway 未重新接入 browser-use/)
   assert.match(backend, /开启自主浏览器代理前必须至少配置一个域名白名单/)
+})
+
+test('browser-use operations allow the real health check to reach its terminal result', () => {
+  const backendTimeout = Number(backend.match(/Duration::from_secs\((\d+)\)/)?.[1]) * 1000
+  const timeoutFor = command => Number(api.match(new RegExp(`invoke\\('${command}'[^\\n]+?, (\\d+)\\)`))?.[1]
+    || api.match(new RegExp(`cachedInvoke\\('${command}'[^\\n]+?, (\\d+)\\)`))?.[1])
+  assert.equal(backendTimeout, 45000)
+  for (const command of ['browser_use_status', 'browser_use_configure', 'browser_use_unregister']) {
+    const frontendTimeout = timeoutFor(command)
+    assert.ok(frontendTimeout > backendTimeout, `${command} timeout ${frontendTimeout} must exceed backend timeout ${backendTimeout}`)
+  }
+  assert.match(page, /正在检测 browser-use 运行状态/)
+  assert.match(page, /void loadStatus\(\)/)
+  assert.doesNotMatch(page, /await loadStatus\(\)\n  return page/)
 })
 
 test('browser-use has register, pause and complete uninstall paths', () => {

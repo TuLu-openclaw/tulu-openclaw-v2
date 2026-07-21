@@ -510,8 +510,8 @@ export const api = {
   cliAnythingMatrixPreflight: (name) => invoke('cli_anything_matrix_preflight', { name }, 120000),
   browserUseStatus: () => cachedInvoke('browser_use_status', {}, 8000, 70000),
   browserUseInstall: () => { invalidate('browser_use_status'); return invoke('browser_use_install', {}, 600000) },
-  browserUseConfigure: (permissions) => { invalidate('browser_use_status'); return invoke('browser_use_configure', { permissions }, 30000) },
-  browserUseUnregister: () => { invalidate('browser_use_status'); return invoke('browser_use_unregister', {}, 30000) },
+  browserUseConfigure: (permissions) => { invalidate('browser_use_status'); return invoke('browser_use_configure', { permissions }, 120000) },
+  browserUseUnregister: () => { invalidate('browser_use_status'); return invoke('browser_use_unregister', {}, 120000) },
   browserUseUninstall: () => { invalidate('browser_use_status'); return invoke('browser_use_uninstall', {}, 120000) },
 
   // 日志（短缓存）

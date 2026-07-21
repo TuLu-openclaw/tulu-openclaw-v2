@@ -219,6 +219,6 @@ export async function render() {
     <div id="browser-use-body"><div class="bu-working">正在检测 browser-use 运行状态…</div></div>
   `
   bindEvents()
-  await loadStatus()
+  void loadStatus()
   return page
 }

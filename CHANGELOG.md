@@ -5,6 +5,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [4.4.2] - 2026-07-20
+
+### 修复 (Fixes)
+
+- **browser-use 页面状态超时** — 前端状态查询超时从 8 秒提高到 60 秒，覆盖后端真实 MCP 与隔离 Chromium 健康检查的 45 秒硬上限，不再错误显示 `invoke timeout: browser_use_status (8000ms)`。
+- **browser-use 页面进入阻塞** — 页面先完成渲染并显示检测中状态，再在后台执行真实健康检查，避免路由等待健康检查导致无法正常进入页面。
+- **browser-use 配置操作超时** — 保存权限和暂停全局接入的前端超时同步提高到 120 秒，确保 Gateway 重载和真实健康检查能返回最终状态。
+
 ## [4.4.1] - 2026-07-20
 
 ### 修复 (Fixes)
