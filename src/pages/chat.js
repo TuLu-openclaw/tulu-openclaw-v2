@@ -12,6 +12,7 @@ import { showModal, showConfirm, showContentModal } from '../components/modal.js
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
+import { isInternalChatPayload, isInternalContentBlock } from '../lib/chat-visibility.js'
 
 const RENDER_THROTTLE = 16
 const STREAM_RENDER_MAX_PENDING_MS = 64
@@ -3526,6 +3527,7 @@ function insertMention(name) {
 }
 
 function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
+  if (isInternalChatPayload(payload)) return
   const member = getGroupMemberBySession(group, sessionKey)
   const label = getGroupMemberLabel(member, sessionKey)
   const c = extractChatContent(payload.message)
@@ -4348,22 +4350,8 @@ function renderStreamToolCard(tool = {}) {
 }
 
 function upsertLiveToolInStream(tool = {}, runId = _currentRunId) {
-  beginStreamBubble(runId)
-  if (!_currentAiBubble) return
-  let container = _currentAiBubble.querySelector('.msg-tool.msg-tool-live')
-  if (!container) {
-    container = document.createElement('div')
-    container.className = 'msg-tool msg-tool-live'
-    _currentAiBubble.appendChild(container)
-  }
-  const id = String(tool.id || tool.toolCallId || tool.tool_call_id || tool.name || 'tool')
-  const existing = container.querySelector(`[data-tool-id="${CSS.escape(id)}"]`)
-  const wrapper = document.createElement('div')
-  wrapper.innerHTML = renderStreamToolCard({ ...tool, id })
-  const next = wrapper.firstElementChild
-  if (existing) existing.replaceWith(next)
-  else container.appendChild(next)
-  scrollToBottom()
+  // Tool progress is shown in the reply status bar. Keep tool events out of
+  // the answer bubble so internal inputs and outputs never become chat text.
 }
 
 function renderStreamMediaRefs(refs = [], runId = _currentRunId) {
@@ -4460,11 +4448,7 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'delta') {
-    // 过滤推理/思考内容 delta：网关会把 Claude extended thinking 或其他模型的
-    // reasoning 增量以 isReasoning/isReasoningSnapshot=true 的 payload 推送过来。
-    // 这些内容是模型的内部思考过程，不属于最终回复，不能渲染到对话气泡。
-    // 修复「对话气泡中混入大量英文推理文本」问题。
-    if (payload.isReasoning === true || payload.isReasoningSnapshot === true) return
+    if (isInternalChatPayload(payload)) return
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 delta，避免串流:', runId, 'current:', _currentRunId)
@@ -4493,8 +4477,7 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'final') {
-    // 纯 reasoning 的 final payload 不作为正式回复渲染。
-    if (payload.isReasoning === true || payload.isReasoningSnapshot === true) return
+    if (isInternalChatPayload(payload)) return
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 final，避免覆盖当前流:', runId, 'current:', _currentRunId)
@@ -4517,7 +4500,7 @@ function handleChatEvent(payload) {
     if (finalAudios.length) _currentAiAudios = finalAudios
     if (finalFiles.length) _currentAiFiles = finalFiles
     if (finalTools.length) _currentAiTools = finalTools
-    const hasContent = finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length
+    const hasContent = finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length
     // 忽略空 final（Gateway 会为一条消息触发多个 run，部分是空 final）
     if (!_currentAiBubble && !hasContent) return
     if (runId) rememberSeenRunId(runId)
@@ -4740,6 +4723,7 @@ function translateGatewayError(message = '') {
 /** 从 Gateway message 对象提取文本和所有媒体（参照 clawapp extractContent） */
 function extractChatContent(message) {
   if (!message || typeof message !== 'object') return null
+  if (isInternalChatPayload(message)) return { text: '', images: [], videos: [], audios: [], files: [], tools: [] }
   const tools = []
   collectToolsFromMessage(message, tools)
   if (message.role === 'tool' || message.role === 'toolResult') {
@@ -4761,16 +4745,8 @@ function extractChatContent(message) {
   if (Array.isArray(content)) {
     const texts = [], images = [], videos = [], audios = [], files = []
     for (const block of content) {
-      // 跳过 reasoning/thinking 类型的内容块（Claude extended thinking、
-      // redacted_thinking、OpenAI reasoning 等），不当作正文。
-      const blockType = block?.type
-      if (
-        blockType === 'thinking' ||
-        blockType === 'redacted_thinking' ||
-        blockType === 'reasoning' ||
-        block?.isReasoning === true
-      ) continue
-      if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
+      if (isInternalContentBlock(block)) continue
+      if ((block.type === 'text' || block.type === 'output_text') && typeof block.text === 'string') texts.push(block.text)
       else if (block.type === 'image' && !block.omitted) {
         if (block.data) images.push({ mediaType: block.mimeType || 'image/png', data: block.data })
         else if (block.source?.type === 'base64' && block.source.data) images.push({ mediaType: block.source.media_type || 'image/png', data: block.source.data })
@@ -5391,7 +5367,7 @@ async function loadHistory() {
     if (local.length) {
       clearMessages()
       local.forEach(msg => {
-        if (!msg.content && !msg.attachments?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length && !msg.tools?.length) return
+        if (!msg.content && !msg.attachments?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length) return
         const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
         if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
         else if (msg.role === 'assistant') {
@@ -5429,7 +5405,7 @@ async function loadHistory() {
     clearMessages()
     let hasOmittedImages = false
     deduped.forEach(msg => {
-      if (!msg.text && !msg.images?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length && !msg.tools?.length) return
+      if (!msg.text && !msg.images?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length) return
       const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
       if (msg.role === 'user') {
         const userAtts = msg.images?.length ? msg.images.map(i => ({
@@ -5489,7 +5465,7 @@ function dedupeHistory(messages) {
   for (const msg of messages) {
     const role = (msg.role === 'tool' || msg.role === 'toolResult') ? 'assistant' : msg.role
     const c = extractContent(msg)
-    if (!c.text && !c.images.length && !c.videos.length && !c.audios.length && !c.files.length && !c.tools.length) continue
+    if (!c.text && !c.images.length && !c.videos.length && !c.audios.length && !c.files.length) continue
     const tools = (c.tools || []).map(t => {
       const id = t.id || t.tool_call_id
       const time = t.time || resolveToolTime(id, msg.timestamp)
@@ -5553,6 +5529,7 @@ function historyMessageSignature(message = {}) {
 
 function extractContent(msg) {
   const tools = []
+  if (isInternalChatPayload(msg)) return { text: '', images: [], videos: [], audios: [], files: [], tools }
   collectToolsFromMessage(msg, tools)
   if (msg.role === 'tool' || msg.role === 'toolResult') {
     const output = typeof msg.content === 'string' ? msg.content : null
@@ -5573,7 +5550,8 @@ function extractContent(msg) {
   if (Array.isArray(msg.content)) {
     const texts = [], images = [], videos = [], audios = [], files = []
     for (const block of msg.content) {
-      if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
+      if (isInternalContentBlock(block)) continue
+      if ((block.type === 'text' || block.type === 'output_text') && typeof block.text === 'string') texts.push(block.text)
       else if (block.type === 'image' && !block.omitted) {
         if (block.data) images.push({ mediaType: block.mimeType || 'image/png', data: block.data })
         else if (block.source?.type === 'base64' && block.source.data) images.push({ mediaType: block.source.media_type || 'image/png', data: block.source.data })
@@ -5994,35 +5972,7 @@ function collectToolsFromMessage(message, tools) {
 function appendToolsToEl(el, tools) {
   if (!el) return
   const existing = el.querySelector?.('.msg-tool')
-  if (!tools?.length) {
-    if (existing) existing.remove()
-    return
-  }
-  const container = document.createElement('div')
-  container.className = 'msg-tool'
-  tools.forEach(tool => {
-    const details = document.createElement('details')
-    details.className = 'msg-tool-item'
-    const summary = document.createElement('summary')
-    const status = formatToolStatus(tool.status)
-    const timeValue = getToolTime(tool) || resolveToolTime(tool.id || tool.tool_call_id, tool.messageTimestamp)
-    const timeText = timeValue ? formatTime(new Date(timeValue)) : ''
-    const summaryText = timeText
-      ? t('chat.toolRecordSummaryWithTime', { name: formatToolDisplayName(tool.name), status, time: timeText })
-      : t('chat.toolRecordSummary', { name: formatToolDisplayName(tool.name), status })
-    summary.textContent = summaryText
-    const body = document.createElement('div')
-    body.className = 'msg-tool-body'
-    const inputJson = stripAnsi(safeStringify(tool.input))
-    const outputJson = stripAnsi(safeStringify(tool.output))
-    body.innerHTML = `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputJson || t('chat.noParams'))}</pre></div>`
-      + `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputJson || t('chat.noResult'))}</pre></div>`
-    details.appendChild(summary)
-    details.appendChild(body)
-    container.appendChild(details)
-  })
   if (existing) existing.remove()
-  el.insertBefore(container, el.firstChild)
 }
 
 /** 图片灯箱查看 */
