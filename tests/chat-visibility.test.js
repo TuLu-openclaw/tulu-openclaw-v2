@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isInternalChatPayload, isInternalContentBlock } from '../src/lib/chat-visibility.js'
+import { hasVisibleChatContent, isInternalChatPayload, isInternalContentBlock, shouldFinalizeChatRun } from '../src/lib/chat-visibility.js'
 
 test('rejects reasoning and commentary lanes at every supported envelope level', () => {
   assert.equal(isInternalChatPayload({ isReasoning: true }), true)
@@ -49,4 +49,24 @@ test('keeps mixed messages while allowing commentary blocks to be removed separa
       { type: 'text', text: 'visible', textSignature: '{"v":1,"phase":"final_answer"}' },
     ],
   }), false)
+  assert.equal(isInternalChatPayload({
+    role: 'assistant',
+    content: [
+      { type: 'text', text: 'private', textSignature: '{"v":1,"phase":"commentary"}' },
+      { type: 'text', text: 'legacy visible answer without a signature' },
+    ],
+  }), false)
+})
+
+test('only finalizes runs that have visible content or a tracked tool execution', () => {
+  assert.equal(shouldFinalizeChatRun(), false)
+  assert.equal(shouldFinalizeChatRun({ hasVisibleContent: true }), true)
+  assert.equal(shouldFinalizeChatRun({ hasTrackedTools: true }), true)
+})
+
+test('group and background rendering requires visible text or media', () => {
+  assert.equal(hasVisibleChatContent({}), false)
+  assert.equal(hasVisibleChatContent({ tools: [{ name: 'exec' }] }), false)
+  assert.equal(hasVisibleChatContent({ text: 'answer' }), true)
+  assert.equal(hasVisibleChatContent({ files: [{ name: 'report.pdf' }] }), true)
 })

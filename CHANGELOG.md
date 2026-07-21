@@ -5,6 +5,21 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [4.4.6] - 2026-07-22
+
+### 修复 (Fixes)
+
+- **聊天泄露治理** — 统一按协议元数据、lane/phase、内容块签名和结构化规则过滤 reasoning、commentary、thinking、工具参数/结果与内部过程，保留真正的 `final_answer` 与普通可见文本，不再把内部命令、搜索词、环境变量、路径或“工具成功”卡片写进聊天气泡。
+- **终态状态机收口** — 修复 direct/group/background 多路径 final 结算差异：真正空终态与纯内部终态不会抢占真实答案；纯工具终态仍能正常收尾但不生成空气泡；无气泡终态也会更新上下文占用与任务状态。
+- **本地历史净化** — IndexedDB 与历史同步只保留可见文本/媒体，升级后读取本地历史时会顺带清除旧的工具结果垃圾行，避免内部过程在本地重现。
+- **中文错误可读化** — 新增结构化聊天错误诊断层，把内部搜索无结果、缺程序/文件、权限不足、额度不足、认证失败、网络中断等错误转换为可执行的中文提示，同时隐藏栈、命令行、环境变量和本地路径；原始错误只保留在开发诊断日志中。
+- **Windows 构建门禁** — 修复 `browser-use-product` 测试的 CRLF 兼容断言，确保 Windows 上完整前端测试门禁稳定通过。
+
+### 验证 (Verification)
+
+- `npm test` 52/52 通过
+- `npm run build` 通过
+- 修正版 Windows x64 独立可执行文件跨越多轮历史崩溃周期运行，无新增 Application Error 或 CrashDump
 ## [4.4.2] - 2026-07-20
 
 ### 修复 (Fixes)

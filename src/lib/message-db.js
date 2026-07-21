@@ -10,6 +10,17 @@ const STORE_SESSIONS = 'sessions'
 
 let _db = null
 
+export function isVisibleStoredMessage(message = {}) {
+  return Boolean(
+    message.content
+    || message.text
+    || message.attachments?.length
+    || message.videos?.length
+    || message.audios?.length
+    || message.files?.length
+  )
+}
+
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db)
@@ -97,14 +108,21 @@ export async function getLocalMessages(sessionKey, limit = 200) {
   try {
     const db = await openDB()
     return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readonly')
+      const tx = db.transaction(STORE_NAME, 'readwrite')
       const index = tx.objectStore(STORE_NAME).index('sessionKey_timestamp')
       const range = IDBKeyRange.bound([sessionKey, 0], [sessionKey, Date.now() + 1])
       const messages = []
       const request = index.openCursor(range, 'prev')
       request.onsuccess = (event) => {
         const cursor = event.target.result
-        if (cursor && messages.length < limit) { messages.push(cursor.value); cursor.continue() }
+        if (cursor) {
+          if (isVisibleStoredMessage(cursor.value)) {
+            if (messages.length < limit) messages.push(cursor.value)
+          } else {
+            cursor.delete()
+          }
+          cursor.continue()
+        }
       }
       tx.oncomplete = () => resolve(messages.reverse())
       tx.onerror = () => resolve([])

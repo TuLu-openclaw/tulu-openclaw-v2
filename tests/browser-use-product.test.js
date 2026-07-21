@@ -87,5 +87,5 @@ test('browser-use has register, pause and complete uninstall paths', () => {
   assert.match(backend, /pub async fn browser_use_unregister/)
   assert.match(backend, /pub async fn browser_use_uninstall/)
   assert.match(backend, /fs::remove_dir_all\(&root\)/)
-  assert.match(backend, /allow_interaction,\n            allow_autonomous,\n            allowed_domains/)
+  assert.match(backend, /allow_interaction,\r?\n            allow_autonomous,\r?\n            allowed_domains/)
 })

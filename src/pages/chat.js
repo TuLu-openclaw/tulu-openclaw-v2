@@ -12,7 +12,8 @@ import { showModal, showConfirm, showContentModal } from '../components/modal.js
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
-import { isInternalChatPayload, isInternalContentBlock } from '../lib/chat-visibility.js'
+import { hasVisibleChatContent, isInternalChatPayload, isInternalContentBlock, shouldFinalizeChatRun } from '../lib/chat-visibility.js'
+import { diagnoseChatError } from '../lib/chat-error-diagnosis.js'
 
 const RENDER_THROTTLE = 16
 const STREAM_RENDER_MAX_PENDING_MS = 64
@@ -2907,7 +2908,7 @@ async function buildEcomOrchestrationCandidates(prompt = '') {
     try {
       members.push(await ensureEcomSubAgent(role))
     } catch (e) {
-      appendSystemMessage(`自动创建协同子Agent失败：${role.name} - ${e?.message || e}`, { severity: 'error' })
+      appendSystemMessage(`自动创建协同子Agent失败：${userFacingChatError(e, 'group-agent-create')}`, { severity: 'error' })
     }
   }
   return members
@@ -2954,7 +2955,7 @@ async function dispatchEcomOrchestration(prompt, members = []) {
       await wsClient.chatSend(member.sessionKey, prompt)
       updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
     } catch (e) {
-      appendSystemMessage(`协同成员派发失败：${member.label || member.sessionKey} - ${e?.message || e}`, { severity: 'error' })
+      appendSystemMessage(`协同成员派发失败：${member.label || member.sessionKey} - ${userFacingChatError(e, 'group-dispatch')}`, { severity: 'error' })
     }
   }
   _ecomOrchestrationState = { groupId, members, lastPrompt: prompt, lastDispatchAt: Date.now() }
@@ -3527,9 +3528,14 @@ function insertMention(name) {
 }
 
 function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
-  if (isInternalChatPayload(payload)) return
   const member = getGroupMemberBySession(group, sessionKey)
   const label = getGroupMemberLabel(member, sessionKey)
+  const gUsage = extractMessageUsage(payload.message || payload)
+  if (gUsage && sessionKey) {
+    const gCtxUsed = (gUsage.input || 0) + (gUsage.cacheRead || 0) + (gUsage.cacheWrite || 0)
+    if (gCtxUsed > 0) _sessionTokenTotals.set(sessionKey, gCtxUsed)
+  }
+  if (isInternalChatPayload(payload)) return false
   const c = extractChatContent(payload.message)
   const text = c?.text || ''
   const images = c?.images || []
@@ -3537,16 +3543,7 @@ function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   const audios = c?.audios || []
   const files = c?.files || []
   const tools = c?.tools || []
-  if (!text && !images.length && !videos.length && !audios.length && !files.length && !tools.length) return
-  // 群聊成员回复也用本轮真实上下文输入量更新该成员会话的占用，
-  // 与前台 final 分支保持一致（群聊不走 final 分支）。
-  {
-    const gUsage = extractMessageUsage(payload.message || payload)
-    if (gUsage && sessionKey) {
-      const gCtxUsed = (gUsage.input || 0) + (gUsage.cacheRead || 0) + (gUsage.cacheWrite || 0)
-      if (gCtxUsed > 0) _sessionTokenTotals.set(sessionKey, gCtxUsed)
-    }
-  }
+  if (!hasVisibleChatContent({ text, images, videos, audios, files })) return false
   const shouldRender = options.render !== false
   if (shouldRender) appendAiMessage(text, new Date(), images, videos, audios, files, tools, { agentLabel: label, sessionKey, model: extractMessageModel(payload.message || {}) || getSessionRuntimeModel(sessionKey), contextWindow: getContextWindow(sessionKey) })
   const stored = {
@@ -3555,6 +3552,16 @@ function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   }
   rememberGroupMessage(group, stored)
   saveMessage(stored)
+  return true
+}
+
+function shouldFinalizeBackgroundPayload(payload) {
+  if (isInternalChatPayload(payload)) return false
+  const content = extractChatContent(payload.message) || {}
+  return shouldFinalizeChatRun({
+    hasVisibleContent: hasVisibleChatContent(content),
+    hasTrackedTools: Boolean(content.tools?.length),
+  })
 }
 
 function showGroupEditor(groupId = '') {
@@ -3795,7 +3802,7 @@ async function sendMessage() {
       await maybeAutoInstallEcomSkills(text, { force: false })
       await maybeAutoOrchestrateEcomTask(text)
     } catch (e) {
-      appendSystemMessage(`电商自动编排预处理失败：${e?.message || e}`, { severity: 'error' })
+      appendSystemMessage(`电商自动编排预处理失败：${userFacingChatError(e, 'ecom-preflight')}`, { severity: 'error' })
     }
   }
   hideCmdPanel()
@@ -3877,8 +3884,9 @@ async function doGroupSend(group, text, attachments = []) {
         await wsClient.chatSend(sessionKey, groupPrompt, attachments.length ? attachments : undefined)
         updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
       } catch (err) {
-        updateTask(task.id, { status: 'error', progress: 100, error: err.message })
-        appendSystemMessage(t('chat.groupSendFailed', { target: target.label || sessionKey, msg: err.message }))
+        const friendlyError = userFacingChatError(err, 'group-send')
+        updateTask(task.id, { status: 'error', progress: 100, error: friendlyError })
+        appendSystemMessage(t('chat.groupSendFailed', { target: target.label || sessionKey, msg: friendlyError }))
       }
     }
   } finally {
@@ -4009,15 +4017,6 @@ function handleEvent(msg) {
       scheduleStreamSafetyTimeout()
       const toolLabel = formatToolDisplayName(toolName)
       const toolInput = summarizeToolInput(payload.data?.args || payload.data?.input || payload.data?.parameters || '')
-      const liveTool = mergeToolEventData({
-        id: toolCallId,
-        name: toolName,
-        input: payload.data?.args || payload.data?.input || payload.data?.parameters || current.input || null,
-        output: payload.data?.output || payload.data?.result || payload.data?.content || payload.data?.meta || current.output || null,
-        status: payload.data?.isError ? 'error' : (payload.data?.output || payload.data?.result || payload.data?.content || payload.data?.meta ? 'ok' : 'running'),
-        time: ts || Date.now(),
-      })
-      upsertLiveToolInStream(liveTool, payload.runId || _currentRunId)
       emitLobsterPhase('tool', t('chat.lobsterToolCall', { tool: toolLabel }))
       showTyping(false)
       const count = payload.runId ? (_toolRunIndex.get(payload.runId) || []).length : 1
@@ -4331,29 +4330,6 @@ function extractMediaRefsFromValue(value, refs = []) {
   return refs
 }
 
-function renderStreamToolCard(tool = {}) {
-  const id = tool.id || tool.toolCallId || tool.tool_call_id || tool.name || 'tool'
-  const name = formatToolDisplayName(tool.name || tool.toolName || tool.tool || 'tool')
-  const status = tool.status || (tool.isError ? 'error' : 'running')
-  const inputText = stripAnsi(safeStringify(tool.input || tool.args || tool.parameters || ''))
-  const outputText = stripAnsi(safeStringify(tool.output || tool.result || tool.content || ''))
-  const statusText = formatToolStatus(status)
-  return `
-    <details class="msg-tool-item msg-tool-live-item ${status === 'error' ? 'is-error' : status === 'running' ? 'is-running' : 'is-done'}" data-tool-id="${escapeAttr(String(id))}">
-      <summary>${escapeHtml(name)} · ${escapeHtml(statusText)}${status === 'running' ? ' …' : ''}</summary>
-      <div class="msg-tool-body">
-        <div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputText || t('chat.noParams'))}</pre></div>
-        ${outputText ? `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputText)}</pre></div>` : ''}
-      </div>
-    </details>
-  `
-}
-
-function upsertLiveToolInStream(tool = {}, runId = _currentRunId) {
-  // Tool progress is shown in the reply status bar. Keep tool events out of
-  // the answer bubble so internal inputs and outputs never become chat text.
-}
-
 function renderStreamMediaRefs(refs = [], runId = _currentRunId) {
   if (!refs.length) return false
   beginStreamBubble(runId)
@@ -4387,6 +4363,7 @@ function handleChatEvent(payload) {
     }
     if (state === 'delta') return
     if (state === 'final') {
+      if (!shouldFinalizeBackgroundPayload(payload)) return
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
       completeTaskRound(doneTask)
       appendGroupAssistantMessage(eventGroup, eventSessionKey, payload, { render: renderIntoCurrentGroup })
@@ -4405,6 +4382,7 @@ function handleChatEvent(payload) {
   // 群聊会同时把任务发给多个真实会话；非当前会话的事件只更新任务清单和轮次，不渲染到当前聊天窗口，避免串流。
   if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) {
     if (state === 'final') {
+      if (!shouldFinalizeBackgroundPayload(payload)) return
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
       completeTaskRound(doneTask)
       refreshSessionList()
@@ -4477,14 +4455,14 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'final') {
-    if (isInternalChatPayload(payload)) return
+    const internalFinal = isInternalChatPayload(payload)
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 final，避免覆盖当前流:', runId, 'current:', _currentRunId)
       return
     }
     _cancelResponseWatchdog()
-    const c = extractChatContent(payload.message)
+    const c = internalFinal ? null : extractChatContent(payload.message)
     const finalText = c?.text || ''
     const finalImages = c?.images || []
     const finalVideos = c?.videos || []
@@ -4500,9 +4478,17 @@ function handleChatEvent(payload) {
     if (finalAudios.length) _currentAiAudios = finalAudios
     if (finalFiles.length) _currentAiFiles = finalFiles
     if (finalTools.length) _currentAiTools = finalTools
-    const hasContent = finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length
-    // 忽略空 final（Gateway 会为一条消息触发多个 run，部分是空 final）
-    if (!_currentAiBubble && !hasContent) return
+    const hasContent = finalText || _currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length
+    const hasTrackedTools = finalTools.length > 0 || _currentAiTools.length > 0
+    // Gateway can emit empty finals before the real answer. Only a visible
+    // answer or a confirmed tool execution is allowed to consume the run.
+    if (!shouldFinalizeChatRun({ hasVisibleContent: hasContent, hasTrackedTools })) {
+      if (internalFinal) {
+        showTyping(true, t('chat.replyActivityFinalizing'))
+        scheduleStreamSafetyTimeout()
+      }
+      return
+    }
     if (runId) rememberSeenRunId(runId)
     showTyping(false)
     // 如果流式阶段没有创建 bubble，从 final message 中提取
@@ -4529,6 +4515,14 @@ function handleChatEvent(payload) {
       model: payload.message?.model || payload.model,
       modelProvider: payload.message?.modelProvider || payload.modelProvider || payload.provider,
     }
+    const usage = extractMessageUsage(finalMetaSource)
+    const cost = extractMessageCost(finalMetaSource)
+    const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
+    if (usage) {
+      const ctxUsed = (usage.input || 0) + (usage.cacheRead || 0) + (usage.cacheWrite || 0)
+      const usageKey = eventSessionKey || _sessionKey
+      if (ctxUsed > 0 && usageKey) _sessionTokenTotals.set(usageKey, ctxUsed)
+    }
     // 添加时间戳 + 耗时 + token 消耗
     const wrapper = _currentAiBubble?.parentElement
     if (wrapper) {
@@ -4543,20 +4537,6 @@ function handleChatEvent(payload) {
         durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
       if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
-      const usage = extractMessageUsage(finalMetaSource)
-      const cost = extractMessageCost(finalMetaSource)
-      const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
-      // 用本轮回复的实际上下文输入量（input + 缓存读/写）更新会话的当前
-      // 上下文占用。这才是判断是否接近窗口、是否需要压缩的正确指标：
-      // 它反映“本次发给模型的 prompt 总长”，压缩后会下降。
-      // 不能用累计花费（会一直累加，远超窗口）来当上下文占用。
-      if (usage) {
-        const ctxUsed = (usage.input || 0) + (usage.cacheRead || 0) + (usage.cacheWrite || 0)
-        // 用事件自带的 eventSessionKey（而非当前前台 _sessionKey），
-        // 这样后台/群聊成员/其他 agent 的回复也各自更新自己的真实占用。
-        const usageKey = eventSessionKey || _sessionKey
-        if (ctxUsed > 0 && usageKey) _sessionTokenTotals.set(usageKey, ctxUsed)
-      }
       meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(eventSessionKey || _sessionKey), showCopy: true, showTranslate: true })
       wrapper.appendChild(meta)
     }
@@ -4565,7 +4545,7 @@ function handleChatEvent(payload) {
     setReplyStatus('done', replyStatusText('done'), { runId: runId || _currentRunId, activity: t('chat.replyActivityDone') })
     maybeFinalizeEcomRunState('done')
     refreshSessionList()
-    if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length) {
+    if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
         content: _currentAiText, timestamp: Date.now(),
@@ -4574,7 +4554,6 @@ function handleChatEvent(payload) {
         videos: _currentAiVideos,
         audios: _currentAiAudios,
         files: _currentAiFiles,
-        tools: finalTools.length ? finalTools : _currentAiTools,
       })
     }
     // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
@@ -4700,12 +4679,15 @@ function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
 
 function translateGatewayError(message = '') {
   const raw = String(message || '')
+  console.error('[chat] Gateway task failed:', raw)
   const req = raw.match(/requestId:\s*([^)\s]+)/i)?.[1]
   if (/pairing required|PAIRING_REQUIRED|device identity changed/i.test(raw)) {
     return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request: req }) : '' })
   }
   if (/origin not allowed/i.test(raw)) return t('chat.gatewayOriginNotAllowed')
   if (/NOT_PAIRED/i.test(raw)) return t('chat.gatewayNotPaired')
+  const diagnosis = diagnoseChatError(raw)
+  if (diagnosis.kind !== 'plain') return diagnosis.message
   const enhanced = enhanceModelCallError(raw, t)
   const lower = raw.toLowerCase()
   if (/insufficient|quota|credit|balance|余额|欠费|429|payment\s+required/.test(lower)) {
@@ -4718,6 +4700,11 @@ function translateGatewayError(message = '') {
     return `${enhanced}\n\n💡 模型请求网络异常：连接超时或服务端中断。不是聊天页无响应，请检查网络、代理或服务商状态。`
   }
   return enhanced
+}
+
+function userFacingChatError(error, context = 'chat') {
+  console.error(`[chat] ${context} failed:`, error)
+  return diagnoseChatError(error).message
 }
 
 /** 从 Gateway message 对象提取文本和所有媒体（参照 clawapp extractContent） */
@@ -5393,11 +5380,7 @@ async function loadHistory() {
 
     // 正在发送/流式输出时不全量重绘，避免覆盖本地乐观渲染
     if (hasExisting && (_isSending || _isStreaming || _messageQueue.length > 0)) {
-      saveMessages(result.messages.map(m => {
-        const c = extractContent(m)
-        const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-        return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey), videos: c?.videos || [], audios: c?.audios || [], files: c?.files || [], tools: c?.tools || [] }
-      }))
+      saveMessages(result.messages.map(m => localHistoryMessage(m, sessionKey)).filter(Boolean))
       _isLoadingHistory = false
       return
     }
@@ -5422,16 +5405,12 @@ async function loadHistory() {
     if (hasOmittedImages) {
       appendSystemMessage(t('chat.imageHistoryHint'))
     }
-    saveMessages(result.messages.map(m => {
-      const c = extractContent(m)
-      const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-      return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey), videos: c?.videos || [], audios: c?.audios || [], files: c?.files || [], tools: c?.tools || [] }
-    }))
+    saveMessages(result.messages.map(m => localHistoryMessage(m, sessionKey)).filter(Boolean))
     scrollToBottom()
     restoreReplyStatus()
   } catch (e) {
     console.error('[chat] loadHistory error:', e)
-    if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${e.message}`)
+    if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${userFacingChatError(e, 'history-load')}`)
   } finally {
     _isLoadingHistory = false
   }
@@ -5973,6 +5952,34 @@ function appendToolsToEl(el, tools) {
   if (!el) return
   const existing = el.querySelector?.('.msg-tool')
   if (existing) existing.remove()
+}
+
+function localHistoryMessage(message, sessionKey) {
+  const c = extractContent(message)
+  if (!c) return null
+  const hasVisibleContent = c.text || c.images?.length || c.videos?.length || c.audios?.length || c.files?.length
+  if (!hasVisibleContent) return null
+  const role = (message.role === 'tool' || message.role === 'toolResult') ? 'assistant' : message.role
+  return {
+    id: message.id || uuid(),
+    sessionKey,
+    role,
+    content: c.text || '',
+    timestamp: message.timestamp || Date.now(),
+    usage: extractMessageUsage(message),
+    cost: extractMessageCost(message),
+    model: extractMessageModel(message),
+    contextWindow: getContextWindow(sessionKey),
+    attachments: (c.images || []).map(image => ({
+      category: 'image',
+      mimeType: image.mediaType || image.media_type || 'image/png',
+      content: image.data || image.source?.data || '',
+      url: image.url || image.source?.url || '',
+    })).filter(image => image.content || image.url),
+    videos: c.videos || [],
+    audios: c.audios || [],
+    files: c.files || [],
+  }
 }
 
 /** 图片灯箱查看 */

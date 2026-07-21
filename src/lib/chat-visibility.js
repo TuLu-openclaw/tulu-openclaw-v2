@@ -43,11 +43,10 @@ function signedBlockPhase(block) {
 
 function hasOnlyInternalSignedText(value) {
   if (!Array.isArray(value?.content)) return false
-  const phases = value.content
+  const textBlocks = value.content
     .filter(block => ['text', 'input_text', 'output_text'].includes(normalizedType(block?.type)))
-    .map(signedBlockPhase)
-    .filter(Boolean)
-  return phases.length > 0 && phases.every(phase => INTERNAL_MESSAGE_TYPES.has(phase))
+  return textBlocks.length > 0
+    && textBlocks.every(block => INTERNAL_MESSAGE_TYPES.has(signedBlockPhase(block)))
 }
 
 export function isInternalContentBlock(block) {
@@ -70,4 +69,18 @@ export function isInternalChatPayload(payload) {
     payload.data?.item,
   ]
   return candidates.some(value => hasInternalFlag(value) || hasInternalLane(value) || hasOnlyInternalSignedText(value))
+}
+
+export function shouldFinalizeChatRun({ hasVisibleContent = false, hasTrackedTools = false } = {}) {
+  return Boolean(hasVisibleContent || hasTrackedTools)
+}
+
+export function hasVisibleChatContent(content = {}) {
+  return Boolean(
+    content.text
+    || content.images?.length
+    || content.videos?.length
+    || content.audios?.length
+    || content.files?.length
+  )
 }
