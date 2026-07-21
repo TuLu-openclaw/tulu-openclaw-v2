@@ -1110,6 +1110,10 @@
   background: var(--accent);
   color: #fff;
   border-bottom-right-radius: 4px;
+  /* User text is written via textContent (not markdown); default white-space:normal
+     collapses newlines into spaces, squashing paragraphs/lists into one block.
+     pre-wrap preserves newlines and indentation while still wrapping at bubble width. */
+  white-space: pre-wrap;
 }
 
 .msg-ai .msg-bubble {
