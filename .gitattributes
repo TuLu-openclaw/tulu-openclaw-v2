@@ -1,2 +1,14 @@
 *.yml text eol=lf working-tree-encoding=UTF-8
 *.yaml text eol=lf working-tree-encoding=UTF-8
+
+# Git LFS — large binary assets in _vendor/ (runtime bundles, media)
+_vendor/**/*.dll filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.exe filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.gif filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.zip filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.webp filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.ttf filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.otf filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.icns filter=lfs diff=lfs merge=lfs -text
+_vendor/**/*.png filter=lfs diff=lfs merge=lfs -text

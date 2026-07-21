@@ -4,6 +4,35 @@ get-sec-log.cjs
 e2e_log.txt
 log-sec.txt
 
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+.env.production
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+credentials.json
+credentials*.json
+secrets.json
+
+# Temporary debug/fix scripts (development-only, must not ship)
+fix_bugs.*
+fix-*.cjs
+fix-*.js
+fix-*.py
+fix2.py
+fix3.py
+test-crawl*.cjs
+test-crawl*.js
+test-bfzy.mjs
+test-detail.mjs
+test-movie-api.mjs
+test-play.mjs
+
 # Dependencies
 node_modules/
 
@@ -13,6 +42,11 @@ dist-ssr/
 src-tauri/target/
 src-tauri/resources/runtime/
 _vendor/runtime-build/
+
+# Runtime state & logs
+*.log
+runtime/
+.openclaw/
 
 # IDE
 .vscode/

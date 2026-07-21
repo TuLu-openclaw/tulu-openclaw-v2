@@ -16,6 +16,22 @@
     }
   },
   "panels": {
+    "4.4.4": {
+      "official": {
+        "recommended": "2026.7.1-2"
+      },
+      "chinese": {
+        "recommended": "2026.7.1-2-zh.1"
+      }
+    },
+    "4.4.3": {
+      "official": {
+        "recommended": "2026.7.1-2"
+      },
+      "chinese": {
+        "recommended": "2026.7.1-2-zh.1"
+      }
+    },
     "4.4.2": {
       "official": {
         "recommended": "2026.7.1-2"

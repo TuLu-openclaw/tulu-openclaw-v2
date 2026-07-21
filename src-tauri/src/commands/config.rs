@@ -3413,30 +3413,66 @@ fn verify_standalone_image_dependency(install_dir: &std::path::Path) -> Result<(
         .map_err(|error| format!("standalone 归档缺少可用的图片附件处理依赖 sharp: {error}"))
 }
 
-fn install_openclaw_image_dependency(registry: &str) -> Result<(), String> {
-    let output = npm_command_elevated()
-        .args([
-            "install",
-            "-g",
-            OPENCLAW_IMAGE_DEPENDENCY,
-            "--registry",
-            registry,
-        ])
-        .output()
-        .map_err(|error| format!("安装 OpenClaw 图片处理依赖 sharp 失败: {error}"))?;
-    if output.status.success() {
-        return Ok(());
-    }
+/// 安装 sharp（可选的图片附件处理依赖）。
+///
+/// sharp 含平台原生二进制，在部分网络下下载会长时间阻塞，因此：
+/// - 为 npm 加上 fetch 超时参数，避免单个请求永久挂起；
+/// - 外层再包一层整体 `timeout_secs` 看门狗，超时强制 kill。
+/// 该函数绝不会永久阻塞，调用方应将其视为 best-effort（失败仅警告）。
+fn install_openclaw_image_dependency_with_timeout(
+    registry: &str,
+    timeout_secs: u64,
+) -> Result<(), String> {
+    use std::time::{Duration, Instant};
 
-    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if detail.is_empty() {
-        format!(
-            "安装 OpenClaw 图片处理依赖 sharp 失败，退出码 {:?}",
-            output.status.code()
-        )
-    } else {
-        format!("安装 OpenClaw 图片处理依赖 sharp 失败: {detail}")
-    })
+    let mut cmd = npm_command_elevated();
+    cmd.args([
+        "install",
+        "-g",
+        OPENCLAW_IMAGE_DEPENDENCY,
+        "--registry",
+        registry,
+        // npm 自身网络超时（毫秒），防止单个拉取永久挂起
+        "--fetch-timeout",
+        "60000",
+        "--fetch-retries",
+        "2",
+    ]);
+    let mut child = cmd
+        .spawn()
+        .map_err(|error| format!("安装 OpenClaw 图片处理依赖 sharp 失败: {error}"))?;
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if status.success() {
+                    return Ok(());
+                }
+                return Err(format!(
+                    "安装 OpenClaw 图片处理依赖 sharp 失败，退出码 {:?}",
+                    status.code()
+                ));
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("安装 OpenClaw 图片处理依赖 sharp 超时（{timeout_secs}s）"));
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                return Err(format!("等待 sharp 安装进程失败: {error}"));
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn install_openclaw_image_dependency(registry: &str) -> Result<(), String> {
+    install_openclaw_image_dependency_with_timeout(registry, 120)
 }
 
 /// npm 全局 bin 目录
@@ -3672,8 +3708,14 @@ async fn try_standalone_install(
     if !openclaw_bin.exists() {
         return Err("standalone 解压后未找到 openclaw 可执行文件".into());
     }
-    verify_standalone_image_dependency(&install_dir)?;
-    let _ = app.emit("upgrade-log", "standalone 图片附件处理依赖 sharp 已验证");
+    match verify_standalone_image_dependency(&install_dir) {
+        Ok(_) => {
+            let _ = app.emit("upgrade-log", "standalone 图片附件处理依赖 sharp 已验证 ✓");
+        }
+        Err(e) => {
+            let _ = app.emit("upgrade-log", format!("⚠️ standalone sharp 验证失败（不影响核心功能）: {e}"));
+        }
+    }
 
     // 7. 添加到 PATH（Windows 用户 PATH，Unix 创建 symlink）
     #[cfg(target_os = "windows")]
@@ -4042,9 +4084,16 @@ async fn try_r2_install(
     // 清理临时文件
     let _ = std::fs::remove_file(&archive_path);
 
-    let _ = app.emit("upgrade-log", "正在安装并验证图片附件处理依赖 sharp...");
-    install_openclaw_image_dependency("https://registry.npmjs.org")?;
-    verify_openclaw_image_dependency(source)?;
+    let _ = app.emit("upgrade-log", "正在安装图片附件处理依赖 sharp（可选）...");
+    let registry = get_configured_registry();
+    match install_openclaw_image_dependency(&registry) {
+        Ok(_) => {
+            let _ = app.emit("upgrade-log", "图片附件处理依赖 sharp 已就绪 ✓");
+        }
+        Err(e) => {
+            let _ = app.emit("upgrade-log", format!("⚠️ sharp 安装失败（不影响核心功能）: {e}"));
+        }
+    }
 
     let _ = app.emit("upgrade-progress", 95);
     Ok(cdn_version.to_string())
@@ -4197,7 +4246,6 @@ async fn upgrade_openclaw_inner(
         "install",
         "-g",
         &pkg,
-        OPENCLAW_IMAGE_DEPENDENCY,
         "--force",
         "--registry",
         registry,
@@ -4262,7 +4310,6 @@ async fn upgrade_openclaw_inner(
                 "install",
                 "-g",
                 &pkg,
-                OPENCLAW_IMAGE_DEPENDENCY,
                 "--force",
                 "--registry",
                 fallback,
@@ -4339,9 +4386,16 @@ async fn upgrade_openclaw_inner(
         }
     }
 
-    let _ = app.emit("upgrade-log", "正在验证图片附件处理依赖 sharp...");
-    verify_openclaw_image_dependency(&source)?;
-    let _ = app.emit("upgrade-log", "图片附件处理依赖 sharp 已就绪");
+    // sharp 改为 best-effort：独立安装，带超时，失败仅警告不阻断升级
+    let _ = app.emit("upgrade-log", "正在安装图片附件处理依赖 sharp（可选）...");
+    match install_openclaw_image_dependency_with_timeout(registry, 120) {
+        Ok(_) => {
+            let _ = app.emit("upgrade-log", "图片附件处理依赖 sharp 已就绪 ✓");
+        }
+        Err(e) => {
+            let _ = app.emit("upgrade-log", format!("⚠️ sharp 安装未完成（不影响核心功能）: {e}"));
+        }
+    }
 
     // 安装成功后再卸载旧包（确保 CLI 始终可用）
     if need_uninstall_old {

@@ -130,6 +130,19 @@ let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _curren
 let _lastStreamDeltaFingerprint = ''
 let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
 let _lastRenderTime = 0, _renderPending = false, _renderTimer = null, _lastHistoryHash = ''
+// ── 打字机匀速消费缓冲区 ──
+// 网络 delta 一阵一阵到达（缓冲/分块），若来多少渲染多少会出现"卡顿→爆发→卡顿"。
+// 解耦方案：delta 只累加进 _currentAiText（目标文本），另开一个 rAF 循环把
+// _displayedText（已显示文本）朝目标匀速推进，落后越多打字越快（自动追赶），
+// 追上就停。流式期间只做轻量文本渲染，完整 markdown 解析留到结束一次性做。
+let _displayedText = ''            // 屏幕上已"打"出来的文本
+let _typewriterRAF = null          // 消费循环的 rAF 句柄
+let _typewriterActive = false      // 消费循环是否在跑
+let _lastFullMdRender = 0          // 上次做完整 markdown 渲染的时间戳
+const TYPE_MIN_CHARS_PER_FRAME = 2         // 每帧最少推进字数（保证匀速手感）
+const TYPE_CATCHUP_DIVISOR = 6             // 追赶系数：积压越多，单帧推进越多（backlog/该值）
+const TYPE_MAX_CHARS_PER_FRAME = 400       // 单帧推进上限，避免一次吐太多
+const STREAM_MD_RENDER_INTERVAL = 180      // 流式期间完整 markdown 重渲染的最小间隔(ms)
 let _autoScrollEnabled = true, _lastScrollTop = 0, _touchStartY = 0
 let _isLoadingHistory = false
 let _streamSafetyTimer = null, _unsubEvent = null, _unsubReady = null, _unsubStatus = null
@@ -4434,9 +4447,10 @@ function handleChatEvent(payload) {
     if (c?.text && applyStreamText(c.text)) {
       showTyping(false)
       beginStreamBubble(runId)
-      setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: runId || _currentRunId, activity: t('chat.replyActivityReceivingOutput') })
-      scheduleStreamSafetyTimeout()
-      throttledRender()
+      // 启动打字机消费循环（幂等：已在跑则直接返回），而不是每 token 立即渲染
+      startTypewriter()
+      // 状态条文本/看门狗节流更新，避免每 token 写 localStorage + 重置 90s 定时器
+      maybeUpdateStreamStatus(runId)
     }
     return
   }
@@ -5083,48 +5097,121 @@ function updateStreamingStatus(state, detail = '', options = {}) {
   return setReplyStatus(state, detail, options)
 }
 
-// ── 流式渲染（节流） ──
-
-function throttledRender() {
-  if (!_currentAiBubble || !_currentAiText) return
+// 节流的流式状态更新：避免每 token 都 setReplyStatus（写 localStorage）+ 重置 90s 看门狗。
+// delta 一阵一阵到，每 token 写一次 localStorage + clear/reset 定时器是主线程负担。
+let _lastStreamStatusAt = 0
+const STREAM_STATUS_THROTTLE = 250 // ms
+function maybeUpdateStreamStatus(runId) {
   const now = performance.now()
-  const elapsed = now - _lastRenderTime
-  const forceRender = elapsed >= STREAM_RENDER_MAX_PENDING_MS
-  if (!_renderPending && (elapsed >= RENDER_THROTTLE || forceRender)) {
-    doRender()
+  if (now - _lastStreamStatusAt < STREAM_STATUS_THROTTLE) return
+  _lastStreamStatusAt = now
+  setReplyStatus('streaming', t('chat.replyStreamingProgress', { count: _currentAiText.length }), { runId: runId || _currentRunId, activity: t('chat.replyActivityReceivingOutput') })
+  scheduleStreamSafetyTimeout()
+}
+
+// ── 流式渲染（打字机匀速消费） ──
+
+/**
+ * 启动打字机消费循环。每帧检查 _displayedText 是否追上 _currentAiText，
+ * 若未追上则逐字推进；积压越多单帧推进越快（自动追赶）。
+ * 流式期间用轻量纯文本渲染（换行→<br>），完整 markdown 解析节流到
+ * 180ms 间隔或结束时一次性做，彻底消除 O(n²) 逐帧全量重解析。
+ */
+function startTypewriter() {
+  if (_typewriterActive) return
+  _typewriterActive = true
+  _displayedText = '' // 从头开始打字
+  _lastFullMdRender = 0
+  typewriterLoop()
+}
+
+function stopTypewriter() {
+  if (_typewriterRAF) {
+    cancelAnimationFrame(_typewriterRAF)
+    _typewriterRAF = null
+  }
+  _typewriterActive = false
+}
+
+function typewriterLoop() {
+  if (!_typewriterActive || !_currentAiBubble) {
+    _typewriterRAF = null
     return
   }
-  if (_renderPending) return
-  _renderPending = true
-  const delay = Math.max(0, RENDER_THROTTLE - elapsed)
-  _renderTimer = setTimeout(() => {
-    _renderTimer = null
-    requestAnimationFrame(() => {
-      _renderPending = false
-      doRender()
-    })
-  }, delay)
+
+  const target = _currentAiText || ''
+  const displayed = _displayedText || ''
+  const backlog = target.length - displayed.length
+
+  if (backlog > 0) {
+    // 计算本帧推进量：基础速度 + 根据积压自动追赶
+    const catchupBoost = Math.floor(backlog / TYPE_CATCHUP_DIVISOR)
+    const charsThisFrame = Math.min(
+      TYPE_MAX_CHARS_PER_FRAME,
+      Math.max(TYPE_MIN_CHARS_PER_FRAME, TYPE_MIN_CHARS_PER_FRAME + catchupBoost)
+    )
+    _displayedText = target.slice(0, displayed.length + charsThisFrame)
+
+    // 流式期间用轻量渲染：纯文本 + 换行转<br>，不做完整 markdown 解析
+    renderStreamLightweight(_displayedText)
+
+    // 节流完整 markdown 渲染：仅在间隔足够长时（或首次）触发一次
+    const now = performance.now()
+    if (now - _lastFullMdRender >= STREAM_MD_RENDER_INTERVAL) {
+      _lastFullMdRender = now
+      renderStreamFullMarkdown(_displayedText)
+    }
+
+    scrollToBottom()
+  }
+
+  // 无论是否推进，循环继续（直到 stopTypewriter）
+  _typewriterRAF = requestAnimationFrame(typewriterLoop)
+}
+
+/**
+ * 轻量流式渲染：纯文本 + 换行→<br>，跳过完整 markdown 解析。
+ * 保留光标效果，快速更新 DOM。
+ */
+function renderStreamLightweight(text) {
+  if (!_currentAiBubble) return
+  const escaped = escapeHtml(text || '')
+  const withBreaks = escaped.replace(/\n/g, '<br>')
+  _currentAiBubble.innerHTML = withBreaks + '<span class="stream-cursor"></span>'
+}
+
+/**
+ * 节流的完整 markdown 渲染：解析代码块、列表、表格等。
+ * 流式期间按 STREAM_MD_RENDER_INTERVAL 调用；结束时 flushStreamRender 强制调用一次。
+ */
+function renderStreamFullMarkdown(text) {
+  if (!_currentAiBubble) return
+  const liveTools = _currentAiBubble.querySelector?.('.msg-tool.msg-tool-live')
+  if (_currentAiBubble.parentElement) {
+    _currentAiBubble.parentElement.dataset.rawText = text || ''
+  }
+  const renderText = makeStreamRenderSnapshot(text)
+  _currentAiBubble.innerHTML = renderMarkdown(renderText)
+  if (liveTools) _currentAiBubble.appendChild(liveTools)
+}
+
+/** 旧 throttledRender 保留兼容（非流式路径可能调用），内部走 typewriter */
+function throttledRender() {
+  // 流式时由 typewriter 循环接管，非流式直接flush
+  if (_typewriterActive) return
+  flushStreamRender()
 }
 
 function flushStreamRender() {
-  if (_renderTimer) {
-    clearTimeout(_renderTimer)
-    _renderTimer = null
-  }
-  _renderPending = false
-  doRender()
+  // 强制把 _displayedText 追平到 _currentAiText，并做完整 markdown 渲染
+  _displayedText = _currentAiText || ''
+  renderStreamFullMarkdown(_displayedText)
+  scrollToBottom()
 }
 
 function doRender() {
-  _lastRenderTime = performance.now()
-  if (_currentAiBubble && _currentAiText) {
-    const liveTools = _currentAiBubble.querySelector?.('.msg-tool.msg-tool-live')
-    if (_currentAiBubble.parentElement) _currentAiBubble.parentElement.dataset.rawText = _currentAiText || ''
-    const renderText = makeStreamRenderSnapshot(_currentAiText)
-    _currentAiBubble.innerHTML = renderMarkdown(renderText)
-    if (liveTools) _currentAiBubble.appendChild(liveTools)
-    scrollToBottom()
-  }
+  // 旧实现已被 typewriter 替代，保留空壳防报错
+  flushStreamRender()
 }
 
 // ── 响应看门狗：防止页面卡在等待状态 ──
@@ -5188,6 +5275,8 @@ function _schedulePostFinalCheck() {
 function resetStreamState() {
   clearTimeout(_streamSafetyTimer)
   clearTimeout(_runtimeStatusSyncTimer)
+  // 先停打字机循环，再 flush（把还没打完的剩余内容一次性显示出来）
+  stopTypewriter()
   if (_currentAiBubble && (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length)) {
     flushStreamRender()
     appendImagesToEl(_currentAiBubble, _currentAiImages)
@@ -5202,6 +5291,10 @@ function resetStreamState() {
   }
   _renderPending = false
   _lastRenderTime = 0
+  // 打字机状态清理
+  _displayedText = ''
+  _lastFullMdRender = 0
+  _lastStreamStatusAt = 0
   _currentAiBubble = null
   _currentAiText = ''
   _currentAiImages = []
