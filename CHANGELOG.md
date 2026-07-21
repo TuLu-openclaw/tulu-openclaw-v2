@@ -5,6 +5,26 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [4.4.4] - 2026-07-21
+
+### 修复 (Fixes)
+
+- **升级/降级卡在"准备中..."** — 从核心升级命令中移除 sharp 图片依赖的强制安装，恢复 v4.4.1 的升级行为；sharp 改为 best-effort：120 秒超时且失败仅告警，绝不阻塞核心升级。修复 R2/standalone 路径中硬编码的 npmjs.org 源，改用 `get_configured_registry()` 动态读取配置源。新增 `install_openclaw_image_dependency_with_timeout` 辅助函数。
+
+### 优化 (Improvements)
+
+- **实时聊天打字机流式输出** — 将网络到达速度与屏幕显示速度解耦，新增打字机匀速消费缓冲区，画面按稳定节奏平滑打字，消除"卡顿→爆发→卡顿"的抖动。流式期间仅做轻量纯文本渲染，完整 markdown 解析节流到每 180ms 一次，彻底消除逐帧全量重解析导致的 O(n²) 开销。状态栏与看门狗定时器更新节流至 250ms，将每 token 写 localStorage 和重置定时器的开销降低约 100 倍。
+
+### 其他 (Chore)
+
+- **仓库规范** — `.gitignore` 补全密钥、证书、临时调试脚本规则；`.gitattributes` 新增 `_vendor/` 二进制文件的 Git LFS 追踪规则；`openclaw-version-policy.json` 补全 4.4.3 / 4.4.4 面板条目。
+
+## [4.4.3] - 2026-07-21
+
+### 修复 (Fixes)
+
+- **npm 全局目录被删** — 修复安装/升级时 CLI 丢失问题，防止 npm 全局目录在升级流程中被误删。
+
 ## [4.4.2] - 2026-07-20
 
 ### 修复 (Fixes)
