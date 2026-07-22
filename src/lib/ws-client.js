@@ -10,6 +10,7 @@
  * 6. 开始正常通信
  */
 import { invoke } from './tauri-api.js'
+import { isInternalChatPayload } from './chat-visibility.js'
 
 export function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID()
@@ -375,7 +376,7 @@ export class WsClient {
       }
 
       // 缓存聊天消息
-      if (msg.event === 'chat.message' && msg.payload?.sessionKey) {
+      if (msg.event === 'chat.message' && msg.payload?.sessionKey && !isInternalChatPayload(msg.payload)) {
         this._cacheMessage(msg.payload.sessionKey, msg.payload)
       }
 
@@ -843,7 +844,7 @@ export class WsClient {
       // 将历史消息缓存起来
       if (history?.messages) {
         for (const msg of history.messages) {
-          this._cacheMessage(sessionKey, msg)
+          if (!isInternalChatPayload(msg)) this._cacheMessage(sessionKey, msg)
         }
       }
       return { history }

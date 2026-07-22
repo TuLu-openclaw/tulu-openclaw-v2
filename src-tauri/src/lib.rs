@@ -275,7 +275,42 @@ fn start_install_shutdown_watcher(app: tauri::AppHandle) {
 #[cfg(not(target_os = "windows"))]
 fn start_install_shutdown_watcher(_app: tauri::AppHandle) {}
 
+/// 安装全局 panic hook：把 panic 写入日志文件而不是让窗口静默闪退。
+/// 修复「客户端无缘无故随机闪退」：panic 之前不落盘、无提示，用户只看到窗口消失。
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let log_dir = commands::openclaw_dir().join("logs");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "<non-string panic payload>".to_string()
+        };
+        let line = format!(
+            "[{}] PANIC at {location}: {payload}\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f")
+        );
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_dir.join("panic.log"))
+            .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+        eprintln!("{line}");
+        // 保留默认行为（stderr 输出等），但不 abort 整个进程。
+        default_hook(info);
+    }));
+}
+
 pub fn run() {
+    install_panic_hook();
+
     let hot_update_dir = commands::openclaw_dir()
         .join("星枢OpenClaw")
         .join("web-update");

@@ -1110,6 +1110,10 @@
   background: var(--accent);
   color: #fff;
   border-bottom-right-radius: 4px;
+  /* User text is written via textContent (not markdown); default white-space:normal
+     collapses newlines into spaces, squashing paragraphs/lists into one block.
+     pre-wrap preserves newlines and indentation while still wrapping at bubble width. */
+  white-space: pre-wrap;
 }
 
 .msg-ai .msg-bubble {
@@ -1597,6 +1601,17 @@
   color: var(--error, #ef4444);
 }
 
+/* 超过 100%（当前上下文已超模型窗口，依赖网关自动压缩）*/
+.chat-session-context.over {
+  background: rgba(239, 68, 68, 0.22);
+  color: #fff;
+  animation: ctx-over-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ctx-over-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .chat-session-agent {
   background: var(--bg-tertiary);
   padding: 0 4px;
@@ -1828,6 +1843,7 @@
 }
 .msg-meta .msg-context-warn { color: var(--warning, #f59e0b); }
 .msg-meta .msg-context-danger { color: var(--error, #ef4444); }
+.msg-meta .msg-context-over { color: var(--error, #ef4444); font-weight: 700; }
 .msg-meta .msg-model {
   max-width: 180px;
   overflow: hidden;

@@ -12,6 +12,8 @@ import { showModal, showConfirm, showContentModal } from '../components/modal.js
 import { icon as svgIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
+import { hasVisibleChatContent, isInternalChatPayload, isInternalContentBlock, shouldFinalizeChatRun } from '../lib/chat-visibility.js'
+import { diagnoseChatError } from '../lib/chat-error-diagnosis.js'
 
 const RENDER_THROTTLE = 16
 const STREAM_RENDER_MAX_PENDING_MS = 64
@@ -986,9 +988,10 @@ function buildMessageMeta({ time = new Date(), durationMs = 0, usage = null, cos
     const ctxBase = Number(contextWindow) || 0
     const ctxUsed = u.input + u.cacheRead + u.cacheWrite
     if (ctxBase > 0 && ctxUsed > 0) {
-      const pct = Math.min(Math.round((ctxUsed / ctxBase) * 100), 100)
-      const cls = pct >= 90 ? 'msg-context msg-context-danger' : pct >= 75 ? 'msg-context msg-context-warn' : 'msg-context'
-      parts.push(`<span class="${cls}" title="${escapeAttr(t('chat.contextUsage'))}">${escapeHtml(t('chat.contextPercent', { percent: pct }))}</span>`)
+      // 不封顶：真实反映占用，超 100% 时用户能看到超限程度。
+      const pct = Math.round((ctxUsed / ctxBase) * 100)
+      const cls = pct > 100 ? 'msg-context msg-context-over' : pct >= 90 ? 'msg-context msg-context-danger' : pct >= 75 ? 'msg-context msg-context-warn' : 'msg-context'
+      parts.push(`<span class="${cls}" title="${escapeAttr(t('chat.contextUsage'))} · ${compactNumber(ctxUsed)} / ${compactNumber(ctxBase)}">${escapeHtml(t('chat.contextPercent', { percent: pct }))}</span>`)
     }
   }
   const totalCost = normalizeCost(cost)
@@ -1070,8 +1073,27 @@ function updateSessionRuntimeCache(sessions, defaults = null) {
     else _sessionModels.delete(key)
     const ctx = Number(item.contextTokens ?? item.context_tokens ?? item.contextWindow ?? item.context_window ?? runtime.contextTokens ?? runtime.context_tokens ?? runtime.contextWindow ?? runtime.context_window ?? defaultCtx ?? 0) || 0
     if (ctx > 0) _sessionContextTokens.set(key, ctx)
-    const total = Number(item.totalTokens ?? item.total_tokens ?? item.contextUsedTokens ?? item.usedTokens ?? runtime.totalTokens ?? runtime.total_tokens ?? runtime.contextUsedTokens ?? runtime.usedTokens ?? 0) || 0
-    if (total > 0) _sessionTokenTotals.set(key, total)
+    // 优先取“当前上下文占用”类字段（会随压缩下降）；contextUsedTokens/usedTokens/
+    // promptTokens 都是当前 prompt 长度。totalTokens 是累计花费（只增不减），
+    // 不能当上下文占用，只在没有真实占用字段时兵底。
+    // 网关 sessions.list 实际下发 inputTokens（当前 prompt 输入量，会随压缩下降），
+    // 优先用它作为“当前上下文占用”。其余字段作为兼容层，totalTokens 仅兜底。
+    const liveCtx = Number(
+      item.inputTokens ?? item.input_tokens ??
+      item.contextUsedTokens ?? item.context_used_tokens ?? item.usedTokens ?? item.used_tokens ??
+      item.promptTokens ?? item.prompt_tokens ??
+      runtime.inputTokens ?? runtime.input_tokens ??
+      runtime.contextUsedTokens ?? runtime.context_used_tokens ?? runtime.usedTokens ?? runtime.used_tokens ??
+      runtime.promptTokens ?? runtime.prompt_tokens ?? 0
+    ) || 0
+    if (liveCtx > 0) {
+      _sessionTokenTotals.set(key, liveCtx)
+    } else {
+      // 没有 inputTokens 时兜底 totalTokens（网关当前它也是“当前上下文”语义、
+      // 带 totalTokensFresh）；且不覆盖 final 事件刚写入的更准确的当轮 input。
+      const fallback = Number(item.totalTokens ?? item.total_tokens ?? runtime.totalTokens ?? runtime.total_tokens ?? 0) || 0
+      if (fallback > 0 && !_sessionTokenTotals.has(key)) _sessionTokenTotals.set(key, fallback)
+    }
   }
 }
 
@@ -1866,9 +1888,12 @@ function renderSessionCard(s) {
   const model = getSessionDisplayModel(key, s)
   const taskInfo = getCurrentTaskRoundInfo(key, model)
   const ctxTokens = Number(s.contextTokens ?? s.context_tokens ?? s.contextWindow ?? _sessionContextTokens.get(key) ?? _defaultContextTokens ?? 0) || 0
-  const totalTokens = Number(s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? _sessionTokenTotals.get(key) ?? 0) || 0
-  const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.min(Math.round((totalTokens / ctxTokens) * 100), 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
-  const ctxClass = percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
+  // 上下文占用统一以 _sessionTokenTotals 为单一可信源：它已由
+  // updateSessionRuntimeCache（inputTokens 优先）和 final/群聊事件实时维护。
+  // 优先读它，避免与原始 s.totalTokens 双源不一致；再退回原始字段兜底。
+  const totalTokens = Number(_sessionTokenTotals.get(key) ?? s.inputTokens ?? s.input_tokens ?? s.totalTokens ?? s.total_tokens ?? s.contextUsedTokens ?? s.usedTokens ?? 0) || 0
+  const percentUsed = ctxTokens > 0 && totalTokens > 0 ? Math.round((totalTokens / ctxTokens) * 100) : (Number.isFinite(Number(s.percentUsed)) ? Number(s.percentUsed) : 0)
+  const ctxClass = percentUsed > 100 ? ' over' : percentUsed >= 90 ? ' danger' : percentUsed >= 75 ? ' warn' : ''
   const displayLabel = getDisplayLabel(key) || parseSessionLabel(key)
   const selected = _isSessionMultiSelectMode && _selectedSessionKeys.has(key) ? ' selected' : ''
   const checkbox = _isSessionMultiSelectMode ? `<button class="chat-session-check" data-select-session="${escapeAttr(key)}" aria-pressed="${selected ? 'true' : 'false'}" title="${t('chat.toggleSessionSelection')}">${selected ? '✓' : ''}</button>` : ''
@@ -2883,7 +2908,7 @@ async function buildEcomOrchestrationCandidates(prompt = '') {
     try {
       members.push(await ensureEcomSubAgent(role))
     } catch (e) {
-      appendSystemMessage(`自动创建协同子Agent失败：${role.name} - ${e?.message || e}`, { severity: 'error' })
+      appendSystemMessage(`自动创建协同子Agent失败：${userFacingChatError(e, 'group-agent-create')}`, { severity: 'error' })
     }
   }
   return members
@@ -2930,7 +2955,7 @@ async function dispatchEcomOrchestration(prompt, members = []) {
       await wsClient.chatSend(member.sessionKey, prompt)
       updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
     } catch (e) {
-      appendSystemMessage(`协同成员派发失败：${member.label || member.sessionKey} - ${e?.message || e}`, { severity: 'error' })
+      appendSystemMessage(`协同成员派发失败：${member.label || member.sessionKey} - ${userFacingChatError(e, 'group-dispatch')}`, { severity: 'error' })
     }
   }
   _ecomOrchestrationState = { groupId, members, lastPrompt: prompt, lastDispatchAt: Date.now() }
@@ -3505,6 +3530,12 @@ function insertMention(name) {
 function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   const member = getGroupMemberBySession(group, sessionKey)
   const label = getGroupMemberLabel(member, sessionKey)
+  const gUsage = extractMessageUsage(payload.message || payload)
+  if (gUsage && sessionKey) {
+    const gCtxUsed = (gUsage.input || 0) + (gUsage.cacheRead || 0) + (gUsage.cacheWrite || 0)
+    if (gCtxUsed > 0) _sessionTokenTotals.set(sessionKey, gCtxUsed)
+  }
+  if (isInternalChatPayload(payload)) return false
   const c = extractChatContent(payload.message)
   const text = c?.text || ''
   const images = c?.images || []
@@ -3512,7 +3543,7 @@ function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   const audios = c?.audios || []
   const files = c?.files || []
   const tools = c?.tools || []
-  if (!text && !images.length && !videos.length && !audios.length && !files.length && !tools.length) return
+  if (!hasVisibleChatContent({ text, images, videos, audios, files })) return false
   const shouldRender = options.render !== false
   if (shouldRender) appendAiMessage(text, new Date(), images, videos, audios, files, tools, { agentLabel: label, sessionKey, model: extractMessageModel(payload.message || {}) || getSessionRuntimeModel(sessionKey), contextWindow: getContextWindow(sessionKey) })
   const stored = {
@@ -3521,6 +3552,16 @@ function appendGroupAssistantMessage(group, sessionKey, payload, options = {}) {
   }
   rememberGroupMessage(group, stored)
   saveMessage(stored)
+  return true
+}
+
+function shouldFinalizeBackgroundPayload(payload) {
+  if (isInternalChatPayload(payload)) return false
+  const content = extractChatContent(payload.message) || {}
+  return shouldFinalizeChatRun({
+    hasVisibleContent: hasVisibleChatContent(content),
+    hasTrackedTools: Boolean(content.tools?.length),
+  })
 }
 
 function showGroupEditor(groupId = '') {
@@ -3761,7 +3802,7 @@ async function sendMessage() {
       await maybeAutoInstallEcomSkills(text, { force: false })
       await maybeAutoOrchestrateEcomTask(text)
     } catch (e) {
-      appendSystemMessage(`电商自动编排预处理失败：${e?.message || e}`, { severity: 'error' })
+      appendSystemMessage(`电商自动编排预处理失败：${userFacingChatError(e, 'ecom-preflight')}`, { severity: 'error' })
     }
   }
   hideCmdPanel()
@@ -3843,8 +3884,9 @@ async function doGroupSend(group, text, attachments = []) {
         await wsClient.chatSend(sessionKey, groupPrompt, attachments.length ? attachments : undefined)
         updateTask(task.id, { status: 'thinking', progress: TASK_PROGRESS.thinking })
       } catch (err) {
-        updateTask(task.id, { status: 'error', progress: 100, error: err.message })
-        appendSystemMessage(t('chat.groupSendFailed', { target: target.label || sessionKey, msg: err.message }))
+        const friendlyError = userFacingChatError(err, 'group-send')
+        updateTask(task.id, { status: 'error', progress: 100, error: friendlyError })
+        appendSystemMessage(t('chat.groupSendFailed', { target: target.label || sessionKey, msg: friendlyError }))
       }
     }
   } finally {
@@ -3975,15 +4017,6 @@ function handleEvent(msg) {
       scheduleStreamSafetyTimeout()
       const toolLabel = formatToolDisplayName(toolName)
       const toolInput = summarizeToolInput(payload.data?.args || payload.data?.input || payload.data?.parameters || '')
-      const liveTool = mergeToolEventData({
-        id: toolCallId,
-        name: toolName,
-        input: payload.data?.args || payload.data?.input || payload.data?.parameters || current.input || null,
-        output: payload.data?.output || payload.data?.result || payload.data?.content || payload.data?.meta || current.output || null,
-        status: payload.data?.isError ? 'error' : (payload.data?.output || payload.data?.result || payload.data?.content || payload.data?.meta ? 'ok' : 'running'),
-        time: ts || Date.now(),
-      })
-      upsertLiveToolInStream(liveTool, payload.runId || _currentRunId)
       emitLobsterPhase('tool', t('chat.lobsterToolCall', { tool: toolLabel }))
       showTyping(false)
       const count = payload.runId ? (_toolRunIndex.get(payload.runId) || []).length : 1
@@ -4297,43 +4330,6 @@ function extractMediaRefsFromValue(value, refs = []) {
   return refs
 }
 
-function renderStreamToolCard(tool = {}) {
-  const id = tool.id || tool.toolCallId || tool.tool_call_id || tool.name || 'tool'
-  const name = formatToolDisplayName(tool.name || tool.toolName || tool.tool || 'tool')
-  const status = tool.status || (tool.isError ? 'error' : 'running')
-  const inputText = stripAnsi(safeStringify(tool.input || tool.args || tool.parameters || ''))
-  const outputText = stripAnsi(safeStringify(tool.output || tool.result || tool.content || ''))
-  const statusText = formatToolStatus(status)
-  return `
-    <details class="msg-tool-item msg-tool-live-item ${status === 'error' ? 'is-error' : status === 'running' ? 'is-running' : 'is-done'}" data-tool-id="${escapeAttr(String(id))}">
-      <summary>${escapeHtml(name)} · ${escapeHtml(statusText)}${status === 'running' ? ' …' : ''}</summary>
-      <div class="msg-tool-body">
-        <div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputText || t('chat.noParams'))}</pre></div>
-        ${outputText ? `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputText)}</pre></div>` : ''}
-      </div>
-    </details>
-  `
-}
-
-function upsertLiveToolInStream(tool = {}, runId = _currentRunId) {
-  beginStreamBubble(runId)
-  if (!_currentAiBubble) return
-  let container = _currentAiBubble.querySelector('.msg-tool.msg-tool-live')
-  if (!container) {
-    container = document.createElement('div')
-    container.className = 'msg-tool msg-tool-live'
-    _currentAiBubble.appendChild(container)
-  }
-  const id = String(tool.id || tool.toolCallId || tool.tool_call_id || tool.name || 'tool')
-  const existing = container.querySelector(`[data-tool-id="${CSS.escape(id)}"]`)
-  const wrapper = document.createElement('div')
-  wrapper.innerHTML = renderStreamToolCard({ ...tool, id })
-  const next = wrapper.firstElementChild
-  if (existing) existing.replaceWith(next)
-  else container.appendChild(next)
-  scrollToBottom()
-}
-
 function renderStreamMediaRefs(refs = [], runId = _currentRunId) {
   if (!refs.length) return false
   beginStreamBubble(runId)
@@ -4367,6 +4363,7 @@ function handleChatEvent(payload) {
     }
     if (state === 'delta') return
     if (state === 'final') {
+      if (!shouldFinalizeBackgroundPayload(payload)) return
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
       completeTaskRound(doneTask)
       appendGroupAssistantMessage(eventGroup, eventSessionKey, payload, { render: renderIntoCurrentGroup })
@@ -4385,6 +4382,7 @@ function handleChatEvent(payload) {
   // 群聊会同时把任务发给多个真实会话；非当前会话的事件只更新任务清单和轮次，不渲染到当前聊天窗口，避免串流。
   if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) {
     if (state === 'final') {
+      if (!shouldFinalizeBackgroundPayload(payload)) return
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
       completeTaskRound(doneTask)
       refreshSessionList()
@@ -4428,6 +4426,7 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'delta') {
+    if (isInternalChatPayload(payload)) return
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 delta，避免串流:', runId, 'current:', _currentRunId)
@@ -4456,13 +4455,14 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'final') {
+    const internalFinal = isInternalChatPayload(payload)
     if (!_currentRunId && runId) _currentRunId = runId
     if (_currentRunId && runId && runId !== _currentRunId) {
       console.warn('[chat] 忽略非当前 run 的 final，避免覆盖当前流:', runId, 'current:', _currentRunId)
       return
     }
     _cancelResponseWatchdog()
-    const c = extractChatContent(payload.message)
+    const c = internalFinal ? null : extractChatContent(payload.message)
     const finalText = c?.text || ''
     const finalImages = c?.images || []
     const finalVideos = c?.videos || []
@@ -4478,9 +4478,17 @@ function handleChatEvent(payload) {
     if (finalAudios.length) _currentAiAudios = finalAudios
     if (finalFiles.length) _currentAiFiles = finalFiles
     if (finalTools.length) _currentAiTools = finalTools
-    const hasContent = finalText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length
-    // 忽略空 final（Gateway 会为一条消息触发多个 run，部分是空 final）
-    if (!_currentAiBubble && !hasContent) return
+    const hasContent = finalText || _currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length
+    const hasTrackedTools = finalTools.length > 0 || _currentAiTools.length > 0
+    // Gateway can emit empty finals before the real answer. Only a visible
+    // answer or a confirmed tool execution is allowed to consume the run.
+    if (!shouldFinalizeChatRun({ hasVisibleContent: hasContent, hasTrackedTools })) {
+      if (internalFinal) {
+        showTyping(true, t('chat.replyActivityFinalizing'))
+        scheduleStreamSafetyTimeout()
+      }
+      return
+    }
     if (runId) rememberSeenRunId(runId)
     showTyping(false)
     // 如果流式阶段没有创建 bubble，从 final message 中提取
@@ -4507,6 +4515,14 @@ function handleChatEvent(payload) {
       model: payload.message?.model || payload.model,
       modelProvider: payload.message?.modelProvider || payload.modelProvider || payload.provider,
     }
+    const usage = extractMessageUsage(finalMetaSource)
+    const cost = extractMessageCost(finalMetaSource)
+    const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
+    if (usage) {
+      const ctxUsed = (usage.input || 0) + (usage.cacheRead || 0) + (usage.cacheWrite || 0)
+      const usageKey = eventSessionKey || _sessionKey
+      if (ctxUsed > 0 && usageKey) _sessionTokenTotals.set(usageKey, ctxUsed)
+    }
     // 添加时间戳 + 耗时 + token 消耗
     const wrapper = _currentAiBubble?.parentElement
     if (wrapper) {
@@ -4521,10 +4537,7 @@ function handleChatEvent(payload) {
         durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
       if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
-      const usage = extractMessageUsage(finalMetaSource)
-      const cost = extractMessageCost(finalMetaSource)
-      const model = extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey)
-      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(_sessionKey), showCopy: true, showTranslate: true })
+      meta.innerHTML = buildMessageMeta({ time: new Date(), durationMs: payload.durationMs || (_streamStartTime ? Date.now() - _streamStartTime : 0), usage, cost, model, contextWindow: getContextWindow(eventSessionKey || _sessionKey), showCopy: true, showTranslate: true })
       wrapper.appendChild(meta)
     }
     const doneTask = updateTaskByRunOrSession(runId || _currentRunId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true })
@@ -4532,7 +4545,7 @@ function handleChatEvent(payload) {
     setReplyStatus('done', replyStatusText('done'), { runId: runId || _currentRunId, activity: t('chat.replyActivityDone') })
     maybeFinalizeEcomRunState('done')
     refreshSessionList()
-    if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length || _currentAiTools.length) {
+    if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length) {
       saveMessage({
         id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
         content: _currentAiText, timestamp: Date.now(),
@@ -4541,7 +4554,6 @@ function handleChatEvent(payload) {
         videos: _currentAiVideos,
         audios: _currentAiAudios,
         files: _currentAiFiles,
-        tools: finalTools.length ? finalTools : _currentAiTools,
       })
     }
     // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
@@ -4667,12 +4679,15 @@ function keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey) {
 
 function translateGatewayError(message = '') {
   const raw = String(message || '')
+  console.error('[chat] Gateway task failed:', raw)
   const req = raw.match(/requestId:\s*([^)\s]+)/i)?.[1]
   if (/pairing required|PAIRING_REQUIRED|device identity changed/i.test(raw)) {
     return t('chat.gatewayPairingChanged', { request: req ? t('chat.gatewayRequestIdSuffix', { request: req }) : '' })
   }
   if (/origin not allowed/i.test(raw)) return t('chat.gatewayOriginNotAllowed')
   if (/NOT_PAIRED/i.test(raw)) return t('chat.gatewayNotPaired')
+  const diagnosis = diagnoseChatError(raw)
+  if (diagnosis.kind !== 'plain') return diagnosis.message
   const enhanced = enhanceModelCallError(raw, t)
   const lower = raw.toLowerCase()
   if (/insufficient|quota|credit|balance|余额|欠费|429|payment\s+required/.test(lower)) {
@@ -4687,9 +4702,15 @@ function translateGatewayError(message = '') {
   return enhanced
 }
 
+function userFacingChatError(error, context = 'chat') {
+  console.error(`[chat] ${context} failed:`, error)
+  return diagnoseChatError(error).message
+}
+
 /** 从 Gateway message 对象提取文本和所有媒体（参照 clawapp extractContent） */
 function extractChatContent(message) {
   if (!message || typeof message !== 'object') return null
+  if (isInternalChatPayload(message)) return { text: '', images: [], videos: [], audios: [], files: [], tools: [] }
   const tools = []
   collectToolsFromMessage(message, tools)
   if (message.role === 'tool' || message.role === 'toolResult') {
@@ -4711,7 +4732,8 @@ function extractChatContent(message) {
   if (Array.isArray(content)) {
     const texts = [], images = [], videos = [], audios = [], files = []
     for (const block of content) {
-      if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
+      if (isInternalContentBlock(block)) continue
+      if ((block.type === 'text' || block.type === 'output_text') && typeof block.text === 'string') texts.push(block.text)
       else if (block.type === 'image' && !block.omitted) {
         if (block.data) images.push({ mediaType: block.mimeType || 'image/png', data: block.data })
         else if (block.source?.type === 'base64' && block.source.data) images.push({ mediaType: block.source.media_type || 'image/png', data: block.source.data })
@@ -4792,6 +4814,13 @@ function stripThinkingTags(text) {
   const safe = stripAnsi(text)
   return safe
     .replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, '')
+    // OpenClaw 网关在流式预览里把 reasoning 内容作为 markdown 引用块推送：
+    // "> Thinking\n> 思考内容..." 或多行 "> ..."。
+    // 修复：头部连续的 >引用块（以 Thinking 标题开头）流入正文气泡。
+    .replace(/^>\s*Thinking\b[^\n]*(?:\n>\s*[^\n]*)*\n?/gim, '')
+    // 兼容 DeepSeek R1 的 <think>...</think>（已由上方处理）和纯推理文本块：
+    // 随着 Thinking... 行起头的段落（防备无标签缓冲区残漏）
+    .replace(/^Thinking\.\.\.\s*\n[\s\S]*?(?=\n\S|$)/gim, '')
     .replace(/Conversation info \(untrusted metadata\):\s*```json[\s\S]*?```\s*/gi, '')
     .replace(/\[Queued messages while agent was busy\]\s*---\s*Queued #\d+\s*/gi, '')
     .trim()
@@ -5325,7 +5354,7 @@ async function loadHistory() {
     if (local.length) {
       clearMessages()
       local.forEach(msg => {
-        if (!msg.content && !msg.attachments?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length && !msg.tools?.length) return
+        if (!msg.content && !msg.attachments?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length) return
         const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
         if (msg.role === 'user') appendUserMessage(msg.content || '', msg.attachments || null, msgTime)
         else if (msg.role === 'assistant') {
@@ -5351,11 +5380,7 @@ async function loadHistory() {
 
     // 正在发送/流式输出时不全量重绘，避免覆盖本地乐观渲染
     if (hasExisting && (_isSending || _isStreaming || _messageQueue.length > 0)) {
-      saveMessages(result.messages.map(m => {
-        const c = extractContent(m)
-        const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-        return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey), videos: c?.videos || [], audios: c?.audios || [], files: c?.files || [], tools: c?.tools || [] }
-      }))
+      saveMessages(result.messages.map(m => localHistoryMessage(m, sessionKey)).filter(Boolean))
       _isLoadingHistory = false
       return
     }
@@ -5363,7 +5388,7 @@ async function loadHistory() {
     clearMessages()
     let hasOmittedImages = false
     deduped.forEach(msg => {
-      if (!msg.text && !msg.images?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length && !msg.tools?.length) return
+      if (!msg.text && !msg.images?.length && !msg.videos?.length && !msg.audios?.length && !msg.files?.length) return
       const msgTime = msg.timestamp ? new Date(msg.timestamp) : new Date()
       if (msg.role === 'user') {
         const userAtts = msg.images?.length ? msg.images.map(i => ({
@@ -5380,16 +5405,12 @@ async function loadHistory() {
     if (hasOmittedImages) {
       appendSystemMessage(t('chat.imageHistoryHint'))
     }
-    saveMessages(result.messages.map(m => {
-      const c = extractContent(m)
-      const role = (m.role === 'tool' || m.role === 'toolResult') ? 'assistant' : m.role
-      return { id: m.id || uuid(), sessionKey, role, content: c?.text || '', timestamp: m.timestamp || Date.now(), usage: extractMessageUsage(m), cost: extractMessageCost(m), model: extractMessageModel(m), contextWindow: getContextWindow(sessionKey), videos: c?.videos || [], audios: c?.audios || [], files: c?.files || [], tools: c?.tools || [] }
-    }))
+    saveMessages(result.messages.map(m => localHistoryMessage(m, sessionKey)).filter(Boolean))
     scrollToBottom()
     restoreReplyStatus()
   } catch (e) {
     console.error('[chat] loadHistory error:', e)
-    if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${e.message}`)
+    if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(`${t('common.loadFailed')}: ${userFacingChatError(e, 'history-load')}`)
   } finally {
     _isLoadingHistory = false
   }
@@ -5423,7 +5444,7 @@ function dedupeHistory(messages) {
   for (const msg of messages) {
     const role = (msg.role === 'tool' || msg.role === 'toolResult') ? 'assistant' : msg.role
     const c = extractContent(msg)
-    if (!c.text && !c.images.length && !c.videos.length && !c.audios.length && !c.files.length && !c.tools.length) continue
+    if (!c.text && !c.images.length && !c.videos.length && !c.audios.length && !c.files.length) continue
     const tools = (c.tools || []).map(t => {
       const id = t.id || t.tool_call_id
       const time = t.time || resolveToolTime(id, msg.timestamp)
@@ -5487,6 +5508,7 @@ function historyMessageSignature(message = {}) {
 
 function extractContent(msg) {
   const tools = []
+  if (isInternalChatPayload(msg)) return { text: '', images: [], videos: [], audios: [], files: [], tools }
   collectToolsFromMessage(msg, tools)
   if (msg.role === 'tool' || msg.role === 'toolResult') {
     const output = typeof msg.content === 'string' ? msg.content : null
@@ -5507,7 +5529,8 @@ function extractContent(msg) {
   if (Array.isArray(msg.content)) {
     const texts = [], images = [], videos = [], audios = [], files = []
     for (const block of msg.content) {
-      if (block.type === 'text' && typeof block.text === 'string') texts.push(block.text)
+      if (isInternalContentBlock(block)) continue
+      if ((block.type === 'text' || block.type === 'output_text') && typeof block.text === 'string') texts.push(block.text)
       else if (block.type === 'image' && !block.omitted) {
         if (block.data) images.push({ mediaType: block.mimeType || 'image/png', data: block.data })
         else if (block.source?.type === 'base64' && block.source.data) images.push({ mediaType: block.source.media_type || 'image/png', data: block.source.data })
@@ -5928,35 +5951,35 @@ function collectToolsFromMessage(message, tools) {
 function appendToolsToEl(el, tools) {
   if (!el) return
   const existing = el.querySelector?.('.msg-tool')
-  if (!tools?.length) {
-    if (existing) existing.remove()
-    return
-  }
-  const container = document.createElement('div')
-  container.className = 'msg-tool'
-  tools.forEach(tool => {
-    const details = document.createElement('details')
-    details.className = 'msg-tool-item'
-    const summary = document.createElement('summary')
-    const status = formatToolStatus(tool.status)
-    const timeValue = getToolTime(tool) || resolveToolTime(tool.id || tool.tool_call_id, tool.messageTimestamp)
-    const timeText = timeValue ? formatTime(new Date(timeValue)) : ''
-    const summaryText = timeText
-      ? t('chat.toolRecordSummaryWithTime', { name: formatToolDisplayName(tool.name), status, time: timeText })
-      : t('chat.toolRecordSummary', { name: formatToolDisplayName(tool.name), status })
-    summary.textContent = summaryText
-    const body = document.createElement('div')
-    body.className = 'msg-tool-body'
-    const inputJson = stripAnsi(safeStringify(tool.input))
-    const outputJson = stripAnsi(safeStringify(tool.output))
-    body.innerHTML = `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolParams')}</div><pre>${escapeHtml(inputJson || t('chat.noParams'))}</pre></div>`
-      + `<div class="msg-tool-block"><div class="msg-tool-title">${t('chat.toolResult')}</div><pre>${escapeHtml(outputJson || t('chat.noResult'))}</pre></div>`
-    details.appendChild(summary)
-    details.appendChild(body)
-    container.appendChild(details)
-  })
   if (existing) existing.remove()
-  el.insertBefore(container, el.firstChild)
+}
+
+function localHistoryMessage(message, sessionKey) {
+  const c = extractContent(message)
+  if (!c) return null
+  const hasVisibleContent = c.text || c.images?.length || c.videos?.length || c.audios?.length || c.files?.length
+  if (!hasVisibleContent) return null
+  const role = (message.role === 'tool' || message.role === 'toolResult') ? 'assistant' : message.role
+  return {
+    id: message.id || uuid(),
+    sessionKey,
+    role,
+    content: c.text || '',
+    timestamp: message.timestamp || Date.now(),
+    usage: extractMessageUsage(message),
+    cost: extractMessageCost(message),
+    model: extractMessageModel(message),
+    contextWindow: getContextWindow(sessionKey),
+    attachments: (c.images || []).map(image => ({
+      category: 'image',
+      mimeType: image.mediaType || image.media_type || 'image/png',
+      content: image.data || image.source?.data || '',
+      url: image.url || image.source?.url || '',
+    })).filter(image => image.content || image.url),
+    videos: c.videos || [],
+    audios: c.audios || [],
+    files: c.files || [],
+  }
 }
 
 /** 图片灯箱查看 */

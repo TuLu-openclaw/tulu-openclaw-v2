@@ -393,8 +393,11 @@ pub(crate) fn remove_standalone_dir_safe(dir: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-/// 所有可能的 standalone 安装位置（用于检测和卸载）
-pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
+/// 所有可能的 standalone 安装位置。
+///
+/// 此函数只枚举候选路径，不执行依赖 npm/PATH 的安全检查。PATH 构建过程会调用它，
+/// 因此这里必须保持无副作用，避免形成 enhanced_path -> npm_command -> enhanced_path 的递归。
+pub(crate) fn standalone_dir_candidates() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(custom) = standalone_install_dir() {
         dirs.push(custom);
@@ -416,8 +419,13 @@ pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
         }
         dirs.push(PathBuf::from("/opt/openclaw"));
     }
-    // 过滤掉受保护的系统/工具链目录（如 npm 全局目录被误配到 openclawStandaloneInstallDir 的情况），
-    // 避免后续清理逻辑把它们整目录删除。
+    dirs
+}
+
+/// 所有可用于检测和卸载的 standalone 安装位置。
+pub(crate) fn all_standalone_dirs() -> Vec<PathBuf> {
+    let mut dirs = standalone_dir_candidates();
+    // 删除路径必须过滤受保护的系统/工具链目录（如误配的 npm 全局目录）。
     dirs.retain(|d| !is_protected_system_dir(d));
     dirs
 }
@@ -4278,7 +4286,7 @@ async fn upgrade_openclaw_inner(
         if let Some(pipe) = stderr {
             for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = app2.emit("upgrade-log", &line);
-                stderr_lines2.lock().unwrap().push(line);
+                stderr_lines2.lock().unwrap_or_else(|p| p.into_inner()).push(line);
                 if progress < 75 {
                     progress += 2;
                     let _ = app2.emit("upgrade-progress", progress);
@@ -4338,7 +4346,7 @@ async fn upgrade_openclaw_inner(
                     let mut p: u32 = 20;
                     for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                         let _ = app3.emit("upgrade-log", &line);
-                        stderr_lines4.lock().unwrap().push(line);
+                        stderr_lines4.lock().unwrap_or_else(|p| p.into_inner()).push(line);
                         if p < 75 {
                             p += 2;
                             let _ = app3.emit("upgrade-progress", p);
@@ -4364,7 +4372,7 @@ async fn upgrade_openclaw_inner(
                     .unwrap_or("unknown".into());
                 let tail = stderr_lines3
                     .lock()
-                    .unwrap()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .iter()
                     .rev()
                     .take(15)
@@ -4381,7 +4389,7 @@ async fn upgrade_openclaw_inner(
             let _ = app.emit("upgrade-log", format!("❌ 升级失败 (exit code: {code})"));
             let tail = stderr_lines
                 .lock()
-                .unwrap()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .iter()
                 .rev()
                 .take(15)
@@ -5783,11 +5791,15 @@ fn provider_model_from_full<'a>(
     let providers = config
         .pointer("/models/providers")
         .and_then(|v| v.as_object())?;
+
+    // Pass 1：精确 provider key 匹配（最优先）
     if let Some((provider_key, model_id)) = full.split_once('/') {
         if let Some(provider) = providers.get(provider_key) {
             return Some((provider_key.to_string(), provider, model_id.to_string()));
         }
     }
+
+    // Pass 2：遍历所有 provider，完整 full 字符串或 provider/id 组合匹配
     for (provider_key, provider) in providers {
         for item in provider
             .get("models")
@@ -5804,6 +5816,30 @@ fn provider_model_from_full<'a>(
             }
         }
     }
+
+    // Pass 3：provider 前缀漂移兜底——仅用 '/' 后的模型 ID 在所有 provider 中查找。
+    // 修复：运行时会话模型字符串（如 "星枢包月-claude/claude-opus-4-8"）可能携带
+    // 已过时或与 openclaw.json 实际 key（"星枢余额-Claude"）不一致的 provider 前缀，
+    // 导致 Pass 1/2 全部失败。此时按模型 ID 唯一锚点查找，确保翻译/调用不报错。
+    if let Some((_, model_id)) = full.split_once('/') {
+        for (provider_key, provider) in providers {
+            for item in provider
+                .get("models")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+            {
+                let id = item
+                    .as_str()
+                    .or_else(|| item.get("id").and_then(|v| v.as_str()))
+                    .unwrap_or("");
+                if id == model_id {
+                    return Some((provider_key.to_string(), provider, model_id.to_string()));
+                }
+            }
+        }
+    }
+
     None
 }
 

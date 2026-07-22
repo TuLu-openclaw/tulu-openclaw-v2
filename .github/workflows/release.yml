@@ -65,12 +65,26 @@ jobs:
             exit 1
           fi
 
+      - name: Test enhanced PATH recursion guard
+        run: cargo test --manifest-path src-tauri/Cargo.toml path_tests --release
+        shell: powershell
+
       - name: Build Tauri app
         run: |
           choco install mingw -y --no-progress --ignore-checksums
           npm run build
           npm run tauri build
         shell: powershell
+
+      - name: Upload Windows x64 crash diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: XingShuOpenClaw-${{ github.run_id }}-Windows-x64-symbols
+          path: |
+            src-tauri/target/release/XingShu.exe
+            src-tauri/target/release/XingShu.pdb
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Normalize artifact tag
         shell: bash
