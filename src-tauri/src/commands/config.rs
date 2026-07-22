@@ -3381,14 +3381,6 @@ fn verify_openclaw_image_dependency_at(
     })
 }
 
-fn verify_openclaw_image_dependency(source: &str) -> Result<(), String> {
-    let modules_dir = npm_global_modules_dir().ok_or("无法确定 npm 全局 node_modules 目录")?;
-    verify_openclaw_image_dependency_at(
-        &openclaw_package_dir(&modules_dir, source),
-        std::path::Path::new("node"),
-    )
-}
-
 fn verify_standalone_image_dependency(install_dir: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let node_executable = install_dir.join("node.exe");
@@ -3425,6 +3417,7 @@ fn verify_standalone_image_dependency(install_dir: &std::path::Path) -> Result<(
 /// sharp 含平台原生二进制，在部分网络下下载会长时间阻塞，因此：
 /// - 为 npm 加上 fetch 超时参数，避免单个请求永久挂起；
 /// - 外层再包一层整体 `timeout_secs` 看门狗，超时强制 kill。
+///
 /// 该函数绝不会永久阻塞，调用方应将其视为 best-effort（失败仅警告）。
 fn install_openclaw_image_dependency_with_timeout(
     registry: &str,
