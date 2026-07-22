@@ -4286,7 +4286,10 @@ async fn upgrade_openclaw_inner(
         if let Some(pipe) = stderr {
             for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = app2.emit("upgrade-log", &line);
-                stderr_lines2.lock().unwrap_or_else(|p| p.into_inner()).push(line);
+                stderr_lines2
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .push(line);
                 if progress < 75 {
                     progress += 2;
                     let _ = app2.emit("upgrade-progress", progress);
@@ -4346,7 +4349,10 @@ async fn upgrade_openclaw_inner(
                     let mut p: u32 = 20;
                     for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                         let _ = app3.emit("upgrade-log", &line);
-                        stderr_lines4.lock().unwrap_or_else(|p| p.into_inner()).push(line);
+                        stderr_lines4
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .push(line);
                         if p < 75 {
                             p += 2;
                             let _ = app3.emit("upgrade-progress", p);

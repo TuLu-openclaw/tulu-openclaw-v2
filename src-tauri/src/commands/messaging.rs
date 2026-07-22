@@ -3624,7 +3624,10 @@ pub async fn install_qqbot_plugin(
         if let Some(pipe) = stderr {
             for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = app2.emit("plugin-log", &line);
-                qqbot_stderr_clone.lock().unwrap_or_else(|p| p.into_inner()).push(line);
+                qqbot_stderr_clone
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .push(line);
             }
         }
     });
@@ -3684,7 +3687,10 @@ pub async fn install_qqbot_plugin(
     }
 
     if !status.success() {
-        let all_stderr = qqbot_stderr_lines.lock().unwrap_or_else(|p| p.into_inner()).join("\n");
+        let all_stderr = qqbot_stderr_lines
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .join("\n");
         let is_host_version_issue = all_stderr.contains("minHostVersion")
             || all_stderr.contains("minimum host version")
             || all_stderr.contains("requires OpenClaw")
