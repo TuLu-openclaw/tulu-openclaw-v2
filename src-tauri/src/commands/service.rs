@@ -1337,10 +1337,7 @@ mod platform {
     /// 在后台隐藏启动 Gateway，避免守护重试时不断弹出终端窗口
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
         if !is_cli_installed() {
-            return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g openclaw 安装"
-                    .into(),
-            );
+            return Err("openclaw CLI 未安装，请先通过 npm install -g openclaw 安装".into());
         }
 
         // 先用纯 TCP 判断 Gateway 是否已运行；运行中直接返回，避免每次启动请求都触发 netstat/WMIC 清理扫描。
@@ -1686,10 +1683,7 @@ mod platform {
 
     async fn gateway_command(action: &str) -> Result<(), String> {
         if !is_cli_installed() {
-            return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g openclaw 安装"
-                    .into(),
-            );
+            return Err("openclaw CLI 未安装，请先通过 npm install -g openclaw 安装".into());
         }
         let action_owned = action.to_string();
         let mut child = crate::utils::openclaw_command_async()
@@ -1750,10 +1744,7 @@ mod platform {
 
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
         if !is_cli_installed() {
-            return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g openclaw 安装"
-                    .into(),
-            );
+            return Err("openclaw CLI 未安装，请先通过 npm install -g openclaw 安装".into());
         }
 
         let port = crate::commands::gateway_listen_port();

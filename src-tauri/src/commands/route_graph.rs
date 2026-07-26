@@ -147,12 +147,7 @@ fn build_route_graph(snapshot: &Value) -> Result<RouteGraph, String> {
     build_provider_nodes(snapshot, &mut graph, &mut provider_models);
     build_channel_nodes(snapshot, &mut graph, &mut channel_accounts);
     build_agent_nodes(snapshot, &mut graph, &mut agent_ids, &provider_models);
-    build_binding_edges(
-        snapshot,
-        &mut graph,
-        &agent_ids,
-        &channel_accounts,
-    );
+    build_binding_edges(snapshot, &mut graph, &agent_ids, &channel_accounts);
 
     graph.nodes.sort_by(|left, right| left.id.cmp(&right.id));
     graph.edges.sort_by(|left, right| left.id.cmp(&right.id));
@@ -309,9 +304,9 @@ fn build_agent_nodes(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let has_main = agents.iter().any(|agent| {
-        agent.get("id").and_then(Value::as_str).map(str::trim) == Some("main")
-    });
+    let has_main = agents
+        .iter()
+        .any(|agent| agent.get("id").and_then(Value::as_str).map(str::trim) == Some("main"));
     if !has_main {
         agents.insert(0, value_object([("id", Value::String("main".to_string()))]));
     }
@@ -349,13 +344,7 @@ fn build_agent_nodes(
         let selected_model = explicit_model.or(default_model);
         let inherited = explicit_model.is_none() && selected_model.is_some();
         for reference in model_references(selected_model, inherited) {
-            connect_agent_model(
-                graph,
-                &agent_node_id,
-                agent_id,
-                &reference,
-                provider_models,
-            );
+            connect_agent_model(graph, &agent_node_id, agent_id, &reference, provider_models);
         }
     }
 }
@@ -364,7 +353,11 @@ fn model_references(model: Option<&Value>, inherited: bool) -> Vec<ModelReferenc
     let Some(model) = model else {
         return Vec::new();
     };
-    if let Some(primary) = model.as_str().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(primary) = model
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         return vec![ModelReference {
             value: primary.to_string(),
             role: "primary",
@@ -417,7 +410,10 @@ fn connect_agent_model(
         graph.diagnostics.push(RouteDiagnostic {
             code: DiagnosticCode::MissingModel,
             severity: DiagnosticSeverity::Error,
-            message: format!("Agent {agent_id} 引用的模型 {} 不是 provider/model 格式", reference.value),
+            message: format!(
+                "Agent {agent_id} 引用的模型 {} 不是 provider/model 格式",
+                reference.value
+            ),
             binding_index: None,
             node_ids: vec![agent_node_id.to_string()],
             data: Some(value_object([(
@@ -446,7 +442,9 @@ fn connect_agent_model(
         graph.diagnostics.push(RouteDiagnostic {
             code: DiagnosticCode::MissingModel,
             severity: DiagnosticSeverity::Error,
-            message: format!("Agent {agent_id} 引用了 provider {provider_id} 中不存在的模型 {model_id}"),
+            message: format!(
+                "Agent {agent_id} 引用了 provider {provider_id} 中不存在的模型 {model_id}"
+            ),
             binding_index: None,
             node_ids: vec![agent_node_id.to_string(), node_id("provider", provider_id)],
             data: Some(value_object([(
@@ -493,16 +491,30 @@ fn build_binding_edges(
         };
         let agent_id = match binding.get("agentId") {
             None => "main".to_string(),
-            Some(value) => match value.as_str().map(str::trim).filter(|value| !value.is_empty()) {
+            Some(value) => match value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
                 Some(value) => value.to_string(),
                 None => {
-                    push_invalid_binding(graph, index, "agentId 必须是非空字符串", &Value::Object(binding.clone()));
+                    push_invalid_binding(
+                        graph,
+                        index,
+                        "agentId 必须是非空字符串",
+                        &Value::Object(binding.clone()),
+                    );
                     continue;
                 }
             },
         };
         let Some(match_value) = binding.get("match") else {
-            push_invalid_binding(graph, index, "binding 缺少 match 对象", &Value::Object(binding.clone()));
+            push_invalid_binding(
+                graph,
+                index,
+                "binding 缺少 match 对象",
+                &Value::Object(binding.clone()),
+            );
             continue;
         };
         let Some(match_object) = match_value.as_object() else {
@@ -520,15 +532,25 @@ fn build_binding_edges(
         };
         let account_id = match match_object.get("accountId") {
             None => None,
-            Some(value) => match value.as_str().map(str::trim).filter(|value| !value.is_empty()) {
+            Some(value) => match value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
                 Some(value) => Some(value.to_string()),
                 None => {
-                    push_invalid_binding(graph, index, "match.accountId 必须是非空字符串", match_value);
+                    push_invalid_binding(
+                        graph,
+                        index,
+                        "match.accountId 必须是非空字符串",
+                        match_value,
+                    );
                     continue;
                 }
             },
         };
-        let normalized_match = normalize_match(match_value).unwrap_or_else(|| Value::Object(Map::new()));
+        let normalized_match =
+            normalize_match(match_value).unwrap_or_else(|| Value::Object(Map::new()));
         let route_key = serde_json::to_string(&normalized_match).unwrap_or_default();
         let record = BindingRecord {
             index,
@@ -547,7 +569,9 @@ fn build_binding_edges(
         if !agent_ids.contains(&record.agent_id) {
             continue;
         }
-        let Some((resolved_channel, accounts)) = resolve_channel(&record.channel_id, channel_accounts) else {
+        let Some((resolved_channel, accounts)) =
+            resolve_channel(&record.channel_id, channel_accounts)
+        else {
             continue;
         };
         let source = if let Some(account_id) = &record.account_id {
@@ -587,7 +611,10 @@ fn diagnose_binding_references(
         graph.diagnostics.push(RouteDiagnostic {
             code: DiagnosticCode::MissingAgent,
             severity: DiagnosticSeverity::Error,
-            message: format!("binding {} 指向不存在的 Agent {}", record.index, record.agent_id),
+            message: format!(
+                "binding {} 指向不存在的 Agent {}",
+                record.index, record.agent_id
+            ),
             binding_index: Some(record.index),
             node_ids: Vec::new(),
             data: Some(value_object([(
@@ -596,11 +623,15 @@ fn diagnose_binding_references(
             )])),
         });
     }
-    let Some((resolved_channel, accounts)) = resolve_channel(&record.channel_id, channel_accounts) else {
+    let Some((resolved_channel, accounts)) = resolve_channel(&record.channel_id, channel_accounts)
+    else {
         graph.diagnostics.push(RouteDiagnostic {
             code: DiagnosticCode::MissingChannel,
             severity: DiagnosticSeverity::Error,
-            message: format!("binding {} 引用了不存在的渠道 {}", record.index, record.channel_id),
+            message: format!(
+                "binding {} 引用了不存在的渠道 {}",
+                record.index, record.channel_id
+            ),
             binding_index: Some(record.index),
             node_ids: Vec::new(),
             data: Some(value_object([(
@@ -638,7 +669,10 @@ fn diagnose_binding_collisions(records: &[BindingRecord], graph: &mut RouteGraph
     for group in groups.values().filter(|group| group.len() > 1) {
         let mut by_agent: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
         for record in group {
-            by_agent.entry(&record.agent_id).or_default().push(record.index);
+            by_agent
+                .entry(&record.agent_id)
+                .or_default()
+                .push(record.index);
         }
         for (agent_id, indices) in &by_agent {
             if indices.len() > 1 {
@@ -913,18 +947,51 @@ mod tests {
         let graph = build_route_graph(&snapshot).unwrap();
 
         assert!(graph.nodes.iter().any(|node| node.id == "agent:main"));
-        assert!(graph.nodes.iter().any(|node| node.id == "account:telegram/default"));
-        assert!(graph.nodes.iter().any(|node| node.id == "account:feishu/blue"));
-        assert_eq!(graph.edges.iter().filter(|edge| edge.kind == EdgeKind::Provides).count(), 2);
-        assert_eq!(graph.edges.iter().filter(|edge| edge.kind == EdgeKind::UsesModel).count(), 5);
-        assert_eq!(graph.edges.iter().filter(|edge| edge.kind == EdgeKind::RoutesTo).count(), 2);
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id == "account:telegram/default"));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id == "account:feishu/blue"));
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| edge.kind == EdgeKind::Provides)
+                .count(),
+            2
+        );
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| edge.kind == EdgeKind::UsesModel)
+                .count(),
+            5
+        );
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| edge.kind == EdgeKind::RoutesTo)
+                .count(),
+            2
+        );
         let detailed = graph
             .edges
             .iter()
             .find(|edge| edge.source == "account:feishu/blue")
             .unwrap();
-        assert_eq!(detailed.data.as_ref().unwrap()["match"]["peer"]["id"], "g-1");
-        assert_eq!(detailed.data.as_ref().unwrap()["match"]["roles"], json!(["alpha", "beta"]));
+        assert_eq!(
+            detailed.data.as_ref().unwrap()["match"]["peer"]["id"],
+            "g-1"
+        );
+        assert_eq!(
+            detailed.data.as_ref().unwrap()["match"]["roles"],
+            json!(["alpha", "beta"])
+        );
         assert!(graph.diagnostics.is_empty());
     }
 
@@ -973,10 +1040,29 @@ mod tests {
         });
         let graph = build_route_graph(&snapshot).unwrap();
         let found = codes(&graph);
-        assert_eq!(found.iter().filter(|code| **code == DiagnosticCode::InvalidBinding).count(), 2);
+        assert_eq!(
+            found
+                .iter()
+                .filter(|code| **code == DiagnosticCode::InvalidBinding)
+                .count(),
+            2
+        );
         assert!(found.contains(&DiagnosticCode::DuplicateBinding));
         assert!(found.contains(&DiagnosticCode::CompetingBinding));
-        assert_eq!(found.iter().filter(|code| **code == DiagnosticCode::CompetingBinding).count(), 2);
-        assert_eq!(graph.edges.iter().filter(|edge| edge.kind == EdgeKind::RoutesTo).count(), 5);
+        assert_eq!(
+            found
+                .iter()
+                .filter(|code| **code == DiagnosticCode::CompetingBinding)
+                .count(),
+            2
+        );
+        assert_eq!(
+            graph
+                .edges
+                .iter()
+                .filter(|edge| edge.kind == EdgeKind::RoutesTo)
+                .count(),
+            5
+        );
     }
 }

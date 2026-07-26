@@ -98,7 +98,9 @@ test('bundled runtime uses complete hashes and verified official HTTPS sources',
   assert.ok(runtimePrepare.includes('MAX_ARCHIVE_ENTRIES'))
   assert.ok(runtimePrepare.includes('MAX_EXTRACTED_BYTES'))
   assert.ok(runtimePrepare.includes('validateArchiveMembers(archivePath)'))
-  assert.ok(runtimePrepare.includes('contains a link or special file'))
+  assert.ok(runtimePrepare.includes('isSafeArchiveSymlink(line)'))
+  assert.ok(runtimePrepare.includes('contains an unsafe link or special file'))
+  assert.ok(runtimePrepare.includes('contains an unsafe symbolic link'))
   assert.ok(runtimePrepare.includes('expected entry is not a contained regular file'))
   assert.ok(runtimePrepare.includes('entry sha256 mismatch'))
   assert.ok(runtimeBuild.includes('unsupported Cargo TARGET for bundled runtime'))
@@ -357,7 +359,10 @@ test('active install and upgrade paths are restricted to official OpenClaw via n
   assert.ok(rustConfig.includes('let source = "official".to_string();'))
   assert.ok(rustConfig.includes('async fn get_latest_version_for()'))
   assert.equal((rustConfig.match(/let recommended = recommended_version_for\("official"\);/g) || []).length, 2)
-  assert.match(rustConfig, /"official"\.into\(\),\r?\n            version,\r?\n            "npm"\.into\(\),/)
+  assert.match(
+    rustConfig,
+    /upgrade_openclaw_inner\(\s*app2\.clone\(\),\s*"official"\.into\(\),\s*version,\s*"npm"\.into\(\)\s*\)/,
+  )
   assert.ok(!rustConfig.includes('github.com/qingchencloud/openclaw-standalone'))
   assert.equal((rustConfig.match(/try_standalone_install\(/g) || []).length, 1, 'legacy standalone installer must have no caller')
   assert.equal((devApi.match(/_tryStandaloneInstall\(/g) || []).length, 1, 'Web legacy standalone installer must have no caller')

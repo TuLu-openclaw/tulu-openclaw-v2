@@ -307,10 +307,21 @@ function validateArchiveMembers(archivePath) {
   }
   for (const line of listing) {
     const type = line[0]
-    if (type !== '-' && type !== 'd') {
-      throw new Error(`Runtime archive contains a link or special file: ${line}`)
-    }
+    if (type === '-' || type === 'd') continue
+    if (type === 'l' && isSafeArchiveSymlink(line)) continue
+    throw new Error(`Runtime archive contains an unsafe link or special file: ${line}`)
   }
+}
+
+function isSafeArchiveSymlink(line) {
+  const match = line.match(/\s([^\s]+) -> (.+)$/)
+  if (!match) return false
+  const [, member, target] = match
+  if (!isSafeArchiveMemberPath(member) || !target || target.includes('\0')) return false
+  const normalizedTarget = target.replaceAll('\\', '/')
+  if (normalizedTarget.startsWith('/') || /^[A-Za-z]:\//.test(normalizedTarget)) return false
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(member), normalizedTarget))
+  return isSafeArchiveMemberPath(resolved)
 }
 
 function isSafeArchiveMemberPath(value) {
@@ -333,14 +344,19 @@ function validateExtractedTree(root) {
       }
       const entryPath = path.join(dir, entry.name)
       const stat = fs.lstatSync(entryPath)
-      if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
-        throw new Error(`Extracted runtime contains a link or special file: ${entryPath}`)
+      if (!stat.isSymbolicLink() && !stat.isDirectory() && !stat.isFile()) {
+        throw new Error(`Extracted runtime contains a special file: ${entryPath}`)
       }
       const real = fs.realpathSync(entryPath)
       if (!isPathInside(rootReal, real)) {
         throw new Error(`Extracted runtime escaped its destination: ${entryPath}`)
       }
-      if (stat.isDirectory()) {
+      if (stat.isSymbolicLink()) {
+        const target = fs.readlinkSync(entryPath)
+        if (path.isAbsolute(target) || !isPathInside(rootReal, path.resolve(path.dirname(entryPath), target))) {
+          throw new Error(`Extracted runtime contains an unsafe symbolic link: ${entryPath}`)
+        }
+      } else if (stat.isDirectory()) {
         visit(entryPath)
       } else {
         totalBytes += stat.size
@@ -425,17 +441,24 @@ function pickSingleDir(dir) {
   return dir
 }
 
-function copyDir(src, dst) {
+function copyDir(src, dst, sourceRoot = fs.realpathSync(src)) {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const from = path.join(src, entry.name)
     const to = path.join(dst, entry.name)
     if (entry.isDirectory()) {
       fs.mkdirSync(to, { recursive: true })
-      copyDir(from, to)
+      copyDir(from, to, sourceRoot)
     } else if (entry.isFile()) {
       fs.copyFileSync(from, to)
+    } else if (entry.isSymbolicLink()) {
+      const target = fs.readlinkSync(from)
+      const resolved = fs.realpathSync(from)
+      if (path.isAbsolute(target) || !isPathInside(sourceRoot, resolved)) {
+        throw new Error(`Runtime materialization rejected an unsafe symbolic link: ${from}`)
+      }
+      fs.symlinkSync(target, to)
     } else {
-      throw new Error(`Runtime materialization rejected a link or special file: ${from}`)
+      throw new Error(`Runtime materialization rejected a special file: ${from}`)
     }
   }
 }

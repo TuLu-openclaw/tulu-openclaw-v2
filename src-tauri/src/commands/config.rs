@@ -264,7 +264,8 @@ fn fallback_openclaw_node_requirement(version: &str) -> Option<&'static str> {
 fn find_openclaw_package_json(cli_path: &Path) -> Option<PathBuf> {
     let dir = cli_path.parent()?;
     let cli_source = crate::utils::classify_cli_source(&cli_path.to_string_lossy());
-    let pkg_names: &[&str] = if matches!(cli_source.as_str(), "npm-zh" | "standalone" | "portable") {
+    let pkg_names: &[&str] = if matches!(cli_source.as_str(), "npm-zh" | "standalone" | "portable")
+    {
         &["@qingchencloud/openclaw-zh", "openclaw"]
     } else {
         &["openclaw", "@qingchencloud/openclaw-zh"]
@@ -273,7 +274,10 @@ fn find_openclaw_package_json(cli_path: &Path) -> Option<PathBuf> {
     let mut current = Some(dir);
     while let Some(candidate_dir) = current {
         let own_package = candidate_dir.join("package.json");
-        if matches!(read_package_json_field(&own_package, "/name").as_deref(), Some("openclaw" | "@qingchencloud/openclaw-zh")) {
+        if matches!(
+            read_package_json_field(&own_package, "/name").as_deref(),
+            Some("openclaw" | "@qingchencloud/openclaw-zh")
+        ) {
             return Some(own_package);
         }
         current = candidate_dir.parent();
@@ -349,14 +353,25 @@ fn populate_node_detection_result(
 
 pub(crate) fn ensure_node_runtime_compatible() -> Result<(), String> {
     let node = check_node()?;
-    if !node.get("installed").and_then(Value::as_bool).unwrap_or(false) {
+    if !node
+        .get("installed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         return Err("Node.js 未安装或未检测到，请先安装 Node.js 后重新检测".into());
     }
-    if node.get("compatible").and_then(Value::as_bool).unwrap_or(true) {
+    if node
+        .get("compatible")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
+    {
         return Ok(());
     }
 
-    let version = node.get("version").and_then(Value::as_str).unwrap_or("unknown");
+    let version = node
+        .get("version")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
     let requirement = node
         .get("requiredVersion")
         .and_then(Value::as_str)
@@ -1240,7 +1255,9 @@ pub fn save_openclaw_json(config: &Value) -> Result<(), String> {
 }
 
 fn write_json_transactionally(path: &Path, json: &str, expected: &Value) -> Result<(), String> {
-    let parent = path.parent().ok_or_else(|| "配置路径缺少父目录".to_string())?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "配置路径缺少父目录".to_string())?;
     fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {e}"))?;
 
     let suffix = format!("{}.{}", std::process::id(), rand::random::<u64>());
@@ -1259,17 +1276,16 @@ fn write_json_transactionally(path: &Path, json: &str, expected: &Value) -> Resu
         file.sync_all()
             .map_err(|e| format!("同步配置临时文件失败: {e}"))?;
 
-        let staged = fs::read_to_string(&temp_path)
-            .map_err(|e| format!("回读配置临时文件失败: {e}"))?;
-        let staged_value: Value = serde_json::from_str(&staged)
-            .map_err(|e| format!("配置临时文件校验失败: {e}"))?;
+        let staged =
+            fs::read_to_string(&temp_path).map_err(|e| format!("回读配置临时文件失败: {e}"))?;
+        let staged_value: Value =
+            serde_json::from_str(&staged).map_err(|e| format!("配置临时文件校验失败: {e}"))?;
         if &staged_value != expected {
             return Err("配置临时文件回读内容不一致".to_string());
         }
 
         if path.exists() {
-            fs::rename(path, &rollback_path)
-                .map_err(|e| format!("暂存旧配置失败: {e}"))?;
+            fs::rename(path, &rollback_path).map_err(|e| format!("暂存旧配置失败: {e}"))?;
         }
         if let Err(e) = fs::rename(&temp_path, path) {
             if rollback_path.exists() {
@@ -1278,10 +1294,9 @@ fn write_json_transactionally(path: &Path, json: &str, expected: &Value) -> Resu
             return Err(format!("替换配置文件失败: {e}"));
         }
 
-        let committed = fs::read_to_string(path)
-            .map_err(|e| format!("回读已写配置失败: {e}"))?;
-        let committed_value: Value = serde_json::from_str(&committed)
-            .map_err(|e| format!("已写配置校验失败: {e}"))?;
+        let committed = fs::read_to_string(path).map_err(|e| format!("回读已写配置失败: {e}"))?;
+        let committed_value: Value =
+            serde_json::from_str(&committed).map_err(|e| format!("已写配置校验失败: {e}"))?;
         if &committed_value != expected {
             let _ = fs::remove_file(path);
             if rollback_path.exists() {
@@ -1291,8 +1306,7 @@ fn write_json_transactionally(path: &Path, json: &str, expected: &Value) -> Resu
         }
 
         if rollback_path.exists() {
-            fs::remove_file(&rollback_path)
-                .map_err(|e| format!("清理配置回滚文件失败: {e}"))?;
+            fs::remove_file(&rollback_path).map_err(|e| format!("清理配置回滚文件失败: {e}"))?;
         }
         Ok(())
     })();
@@ -1385,12 +1399,11 @@ mod transactional_config_tests {
             "provider",
         )
         .is_ok());
-        assert!(validate_model_channel_credentials(
-            &json!({"apiKey":"sk-plaintext"}),
-            "provider",
-        )
-        .unwrap_err()
-        .contains("不接受明文凭据"));
+        assert!(
+            validate_model_channel_credentials(&json!({"apiKey":"sk-plaintext"}), "provider",)
+                .unwrap_err()
+                .contains("不接受明文凭据")
+        );
     }
 
     #[test]
@@ -1417,9 +1430,16 @@ fn validate_model_channel_credentials(value: &Value, path: &str) -> Result<(), S
             .filter(|c| !matches!(c, '-' | '_'))
             .flat_map(char::to_lowercase)
             .collect();
-        ["apikey", "token", "secret", "password", "credential", "authorization"]
-            .iter()
-            .any(|needle| normalized.contains(needle))
+        [
+            "apikey",
+            "token",
+            "secret",
+            "password",
+            "credential",
+            "authorization",
+        ]
+        .iter()
+        .any(|needle| normalized.contains(needle))
     };
     let valid_env = |text: &str| {
         let name = text
@@ -1428,7 +1448,9 @@ fn validate_model_channel_credentials(value: &Value, path: &str) -> Result<(), S
             .or_else(|| text.strip_prefix('$'));
         name.is_some_and(|name| {
             let mut chars = name.chars();
-            chars.next().is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+            chars
+                .next()
+                .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
                 && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
         })
     };
@@ -1443,10 +1465,19 @@ fn validate_model_channel_credentials(value: &Value, path: &str) -> Result<(), S
                             !reference.contains_key("value")
                                 && (reference.get("$env").and_then(Value::as_str).is_some()
                                     || reference.get("ref").and_then(Value::as_str).is_some()
-                                    || ((reference.get("source").and_then(Value::as_str).is_some()
-                                        || reference.get("provider").and_then(Value::as_str).is_some())
+                                    || ((reference
+                                        .get("source")
+                                        .and_then(Value::as_str)
+                                        .is_some()
+                                        || reference
+                                            .get("provider")
+                                            .and_then(Value::as_str)
+                                            .is_some())
                                         && ["id", "name", "key"].iter().any(|locator| {
-                                            reference.get(*locator).and_then(Value::as_str).is_some()
+                                            reference
+                                                .get(*locator)
+                                                .and_then(Value::as_str)
+                                                .is_some()
                                         })))
                         });
                     if !valid_reference {
@@ -3788,13 +3819,8 @@ pub async fn upgrade_openclaw(
     tauri::async_runtime::spawn(async move {
         use tauri::Emitter;
         let _ = (source, method);
-        let result = upgrade_openclaw_inner(
-            app2.clone(),
-            "official".into(),
-            version,
-            "npm".into(),
-        )
-        .await;
+        let result =
+            upgrade_openclaw_inner(app2.clone(), "official".into(), version, "npm".into()).await;
         match result {
             Ok(msg) => {
                 let _ = app2.emit("upgrade-done", &msg);
@@ -4678,7 +4704,6 @@ async fn upgrade_openclaw_inner(
     let pkg = format!("{}@{}", pkg_name, ver);
 
     let _ = method;
-
 
     ensure_target_node_runtime_compatible_for_npm(ver)?;
 
@@ -7093,7 +7118,9 @@ pub async fn check_panel_update() -> Result<Value, String> {
                 result.insert("source".into(), Value::String(source.to_string()));
                 result.insert(
                     "downloadUrl".into(),
-                    Value::String("https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest".into()),
+                    Value::String(
+                        "https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest".into(),
+                    ),
                 );
                 return Ok(Value::Object(result));
             }
@@ -7128,7 +7155,12 @@ pub fn get_openclaw_dir() -> Result<Value, String> {
 }
 
 const PANEL_PASSWORD_HASH_FIELD: &str = "accessPasswordHash";
-const PANEL_AUTH_FIELDS: &[&str] = &["accessPassword", "accessPasswordHash", "mustChangePassword", "ignoreRisk"];
+const PANEL_AUTH_FIELDS: &[&str] = &[
+    "accessPassword",
+    "accessPasswordHash",
+    "mustChangePassword",
+    "ignoreRisk",
+];
 const PASSWORD_HASH_ITERATIONS: u32 = 120_000;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -7168,17 +7200,22 @@ fn panel_has_password(config: &Value) -> bool {
 }
 
 fn panel_ignore_risk(config: &Value) -> bool {
-    config.get("ignoreRisk").and_then(Value::as_bool).unwrap_or(false)
+    config
+        .get("ignoreRisk")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> Result<[u8; 32], String> {
-    let mut mac = HmacSha256::new_from_slice(password).map_err(|_| "密码哈希初始化失败".to_string())?;
+    let mut mac =
+        HmacSha256::new_from_slice(password).map_err(|_| "密码哈希初始化失败".to_string())?;
     mac.update(salt);
     mac.update(&1_u32.to_be_bytes());
     let mut block: [u8; 32] = mac.finalize().into_bytes().into();
     let mut output = block;
     for _ in 1..iterations {
-        let mut next = HmacSha256::new_from_slice(password).map_err(|_| "密码哈希初始化失败".to_string())?;
+        let mut next =
+            HmacSha256::new_from_slice(password).map_err(|_| "密码哈希初始化失败".to_string())?;
         next.update(&block);
         block = next.finalize().into_bytes().into();
         for (target, value) in output.iter_mut().zip(block) {
@@ -7213,26 +7250,32 @@ fn verify_panel_password(password: &str, encoded: &str) -> bool {
     if iterations == 0 || iterations > 1_000_000 {
         return false;
     }
-    let (Ok(salt), Ok(expected)) = (BASE64_STANDARD.decode(salt), BASE64_STANDARD.decode(expected)) else {
+    let (Ok(salt), Ok(expected)) = (
+        BASE64_STANDARD.decode(salt),
+        BASE64_STANDARD.decode(expected),
+    ) else {
         return false;
     };
     let Ok(actual) = pbkdf2_sha256(password.as_bytes(), &salt, iterations) else {
         return false;
     };
-    HmacSha256::new_from_slice(&actual)
-        .is_ok_and(|mut mac| {
-            mac.update(b"panel-password-verification");
-            let mut expected_mac = match HmacSha256::new_from_slice(&expected) {
-                Ok(value) => value,
-                Err(_) => return false,
-            };
-            expected_mac.update(b"panel-password-verification");
-            mac.verify_slice(&expected_mac.finalize().into_bytes()).is_ok()
-        })
+    HmacSha256::new_from_slice(&actual).is_ok_and(|mut mac| {
+        mac.update(b"panel-password-verification");
+        let mut expected_mac = match HmacSha256::new_from_slice(&expected) {
+            Ok(value) => value,
+            Err(_) => return false,
+        };
+        expected_mac.update(b"panel-password-verification");
+        mac.verify_slice(&expected_mac.finalize().into_bytes())
+            .is_ok()
+    })
 }
 
 fn password_matches(config: &Value, password: &str) -> bool {
-    if let Some(encoded) = config.get(PANEL_PASSWORD_HASH_FIELD).and_then(Value::as_str) {
+    if let Some(encoded) = config
+        .get(PANEL_PASSWORD_HASH_FIELD)
+        .and_then(Value::as_str)
+    {
         verify_panel_password(password, encoded)
     } else {
         config.get("accessPassword").and_then(Value::as_str) == Some(password)
@@ -7240,10 +7283,15 @@ fn password_matches(config: &Value, password: &str) -> bool {
 }
 
 fn migrate_panel_password(config: &mut Value, password: &str) -> Result<(), String> {
-    let needs_migration = config.get("accessPassword").and_then(Value::as_str).is_some();
+    let needs_migration = config
+        .get("accessPassword")
+        .and_then(Value::as_str)
+        .is_some();
     if needs_migration {
         let hash = hash_panel_password(password)?;
-        let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+        let obj = config
+            .as_object_mut()
+            .ok_or_else(|| "面板配置格式无效".to_string())?;
         obj.remove("accessPassword");
         obj.remove("mustChangePassword");
         obj.insert(PANEL_PASSWORD_HASH_FIELD.to_string(), Value::String(hash));
@@ -7263,7 +7311,22 @@ fn validate_panel_password_strength(password: &str) -> Result<(), String> {
         return Err("密码不能是纯数字".to_string());
     }
     let lower = password.to_lowercase();
-    if ["123456", "654321", "password", "admin", "qwerty", "abc123", "111111", "000000", "letmein", "welcome", "星枢openclaw", "openclaw"].contains(&lower.as_str()) {
+    if [
+        "123456",
+        "654321",
+        "password",
+        "admin",
+        "qwerty",
+        "abc123",
+        "111111",
+        "000000",
+        "letmein",
+        "welcome",
+        "星枢openclaw",
+        "openclaw",
+    ]
+    .contains(&lower.as_str())
+    {
         return Err("密码太常见，请换一个更安全的密码".to_string());
     }
     Ok(())
@@ -7345,7 +7408,9 @@ pub fn panel_auth_setup(password: String) -> Result<Value, String> {
         config = json!({});
     }
     let hash = hash_panel_password(&password)?;
-    let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+    let obj = config
+        .as_object_mut()
+        .ok_or_else(|| "面板配置格式无效".to_string())?;
     obj.remove("accessPassword");
     obj.remove("mustChangePassword");
     obj.remove("ignoreRisk");
@@ -7373,7 +7438,10 @@ pub fn panel_auth_login(password: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn panel_auth_change_password(old_password: String, new_password: String) -> Result<Value, String> {
+pub fn panel_auth_change_password(
+    old_password: String,
+    new_password: String,
+) -> Result<Value, String> {
     if !PANEL_AUTHENTICATED.load(Ordering::SeqCst) {
         return Err("未登录".to_string());
     }
@@ -7389,7 +7457,9 @@ pub fn panel_auth_change_password(old_password: String, new_password: String) ->
         return Err("新密码不能与旧密码相同".to_string());
     }
     let hash = hash_panel_password(&new_password)?;
-    let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+    let obj = config
+        .as_object_mut()
+        .ok_or_else(|| "面板配置格式无效".to_string())?;
     obj.remove("accessPassword");
     obj.remove("mustChangePassword");
     obj.remove("ignoreRisk");
@@ -7410,7 +7480,9 @@ pub fn panel_auth_ignore_risk(enable: bool) -> Result<Value, String> {
     if !config.is_object() {
         config = json!({});
     }
-    let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+    let obj = config
+        .as_object_mut()
+        .ok_or_else(|| "面板配置格式无效".to_string())?;
     if enable {
         obj.remove("accessPassword");
         obj.remove(PANEL_PASSWORD_HASH_FIELD);
