@@ -5,7 +5,7 @@ export async function render() {
     <iframe
       class="xingshu-clone-frame"
       title="星枢安全检测"
-      src="https://www.aiyu.jx.cn/skill-security/"
+      src="https://www.AIyu.jx.cn/skill-security/"
       sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
     ></iframe>
   `

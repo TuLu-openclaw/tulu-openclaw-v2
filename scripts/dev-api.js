@@ -749,7 +749,7 @@ async function _tryR2Install(version, source, logs) {
     logs.push('通用 tarball 模式，执行 npm install...')
     const npmBin = isWindows ? 'npm.cmd' : 'npm'
     try {
-      execSync(`${npmBin} install -g "${tmpPath}" --force 2>&1`, { timeout: 120000, windowsHide: true })
+      execSync(`${npmBin} install -g "${tmpPath}" 2>&1`, { timeout: 120000, windowsHide: true })
       logs.push('npm install 完成 ✓')
     } catch (e) {
       try { fs.unlinkSync(tmpPath) } catch {}
@@ -1195,8 +1195,8 @@ function getLocalOpenclawVersion() {
   return current || null
 }
 
-async function getLatestVersionFor() {
-  const pkg = npmPackageName('official')
+async function getLatestVersionFor(source = 'official') {
+  const pkg = npmPackageName(source === 'chinese' ? 'chinese' : 'official')
   const encodedPkg = pkg.replace('/', '%2F').replace('@', '%40')
   const firstRegistry = pickRegistryForPackage(pkg)
   const registries = [...new Set([firstRegistry, 'https://registry.npmjs.org'])]
@@ -4876,8 +4876,8 @@ const handlers = {
       const cliInstallSource = normalizeCliInstallSource(cli_source)
       if (cliInstallSource !== 'unknown') source = cliInstallSource
     }
-    const latest = await getLatestVersionFor()
-    const recommended = recommendedVersionFor('official')
+    const latest = await getLatestVersionFor(source)
+    const recommended = recommendedVersionFor(source)
     const all_installations = scanAllOpenclawInstallations(cli_path)
 
     return {
@@ -5562,8 +5562,8 @@ const handlers = {
     return execOpenclawSync(['gateway', 'install'], { windowsHide: true, cwd: homedir() }, 'Gateway 服务安装失败') || 'Gateway 服务已安装'
   },
 
-  async list_openclaw_versions() {
-    const source = 'official'
+  async list_openclaw_versions({ source = 'official' } = {}) {
+    source = source === 'chinese' ? 'chinese' : 'official'
     const pkg = npmPackageName(source)
     const encodedPkg = pkg.replace('/', '%2F').replace('@', '%40')
     const firstRegistry = pickRegistryForPackage(pkg)
@@ -5594,8 +5594,8 @@ const handlers = {
     throw new Error('查询版本失败: ' + (lastError?.message || lastError || 'unknown error'))
   },
 
-  async upgrade_openclaw({ version } = {}) {
-    const source = 'official'
+  async upgrade_openclaw({ source = 'official', version } = {}) {
+    source = source === 'chinese' ? 'chinese' : 'official'
     const currentSource = detectInstalledSource()
     const pkg = npmPackageName(source)
     const recommended = recommendedVersionFor(source)
@@ -5614,7 +5614,7 @@ const handlers = {
     const gitEnv = buildGitInstallEnv()
     logs.push(`Git HTTPS 规则已就绪 (${gitConfigured}/${GIT_HTTPS_REWRITES.length})`)
     const runInstall = (targetRegistry) => execSync(
-      `${npmBin} install -g ${pkg}@${ver} ${OPENCLAW_IMAGE_DEPENDENCY} --force --registry ${targetRegistry} --verbose 2>&1`,
+      `${npmBin} install -g ${pkg}@${ver} ${OPENCLAW_IMAGE_DEPENDENCY} --registry ${targetRegistry} --verbose 2>&1`,
       { timeout: 120000, windowsHide: true, env: gitEnv }
     ).toString()
     try {

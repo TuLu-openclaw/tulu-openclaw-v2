@@ -350,30 +350,33 @@ test('active pages and knowledge base no longer promote qtcool to new users', ()
   assert.ok(!movieToolPage.includes('https://claw.qt.cool/'))
 })
 
-test('active install and upgrade paths are restricted to official OpenClaw via npm', () => {
-  for (const retired of ['standalone-r2', 'standalone-github', 'data-source="chinese"', 'value="chinese"']) {
+test('active install and upgrade paths support both editions via npm', () => {
+  for (const retired of ['standalone-r2', 'standalone-github', 'data-source="chinese"']) {
     assert.ok(!setupPage.includes(retired), `setup page must not expose: ${retired}`)
     assert.ok(!servicesPage.includes(retired), `services page must not expose: ${retired}`)
   }
-  assert.ok(!servicesPage.includes('switchToChinese'))
-  assert.ok(tauriApi.includes("invoke('upgrade_openclaw', { source: 'official', version, method: 'npm' }"))
-  assert.match(devApi, /async list_openclaw_versions\(\) \{\r?\n    const source = 'official'/)
-  assert.match(devApi, /async function getLatestVersionFor\(\) \{\r?\n  const pkg = npmPackageName\('official'\)/)
-  assert.ok(devApi.includes("const recommended = recommendedVersionFor('official')"))
-  assert.match(devApi, /async upgrade_openclaw\(\{ version \} = \{\}\) \{\r?\n    const source = 'official'/)
+  assert.ok(setupPage.includes('name="install-source"'))
+  assert.ok(setupPage.includes('value="official"'))
+  assert.ok(setupPage.includes('value="chinese"'))
+  assert.ok(aboutPage.includes('name="oc-source"'))
+  assert.ok(tauriApi.includes('listOpenclawVersions: async (source = \'official\')'))
+  assert.ok(tauriApi.includes("invoke('upgrade_openclaw', { source, version, method }"))
+  assert.match(devApi, /async list_openclaw_versions\(\{ source = 'official' \} = \{\}\)/)
+  assert.match(devApi, /async upgrade_openclaw\(\{ source = 'official', version \} = \{\}\)/)
+  assert.ok(devApi.includes('const pkg = npmPackageName(source)'))
+  assert.ok(devApi.includes('const recommended = recommendedVersionFor(source)'))
+  assert.ok(rustConfig.includes('pub async fn list_openclaw_versions(source: String)'))
+  assert.ok(rustConfig.includes('get_latest_version_for(source: &str)'))
+  assert.ok(rustConfig.includes('recommended_version_for(&source)'))
+  assert.ok(rustConfig.includes('upgrade_openclaw_inner(app2.clone(), source, version, method)'))
   assert.ok(!devApi.includes('github.com/qingchencloud/openclaw-standalone'))
-  assert.ok(rustConfig.includes('let source = "official".to_string();'))
-  assert.ok(rustConfig.includes('async fn get_latest_version_for()'))
-  assert.equal((rustConfig.match(/let recommended = recommended_version_for\("official"\);/g) || []).length, 2)
-  assert.match(
-    rustConfig,
-    /upgrade_openclaw_inner\(\s*app2\.clone\(\),\s*"official"\.into\(\),\s*version,\s*"npm"\.into\(\)\s*\)/,
-  )
   assert.ok(!rustConfig.includes('github.com/qingchencloud/openclaw-standalone'))
   assert.equal((rustConfig.match(/try_standalone_install\(/g) || []).length, 1, 'legacy standalone installer must have no caller')
   assert.equal((devApi.match(/_tryStandaloneInstall\(/g) || []).length, 1, 'Web legacy standalone installer must have no caller')
   assert.ok(!rustConfig.includes('npm install -g {pkg} --force'))
   assert.ok(!rustConfig.includes('"--force"'))
+  assert.ok(!devApi.includes('install -g "${tmpPath}" --force'))
+  assert.ok(!devApi.includes('install -g ${pkg}@${ver} ${OPENCLAW_IMAGE_DEPENDENCY} --force'))
   assert.ok(rustConfig.includes('现有 OpenClaw CLI 将保留到安装验证完成'))
   assert.ok(rustConfig.includes('npm 已完成安装，但未发现可用的 OpenClaw CLI'))
   assert.ok(!rustMessaging.includes('npm i -g @qingchencloud/openclaw-zh'))

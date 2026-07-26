@@ -12,6 +12,7 @@ export function isTauriRuntime() {
 // npm 包名映射
 const NPM_PACKAGES = {
   official: 'openclaw',
+  chinese: '@qingchencloud/openclaw-zh',
 }
 
 // 解析版本号用于排序
@@ -444,8 +445,8 @@ export const api = {
       return r
     })
   },
-  listOpenclawVersions: async () => fetchNpmAllVersions('official'),
-  upgradeOpenclaw: (_source = 'official', version = null, _method = 'npm') => { invalidateInstallationCaches(); return invoke('upgrade_openclaw', { source: 'official', version, method: 'npm' }, 300000).then(r => { invalidateInstallationCaches(); return r }) },
+  listOpenclawVersions: async (source = 'official') => fetchNpmAllVersions(source),
+  upgradeOpenclaw: (source = 'official', version = null, method = 'npm') => { invalidateInstallationCaches(); return invoke('upgrade_openclaw', { source, version, method }, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   uninstallOpenclaw: (cleanConfig = false) => { invalidateInstallationCaches(); return invoke('uninstall_openclaw', { cleanConfig }, 60000).then(r => { invalidateInstallationCaches(); return r }) },
   installGateway: () => { invalidateInstallationCaches(); return invoke('install_gateway', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   uninstallGateway: () => { invalidateInstallationCaches(); return invoke('uninstall_gateway', {}, 60000).then(r => { invalidateInstallationCaches(); return r }) },

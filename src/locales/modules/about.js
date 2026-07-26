@@ -73,6 +73,7 @@ export default {
   uninstallDone: _('卸载完成', 'Uninstall complete', '卸載完成'),
   uninstallFailed: _('卸载失败: ', 'Uninstall failed: ', '卸載失敗: '),
   uninstallTaskStarted: _('后台卸载任务已启动...', 'Background uninstall task started...', '後台卸載任務已啟動...'),
+  sourceLabel: _('发行版本', 'Edition', '發行版本', 'エディション', '에디션', 'Phiên bản phát hành', 'Edición', 'Edição', 'Редакция', 'Édition', 'Ausgabe'),
   versionLabel: _('版本', 'Version', '版本', 'バージョン', '버전', 'Phiên bản', 'Versión', 'Versão', 'Версия'),
   selectVersion: _('选择版本号', 'Select Version', '選擇版本號', 'バージョンを選択', '버전 선택'),
   versionPickerHint: _('默认建议使用当前面板绑定的推荐稳定版。若手动切换到其它版本，尤其是预览版/最新版，请自行验证兼容性；如果你希望面板优先适配最新版功能，欢迎提交 issue。', 'Recommended to use the stable version bound to this panel. Switching to other versions (especially preview/latest) requires manual compatibility verification. Submit an issue if you want latest version support.', '預設建議使用目前面板綁定的推薦穩定版。若手動切換到其它版本，尤其是預覽版/最新版，請自行驗證相容性；如果你希望面板優先適配最新版功能，欢迎提交 issue。'),

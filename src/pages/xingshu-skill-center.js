@@ -5,7 +5,7 @@ export async function render() {
     <iframe
       class="xingshu-clone-frame"
       title="星枢技能中心"
-      src="https://www.aiyu.jx.cn/xingshu-skill/index.local.html"
+      src="https://www.AIyu.jx.cn/xingshu-skill/index.local.html"
       sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
     ></iframe>
   `

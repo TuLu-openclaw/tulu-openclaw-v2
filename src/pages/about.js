@@ -20,7 +20,7 @@ export async function render() {
       <img src="/images/logo-brand.png" alt="星枢OpenClaw" style="height:48px;width:auto">
       <div>
         <h1 class="page-title" style="margin:0">星枢OpenClaw</h1>
-        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a style="color:var(--text-secondary)">${t('about.officialSupport')}</a></p>
+        <p class="page-desc" style="margin:0">${t('about.subtitle')} · <a href="https://www.AIyu.jx.cn" target="_blank" rel="noopener" style="color:var(--text-secondary)">${t('about.officialWebsite')}</a></p>
       </div>
     </div>
     <div class="stat-cards" id="version-cards">
@@ -371,8 +371,8 @@ async function loadData(page) {
 }
 
 /**
- * 版本选择器弹窗 — 管理官方 OpenClaw 版本。
- * 历史汉化包仍可被检测，但新安装和升级统一迁移到官方包。
+ * 版本选择器弹窗 — 用户可自由选择官方版或汉化版及具体版本。
+ * 当前面板推荐版本默认置顶并选中，但不限制其它稳定版或预览版。
  */
 async function showVersionPicker(page, currentVersion) {
   const isInstalled = !!currentVersion.current
@@ -383,9 +383,16 @@ async function showVersionPicker(page, currentVersion) {
       <div class="modal-title">${isInstalled ? t('about.switchVersion') : t('about.installOpenclaw')}</div>
       <div style="display:flex;flex-direction:column;gap:16px;margin:16px 0">
         <div>
-          <label style="font-size:var(--font-size-sm);color:var(--text-secondary);display:block;margin-bottom:8px">${t('about.versionLabel')}</label>
-          <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:var(--font-size-sm)">
-            <strong>${t('about.official')}</strong> <code style="margin-left:6px">openclaw</code>
+          <label style="font-size:var(--font-size-sm);color:var(--text-secondary);display:block;margin-bottom:8px">${t('about.sourceLabel')}</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <label style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:var(--font-size-sm);cursor:pointer">
+              <input type="radio" name="oc-source" value="official" ${currentVersion.source !== 'chinese' ? 'checked' : ''}>
+              <strong>${t('about.official')}</strong> <code style="margin-left:6px">openclaw</code>
+            </label>
+            <label style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:var(--font-size-sm);cursor:pointer">
+              <input type="radio" name="oc-source" value="chinese" ${currentVersion.source === 'chinese' ? 'checked' : ''}>
+              <strong>${t('about.chinese')}</strong> <code style="margin-left:6px">@qingchencloud/openclaw-zh</code>
+            </label>
           </div>
         </div>
         <div>
@@ -419,7 +426,7 @@ async function showVersionPicker(page, currentVersion) {
   overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close() })
 
   const versionsCache = {}
-  const currentSelect = 'official'
+  let currentSelect = overlay.querySelector('input[name="oc-source"]:checked')?.value || 'official'
 
   function updateHint() {
     const targetSource = currentSelect
@@ -511,6 +518,13 @@ async function showVersionPicker(page, currentVersion) {
   }
 
   select.addEventListener('change', updateHint)
+  overlay.querySelectorAll('input[name="oc-source"]').forEach(input => {
+    input.addEventListener('change', () => {
+      currentSelect = input.value
+      showNightly = false
+      loadVersions(currentSelect)
+    })
+  })
 
   confirmBtn.onclick = () => {
     const source = currentSelect
@@ -829,8 +843,8 @@ function renderCompany(page) {
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;font-size:var(--font-size-sm)">
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary)">
-          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.contactAuthor')}</div>
-          <a href="https://qm.qq.com/q/FF8D891UWc" target="_blank" rel="noopener" style="color:var(--accent)">${t('about.officialSupport')}</a>
+          <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.officialWebsite')}</div>
+          <a href="https://www.AIyu.jx.cn" target="_blank" rel="noopener" style="color:var(--accent)">www.AIyu.jx.cn</a>
         </div>
         <div style="padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-primary);background:var(--bg-secondary);text-align:center">
           <div style="color:var(--text-tertiary);font-size:var(--font-size-xs);margin-bottom:4px">${t('about.scanAuthorQr')}</div>

@@ -2939,8 +2939,8 @@ fn build_registry_proxy_client(timeout_secs: u64) -> Option<reqwest::Client> {
 }
 
 /// 从 npm registry 获取最新版本号，超时 5 秒
-async fn get_latest_version_for() -> Option<String> {
-    let pkg = npm_package_name("official")
+async fn get_latest_version_for(source: &str) -> Option<String> {
+    let pkg = npm_package_name(source)
         .replace('/', "%2F")
         .replace('@', "%40");
     let registry = get_configured_registry();
@@ -3142,9 +3142,8 @@ pub async fn get_version_info() -> Result<VersionInfo, String> {
             source = "chinese".to_string();
         }
     }
-    // 当前来源仅用于标识既有安装；所有维护目标统一查询官方 OpenClaw。
-    let latest = get_latest_version_for().await;
-    let recommended = recommended_version_for("official");
+    let latest = get_latest_version_for(&source).await;
+    let recommended = recommended_version_for(&source);
     let update_available = match (&current, &recommended) {
         (Some(c), Some(r)) => recommended_is_newer(r, c),
         (None, Some(_)) => true,
@@ -3199,7 +3198,7 @@ pub async fn get_version_info_local() -> Result<VersionInfo, String> {
             source = "chinese".to_string();
         }
     }
-    let recommended = recommended_version_for("official");
+    let recommended = recommended_version_for(&source);
     let update_available = match (&current, &recommended) {
         (Some(c), Some(r)) => recommended_is_newer(r, c),
         (None, Some(_)) => true,
@@ -3683,8 +3682,13 @@ fn npm_package_name(source: &str) -> &'static str {
 
 /// 获取指定源的所有可用版本列表（从 npm registry 查询）
 #[tauri::command]
-pub async fn list_openclaw_versions(_source: String) -> Result<Vec<String>, String> {
-    let source = "official".to_string();
+pub async fn list_openclaw_versions(source: String) -> Result<Vec<String>, String> {
+    let source = if source == "chinese" {
+        "chinese"
+    } else {
+        "official"
+    }
+    .to_string();
     let pkg = npm_package_name(&source).replace('/', "%2F");
     let registry = get_configured_registry();
     let url = format!("{registry}/{pkg}");
@@ -3810,9 +3814,19 @@ pub async fn upgrade_openclaw(
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         use tauri::Emitter;
-        let _ = (source, method);
-        let result =
-            upgrade_openclaw_inner(app2.clone(), "official".into(), version, "npm".into()).await;
+        let source = if source == "chinese" {
+            "chinese"
+        } else {
+            "official"
+        }
+        .to_string();
+        let method = if method.as_deref() == Some("npm") {
+            "npm"
+        } else {
+            "npm"
+        }
+        .to_string();
+        let result = upgrade_openclaw_inner(app2.clone(), source, version, method).await;
         match result {
             Ok(msg) => {
                 let _ = app2.emit("upgrade-done", &msg);

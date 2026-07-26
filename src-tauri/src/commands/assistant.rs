@@ -2320,7 +2320,7 @@ async fn open_xingshu_skill_url_window(
 pub async fn open_xingshu_skill_center_window(app: tauri::AppHandle) -> Result<String, String> {
     open_xingshu_skill_url_window(
         app,
-        "https://www.aiyu.jx.cn/xingshu-skill/index.local.html",
+        "https://www.AIyu.jx.cn/xingshu-skill/index.local.html",
         "星枢技能中心",
         "xingshu_skill_center",
     )
@@ -2331,7 +2331,7 @@ pub async fn open_xingshu_skill_center_window(app: tauri::AppHandle) -> Result<S
 pub async fn open_xingshu_skill_security_window(app: tauri::AppHandle) -> Result<String, String> {
     open_xingshu_skill_url_window(
         app,
-        "https://www.aiyu.jx.cn/skill-security/",
+        "https://www.AIyu.jx.cn/skill-security/",
         "星枢安全检测",
         "xingshu_skill_security",
     )

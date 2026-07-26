@@ -276,7 +276,8 @@ export async function render() {
             <p class="setup-hero-desc">${t('setup.headerDesc')}</p>
           </div>
         </div>
-        <div class="setup-hero-actions">
+        <div class="setup-hero-actions" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <a class="btn btn-secondary btn-sm" href="https://www.AIyu.jx.cn" target="_blank" rel="noopener" style="min-width:120px">${t('setup.officialWebsite')}</a>
           <button class="btn btn-secondary btn-sm" id="btn-recheck" style="min-width:120px">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right:4px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             ${t('setup.recheck')}
@@ -612,12 +613,31 @@ function renderInstallSection() {
       <p style="color:var(--text-tertiary);font-size:var(--font-size-xs);line-height:1.6;margin:-4px 0 var(--space-sm)">
         ${t('setup.installHint2')}
       </p>
-      <div class="setup-source-option" style="margin-bottom:var(--space-sm)">
-        <input type="hidden" name="install-source" value="official">
-        <div>
-          <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceOfficialLabel')}</div>
-          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">openclaw</div>
+      <fieldset style="border:0;padding:0;margin:0 0 var(--space-sm)">
+        <legend style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:6px">${t('setup.sourceLabel')}</legend>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">
+          <label class="setup-source-option" style="cursor:pointer">
+            <input type="radio" name="install-source" value="official" checked>
+            <div>
+              <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceOfficialLabel')}</div>
+              <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">openclaw</div>
+            </div>
+          </label>
+          <label class="setup-source-option" style="cursor:pointer">
+            <input type="radio" name="install-source" value="chinese">
+            <div>
+              <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceChineseLabel')}</div>
+              <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">@qingchencloud/openclaw-zh</div>
+            </div>
+          </label>
         </div>
+      </fieldset>
+      <div style="margin-bottom:var(--space-sm)">
+        <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.versionLabel')}</label>
+        <select id="install-version-select" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm)">
+          <option value="">${t('common.loading')}</option>
+        </select>
+        <div id="install-version-hint" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:4px;line-height:1.5">${t('setup.versionChoiceHint')}</div>
       </div>
       <div style="margin-bottom:var(--space-sm)" id="registry-section">
         <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.registryLabel')}</label>
@@ -1277,6 +1297,43 @@ function bindEvents(page, nodeOk, detectState) {
 
   const registrySection = page.querySelector('#registry-section')
   const installPathInput = page.querySelector('#install-path')
+  const versionSelect = page.querySelector('#install-version-select')
+  const versionHint = page.querySelector('#install-version-hint')
+  let selectedRecommendedVersion = ''
+
+  async function loadInstallVersions(source) {
+    if (!versionSelect) return
+    versionSelect.disabled = true
+    versionSelect.innerHTML = `<option value="">${t('common.loading')}</option>`
+    try {
+      const versions = await api.listOpenclawVersions(source)
+      if (!Array.isArray(versions) || versions.length === 0) {
+        versionSelect.innerHTML = `<option value="">${t('setup.noVersions')}</option>`
+        selectedRecommendedVersion = ''
+        return
+      }
+      selectedRecommendedVersion = versions[0]
+      versionSelect.innerHTML = versions.map((version, index) => `<option value="${escapeHtml(version)}">${escapeHtml(version)}${index === 0 ? ` (${t('setup.recommended')})` : ''}</option>`).join('')
+      versionSelect.value = selectedRecommendedVersion
+      if (versionHint) versionHint.textContent = t('setup.recommendedVersionHint', { version: selectedRecommendedVersion })
+    } catch (e) {
+      selectedRecommendedVersion = ''
+      versionSelect.innerHTML = `<option value="">${escapeHtml(t('setup.versionLoadFailed', { err: e?.message || e }))}</option>`
+    } finally {
+      versionSelect.disabled = false
+    }
+  }
+
+  page.querySelectorAll('input[name="install-source"]').forEach(input => {
+    input.addEventListener('change', () => loadInstallVersions(input.value))
+  })
+  versionSelect?.addEventListener('change', () => {
+    if (!versionHint) return
+    versionHint.textContent = versionSelect.value === selectedRecommendedVersion
+      ? t('setup.recommendedVersionHint', { version: selectedRecommendedVersion })
+      : t('setup.customVersionHint', { version: versionSelect.value })
+  })
+  loadInstallVersions(page.querySelector('input[name="install-source"]:checked')?.value || 'official')
   page.querySelector('#btn-browse-install-path')?.addEventListener('click', async () => {
     const selected = await chooseDirectoryPath()
     if (selected && installPathInput) installPathInput.value = selected
@@ -1289,7 +1346,8 @@ function bindEvents(page, nodeOk, detectState) {
   if (!installBtn || !nodeOk) return
 
   installBtn.addEventListener('click', async () => {
-    const source = 'official'
+    const source = page.querySelector('input[name="install-source"]:checked')?.value || 'official'
+    const version = versionSelect?.value || null
     const method = 'npm'
     const registry = page.querySelector('#registry-select')?.value
     const modal = showUpgradeModal(t('setup.installOpenclaw'))
@@ -1416,7 +1474,7 @@ function bindEvents(page, nodeOk, detectState) {
         }
 
         // 发起后台任务（立即返回）
-        await api.upgradeOpenclaw(source, null, method)
+        await api.upgradeOpenclaw(source, version, method)
         modal.appendLog(t('setup.bgTaskStarted'))
       } else {
         // Web 模式：同步等待
@@ -1425,7 +1483,7 @@ function bindEvents(page, nodeOk, detectState) {
           modal.appendLog(t('setup.setRegistry', { url: registry }))
           try { await api.setNpmRegistry(registry) } catch {}
         }
-        const msg = await api.upgradeOpenclaw(source, null, method)
+        const msg = await api.upgradeOpenclaw(source, version, method)
         modal.appendLog(sanitizeInstallOutput(msg))
         await autoBindDetectedOpenclawCli(modal).catch(() => '')
         const verification = await verifyInstalledOpenclaw()
