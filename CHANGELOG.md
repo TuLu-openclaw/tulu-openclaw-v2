@@ -5,6 +5,24 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [4.4.7] - 2026-07-27
+
+### 修复 (Fixes)
+
+- **厂长资源片库接入** — 将已失效的天穹影片源完整替换为 `4kcz.com` 实时 HTML 源，沿用原有片库布局与历史记录兼容键；首页分区、站点导航、分类、搜索、详情和剧集均从实时页面动态解析。
+- **厂长真实播放地址** — 播放前解析 `/v_play/` 页面及播放器包装 URL，优先提取其 `url` 参数中的真实 `m3u8` 或 `mp4`，避免把播放器包装页误当成媒体地址。
+- **厂长真实分页** — 分类按请求页加载并通过下一页内容判断 `hasMore`，移除固定预抓 4 页、最多 120 条和始终返回第一页的临时限制。
+- **天穹退役代码清理** — 删除旧天穹分类、专题、筛选项、`.capi` 请求、播放线路处理和用户可见旧报错，不再保留失效源的硬编码结构。
+- **云岚详情路径纠正** — 云岚详情改用独立 HTML 解析，不再错误调用天穹接口；源站返回 403 或 cdndefend 验证页时明确提示上游限制，不使用伪造或离线详情数据。
+
+### 验证 (Verification)
+
+- `npm test` 230/230 通过
+- `npm run build` 通过
+- `npm audit --omit=dev` 0 vulnerabilities
+- Windows x64、Windows ARM64、macOS Intel、macOS Apple Silicon、Linux AppImage 与 Linux DEB 发布构建全部通过
+- GitHub Release `v4.4.7` 已生成六个平台安装包与 `SHA256SUMS`
+
 ## [4.4.6] - 2026-07-22
 
 ### 修复 (Fixes)
