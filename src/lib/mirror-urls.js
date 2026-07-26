@@ -3,8 +3,8 @@
  * Release and repository links must stay on the formal GitHub source.
  */
 
-const GITHUB_ORG = 'https://github.com/TuLu-openclaw'
-const RELEASE_BASE = `${GITHUB_ORG}/tulu-openclaw-v2/releases/latest`
+const GITHUB_ORG = 'https://github.com/openclaw'
+const RELEASE_BASE = `${GITHUB_ORG}/openclaw/releases/latest`
 
 export async function repoUrl(repo, path = '') {
   return `${GITHUB_ORG}/${repo}${path}`

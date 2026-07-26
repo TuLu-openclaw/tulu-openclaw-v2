@@ -4,7 +4,8 @@ set -euo pipefail
 PRODUCT_NAME="星枢OpenClaw"
 SERVICE_NAME="xingshu-openclaw-web"
 PANEL_PORT="${PANEL_PORT:-1420}"
-REPO="TuLu-openclaw/tulu-openclaw-v2"
+PANEL_RELEASE_API="${PANEL_RELEASE_API:-}"
+PANEL_RELEASE_BASE="${PANEL_RELEASE_BASE:-}"
 NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 log() {
@@ -13,13 +14,13 @@ log() {
 
 if [ "$(id -u)" = "0" ]; then
     IS_ROOT=true
-    INSTALL_DIR="/opt/tulu-openclaw-v2"
+    INSTALL_DIR="/opt/xingshu-openclaw"
     SYSTEMD_DIR="/etc/systemd/system"
     SYSTEMD_SCOPE="system"
     log "[info] 以 root 身份运行，安装到 $INSTALL_DIR"
 else
     IS_ROOT=false
-    INSTALL_DIR="$HOME/.local/share/tulu-openclaw-v2"
+    INSTALL_DIR="$HOME/.local/share/xingshu-openclaw"
     SYSTEMD_DIR="$HOME/.config/systemd/user"
     SYSTEMD_SCOPE="user"
     log "[info] 以普通用户身份运行，安装到 $INSTALL_DIR"
@@ -218,8 +219,13 @@ install_openclaw() {
 }
 
 install_panel() {
+    if [ -z "$PANEL_RELEASE_API" ] || [ -z "$PANEL_RELEASE_BASE" ]; then
+        log "[error] 未配置受管面板发布源，无法下载安装包。"
+        exit 1
+    fi
+
     local latest
-    latest=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+    latest=$(curl -fsSL "$PANEL_RELEASE_API" \
         | grep '"tag_name"' \
         | sed -E 's/.*"v?([^"]+)".*/\1/' \
         | head -n 1)
@@ -234,7 +240,7 @@ install_panel() {
     stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/tulu-openclaw-stage-XXXXXX")
     backup_dir="${INSTALL_DIR}.previous"
     source_name="XingShuOpenClaw-v$latest-source.tar.gz"
-    release_base="https://github.com/$REPO/releases/download/v$latest"
+    release_base="${PANEL_RELEASE_BASE%/}/v$latest"
     trap 'rm -f "${archive:-}" "${sums:-}"; if [ -n "${stage_dir:-}" ]; then rm -rf "$stage_dir"; fi' RETURN
 
     log "[info] 下载并验证正式版本 v$latest..."

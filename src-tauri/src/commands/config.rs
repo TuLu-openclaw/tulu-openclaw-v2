@@ -1045,8 +1045,8 @@ fn npm_command_elevated() -> Command {
     }
 }
 
-/// 安装/升级前的清理工作：停止 Gateway、清理 npm 全局 bin 下的 openclaw 残留文件
-/// 解决 Windows 上 EEXIST（文件已存在）和文件被占用的问题
+/// 安装/升级前只停止 Gateway，避免文件占用。
+/// 不删除现有 CLI shim：npm 安装失败时必须保留仍可使用的 OpenClaw。
 fn pre_install_cleanup() {
     // 1. 停止 Gateway 进程，释放 openclaw 相关文件锁
     #[cfg(target_os = "windows")]
@@ -1072,19 +1072,6 @@ fn pre_install_cleanup() {
         let _ = Command::new("pkill")
             .args(["-f", "openclaw.*gateway"])
             .output();
-    }
-
-    // 2. 清理 npm 全局 bin 目录下的 openclaw 残留文件（Windows EEXIST 根因）
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(npm_bin) = npm_global_bin_dir() {
-            for name in &["openclaw", "openclaw.cmd", "openclaw.ps1"] {
-                let p = npm_bin.join(name);
-                if p.exists() {
-                    let _ = fs::remove_file(&p);
-                }
-            }
-        }
     }
 }
 
@@ -4552,7 +4539,7 @@ async fn try_r2_install(
         // 通用 tarball 模式：npm install -g ./file.tgz（全平台通用，npm 自动处理原生模块）
         let _ = app.emit("upgrade-log", "通用 tarball 模式，执行 npm install...");
         let mut install_cmd = npm_command_elevated();
-        install_cmd.args(["install", "-g", &archive_path.to_string_lossy(), "--force"]);
+        install_cmd.args(["install", "-g", &archive_path.to_string_lossy()]);
         apply_git_install_env(&mut install_cmd);
         let install_output = install_cmd
             .output()
@@ -4714,6 +4701,28 @@ async fn upgrade_openclaw_inner(
 
     let _ = method;
 
+    // 初始安装必须是幂等的：现有官方 CLI 已达到目标版本时直接成功。
+    // Windows 由 resolve_openclaw_cli_path() 明确找到 openclaw.cmd，避免
+    // PowerShell 的 openclaw.ps1 执行策略造成误判。
+    super::refresh_enhanced_path();
+    crate::commands::service::invalidate_cli_detection_cache();
+    if current_source == source {
+        if let (Some(cli_path), Some(current_version)) = (
+            crate::utils::resolve_openclaw_cli_path(),
+            get_local_version().await,
+        ) {
+            let target_satisfied = ver == "latest"
+                || versions_match(&current_version, ver)
+                || (requested_version.is_none() && !recommended_is_newer(ver, &current_version));
+            if target_satisfied {
+                let msg = format!("OpenClaw 已安装且版本满足要求: {current_version} ({cli_path})");
+                let _ = app.emit("upgrade-progress", 100);
+                let _ = app.emit("upgrade-log", &msg);
+                return Ok(msg);
+            }
+        }
+    }
+
     ensure_target_node_runtime_compatible_for_npm(ver)?;
 
     // 切换源时需要卸载旧包，但为避免安装失败导致 CLI 丢失，
@@ -4745,11 +4754,14 @@ async fn upgrade_openclaw_inner(
         ),
     );
 
-    // 安装前：停止 Gateway 并清理可能冲突的 bin 文件
-    let _ = app.emit("upgrade-log", "正在停止 Gateway 并清理旧文件...");
+    // 安装前只停止 Gateway，保留现有 CLI 直到新安装验证成功。
+    let _ = app.emit(
+        "upgrade-log",
+        "正在停止 Gateway，现有 OpenClaw CLI 将保留到安装验证完成...",
+    );
     pre_install_cleanup();
 
-    let _ = app.emit("upgrade-log", format!("$ npm install -g {pkg} --force"));
+    let _ = app.emit("upgrade-log", format!("$ npm install -g {pkg}"));
     #[cfg(target_os = "linux")]
     {
         if !nix_is_root() {
@@ -4794,15 +4806,7 @@ async fn upgrade_openclaw_inner(
     };
 
     let mut install_cmd = npm_command_elevated();
-    install_cmd.args([
-        "install",
-        "-g",
-        &pkg,
-        "--force",
-        "--registry",
-        registry,
-        "--verbose",
-    ]);
+    install_cmd.args(["install", "-g", &pkg, "--registry", registry, "--verbose"]);
     apply_git_install_env(&mut install_cmd);
     let mut child = install_cmd
         .stdout(Stdio::piped())
@@ -4861,15 +4865,7 @@ async fn upgrade_openclaw_inner(
             let _ = app.emit("upgrade-progress", 15);
             let fallback = "https://registry.npmjs.org";
             let mut install_cmd2 = npm_command_elevated();
-            install_cmd2.args([
-                "install",
-                "-g",
-                &pkg,
-                "--force",
-                "--registry",
-                fallback,
-                "--verbose",
-            ]);
+            install_cmd2.args(["install", "-g", &pkg, "--registry", fallback, "--verbose"]);
             apply_git_install_env(&mut install_cmd2);
             let mut child2 = install_cmd2
                 .stdout(Stdio::piped())
@@ -5038,7 +5034,21 @@ async fn upgrade_openclaw_inner(
         }
     }
 
-    let new_ver = get_local_version().await.unwrap_or_else(|| "未知".into());
+    // npm 成功退出不等于产品可用。刷新缓存并验证 CLI 路径和版本后才能发出 done。
+    super::refresh_enhanced_path();
+    crate::commands::service::invalidate_cli_detection_cache();
+    let cli_path = crate::utils::resolve_openclaw_cli_path().ok_or_else(|| {
+        "npm 已完成安装，但未发现可用的 OpenClaw CLI。请重新检测或手动绑定 openclaw.cmd。"
+            .to_string()
+    })?;
+    let new_ver = get_local_version()
+        .await
+        .ok_or_else(|| format!("已发现 OpenClaw CLI，但无法读取版本: {cli_path}"))?;
+    if ver != "latest" && !versions_match(&new_ver, ver) {
+        return Err(format!(
+            "安装后的 OpenClaw 版本与目标不一致：目标 {ver}，检测到 {new_ver}"
+        ));
+    }
     let msg = format!("✅ 安装完成，当前版本: {new_ver}");
     let _ = app.emit("upgrade-log", &msg);
     Ok(msg)
@@ -7082,67 +7092,15 @@ pub fn patch_model_vision() -> Result<bool, String> {
     Ok(changed)
 }
 
-/// 检查 星枢OpenClaw 自身是否有新版本（仅正式 GitHub Release）
+/// 旧版面板更新检查入口。正式更新统一由签名更新清单提供，
+/// 此接口不再向前端返回源码仓库或发布地址。
 #[tauri::command]
 pub async fn check_panel_update() -> Result<Value, String> {
-    let client =
-        crate::commands::build_http_client(std::time::Duration::from_secs(8), Some("星枢OpenClaw"))
-            .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
-
-    let sources = [(
-        "https://api.github.com/repos/TuLu-openclaw/tulu-openclaw-v2/releases/latest",
-        "https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases",
-        "github",
-    )];
-
-    let mut last_err = String::new();
-    for (api_url, releases_url, source) in &sources {
-        match client.get(*api_url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                let json: Value = resp
-                    .json()
-                    .await
-                    .map_err(|e| format!("解析响应失败: {e}"))?;
-
-                let tag = json
-                    .get("tag_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .trim_start_matches('v')
-                    .to_string();
-
-                if tag.is_empty() {
-                    last_err = format!("{source}: 未找到版本号");
-                    continue;
-                }
-
-                let mut result = serde_json::Map::new();
-                result.insert("latest".into(), Value::String(tag));
-                result.insert(
-                    "url".into(),
-                    json.get("html_url")
-                        .cloned()
-                        .unwrap_or(Value::String(releases_url.to_string())),
-                );
-                result.insert("source".into(), Value::String(source.to_string()));
-                result.insert(
-                    "downloadUrl".into(),
-                    Value::String(
-                        "https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest".into(),
-                    ),
-                );
-                return Ok(Value::Object(result));
-            }
-            Ok(resp) => {
-                last_err = format!("{source}: HTTP {}", resp.status());
-            }
-            Err(e) => {
-                last_err = format!("{source}: {e}");
-            }
-        }
-    }
-
-    Err(last_err)
+    Ok(json!({
+        "available": false,
+        "latest": Value::Null,
+        "source": "managed"
+    }))
 }
 
 // === 面板配置 (星枢OpenClaw.json) ===

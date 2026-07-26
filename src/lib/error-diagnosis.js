@@ -7,6 +7,18 @@ const NPM_CMD = 'npm install -g openclaw'
 const GIT_HTTPS_CMD = 'git config --global url."https://github.com/".insteadOf ssh://git@github.com/ && git config --global --add url."https://github.com/".insteadOf ssh://git@github.com && git config --global --add url."https://github.com/".insteadOf ssh://git@://github.com/ && git config --global --add url."https://github.com/".insteadOf git@github.com: && git config --global --add url."https://github.com/".insteadOf git://github.com/ && git config --global --add url."https://github.com/".insteadOf git+ssh://git@github.com/'
 const GIT_HTTPS_ROOT_CMD = GIT_HTTPS_CMD
 
+const PRIVATE_REPOSITORY_PATTERN = /(?:https?:\/\/)?(?:api\.)?github\.com\/(?:repos\/)?TuLu-openclaw(?:\/tulu-openclaw-v2)?(?:\/[^\s"'<>]*)?/gi
+
+export function sanitizeInstallOutput(value) {
+  return String(value ?? '')
+    .replace(PRIVATE_REPOSITORY_PATTERN, '[private source redacted]')
+    .replace(/(https?:\/\/)([^\s/@:]+):([^\s/@]+)@/gi, '$1[credentials-redacted]@')
+    .replace(/([?&](?:token|access_token|auth|key|secret|password)=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/\b(?:npm_|ghp_|github_pat_)[A-Za-z0-9_-]{12,}\b/g, '[token-redacted]')
+    .replace(/\b[A-Za-z]:\\Users\\[^\\\r\n]+/gi, '[local-path-redacted]')
+    .replace(/\/(?:Users|home)\/[^\s\r\n]+/g, '[local-path-redacted]')
+}
+
 const INSTALL_ERROR_FALLBACK = {
   installGitSshDeniedTitle: '安装失败 — Git SSH 认证被拒绝',
   installGitSshDeniedRootHint: 'GitHub SSH 认证失败。检测到本次安装实际由 root/sudo 执行，请先为 root 用户配置 HTTPS 替代规则后重试：',
@@ -63,7 +75,7 @@ function createInstallErrorTranslator(translate) {
  */
 export function diagnoseInstallError(errStr, translate) {
   const tr = createInstallErrorTranslator(translate)
-  const raw = String(errStr || '')
+  const raw = sanitizeInstallOutput(errStr)
   const s = raw.toLowerCase()
   const rootNpm = s.includes('/root/.npm/') || s.includes('/root/.config/') || s.includes('sudo npm')
   const gitFixCommand = rootNpm ? GIT_HTTPS_ROOT_CMD : GIT_HTTPS_CMD

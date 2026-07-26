@@ -73,7 +73,6 @@ function renderCftunnel(el, s) {
       <div style="color:var(--text-tertiary);margin-bottom:var(--space-md)">${t('ext.cftunnelNotInstalled')}</div>
       <div style="display:flex;gap:var(--space-sm);align-items:center">
         <button class="btn btn-primary btn-sm" data-action="install-cftunnel">${t('ext.installBtn')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/cftunnel" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
       </div>
       <div id="install-progress-area"></div>
     `
@@ -166,7 +165,6 @@ function renderClawapp(el, s) {
       <div style="color:var(--text-tertiary);margin-bottom:var(--space-md)">${t('ext.clawappNotInstalled')}</div>
       <div style="display:flex;gap:var(--space-sm);align-items:center">
         <button class="btn btn-primary btn-sm" data-action="install-clawapp">${t('ext.installBtn')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/clawapp" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
       </div>
       <div id="install-clawapp-progress-area"></div>
     `

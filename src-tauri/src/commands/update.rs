@@ -11,9 +11,8 @@ pub fn update_dir() -> PathBuf {
         .join("web-update")
 }
 
-/// 前端热更新：只走 GitHub Release，不再走自定义更新源。
-const GITHUB_RELEASE_API: &str =
-    "https://api.github.com/repos/TuLu-openclaw/tulu-openclaw-v2/releases/latest";
+/// 前端热更新由正式更新清单提供。旧版 GitHub 入口已停用，避免把内部源地址
+/// 传播到客户端或用户可见错误。
 
 /// 全量客户端更新：走屠戮自定义更新清单。
 const FULL_UPDATE_MANIFEST_URL: &str =
@@ -101,14 +100,6 @@ fn hash_ok(bytes: &[u8], expected_hash: &str) -> Result<(), String> {
     }
 }
 
-fn asset_url(asset: &Value) -> Option<String> {
-    asset
-        .get("browser_download_url")
-        .and_then(|v| v.as_str())
-        .or_else(|| asset.get("url").and_then(|v| v.as_str()))
-        .map(|s| s.to_string())
-}
-
 fn find_platform_entry(manifest: &Value, key: &str) -> Option<Value> {
     for field in ["platforms", "downloads", "assets"] {
         if let Some(obj) = manifest.get(field).and_then(|v| v.as_object()) {
@@ -138,31 +129,6 @@ fn find_platform_entry(manifest: &Value, key: &str) -> Option<Value> {
     None
 }
 
-fn pick_github_hot_asset(release: &Value, key: &str) -> Option<Value> {
-    let assets = release.get("assets")?.as_array()?;
-    let key_l = key.to_ascii_lowercase();
-    let mut fallback: Option<Value> = None;
-    for a in assets {
-        let name = a
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        let is_zip = name.ends_with(".zip");
-        let is_hot = name.contains("hot")
-            || name.contains("web-update")
-            || name.contains("frontend")
-            || name.contains("dist");
-        if is_zip && is_hot && name.contains(&key_l) {
-            return Some(a.clone());
-        }
-        if fallback.is_none() && is_zip && is_hot {
-            fallback = Some(a.clone());
-        }
-    }
-    fallback
-}
-
 fn entry_url_hash(entry: &Value) -> Result<(String, String, String), String> {
     if let Some(s) = entry.as_str() {
         return Ok((s.to_string(), String::new(), String::new()));
@@ -188,50 +154,18 @@ fn entry_url_hash(entry: &Value) -> Result<(String, String, String), String> {
     Ok((url, hash, name))
 }
 
-/// 检查前端热更新：GitHub Release → 自动匹配当前平台 hot/web-update/frontend/dist zip。
+/// 旧版前端热更新入口已停用。正式更新由受管清单提供，避免客户端携带源码仓库地址。
 #[tauri::command]
 pub async fn check_frontend_update() -> Result<Value, String> {
-    let client = super::build_http_client(std::time::Duration::from_secs(45), Some("星枢OpenClaw"))
-        .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
-    let resp = client
-        .get(GITHUB_RELEASE_API)
-        .header("User-Agent", "XingShuOpenClaw")
-        .send()
-        .await
-        .map_err(|e| format!("GitHub 请求失败: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("GitHub 返回 {}", resp.status()));
-    }
-    let release: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 GitHub Release 失败: {e}"))?;
-    let latest = release
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim_start_matches('v')
-        .to_string();
-    let current = env!("CARGO_PKG_VERSION");
-    let key = platform_key();
-    let asset = pick_github_hot_asset(&release, key);
-    let url = asset.as_ref().and_then(asset_url).unwrap_or_default();
-    let name = asset
-        .as_ref()
-        .and_then(|a| a.get("name").and_then(|v| v.as_str()))
-        .unwrap_or("")
-        .to_string();
-    let remote_newer = !latest.is_empty() && version_gt(&latest, current);
-    let update_ready = remote_newer && update_dir().join("index.html").exists();
     Ok(serde_json::json!({
-        "source": "github",
-        "platform": key,
-        "currentVersion": current,
-        "latestVersion": latest,
-        "hasUpdate": remote_newer && !update_ready && !url.is_empty(),
+        "source": "managed",
+        "platform": platform_key(),
+        "currentVersion": env!("CARGO_PKG_VERSION"),
+        "latestVersion": "",
+        "hasUpdate": false,
         "compatible": true,
-        "updateReady": update_ready,
-        "manifest": { "version": latest, "url": url, "hash": "", "assetName": name, "releaseUrl": release.get("html_url").cloned().unwrap_or(Value::Null), "changelog": release.get("body").and_then(|v| v.as_str()).unwrap_or("").chars().take(300).collect::<String>() }
+        "updateReady": update_dir().join("index.html").exists(),
+        "manifest": { "version": "", "url": "", "hash": "", "assetName": "", "changelog": "" }
     }))
 }
 

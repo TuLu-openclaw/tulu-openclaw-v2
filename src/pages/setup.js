@@ -6,7 +6,7 @@ import { api, invalidate } from '../lib/tauri-api.js'
 import { showUpgradeModal } from '../components/modal.js'
 import { toast } from '../components/toast.js'
 import { setUpgrading, isMacPlatform } from '../lib/app-state.js'
-import { diagnoseInstallError } from '../lib/error-diagnosis.js'
+import { diagnoseInstallError, sanitizeInstallOutput } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
 
@@ -167,6 +167,22 @@ async function autoBindDetectedOpenclawCli(modal = null) {
   return first.path
 }
 
+async function verifyInstalledOpenclaw() {
+  await refreshInstallDetectionCaches()
+  const [versionRes, pathsRes] = await Promise.allSettled([
+    api.getVersionInfo(),
+    api.scanOpenclawPaths(),
+  ])
+  const version = versionRes.status === 'fulfilled' ? versionRes.value : null
+  const paths = pathsRes.status === 'fulfilled' && Array.isArray(pathsRes.value) ? pathsRes.value : []
+  const cliPath = version?.cli_path || paths.find(item => item?.path)?.path || ''
+  return {
+    installed: Boolean(cliPath && version?.current),
+    cliPath,
+    version: version?.current || '',
+  }
+}
+
 async function autoEnterWhenReady(page, delayMs = 1200) {
   await refreshInstallDetectionCaches()
   const [nodeRes, clawRes, configRes] = await Promise.allSettled([
@@ -258,13 +274,6 @@ export async function render() {
           <div class="setup-hero-copy">
             <h1 class="setup-hero-title">${t('setup.headerTitle')}</h1>
             <p class="setup-hero-desc">${t('setup.headerDesc')}</p>
-            <div class="setup-hero-site-row">
-              <a class="setup-hero-site-link" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest" target="_blank" rel="noopener noreferrer" title="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest">
-                ${icon('link', 14)}
-                <span class="setup-hero-site-label">${t('setup.officialWebsite')}</span>
-                <span class="setup-hero-site-value">GitHub Releases</span>
-              </a>
-            </div>
           </div>
         </div>
         <div class="setup-hero-actions">
@@ -663,7 +672,7 @@ function renderEnvironmentHint() {
             <div class="setup-help-block">
               <div class="setup-help-label">${t('setup.wslWebHint')}</div>
               <div class="setup-help-copy">${t('setup.wslWebDesc')}</div>
-              <code class="setup-help-code">curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh</code>
+              <code class="setup-help-code">npm install -g openclaw</code>
               <div class="setup-help-copy">${t('setup.wslWebPostDeploy')}</div>
             </div>
           ` : ''}
@@ -671,12 +680,11 @@ function renderEnvironmentHint() {
             <div class="setup-help-label">${t('setup.dockerHint')}</div>
             <div class="setup-help-copy">${t('setup.dockerDesc')}</div>
             <code class="setup-help-code">npm install -g openclaw</code>
-            <code class="setup-help-code">curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh</code>
           </div>
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.remoteHint')}</div>
             <div class="setup-help-copy">${t('setup.remoteDesc')}</div>
-            <code class="setup-help-code">curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh</code>
+            <code class="setup-help-code">npm install -g openclaw</code>
           </div>
         </div>
       </details>
@@ -1289,12 +1297,19 @@ function bindEvents(page, nodeOk, detectState) {
 
     setUpgrading(true)
 
-    const cleanup = () => {
-      setUpgrading(false)
+    const stopListeners = () => {
       unlistenLog?.()
       unlistenProgress?.()
       unlistenDone?.()
       unlistenError?.()
+      unlistenLog = null
+      unlistenProgress = null
+      unlistenDone = null
+      unlistenError = null
+    }
+    const cleanup = () => {
+      stopListeners()
+      setUpgrading(false)
     }
 
     let unlistenDone, unlistenError
@@ -1307,8 +1322,9 @@ function bindEvents(page, nodeOk, detectState) {
 
         // 后台任务完成：继续安装 Gateway + 自动配置
         unlistenDone = await listen('upgrade-done', async (e) => {
-          cleanup()
-          modal.setDone(typeof e.payload === 'string' ? e.payload : t('setup.installComplete'))
+          stopListeners()
+          modal.appendLog(typeof e.payload === 'string' ? sanitizeInstallOutput(e.payload) : t('setup.installComplete'))
+          modal.setProgress(100)
 
           // 安装成功后自动安装 Gateway
           modal.appendLog(t('setup.installingGateway'))
@@ -1353,19 +1369,38 @@ function bindEvents(page, nodeOk, detectState) {
             modal.appendHtmlLog(`${statusIcon('warn', 14)} 自动绑定 OpenClaw CLI 失败：${escapeHtml(be?.message || be)}`)
           }
 
+          const verification = await verifyInstalledOpenclaw()
+          if (!verification.installed) {
+            modal.setError(t('setup.installVerificationFailed'))
+            modal.appendHtmlLog(`${statusIcon('warn', 14)} ${t('setup.installVerificationHint')}`)
+            cleanup()
+            return
+          }
+          modal.setDone(t('setup.installComplete'))
+          setUpgrading(false)
           toast(t('setup.installSuccess'), 'success')
           await autoEnterWhenReady(page, 1200)
         })
 
-        // 后台任务失败
+        // 后台任务失败：先复检，避免 npm 已成功但探测竞态被误报为失败
         unlistenError = await listen('upgrade-error', async (e) => {
-          cleanup()
-          const errStr = String(e.payload || t('common.unknown'))
+          stopListeners()
+          const errStr = sanitizeInstallOutput(e.payload || t('common.unknown'))
+          const verification = await verifyInstalledOpenclaw().catch(() => ({ installed: false }))
+          if (verification.installed) {
+            modal.appendHtmlLog(`${statusIcon('ok', 14)} ${t('setup.installRecovered', { version: verification.version })}`)
+            modal.setDone(t('setup.installComplete'))
+            setUpgrading(false)
+            toast(t('setup.installSuccess'), 'success')
+            await autoEnterWhenReady(page, 1200)
+            return
+          }
           modal.appendLog(errStr)
           await new Promise(r => setTimeout(r, 150))
-          const fullLog = modal.getLogText() + '\n' + errStr
+          const fullLog = sanitizeInstallOutput(modal.getLogText() + '\n' + errStr)
           const diagnosis = diagnoseInstallError(fullLog, t)
           modal.setError(diagnosis.title)
+          cleanup()
           if (diagnosis.hint) modal.appendLog('')
           if (diagnosis.hint) modal.appendHtmlLog(`${statusIcon('info', 14)} ${escapeHtml(diagnosis.hint)}`)
           if (diagnosis.command) modal.appendHtmlLog(`${icon('clipboard', 14)} ${escapeHtml(diagnosis.command)}`)
@@ -1391,17 +1426,20 @@ function bindEvents(page, nodeOk, detectState) {
           try { await api.setNpmRegistry(registry) } catch {}
         }
         const msg = await api.upgradeOpenclaw(source, null, method)
-        modal.setDone(msg)
+        modal.appendLog(sanitizeInstallOutput(msg))
         await autoBindDetectedOpenclawCli(modal).catch(() => '')
+        const verification = await verifyInstalledOpenclaw()
+        if (!verification.installed) throw new Error(t('setup.installVerificationFailed'))
+        modal.setDone(t('setup.installComplete'))
         toast(t('setup.installSuccess'), 'success')
         await autoEnterWhenReady(page, 1200)
         cleanup()
       }
     } catch (e) {
       cleanup()
-      const errStr = String(e)
+      const errStr = sanitizeInstallOutput(e?.message || e)
       modal.appendLog(errStr)
-      const fullLog = modal.getLogText() + '\n' + errStr
+      const fullLog = sanitizeInstallOutput(modal.getLogText() + '\n' + errStr)
       const diagnosis = diagnoseInstallError(fullLog, t)
       modal.setError(diagnosis.title)
     }

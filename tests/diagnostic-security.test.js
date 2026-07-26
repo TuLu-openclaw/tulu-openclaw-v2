@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
-import { diagnoseInstallError } from '../src/lib/error-diagnosis.js'
+import { diagnoseInstallError, sanitizeInstallOutput } from '../src/lib/error-diagnosis.js'
 
 test('Gateway credentials are assigned through DOM properties, not HTML interpolation', async () => {
   const source = await readFile(new URL('../src/pages/gateway.js', import.meta.url), 'utf8')
@@ -17,6 +17,26 @@ test('Security load errors are rendered as text instead of interpolated HTML', a
   assert.match(source, /message\.textContent =/)
   assert.match(source, /container\.replaceChildren\(section\)/)
   assert.doesNotMatch(source, /innerHTML\s*=.*e(?:\?\.)?\.message/)
+})
+
+test('install output redacts credentials, private sources, and local paths', () => {
+  const raw = 'https://user:secret@example.com/pkg?token=abc123 C:\\Users\\alice\\AppData\\Roaming\\npm https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases npm_supersecrettoken123'
+  const safe = sanitizeInstallOutput(raw)
+  assert.doesNotMatch(safe, /user:secret|token=abc123|TuLu-openclaw|alice|npm_supersecrettoken123/i)
+  assert.match(safe, /redacted/i)
+})
+
+test('setup installation keeps task state until verification and recovers false failures', async () => {
+  const source = await readFile(new URL('../src/pages/setup.js', import.meta.url), 'utf8')
+  const doneHandler = source.slice(source.indexOf("listen('upgrade-done'"), source.indexOf('// 后台任务失败'))
+  const errorHandler = source.slice(source.indexOf("listen('upgrade-error'"), source.indexOf('// 先设置镜像源'))
+  assert.match(doneHandler, /stopListeners\(\)/)
+  assert.match(doneHandler, /verifyInstalledOpenclaw\(\)/)
+  assert.ok(doneHandler.indexOf('verifyInstalledOpenclaw()') < doneHandler.indexOf('setUpgrading(false)'))
+  assert.match(errorHandler, /verifyInstalledOpenclaw\(\)/)
+  assert.match(errorHandler, /installRecovered/)
+  const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8')
+  assert.match(mainSource, /if \(isUpgrading\(\)\) return/)
 })
 
 test('install diagnoses never recommend disabling TLS, forced install, or sudo npm', () => {

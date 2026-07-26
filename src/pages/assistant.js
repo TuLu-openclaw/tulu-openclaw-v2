@@ -124,8 +124,7 @@ ${personality}
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **星枢：双引擎管理面板 官网**: https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest
-- **GitHub**: https://github.com/TuLu-openclaw
+- 星枢OpenClaw 的更新和支持入口由当前应用提供
 - **开源项目**:
   - **星枢：双引擎管理面板** — OpenClaw 可视化管理面板（Tauri v2）
   - **OpenClaw 官方版** — AI Agent 平台，使用 npm install -g openclaw 安装
@@ -133,7 +132,7 @@ ${personality}
 ## 星枢：双引擎管理面板 是什么
 - OpenClaw 的可视化管理面板，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
 - 支持仪表盘监控、模型配置、Agent 管理、实时聊天、记忆文件管理、AI 助手工具调用等
-- 下载: https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest | GitHub: https://github.com/TuLu-openclaw/tulu-openclaw-v2
+- 下载和更新：请使用当前应用提供的安装与更新功能
 
 ## OpenClaw 是什么
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
@@ -198,8 +197,7 @@ ${personality}
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
 - **OpenClaw 官方版**: npm install -g openclaw
-- **星枢：双引擎管理面板**: 从 https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases 下载
-- **更多项目**: 访问 https://github.com/TuLu-openclaw
+- **星枢：双引擎管理面板**: 使用应用内更新和安装功能
 
 ${t('assistant.systemPromptInstallPathGuidance')}
 
@@ -208,8 +206,8 @@ ${t('assistant.systemPromptInstallPathGuidance')}
 
 ### 提交 Issue
 引导用户到对应仓库提交 Issue，帮用户整理好格式：
-- **星枢：双引擎管理面板**: https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new
-- **OpenClaw 官方版**: https://github.com/openclaw/openclaw/issues/new
+- **星枢：双引擎管理面板**: 使用应用内的支持入口
+- **OpenClaw 官方版**: 请使用官方支持渠道
 
 Issue 模板（帮用户填好）：
 \`\`\`
@@ -669,8 +667,8 @@ const BUILTIN_SKILLS = [
    - **环境信息**（自动填充）
    - **相关日志**（如有）
 6. 用代码块展示完整 Issue 内容，给出对应仓库的 Issue 链接：
-   - 星枢：双引擎管理面板: https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new
-   - OpenClaw: https://github.com/TuLu-openclaw/openclaw-zh/issues/new
+   - 星枢：双引擎管理面板: 使用应用内的支持入口
+   - OpenClaw: 请使用官方支持渠道
 `,
   },
   {
@@ -860,7 +858,7 @@ const HERMES_SKILLS = [
    - **环境信息**（自动填充）
    - **相关日志**（如有）
 6. 给出对应仓库的 Issue 链接：
-   - 星枢：双引擎管理面板: https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new
+   - 星枢：双引擎管理面板: 使用应用内的支持入口
 `,
   },
 ]

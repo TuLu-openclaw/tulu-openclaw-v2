@@ -49,6 +49,7 @@ const dockerCompose = readFileSync(new URL('../docker-compose.yml', import.meta.
 const dockerDeploy = readFileSync(new URL('../scripts/docker-deploy.sh', import.meta.url), 'utf8')
 const dockerWorkflow = readFileSync(new URL('../.github/workflows/docker-image.yml', import.meta.url), 'utf8')
 const mirrorUrls = readFileSync(new URL('../src/lib/mirror-urls.js', import.meta.url), 'utf8')
+const updateCommand = readFileSync(new URL('../src-tauri/src/commands/update.rs', import.meta.url), 'utf8')
 const buildScript = readFileSync(new URL('../scripts/build.sh', import.meta.url), 'utf8')
 const devScript = readFileSync(new URL('../scripts/dev.sh', import.meta.url), 'utf8')
 const retiredTranslationGenerator = readFileSync(new URL('../scripts/gen-patches-6lang.cjs', import.meta.url), 'utf8')
@@ -213,7 +214,9 @@ test('deploy scripts avoid legacy package names and unverified fallback sources'
   assert.ok(linuxDeploy.includes('verify_official_openclaw "$oc_path"'))
   assert.ok(linuxDeploy.includes('无法证明来自官方 npm 包'))
   assert.ok(linuxDeploy.includes('无法验证已安装 CLI 属于官方 npm 包 openclaw'))
-  assert.ok(linuxDeploy.includes('api.github.com/repos/$REPO/releases/latest'))
+  assert.ok(linuxDeploy.includes('PANEL_RELEASE_API'))
+  assert.ok(linuxDeploy.includes('PANEL_RELEASE_BASE'))
+  assert.ok(!linuxDeploy.includes('TuLu-openclaw/tulu-openclaw-v2'))
   assert.ok(linuxDeploy.includes('npm ci --ignore-scripts'))
   assert.ok(linuxDeploy.includes('tar tzf'))
   assert.ok(linuxDeploy.includes('SHA256SUMS'))
@@ -282,13 +285,10 @@ test('README documents version-specific Node compatibility instead of legacy 18+
   assert.ok(!readme.includes('| Node.js | 18+ |'))
 })
 
-test('web deployment guidance uses release assets instead of raw main scripts', () => {
-  const expected = 'curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh'
-  assert.ok(readme.includes(expected))
-  assert.ok(setupPage.includes(expected))
-  assert.ok(!readme.includes('raw.githubusercontent.com/TuLu-openclaw/tulu-openclaw-v2/main/deploy.sh'))
-  assert.ok(!setupPage.includes('raw.githubusercontent.com/TuLu-openclaw/tulu-openclaw-v2/main/deploy.sh'))
-  assert.ok(!readme.includes('cd clawpanel'))
+test('setup deployment guidance never exposes private repository addresses', () => {
+  assert.ok(setupPage.includes('npm install -g openclaw'))
+  assert.ok(!setupPage.includes('raw.githubusercontent.com'))
+  assert.ok(!setupPage.includes('TuLu-openclaw'))
 })
 
 test('translated READMEs do not advertise retired sources or unsupported release artifacts', () => {
@@ -314,9 +314,15 @@ test('translated READMEs do not advertise retired sources or unsupported release
   }
 })
 
-test('panel update and about page no longer advertise legacy mirrors or obsolete package hubs', () => {
-  assert.ok(rustConfig.includes('https://api.github.com/repos/TuLu-openclaw/tulu-openclaw-v2/releases/latest'))
-  assert.ok(rustConfig.includes('https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest'))
+test('panel update and about page do not expose private repository addresses', () => {
+  assert.ok(updateCommand.includes('"source": "managed"'))
+  assert.ok(!updateCommand.includes('TuLu-openclaw/tulu-openclaw-v2'))
+  assert.ok(!devApi.includes('TuLu-openclaw/tulu-openclaw-v2'))
+  assert.ok(!setupPage.includes('TuLu-openclaw'))
+  assert.ok(!aboutPage.includes('TuLu-openclaw'))
+  assert.ok(!assistantPage.includes('TuLu-openclaw'))
+  assert.ok(!mainJs.includes('TuLu-openclaw'))
+  assert.ok(!mainJs.includes('/opt/tulu-openclaw-v2'))
   assert.ok(!rustConfig.includes('qingchencloud/星枢OpenClaw'))
   assert.ok(!rustConfig.includes('QtCodeCreators/星枢OpenClaw'))
   assert.ok(!rustConfig.includes('https://claw.qt.cool'))
@@ -366,6 +372,10 @@ test('active install and upgrade paths are restricted to official OpenClaw via n
   assert.ok(!rustConfig.includes('github.com/qingchencloud/openclaw-standalone'))
   assert.equal((rustConfig.match(/try_standalone_install\(/g) || []).length, 1, 'legacy standalone installer must have no caller')
   assert.equal((devApi.match(/_tryStandaloneInstall\(/g) || []).length, 1, 'Web legacy standalone installer must have no caller')
+  assert.ok(!rustConfig.includes('npm install -g {pkg} --force'))
+  assert.ok(!rustConfig.includes('"--force"'))
+  assert.ok(rustConfig.includes('现有 OpenClaw CLI 将保留到安装验证完成'))
+  assert.ok(rustConfig.includes('npm 已完成安装，但未发现可用的 OpenClaw CLI'))
   assert.ok(!rustMessaging.includes('npm i -g @qingchencloud/openclaw-zh'))
   assert.ok(rustMessaging.includes('npm i -g openclaw@latest --registry https://registry.npmjs.org'))
 })
@@ -390,9 +400,8 @@ test('Docker paths use official packages and build only the checked-out source',
   assert.ok(dockerWorkflow.includes('tulu-openclaw:ci'))
 })
 
-test('URL helpers expose formal repositories and Release assets only', () => {
-  assert.ok(mirrorUrls.includes('https://github.com/TuLu-openclaw'))
-  assert.ok(mirrorUrls.includes('/releases/latest'))
+test('URL helpers do not expose private repository addresses', () => {
+  assert.ok(!mirrorUrls.includes('TuLu-openclaw'))
   assert.ok(!mirrorUrls.includes('gitee.com'))
   assert.ok(!mirrorUrls.includes('raw.githubusercontent.com'))
   assert.ok(!mirrorUrls.includes('/main/deploy.sh'))

@@ -785,6 +785,8 @@ window.addEventListener('lobster-work-end', () => {
           invalidate('check_installation', 'get_services_status', 'get_version_info')
           await detectOpenclawStatus()
           renderSidebar(sidebar)
+          // 安装页仍在执行 Gateway、CLI 绑定和最终复检时，不抢先导航。
+          if (isUpgrading()) return
           // 如果安装完成后变为就绪，跳转到仪表盘
           if (isOpenclawReady() && window.location.hash === '#/setup') {
             navigate('/dashboard')
@@ -1203,12 +1205,10 @@ async function checkGlobalUpdate() {
           <span class="update-banner-ver">${t('about.versionAvailable', { version: ver })}</span>
           ${changelog ? `<span class="update-banner-changelog">· ${changelog}</span>` : ''}
         </div>
-        ${isWeb
-          ? `<button class="btn btn-sm" id="btn-update-show-cmd">${t('about.updateMethod')}</button>
-             <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
-          : `${hasFrontendUpdate ? `<button class="btn btn-sm" id="btn-update-hot">${t('about.hotUpdate')}</button>` : ''}
-             ${hasFullUpdate ? `<button class="btn btn-sm" id="btn-update-full">${t('about.fullInstaller')}</button>` : ''}
-             <a class="btn btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases" target="_blank" rel="noopener">${t('about.releaseNotes')}</a>`
+        ${!isWeb
+          ? `${hasFrontendUpdate ? `<button class="btn btn-sm" id="btn-update-hot">${t('about.hotUpdate')}</button>` : ''}
+             ${hasFullUpdate ? `<button class="btn btn-sm" id="btn-update-full">${t('about.fullInstaller')}</button>` : ''}`
+          : ''
         }
         <button class="update-banner-close" id="btn-update-dismiss" title="${t('about.dismissVersion')}">✕</button>
       </div>
@@ -1218,36 +1218,6 @@ async function checkGlobalUpdate() {
     banner.querySelector('#btn-update-dismiss')?.addEventListener('click', () => {
       localStorage.setItem('星枢OpenClaw_update_dismissed', ver)
       banner.classList.add('update-banner-hidden')
-    })
-
-    // Web 模式：显示更新命令弹窗
-    banner.querySelector('#btn-update-show-cmd')?.addEventListener('click', () => {
-      const overlay = document.createElement('div')
-      overlay.className = 'modal-overlay'
-      overlay.innerHTML = `
-        <div class="modal" style="max-width:480px">
-          <div class="modal-title">${t('about.updateToVersion', { version: ver })}</div>
-          <div style="font-size:var(--font-size-sm);line-height:1.8">
-            <p style="margin-bottom:12px">${t('about.runOnServer')}</p>
-            <pre style="background:var(--bg-tertiary);padding:12px 16px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--font-size-xs);overflow-x:auto;white-space:pre-wrap;user-select:all">cd /opt/tulu-openclaw-v2
-git pull origin main
-npm install
-npm run build
-sudo systemctl restart xingshu-chat
-sudo systemctl reload nginx</pre>
-            <p style="margin-top:12px;color:var(--text-tertiary);font-size:var(--font-size-xs)">
-              ${t('about.updateCommandHint')}
-            </p>
-          </div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary btn-sm" data-action="close">${t('common.close')}</button>
-          </div>
-        </div>
-      `
-      document.body.appendChild(overlay)
-      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
-      overlay.querySelector('[data-action="close"]').onclick = () => overlay.remove()
-      overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') overlay.remove() })
     })
 
     // Tauri 热更新按钮
@@ -1363,7 +1333,7 @@ function startUpdateChecker() {
         <div style="font-size:18px;font-weight:600;margin-bottom:8px;color:#18181b">${t('common.pageLoadFailed')}</div>
         <div style="font-size:13px;color:#71717a;max-width:400px;line-height:1.6;margin-bottom:16px">${String(bootErr?.message || bootErr).replace(/</g,'&lt;')}</div>
         <button id="boot-reload-btn" style="padding:8px 20px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-size:13px;cursor:pointer">${t('common.reloadRetry')}</button>
-        <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}<br><a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues" target="_blank" rel="noopener" style="color:#6366f1">GitHub Issues</a></div>
+        <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}</div>
       </div>`
     app.querySelector('#boot-reload-btn')?.addEventListener('click', () => location.reload())
   }

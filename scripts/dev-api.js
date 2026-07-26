@@ -6345,30 +6345,21 @@ const handlers = {
   auth_login() { throw new Error('由中间件处理') },
   auth_logout() { throw new Error('由中间件处理') },
 
-  check_panel_update() { return { latest: null, url: 'https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases' } },
+  check_panel_update() { return { available: false, latest: null, source: 'managed' } },
 
-  // 前端热更新
+  // 正式更新由受管更新清单提供；开发 API 不向客户端传播源码仓库地址。
   async check_frontend_update() {
     const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
     const currentVersion = pkg.version
-
-    try {
-      const resp = await globalThis.fetch('https://api.github.com/repos/TuLu-openclaw/tulu-openclaw-v2/releases/latest', {
-        signal: AbortSignal.timeout(8000),
-        headers: { 'User-Agent': 'XingShuOpenClaw-Web', Accept: 'application/vnd.github+json' },
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const release = await resp.json()
-      const latestVersion = String(release.tag_name || '').replace(/^v/, '')
-      const hasUpdate = !!latestVersion && latestVersion !== currentVersion && versionGt(latestVersion, currentVersion)
-      const manifest = {
-        version: latestVersion || currentVersion,
-        url: release.html_url || 'https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest',
-      }
-      return { currentVersion, latestVersion, hasUpdate, compatible: true, updateReady: false, manifest }
-    } catch {
-      return { currentVersion, latestVersion: currentVersion, hasUpdate: false, compatible: true, updateReady: false, manifest: { version: currentVersion } }
+    return {
+      currentVersion,
+      latestVersion: '',
+      hasUpdate: false,
+      compatible: true,
+      updateReady: false,
+      manifest: { version: '', url: '', hash: '', assetName: '', changelog: '' },
+      source: 'managed',
     }
   },
   download_frontend_update() { return { success: true, files: 12, path: path.join(OPENCLAW_DIR, '星枢OpenClaw', 'web-update') } },
