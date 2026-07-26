@@ -4975,11 +4975,12 @@ async fn upgrade_openclaw_inner(
     // previously working installation.
     super::refresh_enhanced_path();
     crate::commands::service::invalidate_cli_detection_cache();
-    let verified_cli = crate::utils::resolve_openclaw_cli_path()
-        .ok_or_else(|| "npm 已完成安装，但未发现可用的 OpenClaw CLI；已保留原有安装，未清理旧版本".to_string())?;
-    let verified_version = get_local_version()
-        .await
-        .ok_or_else(|| format!("已发现 OpenClaw CLI，但无法读取版本；已保留原有安装: {verified_cli}"))?;
+    let verified_cli = crate::utils::resolve_openclaw_cli_path().ok_or_else(|| {
+        "npm 已完成安装，但未发现可用的 OpenClaw CLI；已保留原有安装，未清理旧版本".to_string()
+    })?;
+    let verified_version = get_local_version().await.ok_or_else(|| {
+        format!("已发现 OpenClaw CLI，但无法读取版本；已保留原有安装: {verified_cli}")
+    })?;
     let verified_source = detect_installed_source();
     if verified_source != source {
         return Err(format!(
