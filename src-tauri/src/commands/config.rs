@@ -4992,14 +4992,20 @@ async fn upgrade_openclaw_inner(
             "安装后的 OpenClaw 版本与目标不一致：目标 {ver}，检测到 {verified_version}；已保留原有安装"
         ));
     }
-    let _ = app.emit("upgrade-log", format!("新 CLI 验证通过: {verified_version}"));
+    let _ = app.emit(
+        "upgrade-log",
+        format!("新 CLI 验证通过: {verified_version}"),
+    );
 
     // Both npm editions expose the same `openclaw` shim. Uninstalling the
     // previously active package after installing the target can remove the
     // newly verified shim as a side effect. Keep the inactive package as a
     // rollback copy; explicit uninstall remains available to the user.
     if source_changed && current_source != "unknown" {
-        let _ = app.emit("upgrade-log", "旧来源包已保留为回退副本，不自动卸载共享 CLI");
+        let _ = app.emit(
+            "upgrade-log",
+            "旧来源包已保留为回退副本，不自动卸载共享 CLI",
+        );
     }
 
     // 切换源后重装 Gateway 服务
