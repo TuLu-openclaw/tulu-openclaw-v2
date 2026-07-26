@@ -3811,6 +3811,7 @@ pub async fn upgrade_openclaw(
     version: Option<String>,
     method: Option<String>,
 ) -> Result<String, String> {
+    let _requested_method = method;
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         use tauri::Emitter;
@@ -3820,12 +3821,7 @@ pub async fn upgrade_openclaw(
             "official"
         }
         .to_string();
-        let method = if method.as_deref() == Some("npm") {
-            "npm"
-        } else {
-            "npm"
-        }
-        .to_string();
+        let method = "npm".to_string();
         let result = upgrade_openclaw_inner(app2.clone(), source, version, method).await;
         match result {
             Ok(msg) => {
