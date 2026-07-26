@@ -1,0 +1,70 @@
+name: Preview Installer
+
+on:
+  push:
+    branches:
+      - "preview/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    name: Build Windows x64 preview installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout preview source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci --prefer-offline
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Rust compile cache
+        continue-on-error: true
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: src-tauri -> target
+          key: preview-Windows-x64
+
+      - name: Prepare bundled runtime
+        run: node scripts/prepare-runtime.mjs windows-x64
+
+      - name: Verify bundled runtime
+        shell: bash
+        run: |
+          test -f _vendor/runtime/windows-x64/node/node.exe
+          test -f _vendor/runtime/windows-x64/git/cmd/git.exe
+
+      - name: Build NSIS preview installer
+        shell: powershell
+        run: |
+          choco install mingw -y --no-progress --ignore-checksums
+          npm run tauri build -- --bundles nsis
+
+      - name: Upload Windows x64 preview installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: XingShuOpenClaw-preview-${{ github.run_number }}-Windows-x64-setup
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
