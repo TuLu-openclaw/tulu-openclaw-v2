@@ -5472,8 +5472,14 @@ function setupVoiceConversation(page) {
 
   setVoiceStatus(_voiceController.recorderSupported ? t('chat.voiceReadyHint') : t('chat.voiceCompatibilityHint'), 'ready')
   _voiceBtn.addEventListener('click', () => {
-    _voicePanelEl.style.display = _voicePanelEl.style.display === 'none' ? 'block' : 'none'
-    if (_voicePanelEl.style.display === 'block') startSelectedMode()
+    if (_voiceController.active) {
+      _voiceController.stop()
+      _voicePanelEl.style.display = 'block'
+      if (toggleButton) toggleButton.textContent = t('chat.voiceStart')
+      return
+    }
+    _voicePanelEl.style.display = 'block'
+    startSelectedMode()
   })
   _voiceSettingsBtn?.addEventListener('click', () => {
     _voicePanelEl.style.display = _voicePanelEl.style.display === 'none' ? 'block' : 'none'

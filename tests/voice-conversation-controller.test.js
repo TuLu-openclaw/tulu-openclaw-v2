@@ -38,6 +38,13 @@ class FakeRecorder {
   }
 }
 
+class EmptyRecorder extends FakeRecorder {
+  stop() {
+    this.state = 'inactive'
+    this.onstop?.()
+  }
+}
+
 function resetFakeRecognition() {
   FakeRecognition.instances.length = 0
   FakeRecorder.instances.length = 0
@@ -77,6 +84,31 @@ test('short voice mode records, transcribes once, and becomes idle', async () =>
   assert.deepEqual(commands, ['发送 一条消息'])
   assert.equal(voice.mode, 'idle')
   assert.deepEqual(statuses.slice(-3), ['listening', 'transcribing', 'idle'])
+  voice.dispose()
+})
+
+test('short voice mode reports an error when the recorder produces no audio', async () => {
+  resetFakeRecognition()
+  const errors = []
+  const statuses = []
+  const voice = new VoiceConversationController({
+    Recognition: FakeRecognition,
+    MediaRecorder: EmptyRecorder,
+    getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+    transcribe: async () => ({ text: '不应调用' }),
+    onError: error => errors.push(error),
+    onStatus: state => statuses.push(state.status),
+  })
+
+  assert.equal(voice.startShort(), true)
+  await new Promise(resolve => setImmediate(resolve))
+  voice.stop()
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.equal(voice.mode, 'idle')
+  assert.equal(errors.at(-1)?.code, 'no-audio')
+  assert.match(errors.at(-1)?.message || '', /没有录到声音/)
+  assert.equal(statuses.at(-1), 'error')
   voice.dispose()
 })
 
@@ -130,4 +162,5 @@ test('chat page exposes one-shot voice controls and disposes the controller', ()
   assert.match(source, /chat-voice-settings-btn/)
   assert.match(source, /chat-voice-actions/)
   assert.match(source, /_voiceController\?\.dispose\(\)/)
+  assert.match(source, /if \(_voiceController\.active\)/)
 })

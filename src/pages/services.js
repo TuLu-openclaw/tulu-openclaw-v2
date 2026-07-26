@@ -240,7 +240,11 @@ export async function render() {
   `
 
   bindEvents(page)
-  loadAll(page).catch(e => console.warn('[services] initial load failed:', e))
+  // Router 会在 render() 返回后才挂载页面。延后一轮，避免 isConnected
+  // 保护条件把首次加载永久跳过并留下空白骨架屏。
+  setTimeout(() => {
+    loadAll(page).catch(e => console.warn('[services] initial load failed:', e))
+  }, 0)
   return page
 }
 

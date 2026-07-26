@@ -520,7 +520,7 @@ export const api = {
   cliAnythingUninstallTool: (name) => { invalidate('cli_anything_status', 'cli_anything_catalog'); return invoke('cli_anything_uninstall_tool', { name }, 300000) },
   cliAnythingMatrixPreflight: (name) => invoke('cli_anything_matrix_preflight', { name }, 120000),
   browserUseStatus: () => cachedInvoke('browser_use_status', {}, 8000, 70000),
-  browserUseInstall: () => { invalidate('browser_use_status'); return invoke('browser_use_install', {}, 600000) },
+  browserUseInstall: () => { invalidate('browser_use_status'); return invoke('browser_use_install', {}, 1900000) },
   browserUseConfigure: (permissions) => { invalidate('browser_use_status'); return invoke('browser_use_configure', { permissions }, 120000) },
   browserUseUnregister: () => { invalidate('browser_use_status'); return invoke('browser_use_unregister', {}, 120000) },
   browserUseUninstall: () => { invalidate('browser_use_status'); return invoke('browser_use_uninstall', {}, 120000) },
@@ -710,9 +710,9 @@ export const api = {
   checkHermes: () => cachedInvoke('check_hermes', {}, 30000),
   checkHermesUpdate: () => invoke('check_hermes_update'),
   checkPython: () => cachedInvoke('check_python', {}, 60000),
-  installHermes: (method = 'uv-tool', extras = []) => {
+  installHermes: (method = 'official', extras = []) => {
     invalidate('check_hermes', 'hermes_list_providers')
-    return invoke('install_hermes', { method, extras }, 300000)
+    return invoke('install_hermes', { method, extras }, 1900000)
   },
   configureHermes: (provider, apiKey, model, baseUrl, options = {}) => {
     invalidate('check_hermes', 'hermes_list_providers')
@@ -802,7 +802,7 @@ export const api = {
   hermesEnvReveal: () => invoke('hermes_env_reveal'),
   updateHermes: (target = 'latest') => {
     invalidate('check_hermes', 'hermes_list_providers')
-    return invoke('update_hermes', { target })
+    return invoke('update_hermes', { target }, 1900000)
   },
   uninstallHermes: (cleanConfig = false) => {
     invalidate('check_hermes', 'hermes_list_providers')

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -195,12 +196,15 @@ fn run_checked_with_timeout(
     args: &[String],
     timeout: Duration,
 ) -> Result<String, String> {
-    let mut child = hidden_command(program)
+    let mut command = hidden_command(program);
+    command
         .args(args)
         .env("PYTHONUTF8", "1")
         .env("PLAYWRIGHT_BROWSERS_PATH", runtime_dir().join("chromium"))
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    super::apply_proxy_env(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|e| format!("执行 {} 失败: {e}", program.display()))?;
     let deadline = Instant::now() + timeout;
@@ -273,6 +277,24 @@ fn uv_download_url() -> Result<String, String> {
     ))
 }
 
+fn uv_expected_sha256() -> Result<&'static str, String> {
+    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        Ok("2cf29c8ffaa2549aa0f86927b2510008e8ca3dcd2100277d86faf437382a371b")
+    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+        Ok("fbedfb71356d0e63c86b507cf1434a58406afe6eac77aee9d37b8282d4006e14")
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Ok("189108cd026c25d40fb086eaaf320aac52c3f7aab63e185bac51305a1576fc7e")
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        Ok("a338354420dba089218c05d4d585e4bcf174a65fe53260592b2af19ceec85835")
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Ok("735891fb553d0be129f3aa39dc8e9c4c49aaa76ec17f7dfb6a732e79a714873a")
+    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+        Ok("23233d2e950ed8187858350da5c6803b14cbbeaef780382093bb2f2bc4ba1200")
+    } else {
+        Err("当前平台没有 browser-use 运行时支持".into())
+    }
+}
+
 async fn ensure_uv() -> Result<PathBuf, String> {
     let path = uv_path();
     if path.is_file() {
@@ -281,7 +303,7 @@ async fn ensure_uv() -> Result<PathBuf, String> {
     if let Ok(found) = which::which("uv") {
         return Ok(found);
     }
-    let bytes = reqwest::Client::new()
+    let bytes = super::build_http_client(Duration::from_secs(120), Some("XingShu-browser-use"))?
         .get(uv_download_url()?)
         .send()
         .await
@@ -291,6 +313,13 @@ async fn ensure_uv() -> Result<PathBuf, String> {
         .bytes()
         .await
         .map_err(|e| format!("读取 uv 失败: {e}"))?;
+    let actual_sha256 = format!("{:x}", Sha256::digest(&bytes));
+    let expected_sha256 = uv_expected_sha256()?;
+    if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
+        return Err(format!(
+            "uv 运行时完整性校验失败（期望 {expected_sha256}，实际 {actual_sha256}）"
+        ));
+    }
     fs::create_dir_all(runtime_dir()).map_err(|e| format!("创建运行时目录失败: {e}"))?;
     #[cfg(target_os = "windows")]
     {
@@ -639,11 +668,11 @@ pub async fn browser_use_install(app: AppHandle) -> Result<Value, String> {
             format!("mcp=={MCP_VERSION}"),
         ],
     )?;
+    // 必须使用业务 venv 中刚安装的 Playwright，避免浏览器 revision 与 Python 包错配。
     run_checked(
-        Path::new(&uv),
+        &venv_python(),
         &[
-            "tool".into(),
-            "run".into(),
+            "-m".into(),
             "playwright".into(),
             "install".into(),
             "chromium".into(),

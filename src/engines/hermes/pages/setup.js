@@ -507,7 +507,7 @@ export function render() {
     } catch (_) {}
 
     try {
-      await api.installHermes('uv-tool', [])
+      await api.installHermes('official', [])
       installing = false
       progress = 100
       logs.push('✅ ' + t('engine.installSuccess'))

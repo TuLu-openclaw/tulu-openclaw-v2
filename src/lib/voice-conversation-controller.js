@@ -129,7 +129,11 @@ export class VoiceConversationController {
         this._recording = null
         this._recordingStream = null
         this._recordingChunks = []
-        if (chunks.length) void this._transcribeRecording(chunks, recorder.mimeType || 'audio/webm')
+        if (chunks.length) {
+          void this._transcribeRecording(chunks, recorder.mimeType || 'audio/webm')
+        } else if (!this._disposed && this._mode === 'short') {
+          this._handleRecorderError('no-audio')
+        }
       }
       this._recording = recorder
       recorder.start()
@@ -290,6 +294,7 @@ export class VoiceConversationController {
       aborted: '语音识别已停止',
       'start-failed': '无法启动语音识别',
       'recording-failed': '录音失败，请检查麦克风后重试，或改用文字输入',
+      'no-audio': '没有录到声音，请检查麦克风后重试，或改用文字输入',
       'transcription-failed': '语音转文字暂时不可用，请重试或改用文字输入',
     }
     return messages[code] || '语音暂时不可用，请重试或改用文字输入'

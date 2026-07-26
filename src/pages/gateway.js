@@ -275,10 +275,10 @@ function renderConfig(page, state) {
     </div>
   `
 
-  bindConfigEvents(el)
+  bindConfigEvents(el, gw)
 }
 
-function bindConfigEvents(el) {
+function bindConfigEvents(el, gw) {
   // 密码显示/隐藏
   function bindToggle(btnId, inputId) {
     const btn = el.querySelector('#' + btnId)

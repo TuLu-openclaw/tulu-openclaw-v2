@@ -733,7 +733,7 @@ const HERMES_SKILLS = [
 1. 调用 get_system_info 获取系统信息
 2. 用 run_command 执行 \`hermes version\` 检查 Hermes 是否已安装
 3. 如果已安装，告诉用户可以在终端中运行 \`hermes chat\` 开始对话
-4. 如果未安装，给出安装命令：\`uv tool install "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git" --python 3.11\``,
+4. 如果未安装，引导用户在星枢 Hermes 安装页使用“官方安装”，不要给出旧的 Git wheel 安装命令`,
   },
   {
     id: 'hermes-diagnose',
@@ -802,8 +802,7 @@ const HERMES_SKILLS = [
 具体操作：
 1. 调用 get_system_info 获取系统信息
 2. 用 run_command 执行 \`hermes version\` 获取当前版本
-3. 告诉用户升级命令：
-   \`uv tool install --reinstall "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git" --python 3.11\`
+3. 优先引导用户在星枢 Hermes 控制台使用版本升级，终端用户可运行 \`hermes update\`
 4. 提醒用户升级前先停止 Gateway：\`hermes gateway stop\`
 5. 升级完成后建议重新启动 Gateway`,
   },

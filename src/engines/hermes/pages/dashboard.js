@@ -286,8 +286,8 @@ export function render() {
     { label: t('engine.cliVersion'),    desc: t('engine.cliVersionDesc'),   cmd: 'hermes version' },
     { label: t('engine.cliGwStart'),    desc: t('engine.cliGwStartDesc'),   cmd: 'hermes gateway run' },
     { label: t('engine.cliGwStop'),     desc: t('engine.cliGwStopDesc'),    cmd: 'hermes gateway stop' },
-    { label: t('engine.cliUpgrade'),    desc: t('engine.cliUpgradeDesc'),   cmd: 'uv tool install --reinstall "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git" --python 3.11' },
-    { label: t('engine.cliUninstall'),  desc: t('engine.cliUninstallDesc'), cmd: 'uv tool uninstall hermes-agent' },
+    { label: t('engine.cliUpgrade'),    desc: t('engine.cliUpgradeDesc'),   cmd: 'hermes update' },
+    { label: t('engine.cliUninstall'),  desc: t('engine.cliUninstallDesc'), cmd: 'hermes uninstall --yes' },
     { label: t('engine.cliConfig'),     desc: t('engine.cliConfigDesc'),    cmd: isWin ? `explorer ${configPath}` : `open ${configPath}` },
   ]
 
@@ -451,7 +451,7 @@ export function render() {
           <div class="hm-kpi-label">${t('engine.dashVersion')}</div>
           <div class="hm-kpi-value">v${version}</div>
           <div class="hm-kpi-foot">
-            <span class="hm-badge hm-badge--accent">uv-tool</span>
+            <span class="hm-badge hm-badge--accent">official</span>
             <button class="hm-btn hm-btn--ghost hm-btn--sm hm-check-update" style="margin-left:6px;font-size:10px" title="${t('engine.dashCheckUpdate')}">
               ${updateChecking ? '⏳' : '🔄'} ${updateChecking ? t('engine.dashCheckingUpdate') : t('engine.dashCheckUpdate')}
             </button>
@@ -848,7 +848,7 @@ export function render() {
             <p style="margin:0 0 10px;line-height:1.6;color:var(--text-secondary)">
               ${t('engine.dashNativePanelDepHint')}
             </p>
-            <pre style="margin:0 0 12px;padding:12px 14px;background:var(--surface-2,#f5f5f4);border:1px solid var(--border,#e5e5e5);border-radius:6px;font-family:var(--hm-font-mono,monospace);font-size:13px;color:var(--text-primary);user-select:all;white-space:pre-wrap;word-break:break-all"><code>uv tool install --force 'hermes-agent[web] @ git+https://github.com/NousResearch/hermes-agent.git'</code></pre>
+            <pre style="margin:0 0 12px;padding:12px 14px;background:var(--surface-2,#f5f5f4);border:1px solid var(--border,#e5e5e5);border-radius:6px;font-family:var(--hm-font-mono,monospace);font-size:13px;color:var(--text-primary);user-select:all;white-space:pre-wrap;word-break:break-all"><code>${isWin ? 'powershell -NoProfile -Command "iex (irm https://hermes-agent.nousresearch.com/install.ps1)"' : 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash'}</code></pre>
             <p style="margin:0;font-size:12px;color:var(--text-tertiary,#999);line-height:1.6">
               ${t('engine.dashNativePanelDown', { port })}
             </p>
@@ -861,7 +861,7 @@ export function render() {
         })
         overlay.querySelector('#hm-dash-copy-cmd')?.addEventListener('click', async () => {
           try {
-            await navigator.clipboard.writeText(`uv tool install --force 'hermes-agent[web] @ git+https://github.com/NousResearch/hermes-agent.git'`)
+            await navigator.clipboard.writeText(isWin ? 'powershell -NoProfile -Command "iex (irm https://hermes-agent.nousresearch.com/install.ps1)"' : 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash')
             toast(t('common.copied') || 'Copied', 'success')
           } catch {}
         })
@@ -918,7 +918,7 @@ export function render() {
               }
             }
 
-            await api.installHermes('uv-tool', ['web'])
+            await api.installHermes('official', ['web'])
             um.setDone(t('engine.dashNativePanelInstallWebDone'))
             installOk = true
           } catch (err) {
