@@ -10,6 +10,7 @@ import { icon, statusIcon } from '../lib/icons.js'
 import { t, getLang } from '../lib/i18n.js'
 import { getActiveEngineId } from '../lib/engine-manager.js'
 import { getGatewayState as getHermesGatewayState } from '../engines/hermes/index.js'
+import { classifyOpenClawVersions, versionKinds, parseOpenClawVersion } from '../lib/openclaw-version-ui.js'
 
 export async function render() {
   const page = document.createElement('div')
@@ -408,6 +409,7 @@ async function showVersionPicker(page, currentVersion) {
           <div id="oc-action-hint" style="font-size:var(--font-size-xs);color:var(--text-tertiary)"></div>
           <div id="nightly-toggle" style="display:none"></div>
         </div>
+        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.5">${t('about.versionDownloadDataUnavailable')}</div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary btn-sm" data-action="cancel">${t('common.cancel')}</button>
@@ -476,6 +478,7 @@ async function showVersionPicker(page, currentVersion) {
   }
 
   let showNightly = false
+  let showHistory = false
 
   async function loadVersions(source) {
     select.innerHTML = `<option value="">${t('common.loading')}</option>`
@@ -490,23 +493,32 @@ async function showVersionPicker(page, currentVersion) {
         select.innerHTML = `<option value="">${t('about.noVersions')}</option>`
         return
       }
-      const stable = allVersions.filter(v => !v.includes('nightly') && !v.includes('canary') && !v.includes('alpha') && !v.includes('beta') && !v.includes('rc') && !v.includes('dev') && !v.includes('next'))
-      const versions = showNightly ? allVersions : (stable.length > 0 ? stable : allVersions)
-      const nightlyCount = allVersions.length - stable.length
-      select.innerHTML = versions.map((v, idx) => {
+      const recommended = allVersions[0] || ''
+      const groups = classifyOpenClawVersions(allVersions, recommended)
+      const featured = [...new Set([recommended, groups.latestStable].filter(Boolean))]
+      const recentStable = groups.stable.filter(v => !featured.includes(v)).slice(0, 8)
+      const history = groups.stable.filter(v => !featured.includes(v) && !recentStable.includes(v))
+      const versions = [...featured, ...recentStable, ...(showHistory ? history : []), ...(showNightly ? groups.preview : [])]
+      const nightlyCount = groups.preview.length
+      select.innerHTML = versions.map(v => {
         const isCurrent = isInstalled && v === currentVersion.current && source === currentVersion.source
-        const label = `${v}${idx === 0 ? ` (${t('about.recommended')})` : ''}${isCurrent ? ` (${t('about.current')})` : ''}`
+        const kindLabels = versionKinds(v, { recommended, latestStable: groups.latestStable }).map(kind => kind === 'recommended' ? t('about.versionTagRecommended') : kind === 'latest' ? t('about.versionTagLatest') : kind === 'preview' ? t('about.versionTagPreview') : t('about.versionTagStable'))
+        const parsed = parseOpenClawVersion(v)
+        if (parsed.republish) kindLabels.push(t('about.versionTagRepublish', { count: parsed.republish }))
+        if (parsed.chineseRevision) kindLabels.push(t('about.versionTagChineseRevision', { count: parsed.chineseRevision }))
+        const label = `${v} (${kindLabels.join(' · ')})${isCurrent ? ` (${t('about.current')})` : ''}`
         return `<option value="${escapeAttr(v)}">${escapeHtml(label)}</option>`
       }).join('')
       // nightly 切换提示
       const toggleEl = overlay.querySelector('#nightly-toggle')
       if (toggleEl) {
-        if (nightlyCount > 0) {
+        if (history.length > 0 || nightlyCount > 0) {
           toggleEl.style.display = ''
-          toggleEl.innerHTML = showNightly
+          toggleEl.innerHTML = `${history.length ? `<a href="#" id="btn-toggle-history" style="color:var(--text-tertiary);text-decoration:none;font-size:var(--font-size-xs);margin-right:12px">${showHistory ? t('about.hideHistory') : t('about.showHistory', { count: history.length })}</a>` : ''}${nightlyCount ? (showNightly
             ? `<a href="#" id="btn-toggle-nightly" style="color:var(--primary);text-decoration:none;font-size:var(--font-size-xs)">${t('about.hidePreview', { count: nightlyCount })}</a>`
-            : `<a href="#" id="btn-toggle-nightly" style="color:var(--text-tertiary);text-decoration:none;font-size:var(--font-size-xs)">${t('about.showPreview', { count: nightlyCount })}</a>`
-          toggleEl.querySelector('#btn-toggle-nightly').onclick = (e) => { e.preventDefault(); showNightly = !showNightly; loadVersions(source) }
+            : `<a href="#" id="btn-toggle-nightly" style="color:var(--text-tertiary);text-decoration:none;font-size:var(--font-size-xs)">${t('about.showPreview', { count: nightlyCount })}</a>`) : ''}`
+          toggleEl.querySelector('#btn-toggle-history')?.addEventListener('click', (e) => { e.preventDefault(); showHistory = !showHistory; loadVersions(source) })
+          toggleEl.querySelector('#btn-toggle-nightly')?.addEventListener('click', (e) => { e.preventDefault(); showNightly = !showNightly; loadVersions(source) })
         } else {
           toggleEl.style.display = 'none'
         }
@@ -522,6 +534,7 @@ async function showVersionPicker(page, currentVersion) {
     input.addEventListener('change', () => {
       currentSelect = input.value
       showNightly = false
+      showHistory = false
       loadVersions(currentSelect)
     })
   })

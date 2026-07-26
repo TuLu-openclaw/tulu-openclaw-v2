@@ -9,6 +9,7 @@ import { setUpgrading, isMacPlatform } from '../lib/app-state.js'
 import { diagnoseInstallError, sanitizeInstallOutput } from '../lib/error-diagnosis.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { t } from '../lib/i18n.js'
+import { classifyOpenClawVersions, versionKind, versionKinds, parseOpenClawVersion } from '../lib/openclaw-version-ui.js'
 
 function escapeHtml(str) {
   if (str == null) return ''
@@ -638,6 +639,8 @@ function renderInstallSection() {
           <option value="">${t('common.loading')}</option>
         </select>
         <div id="install-version-hint" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:4px;line-height:1.5">${t('setup.versionChoiceHint')}</div>
+        <button class="btn btn-secondary btn-sm" id="install-version-more" type="button" style="margin-top:8px;display:none">${t('setup.showAllVersions')}</button>
+        <div style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:8px;line-height:1.5">${t('setup.versionDownloadDataUnavailable')}</div>
       </div>
       <div style="margin-bottom:var(--space-sm)" id="registry-section">
         <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.registryLabel')}</label>
@@ -1299,7 +1302,48 @@ function bindEvents(page, nodeOk, detectState) {
   const installPathInput = page.querySelector('#install-path')
   const versionSelect = page.querySelector('#install-version-select')
   const versionHint = page.querySelector('#install-version-hint')
+  const versionMoreBtn = page.querySelector('#install-version-more')
   let selectedRecommendedVersion = ''
+  let selectedLatestStableVersion = ''
+  let loadedVersions = []
+  let showAllVersions = false
+
+  function versionLabel(version) {
+    const labels = {
+      recommended: t('setup.versionTagRecommended'),
+      latest: t('setup.versionTagLatest'),
+      preview: t('setup.versionTagPreview'),
+      stable: t('setup.versionTagStable'),
+    }
+    const tags = versionKinds(version, { recommended: selectedRecommendedVersion, latestStable: selectedLatestStableVersion }).map(kind => labels[kind])
+    const parsed = parseOpenClawVersion(version)
+    if (parsed.republish) tags.push(t('setup.versionTagRepublish', { count: parsed.republish }))
+    if (parsed.chineseRevision) tags.push(t('setup.versionTagChineseRevision', { count: parsed.chineseRevision }))
+    return `${version} (${tags.join(' · ')})`
+  }
+
+  function renderVersionOptions() {
+    const groups = classifyOpenClawVersions(loadedVersions, selectedRecommendedVersion)
+    selectedLatestStableVersion = groups.latestStable
+    const featured = [...new Set([selectedRecommendedVersion, selectedLatestStableVersion].filter(Boolean))]
+    const recentStable = groups.stable.filter(version => !featured.includes(version)).slice(0, 8)
+    const historical = groups.stable.filter(version => !featured.includes(version) && !recentStable.includes(version))
+    const option = version => `<option value="${escapeHtml(version)}">${escapeHtml(versionLabel(version))}</option>`
+    versionSelect.innerHTML = [
+      featured.length ? `<optgroup label="${escapeHtml(t('setup.versionGroupSuggested'))}">${featured.map(option).join('')}</optgroup>` : '',
+      recentStable.length ? `<optgroup label="${escapeHtml(t('setup.versionGroupRecentStable'))}">${recentStable.map(option).join('')}</optgroup>` : '',
+      showAllVersions && historical.length ? `<optgroup label="${escapeHtml(t('setup.versionGroupHistory'))}">${historical.map(option).join('')}</optgroup>` : '',
+      showAllVersions && groups.preview.length ? `<optgroup label="${escapeHtml(t('setup.versionGroupPreview'))}">${groups.preview.map(option).join('')}</optgroup>` : '',
+    ].join('')
+    versionSelect.value = selectedRecommendedVersion || selectedLatestStableVersion || groups.all[0] || ''
+    if (versionMoreBtn) {
+      const hiddenCount = historical.length + groups.preview.length
+      versionMoreBtn.style.display = hiddenCount ? '' : 'none'
+      versionMoreBtn.textContent = showAllVersions
+        ? t('setup.hideAllVersions')
+        : t('setup.showAllVersionsCount', { count: hiddenCount })
+    }
+  }
 
   async function loadInstallVersions(source) {
     if (!versionSelect) return
@@ -1313,8 +1357,9 @@ function bindEvents(page, nodeOk, detectState) {
         return
       }
       selectedRecommendedVersion = versions[0]
-      versionSelect.innerHTML = versions.map((version, index) => `<option value="${escapeHtml(version)}">${escapeHtml(version)}${index === 0 ? ` (${t('setup.recommended')})` : ''}</option>`).join('')
-      versionSelect.value = selectedRecommendedVersion
+      loadedVersions = versions
+      showAllVersions = false
+      renderVersionOptions()
       if (versionHint) versionHint.textContent = t('setup.recommendedVersionHint', { version: selectedRecommendedVersion })
     } catch (e) {
       selectedRecommendedVersion = ''
@@ -1327,11 +1372,22 @@ function bindEvents(page, nodeOk, detectState) {
   page.querySelectorAll('input[name="install-source"]').forEach(input => {
     input.addEventListener('change', () => loadInstallVersions(input.value))
   })
+  versionMoreBtn?.addEventListener('click', () => {
+    const selected = versionSelect?.value
+    showAllVersions = !showAllVersions
+    renderVersionOptions()
+    if (selected && [...versionSelect.options].some(option => option.value === selected)) versionSelect.value = selected
+  })
   versionSelect?.addEventListener('change', () => {
     if (!versionHint) return
-    versionHint.textContent = versionSelect.value === selectedRecommendedVersion
+    const kind = versionKind(versionSelect.value, { recommended: selectedRecommendedVersion, latestStable: selectedLatestStableVersion })
+    versionHint.textContent = kind === 'recommended'
       ? t('setup.recommendedVersionHint', { version: selectedRecommendedVersion })
-      : t('setup.customVersionHint', { version: versionSelect.value })
+      : kind === 'latest'
+        ? t('setup.latestVersionHint', { version: versionSelect.value })
+        : kind === 'preview'
+          ? t('setup.previewVersionHint', { version: versionSelect.value })
+          : t('setup.customVersionHint', { version: versionSelect.value })
   })
   loadInstallVersions(page.querySelector('input[name="install-source"]:checked')?.value || 'official')
   page.querySelector('#btn-browse-install-path')?.addEventListener('click', async () => {
