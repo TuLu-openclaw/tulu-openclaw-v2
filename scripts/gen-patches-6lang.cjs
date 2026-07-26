@@ -1,7 +1,12 @@
 /**
- * Generate translation patch files for vi/es/pt/ru/fr/de
- * Writes scripts/translations/{lang}/{module}.json
+ * Retired one-off translation migration generator.
+ *
+ * Current locale sources live under src/locales/. This historical snapshot is
+ * intentionally non-executable because running it would overwrite translation
+ * patches with stale product names and incomplete keys.
  */
+throw new Error('Retired generator: edit src/locales/ directly and update locale tests instead.')
+
 const fs = require('fs')
 const path = require('path')
 const OUTDIR = path.resolve(__dirname, 'translations')

@@ -104,7 +104,7 @@ fn detect_runtime_target_key() -> String {
     if target.contains("linux") && target.starts_with("aarch64") {
         return "linux-arm64".to_string();
     }
-    "windows-x64".to_string()
+    panic!("unsupported Cargo TARGET for bundled runtime: {}", target)
 }
 
 fn sync_resource_dir(manifest_dir: &str, name: &str) {

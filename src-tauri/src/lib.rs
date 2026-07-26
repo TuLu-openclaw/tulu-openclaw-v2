@@ -7,8 +7,8 @@ mod windows_proxy;
 
 use commands::{
     agency_agents, agent, assistant, browser_use, cli_anything, config, device, extensions, hermes,
-    hermes_providers, logs, memory, messaging, music, openmontage, pairing, proxy, service, skills,
-    tvbox, update,
+    hermes_providers, logs, memory, messaging, music, openmontage, pairing, proxy, route_graph,
+    service, skills, tvbox, update,
 };
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -426,6 +426,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // 配置
             config::read_openclaw_config,
+            config::write_model_channel_patch,
             config::write_openclaw_config,
             config::validate_openclaw_config,
             config::read_mcp_config,
@@ -464,6 +465,11 @@ pub fn run() {
             config::get_openclaw_dir,
             config::read_panel_config,
             config::write_panel_config,
+            config::panel_auth_status,
+            config::panel_auth_setup,
+            config::panel_auth_login,
+            config::panel_auth_change_password,
+            config::panel_auth_ignore_risk,
             config::get_bundled_runtime_status,
             config::deploy_bundled_node,
             config::deploy_bundled_git,
@@ -478,6 +484,7 @@ pub fn run() {
             config::invalidate_path_cache,
             config::clear_usage_cost_cache,
             config::get_status_summary,
+            route_graph::get_route_graph,
             config::doctor_fix,
             config::doctor_check,
             config::relaunch_app,
@@ -621,6 +628,8 @@ pub fn run() {
             hermes::hermes_env_set,
             hermes::hermes_env_delete,
             hermes::hermes_env_reveal,
+            hermes::hermes_channel_config_read,
+            hermes::hermes_channel_config_save,
             hermes::hermes_config_raw_read,
             hermes::hermes_config_raw_write,
             hermes::hermes_set_gateway_url,
@@ -635,6 +644,11 @@ pub fn run() {
             hermes::hermes_session_rename,
             hermes::hermes_profiles_list,
             hermes::hermes_profile_use,
+            hermes::hermes_profile_gateway_action,
+            hermes::hermes_profile_create,
+            hermes::hermes_profile_rename,
+            hermes::hermes_profile_delete,
+            hermes::hermes_diagnostic_run,
             hermes::hermes_logs_list,
             hermes::hermes_logs_read,
             hermes::hermes_logs_download,
@@ -647,6 +661,7 @@ pub fn run() {
             hermes::hermes_memory_write,
             hermes::hermes_memory_read_all,
             hermes::hermes_dashboard_probe,
+            hermes::hermes_dashboard_api_proxy,
             hermes::hermes_dashboard_start,
             hermes::hermes_dashboard_stop,
             hermes::hermes_dashboard_themes,

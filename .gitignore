@@ -19,19 +19,31 @@ credentials.json
 credentials*.json
 secrets.json
 
-# Temporary debug/fix scripts (development-only, must not ship)
+# Temporary root-level debug/fix scripts (development-only, must not ship)
+.git_commit_msg.txt
+.gitmsg.txt
+_dev_server.js
+_inject_*.py
+analyze-*.cjs
+check_*.py
+commit-fix.sh
+find-bytes*.cjs
 fix_bugs.*
 fix-*.cjs
 fix-*.js
 fix-*.py
 fix2.py
 fix3.py
+line[0-9]*.cjs
+make-test.js
 test-crawl*.cjs
 test-crawl*.js
 test-bfzy.mjs
 test-detail.mjs
 test-movie-api.mjs
 test-play.mjs
+verify.mjs
+verify-fix.cjs
 
 # Dependencies
 node_modules/
@@ -41,7 +53,8 @@ dist/
 dist-ssr/
 src-tauri/target/
 src-tauri/resources/runtime/
-_vendor/runtime-build/
+_vendor/runtime-build-*/
+_vendor/runtime/*/
 
 # Runtime state & logs
 *.log

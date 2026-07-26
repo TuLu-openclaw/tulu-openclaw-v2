@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Rust toolchain
         run: |
@@ -41,7 +41,7 @@ jobs:
         run: rustc --version && cargo --version
 
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
@@ -88,7 +88,7 @@ jobs:
             runtimeTarget: windows-x64
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Rust toolchain
         run: |
@@ -99,7 +99,7 @@ jobs:
         run: rustc --version && cargo --version
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -119,9 +119,7 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: Prepare bundled runtime
-        env:
-          RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
+      - name: Prepare bundled runtime from verified official sources
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Rust compile check
@@ -129,6 +127,12 @@ jobs:
         env:
           OPENCLAW_ALLOW_RUNTIME_PLACEHOLDER: "1"
         run: cargo check --all-targets
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        env:
+          OPENCLAW_ALLOW_RUNTIME_PLACEHOLDER: "1"
+        run: cargo test --all-targets
 
   # ─────────────────────────────────────────────────────────────
   # Job 3: Frontend Check + Unit Tests
@@ -144,10 +148,10 @@ jobs:
         node-version: ['22', '24']
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
@@ -175,7 +179,7 @@ jobs:
 
       - name: Upload test coverage
         if: ${{ always() && hashFiles('coverage/**') != '' }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: vitest-results-${{ matrix.node-version }}
           path: coverage/
@@ -192,10 +196,10 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
           cache: npm
@@ -225,10 +229,10 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
           cache: npm
@@ -240,7 +244,7 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Run Trivy container image scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8 # pinned master
         with:
           scan-type: 'fs'
           scan-ref: 'src-tauri'
@@ -257,7 +261,7 @@ jobs:
 
       - name: Upload Trivy scan results
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@adfda868f108ac4222129de456ea554034a27db7 # v4
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -289,10 +293,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22'
           cache: npm
@@ -303,7 +307,7 @@ jobs:
           rustup default stable
 
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           workspaces: src-tauri -> target
 
@@ -322,9 +326,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Prepare bundled runtime
-        env:
-          RUNTIME_BASE_URL: http://124.220.22.11:9002/runtime
+      - name: Prepare bundled runtime from verified official sources
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Frontend build
@@ -335,7 +337,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.platform.target }}
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: build-${{ matrix.platform.name }}
           path: |
@@ -356,15 +358,15 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: artifacts
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: artifacts/**/*
           generate_release_notes: true

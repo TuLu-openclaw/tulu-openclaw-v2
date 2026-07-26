@@ -1,559 +1,160 @@
-# 贡献指南 & 维护手册
+# 贡献指南与维护手册
 
-感谢你对 星枢OpenClaw 项目的关注！本文档同时作为**贡献指南**和**项目维护手册**，涵盖开发、构建、发版、部署的完整工作流。
+感谢你参与星枢OpenClaw。本文档说明当前仓库的开发、验证、发布和安全约定。
 
-> 🌐 **官网**: [claw.qt.cool](https://claw.qt.cool/)  |  📦 **仓库**: [github.com/qingchencloud/clawpanel](https://github.com/qingchencloud/clawpanel)
+- 仓库：https://github.com/TuLu-openclaw/tulu-openclaw-v2
+- 问题反馈：https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues
+- 正式版本：https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases
 
----
+## 开发环境
 
-## 目录
-
-- [开发环境要求](#开发环境要求)
-- [项目结构](#项目结构)
-- [运行模式](#运行模式)
-- [版本管理](#版本管理)
-- [发版流程](#发版流程)
-- [CI/CD 工作流](#cicd-工作流)
-- [配置文件说明](#配置文件说明)
-- [关键脚本](#关键脚本)
-- [前端开发约定](#前端开发约定)
-- [Rust 后端约定](#rust-后端约定)
-- [安全机制](#安全机制)
-- [部署模式](#部署模式)
-- [分支与提交规范](#分支与提交规范)
-- [PR 流程](#pr-流程)
-- [代码规范](#代码规范)
-- [问题反馈](#问题反馈)
-
----
-
-## 开发环境要求
-
-| 依赖 | 最低版本 | 说明 |
-|------|----------|------|
-| Node.js | 18+ | 前端构建（推荐 22 LTS） |
-| Rust | stable | Tauri 后端编译 |
-| Tauri CLI | v2 | `cargo install tauri-cli --version "^2"` |
-
-### 快速开始
-
-```bash
-# 克隆仓库
-git clone https://github.com/qingchencloud/clawpanel.git
-cd clawpanel
-
-# 安装前端依赖
-npm install
-```
-
-#### macOS / Linux
-
-```bash
-# 启动完整 Tauri 桌面应用
-./scripts/dev.sh
-
-# 仅启动前端（浏览器调试，含 dev-api 真实后端）
-./scripts/dev.sh web
-```
-
-#### Windows
-
-```powershell
-# 启动完整 Tauri 桌面应用
-npm run tauri dev
-
-# 仅启动前端（浏览器调试，含 dev-api 真实后端）
-npm run dev
-```
-
-> Windows 开发需要安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选「使用 C++ 的桌面开发」工作负载）和 [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)（Win10+ 通常已预装）。
-
----
-
-## 项目结构
-
-```
-clawpanel/
-├── src/                        # 前端源码（Vanilla JS + Vite）
-│   ├── pages/                  # 页面模块（每个导出 render()）
-│   │   ├── dashboard.js        #   仪表盘
-│   │   ├── assistant.js        #   AI 助手
-│   │   ├── chat.js             #   实时聊天
-│   │   ├── chat-debug.js       #   聊天调试（WebSocket）
-│   │   ├── services.js         #   服务管理
-│   │   ├── logs.js             #   日志查看
-│   │   ├── config.js           #   模型配置
-│   │   ├── gateway.js          #   网关配置
-│   │   ├── agents.js           #   Agent 管理
-│   │   ├── memory.js           #   记忆管理
-│   │   ├── extensions.js       #   扩展工具
-│   │   ├── security.js         #   安全设置
-│   │   ├── setup.js            #   初始设置向导
-│   │   └── about.js            #   关于页面
-│   ├── components/             # 通用组件
-│   │   ├── sidebar.js          #   侧边导航栏
-│   │   ├── toast.js            #   消息提示
-│   │   └── modal.js            #   弹窗组件
-│   ├── lib/                    # 工具库
-│   │   ├── tauri-api.js        #   Tauri API 封装（含 Web fallback + mock）
-│   │   ├── theme.js            #   主题切换（暗色/亮色）
-│   │   └── app-state.js        #   应用状态管理
-│   ├── style/                  # CSS 样式（CSS Variables 驱动）
-│   │   ├── variables.css       #   CSS 变量定义（主题色、间距、字号）
-│   │   ├── base.css            #   基础样式重置
-│   │   ├── layout.css          #   布局（侧边栏、内容区）
-│   │   ├── components.css      #   组件样式（按钮、表单、卡片）
-│   │   ├── pages.css           #   页面通用样式
-│   │   ├── chat.css            #   聊天页样式
-│   │   ├── agents.css          #   Agent 页样式
-│   │   ├── debug.css           #   调试页样式
-│   │   └── assistant.css       #   AI 助手页样式
-│   ├── router.js               # Hash 路由
-│   └── main.js                 # 入口文件（含密码保护逻辑）
-├── src-tauri/                  # Rust 后端（Tauri v2）
-│   ├── src/
-│   │   ├── lib.rs              #   入口 + 命令注册
-│   │   ├── commands/           #   Tauri 命令（按功能模块拆分）
-│   │   │   ├── mod.rs          #     模块注册 + enhanced_path()
-│   │   │   ├── config.rs       #     配置读写 + 版本管理 + 面板配置
-│   │   │   ├── service.rs      #     Gateway 服务管理（跨平台）
-│   │   │   ├── agent.rs        #     Agent CRUD
-│   │   │   ├── memory.rs       #     记忆文件管理
-│   │   │   ├── logs.rs         #     日志读取/搜索
-│   │   │   ├── device.rs       #     设备密钥 + Gateway 握手
-│   │   │   ├── pairing.rs      #     设备配对
-│   │   │   ├── extensions.rs   #     扩展工具（cftunnel / clawapp）
-│   │   │   └── assistant.rs    #     AI 助手工具调用
-│   │   ├── models/             #   数据模型
-│   │   ├── tray.rs             #   系统托盘
-│   │   └── utils.rs            #   工具函数
-│   ├── Cargo.toml              # Rust 依赖 + 版本号
-│   └── tauri.conf.json         # Tauri 配置 + 版本号
-├── scripts/                    # 开发与运维脚本
-│   ├── dev.sh                  #   macOS/Linux 开发启动
-│   ├── dev-api.js              #   Vite 插件：Web 模式真实后端 API
-│   ├── build.sh                #   macOS/Linux 编译与打包
-│   ├── linux-deploy.sh         #   Linux 服务器一键部署
-│   └── sync-version.js         #   版本号同步脚本
-├── docs/                       # 文档与截图
-│   ├── index.html              #   官网（claw.qt.cool）
-│   ├── linux-deploy.md         #   Linux 部署指南
-│   └── docker-deploy.md        #   Docker 部署指南
-├── public/                     # 静态资源（图标、Logo）
-├── .github/workflows/          # CI/CD
-│   ├── ci.yml                  #   持续集成（push/PR → 检查）
-│   └── release.yml             #   发布构建（tag → 全平台打包）
-├── .windsurf/workflows/        # Cascade AI 工作流
-│   └── release.md              #   发版工作流指令
-├── package.json                # 前端依赖 + 版本号（唯一真相源）
-├── vite.config.js              # Vite 配置
-├── CHANGELOG.md                # 更新日志
-├── CONTRIBUTING.md             # 本文件
-├── SECURITY.md                 # 安全政策
-└── README.md                   # 项目介绍
-```
-
----
-
-## 运行模式
-
-星枢OpenClaw 有两种运行模式，前端代码通过 `isTauri` 标志自动适配：
-
-| 模式 | 启动方式 | 后端 | API 通信 | 适用场景 |
-|------|----------|------|----------|----------|
-| **Tauri 桌面** | `npm run tauri dev` | Rust (IPC) | `window.__TAURI_INTERNALS__` → `invoke()` | macOS / Windows / Linux 桌面 |
-| **Web 浏览器** | `npm run dev` | Node.js (`dev-api.js`) | `fetch('/__api/xxx')` | Linux 服务器远程管理 |
-
-### API 调用链路
-
-```
-前端代码
-  ↓
-tauri-api.js  →  isTauri?
-  ├─ YES → invoke() → Rust IPC → src-tauri/src/commands/*.rs
-  └─ NO  → webInvoke() → fetch('/__api/cmd') → scripts/dev-api.js
-              ↓ 失败时
-           mockInvoke() → 内置 mock 数据（仅用于无后端调试）
-```
-
-### Web 模式后端 (`dev-api.js`)
-
-`scripts/dev-api.js` 是一个 Vite 插件，在 Web 模式下提供与 Tauri IPC 等效的 HTTP API。它：
-- 拦截 `/__api/*` 请求
-- 调用与 Rust 命令同名的 handler 函数
-- 提供密码保护中间件（session + cookie）
-- 实际执行 `openclaw` CLI 命令操作服务器
-
----
-
-## 版本管理
-
-### 版本号位置
-
-版本号以 `package.json` 为**唯一真相源**，通过同步脚本分发到其他文件：
-
-| 文件 | 字段 | 用途 |
+| 依赖 | 要求 | 用途 |
 |------|------|------|
-| `package.json` | `version` | **主版本源** — npm、前端构建、侧边栏显示 |
-| `src-tauri/tauri.conf.json` | `version` | Tauri 打包版本号 |
-| `src-tauri/Cargo.toml` | `version` | Rust crate 版本号 |
-| `docs/index.html` | `softwareVersion` | 官网 JSON-LD SEO |
-| `CHANGELOG.md` | `## [x.y.z]` | 变更日志（需手动编写内容） |
+| Node.js | 以已安装 OpenClaw 的 `package.json#engines.node` 为准 | 前端、测试和 Web 服务 |
+| npm | 与 Node.js 配套的当前版本 | 安装锁定依赖 |
+| Rust | stable | Tauri 后端编译和测试 |
+| Tauri CLI | v2 | 桌面端开发和打包 |
 
-### 同步命令
-
-```bash
-# 设置新版本并自动同步到所有文件
-npm run version:set 0.6.0
-
-# 仅同步当前 package.json 版本到其他文件
-npm run version:sync
-```
-
-### 前端版本读取
-
-侧边栏底部自动从 `package.json` 读取版本号，无需手动维护：
-
-```javascript
-import { version as APP_VERSION } from '../../package.json'
-```
-
----
-
-## 发版流程
-
-### 完整步骤
+首次准备：
 
 ```bash
-# 1. 确认工作区干净
-git status
-
-# 2. 设置新版本号（自动同步到 tauri.conf.json / Cargo.toml / docs/index.html）
-npm run version:set 0.6.0
-
-# 3. 编写 CHANGELOG.md 变更记录
-
-# 4. 提交
-git add -A
-git commit -m "chore: release v0.6.0"
-git push origin main
-
-# 5. 打 tag 触发自动构建
-git tag v0.6.0
-git push origin v0.6.0
+git clone https://github.com/TuLu-openclaw/tulu-openclaw-v2.git
+cd tulu-openclaw-v2
+npm ci
 ```
-
-### 发版后自动执行
-
-推送 tag 后，GitHub Actions (`release.yml`) 会自动：
-1. **并行构建** macOS ARM64 / macOS Intel / Linux / Windows 四个平台
-2. **创建 GitHub Release** 并上传安装包（.dmg / .exe / .msi / .AppImage / .deb / .rpm）
-3. 所有平台构建完成后，**自动生成 Release Notes**（含下载表格 + 分类 Changelog）
-
-### 回滚
-
-```bash
-git tag -d v0.6.0
-git push origin :refs/tags/v0.6.0
-# 修复后重新打 tag
-```
-
----
-
-## CI/CD 工作流
-
-### `ci.yml` — 持续集成
-
-- **触发**：push 到 `main` 分支 或 PR 到 `main`
-- **平台**：macOS / Linux / Windows 三平台并行
-- **检查项**：
-  1. `npm ci` — 前端依赖安装
-  2. `cargo fmt --check` — Rust 代码格式
-  3. `cargo check` — Rust 编译检查
-  4. `cargo clippy -- -D warnings` — Rust lint（警告即失败）
-  5. `npm run build` — 前端构建验证
-
-### `release.yml` — 发布构建
-
-- **触发**：推送 `v*` 标签 或 手动触发
-- **平台**：macOS ARM64 / macOS Intel / Linux x64 / Windows x64
-- **产物**：通过 `tauri-apps/tauri-action@v0` 构建并上传到 GitHub Release
-- **Release Notes**：独立 job，等所有平台构建完成后统一生成
-
----
-
-## 配置文件说明
-
-### `~/.openclaw/openclaw.json`
-
-OpenClaw 主配置文件，包含模型配置、网关配置等。由 星枢OpenClaw 的"模型配置"和"网关配置"页面读写。
-
-### `~/.openclaw/clawpanel.json`
-
-星枢OpenClaw 面板自身的配置文件，独立于 OpenClaw：
-
-```json
-{
-  "accessPassword": "用户设置的访问密码",
-  "mustChangePassword": true,
-  "ignoreRisk": false,
-  "nodePath": "/custom/node/path"
-}
-```
-
-| 字段 | 说明 |
-|------|------|
-| `accessPassword` | 面板访问密码（明文存储，桌面端本地比对） |
-| `mustChangePassword` | `true` = 首次登录后强制修改默认密码 |
-| `ignoreRisk` | `true` = 无视风险模式，跳过密码保护 |
-| `nodePath` | 用户自定义 Node.js 路径，补充到 PATH |
-
-### `~/.openclaw/npm-registry.txt`
-
-用户配置的 npm 源地址，默认 `https://registry.npmmirror.com`。
-
----
-
-## 关键脚本
-
-| 脚本 | 用途 |
-|------|------|
-| `scripts/dev.sh` | macOS/Linux 开发启动（清理旧进程 → 启动 Vite 或 Tauri） |
-| `scripts/dev-api.js` | Vite 插件，Web 模式的 Node.js 后端（API + 认证中间件） |
-| `scripts/build.sh` | macOS/Linux 构建脚本（支持 `check` / `release` 模式） |
-| `scripts/linux-deploy.sh` | Linux 服务器一键部署（安装依赖 → 克隆仓库 → systemd 服务） |
-| `scripts/sync-version.js` | 版本号同步（`package.json` → 其他 4 个文件） |
-
----
-
-## 前端开发约定
-
-### 页面模块
-
-每个页面是一个独立 JS 模块，导出 `render()` 函数：
-
-```javascript
-export async function render() {
-  const page = document.createElement('div')
-  page.className = 'page'
-  page.innerHTML = `<!-- 页面骨架，含加载占位符 -->`
-
-  // 非阻塞：先返回 DOM，数据在后台异步加载
-  loadData(page)
-  return page
-}
-```
-
-**关键原则**：`render()` 必须立即返回 DOM 元素，不要 `await` 数据加载，否则会阻塞页面切换。
-
-### 新增页面清单
-
-1. 创建 `src/pages/xxx.js`，导出 `render()`
-2. 在 `src/main.js` 注册路由：`registerRoute('/xxx', () => import('./pages/xxx.js'))`
-3. 在 `src/components/sidebar.js` 的 `NAV_ITEMS_FULL` 中添加导航项
-4. 在 `ICONS` 对象中添加对应图标 SVG
-
-### API 调用
-
-统一通过 `tauri-api.js` 封装，不要在页面中直接 `fetch`：
-
-```javascript
-import { api } from '../lib/tauri-api.js'
-
-// 读（自带缓存）
-const config = await api.readOpenclawConfig()
-
-// 写（自动清缓存）
-await api.writeOpenclawConfig(config)
-```
-
-### 双模式适配
-
-页面中需要区分 Tauri/Web 行为时：
-
-```javascript
-const isTauri = !!window.__TAURI_INTERNALS__
-
-if (isTauri) {
-  // 桌面端：通过 Tauri IPC
-  const { api } = await import('../lib/tauri-api.js')
-  const cfg = await api.readPanelConfig()
-} else {
-  // Web 端：通过 HTTP API
-  const resp = await fetch('/__api/xxx', { method: 'POST', ... })
-}
-```
-
----
-
-## Rust 后端约定
-
-### 新增 Tauri 命令
-
-1. 在对应的 `src-tauri/src/commands/xxx.rs` 中添加 `#[tauri::command]` 函数
-2. 在 `src-tauri/src/lib.rs` 的 `invoke_handler` 中注册
-3. 在 `src/lib/tauri-api.js` 的 `api` 对象中添加前端包装方法
-4. 在 `mockInvoke` 的 `mocks` 对象中添加 mock 数据（供无后端调试）
-
-### 跨平台代码
-
-平台相关代码使用条件编译：
-
-```rust
-#[cfg(target_os = "macos")]
-{
-    // macOS: launchctl / plist
-}
-#[cfg(target_os = "linux")]
-{
-    // Linux: 进程管理 / systemd
-}
-#[cfg(target_os = "windows")]
-{
-    // Windows: openclaw CLI / tasklist
-}
-```
-
-### PATH 问题
-
-Tauri 桌面应用启动时 PATH 可能不完整（macOS Finder 启动、Windows 非默认安装路径）。所有需要调用外部命令的地方必须使用 `super::enhanced_path()` 设置环境变量。
-
----
-
-## 安全机制
-
-### 密码保护
-
-星枢OpenClaw 支持访问密码保护，**Web 模式和 Tauri 桌面端均可启用**：
-
-| 模式 | 密码存储 | 验证方式 | 会话管理 |
-|------|----------|----------|----------|
-| Web | `clawpanel.json` | 后端比对 + HTTP-only Cookie | 服务端 session（24h TTL） |
-| Tauri 桌面 | `clawpanel.json` | 前端本地比对 | `sessionStorage` |
-
-### 密码保护流程
-
-```
-启动 → 读 clawpanel.json
-  ├─ 无密码 + ignoreRisk → 放行
-  ├─ 有密码 + 未认证 → 弹出登录覆盖层
-  └─ 有密码 + mustChangePassword → 登录后强制改密码
-```
-
-### 安全设置页 (`/security`)
-
-- 查看当前密码状态
-- 修改密码（含强度校验：≥6 位、不能纯数字、不能常见弱密码）
-- 无视风险模式（关闭密码保护，仅建议受信任内网）
-
----
-
-## 部署模式
-
-### 1. 桌面应用（Tauri）
-
-面向 macOS / Windows / Linux 桌面用户，从 [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases) 下载安装包。
-
-### 2. Linux 服务器（Web 版）
-
-一键部署脚本，适用于无桌面环境的 Linux 服务器：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
-```
-
-部署后通过 `http://服务器IP:1420` 访问，自动生成默认密码。
-
-详见 [Linux 部署指南](docs/linux-deploy.md)。
-
-### 3. Docker
-
-详见 [Docker 部署指南](docs/docker-deploy.md)。
-
----
-
-## 分支与提交规范
-
-### 分支策略
-
-- 所有开发基于 `main` 分支
-- 新功能分支：`feature/功能描述`（例如 `feature/log-export`）
-- 修复分支：`fix/问题描述`（例如 `fix/model-save-crash`）
-- 完成后发起 PR 合并回 `main`
-
-### 提交格式
-
-采用 [Conventional Commits](https://www.conventionalcommits.org/)：
-
-```
-<类型>(可选范围): 简要描述
-```
-
-| 类型 | 说明 | 示例 |
-|------|------|------|
-| `feat` | 新功能 | `feat(model): 新增模型批量测试功能` |
-| `fix` | 修复 Bug | `fix(gateway): 修复端口配置未生效的问题` |
-| `docs` | 文档变更 | `docs: 更新安装说明` |
-| `style` | 代码格式 | `style(css): 统一按钮圆角` |
-| `refactor` | 重构 | `refactor(router): 简化路由匹配逻辑` |
-| `perf` | 性能优化 | `perf(router): 添加模块缓存避免重复加载` |
-| `chore` | 构建/工具 | `chore: release v0.6.0` |
-| `security` | 安全修复 | `security(api): 修复命令注入漏洞` |
-
----
-
-## PR 流程
-
-1. Fork 本仓库并克隆到本地
-2. 从 `main` 创建新分支
-3. 完成开发并进行本地测试
-4. 确保代码风格一致、注释完整
-5. 提交并推送到你的 Fork 仓库
-6. 发起 Pull Request，描述清楚变更内容和测试情况
-7. 等待代码审查，根据反馈修改
-
----
-
-## 致谢名单维护
-
-README 中的“致谢 / Acknowledgements”用于展示历史代码贡献者和社区反馈者。
-
-维护建议：
-
-1. **代码贡献者来源**：优先统计仓库历史 PR 作者
-2. **社区反馈者来源**：从 GitHub Issues 的作者中筛选活跃反馈者
-3. **中文英文同步**：修改 `README.md` 后，同步更新 `README.en.md`
-4. **避免混入无关改动**：提交前只 stage 文档文件，不要把工作区里其他实验文件一起带上
 
 常用命令：
 
 ```bash
-gh pr list --repo qingchencloud/clawpanel --state all --limit 200 --json author,number,title,state
-gh issue list --repo qingchencloud/clawpanel --state all --limit 200 --json author,number,title
+npm run dev          # Web 开发模式
+npm run tauri dev    # Tauri 桌面开发模式
+npm test             # JavaScript 全量测试
+npm run build        # 前端生产构建
 ```
 
-推荐提交流程：
+Windows PowerShell 如果拦截 `npm.ps1`，可使用 `npm.cmd` 执行同名命令。
+
+## 项目结构
+
+- `src/`：前端页面、组件、国际化与领域逻辑
+- `src-tauri/`：Tauri/Rust 后端、命令与桌面配置
+- `scripts/dev-api.js`：Web 模式本地 API 与认证实现
+- `scripts/serve.js`：生产 Web 服务入口
+- `scripts/linux-deploy.sh`：Linux 服务部署与 systemd 配置
+- `deploy.sh`：正式 Release Web 部署入口
+- `tests/`：JavaScript 单元测试和静态政策测试
+- `.github/workflows/release.yml`：发布验证与跨平台构建
+
+## 配置文件
+
+### OpenClaw 配置
+
+`~/.openclaw/openclaw.json` 保存 OpenClaw 的模型、Gateway、Agent 等配置。它与面板自己的访问控制配置相互独立。
+
+### 星枢OpenClaw 配置
+
+`~/.openclaw/星枢OpenClaw.json` 保存面板配置。与认证相关的字段只有：
+
+```json
+{
+  "accessPassword": "用户自己设置的访问密码",
+  "ignoreRisk": false
+}
+```
+
+- `accessPassword`：面板访问密码。不得写入固定默认密码，也不得通过认证状态 API 返回给浏览器。
+- `ignoreRisk`：显式开启免密码访问。只适合受信任网络，关闭后必须重新完成密码初始化。
+- 新安装应写入空对象 `{}` 或保持文件不存在，由用户首次访问时自己设置密码。
+- 历史强制改密字段和预设密码流程已经废弃，不得重新引入。
+
+配置文件包含敏感信息。Unix 系统应使用目录权限 `0700`、文件权限 `0600`，并通过临时文件和原子替换写入。
+
+## 认证流程
+
+Web 和 Tauri 共用相同的产品状态：
+
+```text
+首次启动且没有密码
+  -> 只显示“设置访问密码”
+  -> 用户输入新密码并确认
+  -> 初始化成功后进入面板
+
+已有密码且会话未认证
+  -> 显示正常登录
+  -> 验证成功后进入面板
+
+已认证
+  -> 可在“安全设置”中修改密码或显式开启免密码访问
+```
+
+必须保持以下边界：
+
+- 初始化、登录和后续修改密码是三个独立任务，不共用预设凭据或强制改密状态。
+- 未初始化时，普通 Web API 必须返回 `SETUP_REQUIRED`，不能因为密码为空而放行。
+- 初始化接口只允许调用一次；并发或重复初始化应返回冲突状态。
+- Web 会话 Cookie 必须为 HttpOnly；登录失败必须有限速保护。
+- 错误提示要说明用户下一步能做什么，不直接暴露密码或内部状态。
+
+## Node.js 兼容策略
+
+不要写死“Node.js 18+”之类的长期规则。兼容判断应优先读取已安装 OpenClaw 的 `package.json#engines.node`；无法读取时，再使用仓库内已验证的版本回退规则。
+
+修改 Setup、OpenClaw 安装、Gateway 启动或部署脚本时，必须同时运行 Node 兼容政策测试。
+
+## 代码约定
+
+- 沿用现有 Vanilla JS、Tauri v2 和 Rust 模块边界。
+- 不为局部需求引入新的前端框架或重复抽象。
+- 用户可见文案必须进入 locale 模块，不在页面中散落硬编码文本。
+- 认证、配置写入、发布来源和版本兼容变更必须补回归测试。
+- 不提交 API Key、Token、密码、Cookie、真实用户配置或本机绝对路径。
+- 不回退或覆盖工作区中与当前任务无关的修改。
+
+## 提交前验证
+
+至少执行：
 
 ```bash
-git add README.md README.en.md CONTRIBUTING.md
-git commit -m "docs: add contributor acknowledgements"
-git push origin main
+node --check src/main.js
+node --check scripts/dev-api.js
+npm test
+npm run build
 ```
 
----
+涉及 Rust 时还要执行：
 
-## 代码规范
+```bash
+cd src-tauri
+cargo fmt --all -- --check
+cargo check --all-targets
+cargo test --all-targets
+```
 
-- **前端**：使用 Vanilla JS，不引入第三方框架
-- **注释**：所有代码注释使用中文
-- **风格**：简洁清晰，避免过度封装
-- **命名**：变量和函数使用 camelCase，CSS 类名使用 kebab-case
-- **资源**：静态资源本地化，禁止引用远程 CDN
-- **异步**：页面 `render()` 中禁止阻塞式 await，数据加载走后台异步
-- **版本**：只改 `package.json`，运行 `npm run version:sync` 同步
+涉及 shell 部署脚本时执行 `bash -n deploy.sh scripts/linux-deploy.sh`，并检查正式 Release 来源、暂存解压、失败回滚和权限设置。
 
----
+如果本机缺少 Cargo、真实 OpenClaw/Hermes 环境或目标操作系统，必须把相应项目标记为“受阻”或“仅静态验证”，不能写成已验证。
 
-## 问题反馈
+## 发布流程
 
-如果发现 Bug 或有功能建议，欢迎通过 [GitHub Issues](https://github.com/qingchencloud/clawpanel/issues) 提交。
+1. 更新 `package.json` 中的版本，并运行 `npm run version:sync`。
+2. 完成 JavaScript 测试、前端构建、Rust 格式/编译/测试。
+3. 确认工作树中没有密钥、构建缓存或无关文件。
+4. 创建与应用版本完全一致的 `v*` Tag。
+5. 由 `.github/workflows/release.yml` 构建并发布安装包。
+6. 下载并验收各平台产物后再向用户宣布发布完成。
+
+部署脚本只能安装能够从 GitHub API 确认的正式 Release。API 不可用或 Release 不存在时应停止，不能回退安装 `main`。
+
+未经维护者明确授权，不要推送、打 Tag 或创建 Release。
+
+## Pull Request
+
+PR 请包含：
+
+- 问题背景和用户影响
+- 具体改动及关键权衡
+- 实际执行的测试和结果
+- 未验证项、环境限制与剩余风险
+- 涉及界面时的桌面/移动端截图或可复现说明
+
+优先提交范围清晰、可独立验证的改动。发现安全漏洞时不要公开提交复现细节，请使用 [GitHub Security Advisories](https://github.com/TuLu-openclaw/tulu-openclaw-v2/security/advisories/new) 私下报告。

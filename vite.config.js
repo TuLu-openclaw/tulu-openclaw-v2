@@ -114,9 +114,6 @@ export default defineConfig({
             if (cleanId.includes('@tauri-apps/api')) return 'vendor-tauri'
             return 'vendor'
           }
-          if (cleanId.includes('/src/engines/hermes/')) return 'hermes-core'
-          if (cleanId.includes('/src/lib/tauri-api.js') || cleanId.includes('/src/lib/ws-client.js')) return 'gateway-core'
-          if (cleanId.includes('/src/lib/app-state.js') || cleanId.includes('/src/lib/engine-manager.js') || cleanId.includes('/src/components/sidebar.js')) return 'app-core'
         },
       },
     },

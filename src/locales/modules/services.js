@@ -156,7 +156,6 @@ export default {
   missingContainerId: _('缺少 containerId', 'Missing containerId', '缺少 containerId'),
   chineseEdition: _('汉化优化版', 'Chinese Edition', '漢化最佳化版'),
   officialEdition: _('官方原版', 'Official Edition', '官方原版'),
-  switchToChinese: _('切换到汉化版', 'Switch to Chinese Edition', '切換到漢化版'),
   switchToOfficial: _('切换到官方版', 'Switch to Official Edition', '切換到官方版'),
   aheadOfRecommended: _('当前版本高于推荐稳定版: {version}', 'Current version is ahead of recommended stable: {version}', '目前版本高於推薦穩定版: {version}'),
   alignedRecommended: _('已对齐推荐稳定版: {version}', 'Aligned with recommended stable: {version}', '已对齐推薦穩定版: {version}'),

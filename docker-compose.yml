@@ -12,17 +12,12 @@ services:
   # ---------------------------------------------------------------------------
   # 星枢OpenClaw Web 服务
   # ---------------------------------------------------------------------------
-  星枢OpenClaw:
+  xingshu-openclaw:
     build:
       context: .
       dockerfile: Dockerfile
-      # 使用 BuildKit 构建缓存
-      cache_from:
-        - 星枢OpenClaw:build-cache
-      args:
-        - NPM_REGISTRY=https://registry.npmmirror.com
-    container_name: 星枢OpenClaw
-    hostname: 星枢OpenClaw
+    container_name: xingshu-openclaw
+    hostname: xingshu-openclaw
 
     # -------------------------------------------------------------------------
     # 网络配置 - 关键：使用 host 网络模式解决容器内外互通问题
@@ -122,32 +117,11 @@ services:
     #     condition: service_healthy
 
   # ---------------------------------------------------------------------------
-  # OpenClaw Gateway 服务（可选，取消注释以启用）
+  # OpenClaw Gateway service (optional)
   # ---------------------------------------------------------------------------
-  # gateway:
-  #   image: node:22-alpine
-  #   container_name: openclaw-gateway
-  #   hostname: openclaw-gateway
-  #   network_mode: host
-  #   volumes:
-  #     - ~/.openclaw:/root/.openclaw
-  #   environment:
-  #     - TZ=Asia/Shanghai
-  #   restart: unless-stopped
-  #   command: >
-  #     sh -c "npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com &&
-  #            openclaw init 2>/dev/null || true &&
-  #            openclaw gateway start --foreground"
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
-  #     interval: 30s
-  #     timeout: 5s
-  #     retries: 3
-  #   logging:
-  #     driver: "json-file"
-  #     options:
-  #       max-size: "10m"
-  #       max-file: "3"
+  # The panel image already contains the official `openclaw` CLI. Keep the
+  # Gateway lifecycle in the panel or in a separately maintained official
+  # OpenClaw deployment; do not install packages dynamically at container start.
 
 # =============================================================================
 # 网络配置（使用 host 模式时不需要）

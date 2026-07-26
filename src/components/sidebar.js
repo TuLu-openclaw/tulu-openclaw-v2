@@ -4,11 +4,12 @@
 import { navigate, getCurrentRoute, reloadCurrentRoute } from '../router.js'
 import { toggleTheme, getTheme } from '../lib/theme.js'
 import { isOpenclawReady, getActiveInstance, switchInstance, onInstanceChange } from '../lib/app-state.js'
-import { api } from '../lib/tauri-api.js'
+import { api, isTauriRuntime } from '../lib/tauri-api.js'
 import { toast } from './toast.js'
 import { version as APP_VERSION } from '../../package.json'
 import { t, getLang, setLang, getAvailableLangs } from '../lib/i18n.js'
 import { getActiveEngine, getActiveEngineId, listEngines, switchEngine } from '../lib/engine-manager.js'
+import { getKernelSnapshot, onKernelChange } from '../lib/kernel.js'
 
 const GLOBAL_BUILTIN_ROUTE = '/coming-soon'
 
@@ -87,6 +88,7 @@ function NAV_ITEMS_OPENCLAW() { return [
     items: [
       { route: '/models', label: t('sidebar.models'), icon: 'models' },
       { route: '/agents', label: t('sidebar.agents'), icon: 'agents' },
+      ...(isTauriRuntime() ? [{ route: '/route-graph', label: t('sidebar.routeGraph'), icon: 'route-graph' }] : []),
       { route: '/agency-agents', label: t('sidebar.agencyAgents'), icon: 'agency' },
       { route: '/gateway', label: t('sidebar.gateway'), icon: 'gateway' },
       { route: '/channels', label: t('sidebar.channels'), icon: 'channels' },
@@ -112,6 +114,7 @@ function NAV_ITEMS_OPENCLAW() { return [
       { route: '/openmontage', label: t('sidebar.openmontage'), icon: 'video-factory' },
       { route: '/cli-anything', label: t('sidebar.cliAnything'), icon: 'extensions' },
       { route: '/browser-use', label: t('sidebar.browserUse'), icon: 'browser' },
+      { route: '/extensions', label: t('sidebar.extensions'), icon: 'extensions' },
       { route: '/music-player', label: t('sidebar.musicPlayer'), icon: 'music' },
       { dataAction: 'open-xingshu-chat', label: t('sidebar.xingshuChatroom'), icon: 'chatroom' },
       { route: '/lobster-office', label: t('sidebar.lobsterOffice'), icon: 'lobster' },
@@ -189,6 +192,7 @@ const ICONS = {
   logs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
   models: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>',
   agents: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
+  'route-graph': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6 8l5 8M18 8l-5 8"/></svg>',
   agency: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.2 4.46 4.92.72-3.56 3.47.84 4.9L12 13.23l-4.4 2.32.84-4.9-3.56-3.47 4.92-.72L12 2z"/><path d="M4 21c1.8-3.2 4.4-4.8 8-4.8s6.2 1.6 8 4.8"/></svg>',
   gateway: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
   memory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>',
@@ -217,6 +221,48 @@ const ICONS = {
 
 let _delegated = false
 let _hasMultipleInstances = false
+let _kernelUnsubscribe = null
+
+function getKernelBadgeModel() {
+  const info = getKernelSnapshot()
+  const engineId = getActiveEngineId()
+  const fallbackLabel = engineId === 'hermes' ? 'Hermes' : 'OpenClaw'
+  if (!info) {
+    return {
+      text: t('sidebar.kernelUnknown', { engine: fallbackLabel }),
+      tone: 'unknown',
+      detail: t('sidebar.kernelBadgeWaiting'),
+    }
+  }
+
+  const label = `${info.engine === 'hermes' ? 'Hermes' : 'OpenClaw'} ${info.version || t('sidebar.kernelVersionMissing')}`
+  if (!info.version) {
+    return {
+      text: label,
+      tone: 'unknown',
+      detail: t('sidebar.kernelBadgeWaiting'),
+    }
+  }
+  if (!info.aboveFloor) {
+    return {
+      text: label,
+      tone: 'warn',
+      detail: t('sidebar.kernelBadgeBelowFloor', { floor: info.floor || 'unknown' }),
+    }
+  }
+  if (!info.isLatest) {
+    return {
+      text: label,
+      tone: 'warn',
+      detail: t('sidebar.kernelBadgeUpdateAvailable', { target: info.target || info.floor || info.version }),
+    }
+  }
+  return {
+    text: label,
+    tone: 'ok',
+    detail: t('sidebar.kernelBadgeReady'),
+  }
+}
 
 // 异步检测是否有多实例（首次渲染后触发，有多实例时重渲染）
 function _checkMultiInstances(el) {
@@ -313,6 +359,8 @@ export function renderSidebar(el) {
     </div>
   `).join('')
 
+  const kernelBadge = getKernelBadgeModel()
+
   html += `
     <div class="sidebar-footer">
       <div class="nav-item" id="btn-theme-toggle">
@@ -333,6 +381,10 @@ export function renderSidebar(el) {
       <div class="sidebar-meta">
         <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" class="sidebar-link">${t('sidebar.feedbackGroup')}</a>
         <span class="sidebar-version">v${APP_VERSION}</span>
+      </div>
+      <div class="sidebar-kernel">
+        <span class="sidebar-kernel-badge ${kernelBadge.tone}">${kernelBadge.text}</span>
+        <span class="sidebar-kernel-detail">${kernelBadge.detail}</span>
       </div>
     </div>
   `
@@ -504,6 +556,9 @@ export function renderSidebar(el) {
     // 监听实例变化，刷新多实例标记后重新渲染
     onInstanceChange(() => { _checkMultiInstances(el); renderSidebar(el) })
   }
+
+  if (_kernelUnsubscribe) _kernelUnsubscribe()
+  _kernelUnsubscribe = onKernelChange(() => renderSidebar(el))
 }
 
 // === 移动端侧边栏 ===

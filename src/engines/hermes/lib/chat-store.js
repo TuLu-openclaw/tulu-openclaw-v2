@@ -19,6 +19,11 @@
  */
 import { api } from '../../../lib/tauri-api.js'
 import { t } from '../../../lib/i18n.js'
+import {
+  belongsToHermesRun,
+  canClaimHermesRun,
+  hermesRunId,
+} from './run-event-policy.js'
 
 // ---------- constants ----------
 
@@ -639,20 +644,8 @@ function createStore() {
   // ---------- streaming ----------
 
   const unlisteners = []
-  function getRunId(payload) {
-    return payload?.run_id || payload?.runId || payload?.id || null
-  }
-
-  function isCurrentRunEvent(payload) {
-    const eventRunId = getRunId(payload)
-    // Newer Hermes builds include run_id on every SSE-derived event. Until
-    // the matching `hermes-run-started` arrives, ignore run-scoped events so
-    // late deltas/done from a previously stopped background run cannot mutate
-    // or prematurely finish the next visible chat run.
-    if (eventRunId) return state.currentRunId != null && eventRunId === state.currentRunId
-    // Older builds did not tag every event; keep them working by accepting
-    // untagged payloads for the active listener set.
-    return true
+  function isCurrentRunEvent(payload, runSessionId) {
+    return belongsToHermesRun(payload, state.currentRunId, runSessionId)
   }
 
   async function attachStreamListeners(runSessionId) {
@@ -660,11 +653,11 @@ function createStore() {
     state.currentRunId = null
     const runSession = () => state.sessions.find(x => x.id === runSessionId) || null
     const u0 = await tauriListen('hermes-run-started', (e) => {
-      const runId = getRunId(e?.payload)
-      if (runId) state.currentRunId = runId
+      if (!canClaimHermesRun(e?.payload, runSessionId)) return
+      state.currentRunId = hermesRunId(e?.payload)
     })
     const u1 = await tauriListen('hermes-run-delta', (e) => {
-      if (!isCurrentRunEvent(e?.payload)) return
+      if (!isCurrentRunEvent(e?.payload, runSessionId)) return
       const delta = e?.payload?.delta || ''
       if (!delta) return
       const s = runSession()
@@ -682,7 +675,7 @@ function createStore() {
       notify()
     })
     const u2 = await tauriListen('hermes-run-tool', (e) => {
-      if (!isCurrentRunEvent(e?.payload)) return
+      if (!isCurrentRunEvent(e?.payload, runSessionId)) return
       const evt = e?.payload || {}
       const evtType = evt.event || ''
       const toolName = evt.tool || evt.tool_name || evt.name || 'tool'
@@ -728,7 +721,7 @@ function createStore() {
       notify()
     })
     const u3 = await tauriListen('hermes-run-done', (e) => {
-      if (!isCurrentRunEvent(e?.payload)) return
+      if (!isCurrentRunEvent(e?.payload, runSessionId)) return
       const s = runSession()
       if (!s) { cleanupAfterRun(); return }
 
@@ -767,7 +760,7 @@ function createStore() {
       cleanupAfterRun()
     })
     const u4 = await tauriListen('hermes-run-error', (e) => {
-      if (!isCurrentRunEvent(e?.payload)) return
+      if (!isCurrentRunEvent(e?.payload, runSessionId)) return
       const err = e?.payload?.error || 'unknown error'
       const s = runSession()
       if (s) {

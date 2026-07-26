@@ -11,13 +11,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/qingchencloud/clawpanel/releases/latest">
-    <img src="https://img.shields.io/github/v/release/qingchencloud/clawpanel?style=flat-square&color=6366f1" alt="Release">
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest">
+    <img src="https://img.shields.io/github/v/release/TuLu-openclaw/tulu-openclaw-v2?style=flat-square&color=6366f1" alt="Release">
   </a>
-  <a href="https://github.com/qingchencloud/clawpanel/releases/latest">
-    <img src="https://img.shields.io/github/downloads/qingchencloud/clawpanel/total?style=flat-square&color=8b5cf6" alt="Downloads">
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest">
+    <img src="https://img.shields.io/github/downloads/TuLu-openclaw/tulu-openclaw-v2/total?style=flat-square&color=8b5cf6" alt="Downloads">
   </a>
-  <a href="https://github.com/qingchencloud/clawpanel/blob/main/LICENSE">
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg?style=flat-square" alt="License">
   </a>
 </p>
@@ -28,31 +28,14 @@
   <img src="docs/feature-showcase.gif" width="800" alt="星枢OpenClaw Showcase">
 </p>
 
-星枢OpenClaw é um painel de gestão visual para o framework de AI Agent [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Possui um **assistente IA inteligente integrado** que ajuda a instalar o OpenClaw com um clique, diagnosticar configurações automaticamente, resolver problemas e corrigir erros. 8 ferramentas + 4 modos + Q&A interativo — fácil de gerenciar para iniciantes e especialistas.
+星枢OpenClaw é um painel de gestão visual para o framework de AI Agent [OpenClaw](https://github.com/openclaw/openclaw). Possui um **assistente IA inteligente integrado** que ajuda a instalar o OpenClaw com um clique, diagnosticar configurações automaticamente, resolver problemas e corrigir erros. 8 ferramentas + 4 modos + Q&A interativo — fácil de gerenciar para iniciantes e especialistas.
 
-> 🌐 **Website**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Download**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
-
-### 🎁 QingchenCloud AI API
-
-> Plataforma interna de testes técnicos, aberta para usuários selecionados. Faça login diariamente para ganhar créditos.
-
-<p align="center">
-  <a href="https://gpt.qt.cool"><img src="https://img.shields.io/badge/🔑 QingchenCloud AI-gpt.qt.cool-6366f1?style=for-the-badge" alt="QingchenCloud AI"></a>
-</p>
-
-- **Créditos de login diário** — Login diário + convide amigos para ganhar créditos de teste
-- **API compatível com OpenAI** — Integração perfeita com OpenClaw
-- **Política de recursos** — Limite de velocidade + limite de requisições, possível fila em horários de pico
-- **Disponibilidade de modelos** — Modelos/APIs conforme exibição da página, possível rotação de versões
-
-> ⚠️ **Conformidade**: Apenas para testes técnicos. Uso ilegal ou contornar mecanismos de segurança é proibido. Mantenha sua API Key segura. Regras sujeitas às políticas mais recentes da plataforma.
+> 🌐 **Website**: [GitHub Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest) | 📦 **Download**: [GitHub Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest)
 
 ### 🔥 Suporte a placas de desenvolvimento / Dispositivos embarcados
 
 - **Orange Pi / Raspberry Pi / RK3588** — `npm run serve` para executar
-- **Docker ARM64** — `docker run ghcr.io/qingchencloud/openclaw:latest`
 - **Armbian / Debian / Ubuntu Server** — Detecção automática de arquitetura
-- Sem necessidade de Rust / Tauri / GUI — **apenas Node.js 18+**
 
 ## Comunidade
 
@@ -61,9 +44,9 @@ Uma comunidade de desenvolvedores e entusiastas apaixonados por AI Agents — ju
 <p align="center">
   <a href="https://discord.gg/U9AttmsNHh"><strong>Discord</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/qingchencloud/clawpanel/discussions"><strong>Discussions</strong></a>
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/discussions"><strong>Discussions</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/qingchencloud/clawpanel/issues/new"><strong>Reportar Issue</strong></a>
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new"><strong>Reportar Issue</strong></a>
 </p>
 
 ## Funcionalidades
@@ -82,37 +65,22 @@ Uma comunidade de desenvolvedores e entusiastas apaixonados por AI Agents — ju
 - **Tarefas agendadas** — Execução agendada com Cron, entrega multicanal
 - **Visualizador de logs** — Logs em tempo real multi-fonte e busca por palavras-chave
 - **Gestão de memória** — Ver/editar arquivos de memória, exportar ZIP, trocar Agent
-- **QingchenCloud AI API** — Plataforma de testes interna, compatível com OpenAI
 - **Ferramentas de extensão** — Gestão de túneis cftunnel, monitoramento do ClawApp
 - **Sobre** — Informações de versão, links da comunidade, projetos relacionados
 
 ## Download e instalação
 
-Acesse [Releases](https://github.com/qingchencloud/clawpanel/releases/latest) para a versão mais recente:
+Acesse [Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest) para a versão mais recente:
 
 | Plataforma | Instalador |
 |-----------|-----------|
-| **Windows** | `.exe` (recomendado) ou `.msi` |
 | **macOS Apple Silicon** | `.dmg` (aarch64) |
 | **macOS Intel** | `.dmg` (x64) |
-| **Linux** | `.AppImage` / `.deb` / `.rpm` |
 
 ### Servidor Linux (Versão Web)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
-```
-
-### Docker
-
-```bash
-docker run -d --name clawpanel --restart unless-stopped \
-  -p 1420:1420 -v clawpanel-data:/root/.openclaw \
-  node:22-slim \
-  sh -c "apt-get update && apt-get install -y git && \
-    npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com && \
-    git clone https://github.com/qingchencloud/clawpanel.git /app && \
-    cd /app && npm install && npm run build && npm run serve"
+curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh
 ```
 
 ## Início rápido
@@ -134,8 +102,8 @@ docker run -d --name clawpanel --restart unless-stopped \
 ## Compilar a partir do código-fonte
 
 ```bash
-git clone https://github.com/qingchencloud/clawpanel.git
-cd clawpanel && npm install
+git clone https://github.com/TuLu-openclaw/tulu-openclaw-v2.git
+cd tulu-openclaw-v2 && npm install
 
 # Desktop (requer Rust + Tauri v2)
 npm run tauri dev        # Desenvolvimento
@@ -150,9 +118,9 @@ npm run build && npm run serve  # Produção
 
 | Projeto | Descrição |
 |---------|-----------|
-| [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) | Framework AI Agent |
-| [ClawApp](https://github.com/qingchencloud/clawapp) | Cliente móvel multiplataforma |
-| [cftunnel](https://github.com/qingchencloud/cftunnel) | Ferramenta Cloudflare Tunnel |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Framework AI Agent |
+| [ClawApp](https://github.com/TuLu-openclaw/clawapp) | Cliente móvel multiplataforma |
+| [cftunnel](https://github.com/TuLu-openclaw/cftunnel) | Ferramenta Cloudflare Tunnel |
 
 ## Contribuir
 
@@ -172,11 +140,10 @@ If you find this project useful, consider supporting us via USDT (BNB Smart Chai
 ## Contact
 
 - **Email**: [support@qctx.net](mailto:support@qctx.net)
-- **Website**: [qingchencloud.com](https://qingchencloud.com)
-- **Product**: [claw.qt.cool](https://claw.qt.cool)
+- **Product**: [GitHub Repository](https://github.com/TuLu-openclaw/tulu-openclaw-v2)
 
 ## Licença
 
 [AGPL-3.0](LICENSE). Contate-nos para licença comercial.
 
-© 2026 QingchenCloud | [claw.qt.cool](https://claw.qt.cool)
+© 2026 QingchenCloud | [GitHub Repository](https://github.com/TuLu-openclaw/tulu-openclaw-v2)

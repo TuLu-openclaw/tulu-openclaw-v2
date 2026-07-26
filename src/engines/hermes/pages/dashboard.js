@@ -3,6 +3,7 @@
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
+import { credentialEnvName, maskCredential } from '../../../lib/model-channels.js'
 import { showConfirm, showContentModal, showUpgradeModal } from '../../../components/modal.js'
 import { toast } from '../../../components/toast.js'
 import {
@@ -163,6 +164,7 @@ export function render() {
   let formApiKey = ''
   let formModel = ''
   let selectedHermesProvider = ''
+  let formApiKeyEnv = null
   let formInited = false    // 首次加载后用 hermesConfig 初始化
   let importChoices = []    // OpenClaw 配置导入候选
 
@@ -218,19 +220,23 @@ export function render() {
   }
 
   function maskKey(key) {
+    if (key && typeof key === 'object') return maskCredential(key)
     const v = String(key || '')
     if (!v) return t('engine.configApiKeyNotSet')
+    if (credentialEnvName(v)) return v
     if (isPlaceholderApiKey(v)) return t('engine.configApiKeyPlaceholder')
     return '****' + v.slice(-6)
   }
 
   function pushImportProvider(list, seen, item) {
     const baseUrl = String(item?.baseUrl || item?.base_url || '').trim()
-    const rawApiKey = String(item?.apiKey || item?.api_key || '').trim()
+    const credential = item?.credential ?? item?.apiKey ?? item?.api_key
+    const apiKeyEnv = credentialEnvName(credential)
+    const rawApiKey = typeof credential === 'string' && !apiKeyEnv ? credential.trim() : ''
     const apiKey = isPlaceholderApiKey(rawApiKey) ? '' : rawApiKey
     const name = String(item?.name || item?.id || '').trim()
     if (!name || (!baseUrl && !apiKey && !modelIdsFromProvider(item).length)) return
-    const key = `${name}|${baseUrl}|${apiKey.slice(-8)}`
+    const key = `${name}|${baseUrl}|${apiKeyEnv || apiKey.slice(-8)}`
     if (seen.has(key)) return
     seen.add(key)
     list.push({
@@ -238,6 +244,9 @@ export function render() {
       name,
       baseUrl,
       apiKey,
+      apiKeyEnv,
+      credentialPreview: maskKey(credential),
+      credentialUnsupported: Boolean(credential && !apiKey && !apiKeyEnv),
       apiType: normalizeApiType(item?.api || item?.apiType || item?.type || item?.kind),
       hermesProvider: canonicalHermesProviderForImport(item),
       models: modelIdsFromProvider(item),
@@ -258,7 +267,10 @@ export function render() {
     const k = el.querySelector('#hm-cfg-apikey')
     const m = el.querySelector('#hm-cfg-model')
     if (u) formBaseUrl = u.value
-    if (k) formApiKey = k.value
+    if (k) {
+      formApiKey = k.value
+      if (formApiKey) formApiKeyEnv = null
+    }
     if (m) formModel = m.value
   }
 
@@ -993,12 +1005,13 @@ export function render() {
         if (!p) return
         formBaseUrl = p.baseUrl || ''
         formApiKey = p.apiKey || ''
+        formApiKeyEnv = p.apiKeyEnv || null
         formModel = p.primaryModel || p.models[0] || ''
         selectedHermesProvider = p.hermesProvider || 'custom'
         models = p.models || []
         showDropdown = models.length > 0
         importChoices = []
-        const keyWarning = p.apiKey ? '' : t('engine.importOpenClawKeyWarning')
+        const keyWarning = (p.apiKey || p.apiKeyEnv) && !p.credentialUnsupported ? '' : t('engine.importOpenClawKeyWarning')
         cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.importOpenClawApplied', { name: esc(p.name), provider: esc(selectedHermesProvider), warning: keyWarning })}</span>`
         draw()
       })
@@ -1072,12 +1085,16 @@ export function render() {
 
   async function doSaveModel() {
     syncFormFromDom()
-    if (!formApiKey || isPlaceholderApiKey(formApiKey)) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configValidApiKeyRequired')}</span>`; draw(); return }
     if (!formModel) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configModelRequired')}</span>`; draw(); return }
 
     const matched = inferProviderByBaseUrl(hermesProviders, formBaseUrl)
     // 优先使用导入/预设按钮记录的 provider，避免 OpenClaw 自定义聚合接口被误判。
     const provider = selectedHermesProvider || matched?.id || 'custom'
+    const preservesExistingKey = Boolean(hermesConfig?.api_key_configured)
+      && provider === hermesConfig?.provider
+      && !formApiKey
+      && !formApiKeyEnv
+    if ((!formApiKey && !formApiKeyEnv && !preservesExistingKey) || (formApiKey && isPlaceholderApiKey(formApiKey))) { cfgMsg = `<span style="color:var(--warning)">${t('engine.configValidApiKeyRequired')}</span>`; draw(); return }
     if (provider && hermesProviders.some(p => p.id === provider)) selectedHermesProvider = provider
     const knownProviderIds = hermesProviders.map(p => p.id)
     if (provider !== 'custom' && !knownProviderIds.includes(provider)) {
@@ -1087,7 +1104,12 @@ export function render() {
 
     modelBusy = true; cfgMsg = ''; draw()
     try {
-      await api.configureHermes(provider, formApiKey, formModel, formBaseUrl || null)
+      await api.configureHermes(provider, formApiKey, formModel, formBaseUrl || null, {
+        apiKeyEnv: formApiKeyEnv,
+        preserveExistingKey: preservesExistingKey,
+        expectedConfigRevision: hermesConfig?.config_revision,
+        expectedEnvRevision: hermesConfig?.env_revision,
+      })
       cfgMsg = `<span style="color:var(--success)">✓ ${t('engine.configSavedRestarting')}</span>`
       draw()
       try {
@@ -1150,7 +1172,7 @@ export function render() {
         <div style="font-size:12px;font-weight:600;margin-bottom:8px">${t('engine.importOpenClawFound', { count: providers.length })}</div>
         ${providers.map((p, i) => {
           const modelsStr = p.models.length ? p.models.join(', ') : t('engine.importOpenClawNoModels')
-          const keyHint = maskKey(p.apiKey)
+          const keyHint = p.credentialPreview || maskKey(p.apiKey)
           return `<button type="button" class="hm-import-option" data-idx="${i}">
             <span class="hm-import-option-head"><strong>${esc(p.name)}</strong><em>${esc(p.source)}</em></span>
             <span class="hm-import-option-url">${esc(p.baseUrl || t('engine.importOpenClawNoBaseUrl'))} · ${esc(keyHint)}</span>
@@ -1389,7 +1411,8 @@ export function render() {
       // 首次加载时用 hermesConfig 初始化表单
       if (!formInited && hermesConfig) {
         formBaseUrl = hermesConfig.base_url || ''
-        formApiKey = hermesConfig.api_key || ''
+        formApiKey = ''
+        formApiKeyEnv = null
         formModel = hermesConfig.model || ''
         selectedHermesProvider = hermesConfig.provider || ''
         formInited = true

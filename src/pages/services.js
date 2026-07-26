@@ -293,7 +293,7 @@ function startSlowHint(target, message, delay = 8000) {
 // ===== 版本检测 =====
 
 // 后端检测到的当前安装源
-let detectedSource = 'chinese'
+let detectedSource = 'unknown'
 let lastVersionInfo = null
 
 async function loadVersion(page) {
@@ -320,16 +320,15 @@ async function loadVersion(page) {
     ])
     stopSlowHint()
     lastVersionInfo = info
-    detectedSource = info.source || 'chinese'
+    detectedSource = info.source || 'unknown'
     const ver = info.current || t('common.unknown')
-    const hasRecommended = !!info.recommended
-    const aheadOfRecommended = !!info.current && hasRecommended && !!info.ahead_of_recommended
-    const driftFromRecommended = !!info.current && hasRecommended && !info.is_recommended && !aheadOfRecommended
     const isChinese = detectedSource === 'chinese'
+    const hasRecommended = !isChinese && !!info.recommended
+    const aheadOfRecommended = !isChinese && !!info.current && hasRecommended && !!info.ahead_of_recommended
+    const driftFromRecommended = !isChinese && !!info.current && hasRecommended && !info.is_recommended && !aheadOfRecommended
     const sourceTag = isChinese ? t('services.chineseEdition') : t('services.officialEdition')
-    const switchLabel = isChinese ? t('services.switchToOfficial') : t('services.switchToChinese')
-    const switchTarget = isChinese ? 'official' : 'chinese'
-    const dockerImage = (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/qingchencloud/openclaw'
+    const switchLabel = t('services.switchToOfficial')
+    const dockerImage = (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/openclaw/openclaw'
     const policyNote = aheadOfRecommended
       ? t('services.policyAhead', { ver, recommended: info.recommended })
       : t('services.policyDefault')
@@ -365,7 +364,7 @@ async function loadVersion(page) {
             </div>
             <div style="display:flex;gap:var(--space-sm);margin-top:var(--space-sm);flex-wrap:wrap">
               ${aheadOfRecommended ? `<button class="btn btn-primary btn-sm" data-action="upgrade">${t('services.rollbackToRecommended')}</button>` : driftFromRecommended ? `<button class="btn btn-primary btn-sm" data-action="upgrade">${t('services.switchToRecommended')}</button>` : ''}
-              <button class="btn btn-secondary btn-sm" data-action="switch-source" data-source="${switchTarget}">${switchLabel}</button>
+              ${isChinese ? `<button class="btn btn-secondary btn-sm" data-action="switch-source" data-source="official">${switchLabel}</button>` : ''}
             </div>
             <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary);line-height:1.6">
               ${policyNote}
@@ -381,7 +380,7 @@ async function loadVersion(page) {
 }
 
 function configuredDockerImage(panelConfig) {
-  return (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/qingchencloud/openclaw'
+  return (panelConfig?.dockerDefaultImage || '').trim() || 'ghcr.io/openclaw/openclaw'
 }
 
 function formatDockerBytes(bytes) {
@@ -733,7 +732,7 @@ function renderServices(container, services) {
         ${cliMissing
           ? `<div style="display:flex;flex-direction:column;gap:var(--space-xs);align-items:flex-end">
                <div style="color:var(--text-tertiary);font-size:var(--font-size-xs)">${t('services.installCliHint')}</div>
-               <code style="font-size:var(--font-size-xs);background:var(--bg-tertiary);padding:2px 8px;border-radius:4px;user-select:all">npm install -g @qingchencloud/openclaw-zh</code>
+               <code style="font-size:var(--font-size-xs);background:var(--bg-tertiary);padding:2px 8px;border-radius:4px;user-select:all">npm install -g openclaw</code>
                <button class="btn btn-secondary btn-sm" data-action="refresh-services" style="margin-top:4px">${t('services.refreshStatus')}</button>
              </div>`
           : foreignGateway
@@ -1302,22 +1301,20 @@ async function doUpgradeWithModal(source, page, version = null, method = 'auto')
 }
 
 async function handleUpgrade(btn, page) {
-  const sourceLabel = detectedSource === 'official' ? t('services.officialEdition') : t('services.chineseEdition')
-  const recommendedVersion = recommended ? t('services.recommendedVersionSuffix', { version: recommended }) : ''
+  const sourceLabel = t('services.officialEdition')
+  const targetVersion = detectedSource === 'official' ? recommended : null
+  const recommendedVersion = targetVersion ? t('services.recommendedVersionSuffix', { version: targetVersion }) : ''
   const yes = await showConfirm(t('services.upgradeConfirm', { source: sourceLabel, version: recommendedVersion }))
   if (!yes) return
-  await doUpgradeWithModal(detectedSource, page, recommended || null)
+  await doUpgradeWithModal('official', page, targetVersion || null)
 }
 
 async function handleSwitchSource(target, page) {
-  const targetLabel = target === 'official' ? t('services.officialEdition') : t('services.chineseEdition')
-  const recommended = target === 'official'
-    ? (lastVersionInfo?.source === 'official' ? lastVersionInfo?.recommended : null)
-    : (lastVersionInfo?.source === 'chinese' ? lastVersionInfo?.recommended : null)
-  const recommendedVersion = recommended ? t('services.recommendedVersionSuffix', { version: recommended }) : ''
-  const yes = await showConfirm(t('services.switchSourceConfirm', { target: targetLabel, version: recommendedVersion }))
+  if (target !== 'official') return
+  const targetLabel = t('services.officialEdition')
+  const yes = await showConfirm(t('services.switchSourceConfirm', { target: targetLabel, version: '' }))
   if (!yes) return
-  await doUpgradeWithModal(target, page, null)
+  await doUpgradeWithModal('official', page, null)
 }
 
 // ===== 认领外部 Gateway =====

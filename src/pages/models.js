@@ -2,11 +2,17 @@
  * 模型配置页面
  * 服务商管理 + 模型增删改查 + 主模型选择
  */
-import { api } from '../lib/tauri-api.js'
+import { api, isTauriRuntime } from '../lib/tauri-api.js'
 import { toast } from '../components/toast.js'
-import { showModal, showConfirm } from '../components/modal.js'
+import { showModal, showConfirm, showContentModal } from '../components/modal.js'
 import { icon, statusIcon } from '../lib/icons.js'
 import { API_TYPES, PROVIDER_PRESETS, QTCOOL, MODEL_PRESETS, fetchQtcoolModels } from '../lib/model-presets.js'
+import {
+  applyModelChannelPatchPlan,
+  createModelChannelPatchPlan,
+  parseModelChannelBundle,
+  summarizeModelChannelPatchPlan,
+} from '../lib/model-channels.js'
 import { t } from '../lib/i18n.js'
 
 export async function render() {
@@ -27,28 +33,6 @@ export async function render() {
     </div>
     <div class="form-hint" style="margin-bottom:var(--space-md)">
       ${t('models.providerHint')}
-    </div>
-    <div id="qtcool-promo" style="margin-bottom:var(--space-md);border-radius:var(--radius-lg);border:1px solid var(--border-primary);border-left:3px solid var(--primary);background:var(--bg-secondary);padding:16px 20px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:12px">
-        <div style="flex:1;min-width:200px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span style="font-weight:700;font-size:var(--font-size-base);color:var(--text-primary)">${icon('zap', 15)} ${t('models.qtcoolName')}</span>
-            <span style="font-size:10px;background:var(--primary);color:#fff;padding:1px 7px;border-radius:8px">${t('models.qtcoolRecommend')}</span>
-          </div>
-          <div style="font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.5">
-            ${t('models.qtcoolDesc')}
-            <a href="${QTCOOL.site}" target="_blank" style="color:var(--primary);text-decoration:none">${t('models.qtcoolMore')}</a>
-          </div>
-        </div>
-        <a href="${QTCOOL.checkinUrl}" target="_blank" class="btn btn-primary btn-sm">${icon('gift', 12)} ${t('models.qtcoolCheckin')}</a>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input class="form-input" id="qtcool-apikey" placeholder="${t('models.qtcoolKeyPlaceholder')}" style="font-size:12px;padding:6px 10px;flex:1;min-width:180px">
-        <button class="btn btn-primary btn-sm" id="btn-qtcool-oneclick">${icon('plus', 14)} ${t('models.qtcoolFetchModels')}</button>
-      </div>
-      <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px">
-        ${t('models.qtcoolNoKey')} <a href="${QTCOOL.checkinUrl}" target="_blank" style="color:var(--primary)">${t('models.qtcoolCheckinPage')}</a> ${t('models.qtcoolCheckinHint')} <a href="${QTCOOL.usageUrl}" target="_blank" style="color:var(--primary)">${t('models.qtcoolDashboard')}</a> ${t('models.qtcoolCopyKey')}
-      </div>
     </div>
     <div id="default-model-bar"></div>
     <div style="margin-bottom:var(--space-md)">
@@ -878,46 +862,84 @@ async function exportModelConfig(state) {
   toast(t('models.exported'), 'success')
 }
 
-function parseImportedModelConfig(payload) {
-  const source = payload && typeof payload === 'object' ? payload : null
-  if (!source) throw new Error(t('models.importInvalid'))
-  const models = source.models?.providers
-    ? source.models
-    : source.providers
-      ? { providers: source.providers }
-      : null
-  validateImportedModels(models)
-  return {
-    models,
-    defaultModel: source.defaults?.model || source.agents?.defaults?.model || null,
-  }
+function confirmModelChannelImport(plan) {
+  const rows = summarizeModelChannelPatchPlan(plan)
+  const content = rows.length
+    ? `<div style="display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto">${rows.map(row => `
+        <div style="border:1px solid var(--border-primary);border-radius:var(--radius-md);padding:10px 12px;background:var(--bg-tertiary)">
+          <div style="font-weight:600;font-family:var(--font-mono);font-size:var(--font-size-sm)">${escapeHtml(row.providerId)}</div>
+          <div style="font-size:var(--font-size-xs);color:var(--text-secondary);margin-top:4px;line-height:1.6">
+            ${row.op === 'delete-provider'
+              ? '删除服务商'
+              : `更新服务商 · ${row.modelCount} 个模型 · ${escapeHtml(row.apiType)}<br>${escapeHtml(row.baseUrl)}<br>凭据：${escapeHtml(row.credential)}`}
+          </div>
+        </div>`).join('')}</div>
+       <div class="form-hint" style="margin-top:10px">仅应用以上服务商变更；其他配置和未知字段保持不变。凭据引用不会解析为明文。</div>`
+    : '<div style="color:var(--text-tertiary)">导入文件没有需要应用的变更。</div>'
+  return new Promise(resolve => {
+    const overlay = showContentModal({
+      title: '模型渠道导入预览',
+      content,
+      width: 620,
+      buttons: rows.length ? [{ label: '应用变更', className: 'btn btn-primary btn-sm', id: 'confirm-channel-import' }] : [],
+    })
+    let settled = false
+    const close = (result) => {
+      if (settled) return
+      settled = true
+      overlay.remove()
+      resolve(result)
+    }
+    overlay.querySelector('#confirm-channel-import')?.addEventListener('click', () => close(true))
+    overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => close(false))
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(false) })
+    overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(false) })
+  })
 }
 
 async function importModelConfig(file, page, state) {
   if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
   if (!file) return
-  let parsed
+  let plan
   try {
-    parsed = parseImportedModelConfig(JSON.parse(await file.text()))
+    const bundle = parseModelChannelBundle(JSON.parse(await file.text()))
+    plan = createModelChannelPatchPlan(state.config, bundle)
   } catch (e) {
     toast(`${t('models.importFailed')}: ${e?.message || e}`, 'error')
     return
   }
-  const count = Object.keys(parsed.models.providers || {}).length
-  const ok = await showConfirm(t('models.importConfirm', { count }))
-  if (!ok) return
+  if (!plan.operations.length) {
+    toast('导入文件没有需要应用的模型渠道变更', 'info')
+    return
+  }
+  if (!await confirmModelChannelImport(plan)) return
   pushUndo(state)
-  state.config.models = parsed.models
-  if (!state.config.agents) state.config.agents = {}
-  if (!state.config.agents.defaults) state.config.agents.defaults = {}
-  if (parsed.defaultModel && typeof parsed.defaultModel === 'object') {
-    state.config.agents.defaults.model = { ...parsed.defaultModel }
+  if (isTauriRuntime() && typeof api.writeModelChannelPatch === 'function') {
+    try {
+      const expectedProviders = Object.fromEntries(plan.operations.map(operation => [
+        operation.providerId,
+        state.config?.models?.providers?.[operation.providerId] ?? null,
+      ]))
+      await api.writeModelChannelPatch(expectedProviders, plan.operations)
+      state.config = applyModelChannelPatchPlan(state.config, plan)
+    } catch (error) {
+      try { state.config = await api.readOpenclawConfig() } catch {}
+      renderModelInventory(page, state)
+      renderDefaultBar(page, state)
+      updateUndoBtn(page, state)
+      toast(`模型渠道未应用：${error?.message || error}。配置可能已被其他操作修改，请刷新后重试。`, 'error')
+      return
+    }
+  } else {
+    state.config = applyModelChannelPatchPlan(state.config, plan)
+    ensureValidPrimary(state)
+    autoSave(state)
   }
   ensureValidPrimary(state)
   renderModelInventory(page, state)
+  renderDefaultBar(page, state)
   updateUndoBtn(page, state)
-  autoSave(state)
-  toast(t('models.imported', { count }), 'success')
+  toast(`已导入 ${plan.operations.length} 项模型渠道变更`, 'success')
 }
 
 // 顶部按钮事件
@@ -935,14 +957,15 @@ function bindTopActions(page, state) {
     await importModelConfig(file, page, state)
   }
 
-  // 晴辰云：获取模型列表 → 弹窗让用户选择要添加的模型
-  page.querySelector('#btn-qtcool-oneclick').onclick = async () => {
+  // 历史 qtcool 兼容入口：仅在页面仍渲染该入口时启用
+  const qtcoolOneClickBtn = page.querySelector('#btn-qtcool-oneclick')
+  if (qtcoolOneClickBtn) qtcoolOneClickBtn.onclick = async () => {
     if (!state.config) { toast(t('models.configNotReady'), 'warning'); return }
 
     const bannerKeyInput = page.querySelector('#qtcool-apikey')
     const bannerKey = bannerKeyInput ? bannerKeyInput.value.trim() : ''
 
-    const btn = page.querySelector('#btn-qtcool-oneclick')
+    const btn = qtcoolOneClickBtn
     btn.textContent = t('models.qtcoolFetching')
     btn.disabled = true
 

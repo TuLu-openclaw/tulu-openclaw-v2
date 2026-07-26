@@ -1,15 +1,25 @@
 #[cfg(not(target_os = "macos"))]
 use crate::utils::openclaw_command;
 /// 配置读写命令
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use hmac::{Hmac, Mac};
+use rand::{rngs::OsRng, RngCore};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::fs;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use tauri::Manager;
+
+static OPENCLAW_CONFIG_WRITE_LOCK: Mutex<()> = Mutex::new(());
+static PANEL_CONFIG_WRITE_LOCK: Mutex<()> = Mutex::new(());
+static PANEL_AUTHENTICATED: AtomicBool = AtomicBool::new(false);
 
 use crate::models::types::VersionInfo;
 
@@ -156,6 +166,225 @@ fn parse_version(value: &str) -> Vec<u32> {
         .split(|c: char| !c.is_ascii_digit())
         .filter_map(|s| s.parse().ok())
         .collect()
+}
+
+fn parse_node_version_triplet(value: &str) -> Option<[u32; 3]> {
+    let parts = parse_version(value);
+    if parts.is_empty() {
+        return None;
+    }
+    Some([
+        *parts.first().unwrap_or(&0),
+        *parts.get(1).unwrap_or(&0),
+        *parts.get(2).unwrap_or(&0),
+    ])
+}
+
+fn node_version_satisfies_clause(version: [u32; 3], clause: &str) -> bool {
+    let clause = clause.trim();
+    if clause.is_empty() || clause == "*" {
+        return true;
+    }
+
+    if let Some(raw) = clause.strip_prefix(">=") {
+        return parse_node_version_triplet(raw)
+            .map(|minimum| version >= minimum)
+            .unwrap_or(false);
+    }
+    if let Some(raw) = clause.strip_prefix("<=") {
+        return parse_node_version_triplet(raw)
+            .map(|maximum| version <= maximum)
+            .unwrap_or(false);
+    }
+    if let Some(raw) = clause.strip_prefix('>') {
+        return parse_node_version_triplet(raw)
+            .map(|minimum| version > minimum)
+            .unwrap_or(false);
+    }
+    if let Some(raw) = clause.strip_prefix('<') {
+        return parse_node_version_triplet(raw)
+            .map(|maximum| version < maximum)
+            .unwrap_or(false);
+    }
+
+    if let Some(raw) = clause.strip_prefix('^') {
+        let Some(minimum) = parse_node_version_triplet(raw) else {
+            return false;
+        };
+        let maximum = [minimum[0].saturating_add(1), 0, 0];
+        return version >= minimum && version < maximum;
+    }
+
+    parse_node_version_triplet(clause)
+        .map(|target| version == target)
+        .unwrap_or(false)
+}
+
+fn node_version_satisfies_requirement(version: &str, requirement: &str) -> bool {
+    let Some(version) = parse_node_version_triplet(version) else {
+        return false;
+    };
+    let requirement = requirement.trim();
+    if requirement.is_empty() {
+        return true;
+    }
+    requirement.split("||").any(|range| {
+        range
+            .split_whitespace()
+            .all(|clause| node_version_satisfies_clause(version, clause))
+    })
+}
+
+fn read_package_json_field(path: &Path, pointer: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<Value>(&content)
+        .ok()?
+        .pointer(pointer)?
+        .as_str()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+const OPENCLAW_NODE_22_19_VERSION_FLOOR: &str = "2026.6.5";
+const OPENCLAW_NODE_22_19_REQUIREMENT: &str = ">=22.19.0";
+const OPENCLAW_NODE_7_1_VERSION_FLOOR: &str = "2026.7.1";
+const OPENCLAW_NODE_7_1_REQUIREMENT: &str = ">=22.22.3 <23 || >=24.15.0 <25 || >=25.9.0";
+
+fn fallback_openclaw_node_requirement(version: &str) -> Option<&'static str> {
+    let version = parse_version(&base_version(version));
+    if version >= parse_version(OPENCLAW_NODE_7_1_VERSION_FLOOR) {
+        return Some(OPENCLAW_NODE_7_1_REQUIREMENT);
+    }
+    if version >= parse_version(OPENCLAW_NODE_22_19_VERSION_FLOOR) {
+        return Some(OPENCLAW_NODE_22_19_REQUIREMENT);
+    }
+    None
+}
+
+fn find_openclaw_package_json(cli_path: &Path) -> Option<PathBuf> {
+    let dir = cli_path.parent()?;
+    let cli_source = crate::utils::classify_cli_source(&cli_path.to_string_lossy());
+    let pkg_names: &[&str] = if matches!(cli_source.as_str(), "npm-zh" | "standalone" | "portable") {
+        &["@qingchencloud/openclaw-zh", "openclaw"]
+    } else {
+        &["openclaw", "@qingchencloud/openclaw-zh"]
+    };
+
+    let mut current = Some(dir);
+    while let Some(candidate_dir) = current {
+        let own_package = candidate_dir.join("package.json");
+        if matches!(read_package_json_field(&own_package, "/name").as_deref(), Some("openclaw" | "@qingchencloud/openclaw-zh")) {
+            return Some(own_package);
+        }
+        current = candidate_dir.parent();
+    }
+
+    for base in [Some(dir), dir.parent()].into_iter().flatten() {
+        for package_name in pkg_names {
+            let package = base
+                .join("node_modules")
+                .join(package_name)
+                .join("package.json");
+            if package.is_file() {
+                return Some(package);
+            }
+        }
+    }
+    None
+}
+
+pub(crate) fn openclaw_node_requirement() -> Option<String> {
+    let cli_path = crate::utils::resolve_openclaw_cli_path()?;
+    let cli_path = Path::new(&cli_path);
+    let package_json = find_openclaw_package_json(cli_path);
+    if let Some(requirement) = package_json
+        .as_ref()
+        .and_then(|path| read_package_json_field(path, "/engines/node"))
+    {
+        return Some(requirement);
+    }
+
+    package_json
+        .as_ref()
+        .and_then(|path| read_package_json_field(path, "/version"))
+        .or_else(|| read_version_from_installation(cli_path))
+        .as_deref()
+        .and_then(fallback_openclaw_node_requirement)
+        .map(str::to_string)
+}
+
+fn node_version_from_bin(node_bin: &Path) -> Option<String> {
+    let mut cmd = Command::new(node_bin);
+    cmd.arg("--version");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+    let output = cmd.output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn populate_node_detection_result(
+    result: &mut serde_json::Map<String, Value>,
+    version: String,
+    path: String,
+    detected_from: String,
+) {
+    let required_version = openclaw_node_requirement();
+    let compatible = required_version
+        .as_deref()
+        .map(|requirement| node_version_satisfies_requirement(&version, requirement))
+        .unwrap_or(true);
+    result.insert("installed".into(), Value::Bool(true));
+    result.insert("version".into(), Value::String(version));
+    result.insert("path".into(), Value::String(path));
+    result.insert("detectedFrom".into(), Value::String(detected_from));
+    result.insert("compatible".into(), Value::Bool(compatible));
+    result.insert(
+        "requiredVersion".into(),
+        required_version.map(Value::String).unwrap_or(Value::Null),
+    );
+}
+
+pub(crate) fn ensure_node_runtime_compatible() -> Result<(), String> {
+    let node = check_node()?;
+    if !node.get("installed").and_then(Value::as_bool).unwrap_or(false) {
+        return Err("Node.js 未安装或未检测到，请先安装 Node.js 后重新检测".into());
+    }
+    if node.get("compatible").and_then(Value::as_bool).unwrap_or(true) {
+        return Ok(());
+    }
+
+    let version = node.get("version").and_then(Value::as_str).unwrap_or("unknown");
+    let requirement = node
+        .get("requiredVersion")
+        .and_then(Value::as_str)
+        .unwrap_or("当前 OpenClaw 要求的版本");
+    let path = node.get("path").and_then(Value::as_str).unwrap_or("");
+    Err(format!(
+        "Node.js 版本不兼容：当前检测到 {version}，当前 OpenClaw 要求 {requirement}。请升级 Node.js 后重新检测。检测路径：{path}"
+    ))
+}
+
+fn ensure_target_node_runtime_compatible_for_npm(version: &str) -> Result<(), String> {
+    let Some(requirement) = fallback_openclaw_node_requirement(version) else {
+        return Ok(());
+    };
+    let enhanced = super::enhanced_path();
+    let node_path = find_node_path(&enhanced).ok_or_else(|| {
+        format!(
+            "无法通过 npm 安装 OpenClaw {version}：未检测到系统 Node.js。目标版本要求 {requirement}，请先安装兼容版本，或选择自带 Node.js 的 standalone 安装。"
+        )
+    })?;
+    let current = node_version_from_bin(Path::new(&node_path))
+        .ok_or_else(|| format!("无法读取系统 Node.js 版本：{node_path}"))?;
+    if !node_version_satisfies_requirement(&current, requirement) {
+        return Err(format!(
+            "无法通过 npm 安装 OpenClaw {version}：当前 Node.js {current}，目标版本要求 {requirement}。请先升级 Node.js，或选择自带 Node.js 的 standalone 安装。"
+        ));
+    }
+    Ok(())
 }
 
 /// 提取基础版本号（去掉 -zh.x / -nightly.xxx 等后缀，只保留主版本数字部分）
@@ -1010,14 +1239,344 @@ pub fn save_openclaw_json(config: &Value) -> Result<(), String> {
     write_openclaw_config(config.clone())
 }
 
+fn write_json_transactionally(path: &Path, json: &str, expected: &Value) -> Result<(), String> {
+    let parent = path.parent().ok_or_else(|| "配置路径缺少父目录".to_string())?;
+    fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {e}"))?;
+
+    let suffix = format!("{}.{}", std::process::id(), rand::random::<u64>());
+    let temp_path = parent.join(format!(".openclaw.json.{suffix}.tmp"));
+    let rollback_path = parent.join(format!(".openclaw.json.{suffix}.rollback"));
+
+    let write_result = (|| -> Result<(), String> {
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temp_path)
+            .map_err(|e| format!("创建配置临时文件失败: {e}"))?;
+        file.write_all(json.as_bytes())
+            .map_err(|e| format!("写入配置临时文件失败: {e}"))?;
+        file.sync_all()
+            .map_err(|e| format!("同步配置临时文件失败: {e}"))?;
+
+        let staged = fs::read_to_string(&temp_path)
+            .map_err(|e| format!("回读配置临时文件失败: {e}"))?;
+        let staged_value: Value = serde_json::from_str(&staged)
+            .map_err(|e| format!("配置临时文件校验失败: {e}"))?;
+        if &staged_value != expected {
+            return Err("配置临时文件回读内容不一致".to_string());
+        }
+
+        if path.exists() {
+            fs::rename(path, &rollback_path)
+                .map_err(|e| format!("暂存旧配置失败: {e}"))?;
+        }
+        if let Err(e) = fs::rename(&temp_path, path) {
+            if rollback_path.exists() {
+                let _ = fs::rename(&rollback_path, path);
+            }
+            return Err(format!("替换配置文件失败: {e}"));
+        }
+
+        let committed = fs::read_to_string(path)
+            .map_err(|e| format!("回读已写配置失败: {e}"))?;
+        let committed_value: Value = serde_json::from_str(&committed)
+            .map_err(|e| format!("已写配置校验失败: {e}"))?;
+        if &committed_value != expected {
+            let _ = fs::remove_file(path);
+            if rollback_path.exists() {
+                let _ = fs::rename(&rollback_path, path);
+            }
+            return Err("配置写入后回读内容不一致，已尝试回滚".to_string());
+        }
+
+        if rollback_path.exists() {
+            fs::remove_file(&rollback_path)
+                .map_err(|e| format!("清理配置回滚文件失败: {e}"))?;
+        }
+        Ok(())
+    })();
+
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    write_result
+}
+
+#[cfg(test)]
+mod transactional_config_tests {
+    use super::*;
+
+    #[test]
+    fn openclaw_node_requirement_fallbacks_match_release_floors() {
+        assert_eq!(fallback_openclaw_node_requirement("2026.6.4"), None);
+        assert_eq!(
+            fallback_openclaw_node_requirement("2026.6.5-zh.1"),
+            Some(OPENCLAW_NODE_22_19_REQUIREMENT)
+        );
+        assert_eq!(
+            fallback_openclaw_node_requirement("2026.7.1"),
+            Some(OPENCLAW_NODE_7_1_REQUIREMENT)
+        );
+    }
+
+    #[test]
+    fn node_requirement_supports_current_openclaw_ranges() {
+        let requirement = OPENCLAW_NODE_7_1_REQUIREMENT;
+        assert!(!node_version_satisfies_requirement("v22.22.2", requirement));
+        assert!(node_version_satisfies_requirement("v22.22.3", requirement));
+        assert!(!node_version_satisfies_requirement("v23.0.0", requirement));
+        assert!(!node_version_satisfies_requirement("v24.14.9", requirement));
+        assert!(node_version_satisfies_requirement("v24.15.0", requirement));
+        assert!(!node_version_satisfies_requirement("v25.8.9", requirement));
+        assert!(node_version_satisfies_requirement("v25.9.0", requirement));
+    }
+
+    #[test]
+    fn transactional_write_commits_valid_json_and_cleans_staging_files() {
+        let root = std::env::temp_dir().join(format!(
+            "xingshu-config-test-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("openclaw.json");
+        fs::write(&path, r#"{"gateway":{"port":18789},"secret":"keep"}"#).unwrap();
+        let expected = json!({"gateway":{"port":18888},"secret":"keep"});
+        let json = serde_json::to_string_pretty(&expected).unwrap();
+
+        write_json_transactionally(&path, &json, &expected).unwrap();
+
+        let committed: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(committed, expected);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn transactional_write_rejects_mismatched_expected_value() {
+        let root = std::env::temp_dir().join(format!(
+            "xingshu-config-test-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("openclaw.json");
+        fs::write(&path, r#"{"version":"old"}"#).unwrap();
+
+        let error = write_json_transactionally(
+            &path,
+            r#"{"version":"new"}"#,
+            &json!({"version":"different"}),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("回读内容不一致"));
+        let original: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(original, json!({"version":"old"}));
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn model_channel_credentials_accept_references_and_reject_plaintext() {
+        assert!(validate_model_channel_credentials(
+            &json!({"apiKey":"$OPENAI_API_KEY","credential":{"ref":"vault/openai"}}),
+            "provider",
+        )
+        .is_ok());
+        assert!(validate_model_channel_credentials(
+            &json!({"apiKey":"sk-plaintext"}),
+            "provider",
+        )
+        .unwrap_err()
+        .contains("不接受明文凭据"));
+    }
+
+    #[test]
+    fn model_channel_credentials_reject_embedded_value_inside_secret_ref() {
+        let error = validate_model_channel_credentials(
+            &json!({"credential":{"ref":"vault/openai","value":"plaintext"}}),
+            "provider",
+        )
+        .unwrap_err();
+        assert!(error.contains("不接受明文凭据"));
+    }
+}
+
 /// 供其他模块复用：触发 Gateway 重载
 pub async fn do_reload_gateway(app: &tauri::AppHandle) -> Result<String, String> {
     let _ = app; // 预留扩展用
     reload_gateway().await
 }
 
+fn validate_model_channel_credentials(value: &Value, path: &str) -> Result<(), String> {
+    let sensitive_key = |key: &str| {
+        let normalized: String = key
+            .chars()
+            .filter(|c| !matches!(c, '-' | '_'))
+            .flat_map(char::to_lowercase)
+            .collect();
+        ["apikey", "token", "secret", "password", "credential", "authorization"]
+            .iter()
+            .any(|needle| normalized.contains(needle))
+    };
+    let valid_env = |text: &str| {
+        let name = text
+            .strip_prefix("${")
+            .and_then(|rest| rest.strip_suffix('}'))
+            .or_else(|| text.strip_prefix('$'));
+        name.is_some_and(|name| {
+            let mut chars = name.chars();
+            chars.next().is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+                && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+        })
+    };
+
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                let child_path = format!("{path}.{key}");
+                if sensitive_key(key) && !child.is_null() && child.as_str() != Some("") {
+                    let valid_reference = child.as_str().is_some_and(valid_env)
+                        || child.as_object().is_some_and(|reference| {
+                            !reference.contains_key("value")
+                                && (reference.get("$env").and_then(Value::as_str).is_some()
+                                    || reference.get("ref").and_then(Value::as_str).is_some()
+                                    || ((reference.get("source").and_then(Value::as_str).is_some()
+                                        || reference.get("provider").and_then(Value::as_str).is_some())
+                                        && ["id", "name", "key"].iter().any(|locator| {
+                                            reference.get(*locator).and_then(Value::as_str).is_some()
+                                        })))
+                        });
+                    if !valid_reference {
+                        return Err(format!(
+                            "{child_path} 不接受明文凭据，请使用环境变量引用或 SecretRef"
+                        ));
+                    }
+                    validate_model_channel_credentials(child, &child_path)?;
+                } else {
+                    validate_model_channel_credentials(child, &child_path)?;
+                }
+            }
+        }
+        Value::Array(items) => {
+            for (index, child) in items.iter().enumerate() {
+                validate_model_channel_credentials(child, &format!("{path}[{index}]"))?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Apply a complete provider patch plan with optimistic concurrency protection.
+/// Every baseline is checked before any in-memory mutation, and the resulting
+/// config is persisted by one transactional write.
+#[tauri::command]
+pub fn write_model_channel_patch(
+    expected_providers: Value,
+    operations: Vec<Value>,
+) -> Result<Value, String> {
+    let _write_guard = OPENCLAW_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "OpenClaw 配置写入锁不可用".to_string())?;
+    let expected = expected_providers
+        .as_object()
+        .ok_or_else(|| "模型渠道基线必须是对象".to_string())?;
+    if operations.is_empty() {
+        return Err("模型渠道补丁不能为空".to_string());
+    }
+
+    let provider_id_is_valid = |id: &str| {
+        !id.trim().is_empty()
+            && id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    };
+    validate_model_channel_credentials(&Value::Array(operations.clone()), "operations")?;
+    let path = super::openclaw_dir().join("openclaw.json");
+    let mut config = load_openclaw_json()?;
+    let current_providers = config
+        .get("models")
+        .and_then(|v| v.get("providers"))
+        .and_then(Value::as_object);
+    let mut seen_provider_ids = std::collections::HashSet::new();
+
+    for operation in &operations {
+        let provider_id = operation
+            .get("providerId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "模型渠道补丁缺少 providerId".to_string())?;
+        if !provider_id_is_valid(provider_id) || !expected.contains_key(provider_id) {
+            return Err(format!("模型渠道 provider id 或基线无效: {provider_id}"));
+        }
+        if !seen_provider_ids.insert(provider_id.to_string()) {
+            return Err(format!("模型渠道补丁包含重复 provider: {provider_id}"));
+        }
+        let current = current_providers.and_then(|providers| providers.get(provider_id));
+        let baseline = expected.get(provider_id).filter(|value| !value.is_null());
+        if current != baseline {
+            return Err(format!(
+                "模型渠道配置已被其他操作修改，请刷新后重试（provider: {provider_id}）"
+            ));
+        }
+    }
+
+    {
+        let providers = config
+            .as_object_mut()
+            .ok_or_else(|| "OpenClaw 配置顶层必须是对象".to_string())?
+            .entry("models")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .ok_or_else(|| "models 配置必须是对象".to_string())?
+            .entry("providers")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .ok_or_else(|| "models.providers 配置必须是对象".to_string())?;
+
+        for operation in &operations {
+            let provider_id = operation.get("providerId").and_then(Value::as_str).unwrap();
+            match operation.get("op").and_then(Value::as_str) {
+                Some("delete-provider") => {
+                    providers.remove(provider_id);
+                }
+                Some("upsert-provider") => {
+                    let patch = operation
+                        .get("value")
+                        .and_then(Value::as_object)
+                        .ok_or_else(|| format!("provider {provider_id} 的补丁必须是对象"))?;
+                    let target = providers
+                        .entry(provider_id.to_string())
+                        .or_insert_with(|| json!({}))
+                        .as_object_mut()
+                        .ok_or_else(|| format!("provider {provider_id} 必须是对象"))?;
+                    for (key, value) in patch {
+                        target.insert(key.clone(), value.clone());
+                    }
+                }
+                _ => return Err(format!("provider {provider_id} 的补丁操作不受支持")),
+            }
+        }
+    }
+
+    let cleaned = strip_ui_fields(config);
+    let json = serde_json::to_string_pretty(&cleaned).map_err(|e| format!("序列化失败: {e}"))?;
+    write_json_transactionally(&path, &json, &cleaned)?;
+    sync_providers_to_agent_models(&cleaned);
+    Ok(cleaned
+        .get("models")
+        .and_then(|v| v.get("providers"))
+        .cloned()
+        .unwrap_or_else(|| json!({})))
+}
+
 #[tauri::command]
 pub fn write_openclaw_config(config: Value) -> Result<(), String> {
+    let _write_guard = OPENCLAW_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "OpenClaw 配置写入锁不可用".to_string())?;
     let path = super::openclaw_dir().join("openclaw.json");
 
     // Issue #127 修复：先读取现有配置，合并后写入
@@ -1043,9 +1602,9 @@ pub fn write_openclaw_config(config: Value) -> Result<(), String> {
     // 清理 UI 专属字段，避免 CLI schema 校验失败
     let cleaned = strip_ui_fields(merged);
 
-    // 写入
+    // 事务写入：临时文件落盘并校验后再替换正式配置；失败时恢复旧文件。
     let json = serde_json::to_string_pretty(&cleaned).map_err(|e| format!("序列化失败: {e}"))?;
-    fs::write(&path, &json).map_err(|e| format!("写入失败: {e}"))?;
+    write_json_transactionally(&path, &json, &cleaned)?;
 
     // 同步 provider 配置到所有 agent 的 models.json（运行时注册表）
     sync_providers_to_agent_models(&config);
@@ -2357,8 +2916,8 @@ fn build_registry_proxy_client(timeout_secs: u64) -> Option<reqwest::Client> {
 }
 
 /// 从 npm registry 获取最新版本号，超时 5 秒
-async fn get_latest_version_for(source: &str) -> Option<String> {
-    let pkg = npm_package_name(source)
+async fn get_latest_version_for() -> Option<String> {
+    let pkg = npm_package_name("official")
         .replace('/', "%2F")
         .replace('@', "%40");
     let registry = get_configured_registry();
@@ -2560,17 +3119,9 @@ pub async fn get_version_info() -> Result<VersionInfo, String> {
             source = "chinese".to_string();
         }
     }
-    // unknown 来源不查询 latest/recommended（无法确定对应哪个 npm 包）
-    let latest = if source == "unknown" {
-        None
-    } else {
-        get_latest_version_for(&source).await
-    };
-    let recommended = if source == "unknown" {
-        None
-    } else {
-        recommended_version_for(&source)
-    };
+    // 当前来源仅用于标识既有安装；所有维护目标统一查询官方 OpenClaw。
+    let latest = get_latest_version_for().await;
+    let recommended = recommended_version_for("official");
     let update_available = match (&current, &recommended) {
         (Some(c), Some(r)) => recommended_is_newer(r, c),
         (None, Some(_)) => true,
@@ -2625,11 +3176,7 @@ pub async fn get_version_info_local() -> Result<VersionInfo, String> {
             source = "chinese".to_string();
         }
     }
-    let recommended = if source == "unknown" {
-        None
-    } else {
-        recommended_version_for(&source)
-    };
+    let recommended = recommended_version_for("official");
     let update_available = match (&current, &recommended) {
         (Some(c), Some(r)) => recommended_is_newer(r, c),
         (None, Some(_)) => true,
@@ -3106,14 +3653,15 @@ pub async fn get_status_summary() -> Result<Value, String> {
 /// npm 包名映射
 fn npm_package_name(source: &str) -> &'static str {
     match source {
-        "official" => "openclaw",
-        _ => "@qingchencloud/openclaw-zh",
+        "chinese" => "@qingchencloud/openclaw-zh",
+        _ => "openclaw",
     }
 }
 
 /// 获取指定源的所有可用版本列表（从 npm registry 查询）
 #[tauri::command]
-pub async fn list_openclaw_versions(source: String) -> Result<Vec<String>, String> {
+pub async fn list_openclaw_versions(_source: String) -> Result<Vec<String>, String> {
+    let source = "official".to_string();
     let pkg = npm_package_name(&source).replace('/', "%2F");
     let registry = get_configured_registry();
     let url = format!("{registry}/{pkg}");
@@ -3239,11 +3787,12 @@ pub async fn upgrade_openclaw(
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {
         use tauri::Emitter;
+        let _ = (source, method);
         let result = upgrade_openclaw_inner(
             app2.clone(),
-            source,
+            "official".into(),
             version,
-            method.unwrap_or_else(|| "auto".into()),
+            "npm".into(),
         )
         .await;
         match result {
@@ -4128,49 +4677,10 @@ async fn upgrade_openclaw_inner(
         .unwrap_or("latest");
     let pkg = format!("{}@{}", pkg_name, ver);
 
-    // ── standalone 安装（auto / standalone-r2 / standalone-github） ──
-    let try_standalone = source != "official"
-        && (method == "auto" || method == "standalone-r2" || method == "standalone-github");
+    let _ = method;
 
-    if try_standalone {
-        // standalone-github 模式：使用 GitHub Releases 下载地址
-        let github_base = if method == "standalone-github" {
-            Some(format!(
-                "https://github.com/qingchencloud/openclaw-standalone/releases/download/v{}",
-                ver
-            ))
-        } else {
-            None
-        };
-        match try_standalone_install(&app, ver, github_base.as_deref()).await {
-            Ok(installed_ver) => {
-                let _ = app.emit("upgrade-progress", 100);
-                super::refresh_enhanced_path();
-                crate::commands::service::invalidate_cli_detection_cache();
-                let label = if method == "standalone-github" {
-                    "GitHub"
-                } else {
-                    "CDN"
-                };
-                let msg = format!("✅ standalone ({label}) 安装完成，当前版本: {installed_ver}");
-                let _ = app.emit("upgrade-log", &msg);
-                return Ok(msg);
-            }
-            Err(reason) => {
-                if method == "auto" {
-                    let _ = app.emit(
-                        "upgrade-log",
-                        format!("standalone 不可用（{reason}），降级到 npm 安装..."),
-                    );
-                    let _ = app.emit("upgrade-progress", 5);
-                } else {
-                    return Err(format!("standalone 安装失败: {reason}"));
-                }
-            }
-        }
-    }
 
-    // ── npm install（兜底或用户明确选择） ──
+    ensure_target_node_runtime_compatible_for_npm(ver)?;
 
     // 切换源时需要卸载旧包，但为避免安装失败导致 CLI 丢失，
     // 先安装新包，成功后再卸载旧包
@@ -4751,16 +5261,15 @@ pub fn check_node() -> Result<Value, String> {
             Ok(o) if o.status.success() => {
                 let ver = String::from_utf8_lossy(&o.stdout).trim().to_string();
                 let detected_from = detect_node_source(&path);
-                result.insert("installed".into(), Value::Bool(true));
-                result.insert("version".into(), Value::String(ver));
-                result.insert("path".into(), Value::String(path));
-                result.insert("detectedFrom".into(), Value::String(detected_from));
+                populate_node_detection_result(&mut result, ver, path, detected_from);
             }
             _ => {
                 result.insert("installed".into(), Value::Bool(false));
                 result.insert("version".into(), Value::Null);
                 result.insert("path".into(), Value::Null);
                 result.insert("detectedFrom".into(), Value::Null);
+                result.insert("compatible".into(), Value::Bool(false));
+                result.insert("requiredVersion".into(), Value::Null);
             }
         }
     } else {
@@ -4768,6 +5277,8 @@ pub fn check_node() -> Result<Value, String> {
         result.insert("version".into(), Value::Null);
         result.insert("path".into(), Value::Null);
         result.insert("detectedFrom".into(), Value::Null);
+        result.insert("compatible".into(), Value::Bool(false));
+        result.insert("requiredVersion".into(), Value::Null);
     }
     Ok(Value::Object(result))
 }
@@ -5047,6 +5558,8 @@ pub fn check_node_at_path(node_dir: String) -> Result<Value, String> {
     if !node_bin.exists() {
         result.insert("installed".into(), Value::Bool(false));
         result.insert("version".into(), Value::Null);
+        result.insert("compatible".into(), Value::Bool(false));
+        result.insert("requiredVersion".into(), Value::Null);
         return Ok(Value::Object(result));
     }
 
@@ -5057,13 +5570,14 @@ pub fn check_node_at_path(node_dir: String) -> Result<Value, String> {
     match cmd.output() {
         Ok(o) if o.status.success() => {
             let ver = String::from_utf8_lossy(&o.stdout).trim().to_string();
-            result.insert("installed".into(), Value::Bool(true));
-            result.insert("version".into(), Value::String(ver));
-            result.insert("path".into(), Value::String(node_dir));
+            let detected_from = detect_node_source(&node_bin.to_string_lossy());
+            populate_node_detection_result(&mut result, ver, node_dir, detected_from);
         }
         _ => {
             result.insert("installed".into(), Value::Bool(false));
             result.insert("version".into(), Value::Null);
+            result.insert("compatible".into(), Value::Bool(false));
+            result.insert("requiredVersion".into(), Value::Null);
         }
     }
     Ok(Value::Object(result))
@@ -6422,7 +6936,7 @@ pub async fn install_gateway() -> Result<String, String> {
         Ok(o) if o.status.success() => {}
         _ => {
             return Err("openclaw CLI 未安装。请先执行以下命令安装：\n\n\
-                 npm install -g @qingchencloud/openclaw-zh\n\n\
+                 npm install -g openclaw\n\n\
                  安装完成后再点击此按钮安装 Gateway 服务。"
                 .into());
         }
@@ -6534,26 +7048,18 @@ pub fn patch_model_vision() -> Result<bool, String> {
     Ok(changed)
 }
 
-/// 检查 星枢OpenClaw 自身是否有新版本（GitHub → Gitee 自动降级）
+/// 检查 星枢OpenClaw 自身是否有新版本（仅正式 GitHub Release）
 #[tauri::command]
 pub async fn check_panel_update() -> Result<Value, String> {
     let client =
         crate::commands::build_http_client(std::time::Duration::from_secs(8), Some("星枢OpenClaw"))
             .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
-    // 先尝试 GitHub，失败后降级 Gitee
-    let sources = [
-        (
-            "https://api.github.com/repos/qingchencloud/星枢OpenClaw/releases/latest",
-            "https://github.com/qingchencloud/星枢OpenClaw/releases",
-            "github",
-        ),
-        (
-            "https://gitee.com/api/v5/repos/QtCodeCreators/星枢OpenClaw/releases/latest",
-            "https://gitee.com/QtCodeCreators/星枢OpenClaw/releases",
-            "gitee",
-        ),
-    ];
+    let sources = [(
+        "https://api.github.com/repos/TuLu-openclaw/tulu-openclaw-v2/releases/latest",
+        "https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases",
+        "github",
+    )];
 
     let mut last_err = String::new();
     for (api_url, releases_url, source) in &sources {
@@ -6587,7 +7093,7 @@ pub async fn check_panel_update() -> Result<Value, String> {
                 result.insert("source".into(), Value::String(source.to_string()));
                 result.insert(
                     "downloadUrl".into(),
-                    Value::String("https://claw.qt.cool".into()),
+                    Value::String("https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest".into()),
                 );
                 return Ok(Value::Object(result));
             }
@@ -6621,25 +7127,174 @@ pub fn get_openclaw_dir() -> Result<Value, String> {
     }))
 }
 
-#[tauri::command]
-pub fn read_panel_config() -> Result<Value, String> {
+const PANEL_PASSWORD_HASH_FIELD: &str = "accessPasswordHash";
+const PANEL_AUTH_FIELDS: &[&str] = &["accessPassword", "accessPasswordHash", "mustChangePassword", "ignoreRisk"];
+const PASSWORD_HASH_ITERATIONS: u32 = 120_000;
+
+type HmacSha256 = Hmac<Sha256>;
+
+fn read_panel_config_raw() -> Result<Value, String> {
     let path = super::panel_config_path();
     if !path.exists() {
-        return Ok(serde_json::json!({}));
+        return Ok(json!({}));
     }
     let content = fs::read_to_string(&path).map_err(|e| format!("读取失败: {e}"))?;
     serde_json::from_str(&content).map_err(|e| format!("解析失败: {e}"))
 }
 
-#[tauri::command]
-pub fn write_panel_config(mut config: Value) -> Result<(), String> {
+fn write_panel_config_raw(config: &Value) -> Result<(), String> {
     let path = super::panel_config_path();
-    if let Some(dir) = path.parent() {
-        if !dir.exists() {
-            fs::create_dir_all(dir).map_err(|e| format!("创建目录失败: {e}"))?;
+    let json = serde_json::to_string_pretty(config).map_err(|e| format!("序列化失败: {e}"))?;
+    write_json_transactionally(&path, &json, config)
+}
+
+fn strip_panel_auth_fields(config: &mut Value) {
+    if let Some(obj) = config.as_object_mut() {
+        for field in PANEL_AUTH_FIELDS {
+            obj.remove(*field);
         }
     }
+}
+
+fn panel_has_password(config: &Value) -> bool {
+    config
+        .get(PANEL_PASSWORD_HASH_FIELD)
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.is_empty())
+        || config
+            .get("accessPassword")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty())
+}
+
+fn panel_ignore_risk(config: &Value) -> bool {
+    config.get("ignoreRisk").and_then(Value::as_bool).unwrap_or(false)
+}
+
+fn pbkdf2_sha256(password: &[u8], salt: &[u8], iterations: u32) -> Result<[u8; 32], String> {
+    let mut mac = HmacSha256::new_from_slice(password).map_err(|_| "密码哈希初始化失败".to_string())?;
+    mac.update(salt);
+    mac.update(&1_u32.to_be_bytes());
+    let mut block: [u8; 32] = mac.finalize().into_bytes().into();
+    let mut output = block;
+    for _ in 1..iterations {
+        let mut next = HmacSha256::new_from_slice(password).map_err(|_| "密码哈希初始化失败".to_string())?;
+        next.update(&block);
+        block = next.finalize().into_bytes().into();
+        for (target, value) in output.iter_mut().zip(block) {
+            *target ^= value;
+        }
+    }
+    Ok(output)
+}
+
+fn hash_panel_password(password: &str) -> Result<String, String> {
+    let mut salt = [0_u8; 16];
+    OsRng.fill_bytes(&mut salt);
+    let digest = pbkdf2_sha256(password.as_bytes(), &salt, PASSWORD_HASH_ITERATIONS)?;
+    Ok(format!(
+        "pbkdf2-sha256${PASSWORD_HASH_ITERATIONS}${}${}",
+        BASE64_STANDARD.encode(salt),
+        BASE64_STANDARD.encode(digest)
+    ))
+}
+
+fn verify_panel_password(password: &str, encoded: &str) -> bool {
+    let mut parts = encoded.split('$');
+    if parts.next() != Some("pbkdf2-sha256") {
+        return false;
+    }
+    let Some(iterations) = parts.next().and_then(|value| value.parse::<u32>().ok()) else {
+        return false;
+    };
+    let (Some(salt), Some(expected), None) = (parts.next(), parts.next(), parts.next()) else {
+        return false;
+    };
+    if iterations == 0 || iterations > 1_000_000 {
+        return false;
+    }
+    let (Ok(salt), Ok(expected)) = (BASE64_STANDARD.decode(salt), BASE64_STANDARD.decode(expected)) else {
+        return false;
+    };
+    let Ok(actual) = pbkdf2_sha256(password.as_bytes(), &salt, iterations) else {
+        return false;
+    };
+    HmacSha256::new_from_slice(&actual)
+        .is_ok_and(|mut mac| {
+            mac.update(b"panel-password-verification");
+            let mut expected_mac = match HmacSha256::new_from_slice(&expected) {
+                Ok(value) => value,
+                Err(_) => return false,
+            };
+            expected_mac.update(b"panel-password-verification");
+            mac.verify_slice(&expected_mac.finalize().into_bytes()).is_ok()
+        })
+}
+
+fn password_matches(config: &Value, password: &str) -> bool {
+    if let Some(encoded) = config.get(PANEL_PASSWORD_HASH_FIELD).and_then(Value::as_str) {
+        verify_panel_password(password, encoded)
+    } else {
+        config.get("accessPassword").and_then(Value::as_str) == Some(password)
+    }
+}
+
+fn migrate_panel_password(config: &mut Value, password: &str) -> Result<(), String> {
+    let needs_migration = config.get("accessPassword").and_then(Value::as_str).is_some();
+    if needs_migration {
+        let hash = hash_panel_password(password)?;
+        let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+        obj.remove("accessPassword");
+        obj.remove("mustChangePassword");
+        obj.insert(PANEL_PASSWORD_HASH_FIELD.to_string(), Value::String(hash));
+        write_panel_config_raw(config)?;
+    }
+    Ok(())
+}
+
+fn validate_panel_password_strength(password: &str) -> Result<(), String> {
+    if password.chars().count() < 6 {
+        return Err("密码至少 6 位".to_string());
+    }
+    if password.chars().count() > 64 {
+        return Err("密码不能超过 64 位".to_string());
+    }
+    if password.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("密码不能是纯数字".to_string());
+    }
+    let lower = password.to_lowercase();
+    if ["123456", "654321", "password", "admin", "qwerty", "abc123", "111111", "000000", "letmein", "welcome", "星枢openclaw", "openclaw"].contains(&lower.as_str()) {
+        return Err("密码太常见，请换一个更安全的密码".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn read_panel_config() -> Result<Value, String> {
+    let mut config = read_panel_config_raw()?;
+    strip_panel_auth_fields(&mut config);
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn write_panel_config(mut config: Value) -> Result<(), String> {
+    let _write_guard = PANEL_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "面板配置写入锁不可用".to_string())?;
+    let current = read_panel_config_raw()?;
+    if !panel_ignore_risk(&current) && !PANEL_AUTHENTICATED.load(Ordering::SeqCst) {
+        return Err("未登录，不能修改面板配置".to_string());
+    }
+    if !config.is_object() {
+        return Err("面板配置格式无效".to_string());
+    }
     if let Some(obj) = config.as_object_mut() {
+        for field in PANEL_AUTH_FIELDS {
+            obj.remove(*field);
+            if let Some(value) = current.get(*field) {
+                obj.insert((*field).to_string(), value.clone());
+            }
+        }
         if let Some(value) = obj.get_mut("openclawStandaloneInstallDir") {
             if let Some(raw) = value.as_str() {
                 let trimmed = raw.trim();
@@ -6653,8 +7308,121 @@ pub fn write_panel_config(mut config: Value) -> Result<(), String> {
             }
         }
     }
-    let json = serde_json::to_string_pretty(&config).map_err(|e| format!("序列化失败: {e}"))?;
-    fs::write(&path, json).map_err(|e| format!("写入失败: {e}"))
+    write_panel_config_raw(&config)
+}
+
+#[tauri::command]
+pub fn panel_auth_status() -> Result<Value, String> {
+    let config = read_panel_config_raw()?;
+    let ignored = panel_ignore_risk(&config);
+    let initialized = panel_has_password(&config);
+    Ok(json!({
+        "initialized": initialized,
+        "hasPassword": initialized,
+        "ignoreRisk": ignored,
+        "authenticated": ignored || PANEL_AUTHENTICATED.load(Ordering::SeqCst),
+        "state": if ignored || PANEL_AUTHENTICATED.load(Ordering::SeqCst) {
+            "authenticated"
+        } else if initialized {
+            "login_required"
+        } else {
+            "setup_required"
+        }
+    }))
+}
+
+#[tauri::command]
+pub fn panel_auth_setup(password: String) -> Result<Value, String> {
+    validate_panel_password_strength(&password)?;
+    let _write_guard = PANEL_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "面板配置写入锁不可用".to_string())?;
+    let mut config = read_panel_config_raw()?;
+    if panel_ignore_risk(&config) || panel_has_password(&config) {
+        return Err("访问密码已初始化".to_string());
+    }
+    if !config.is_object() {
+        config = json!({});
+    }
+    let hash = hash_panel_password(&password)?;
+    let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+    obj.remove("accessPassword");
+    obj.remove("mustChangePassword");
+    obj.remove("ignoreRisk");
+    obj.insert(PANEL_PASSWORD_HASH_FIELD.to_string(), Value::String(hash));
+    write_panel_config_raw(&config)?;
+    PANEL_AUTHENTICATED.store(true, Ordering::SeqCst);
+    Ok(json!({ "success": true }))
+}
+
+#[tauri::command]
+pub fn panel_auth_login(password: String) -> Result<Value, String> {
+    let _write_guard = PANEL_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "面板配置写入锁不可用".to_string())?;
+    let mut config = read_panel_config_raw()?;
+    if !panel_has_password(&config) {
+        return Err("请先完成访问密码初始化".to_string());
+    }
+    if !password_matches(&config, &password) {
+        return Err("密码错误".to_string());
+    }
+    migrate_panel_password(&mut config, &password)?;
+    PANEL_AUTHENTICATED.store(true, Ordering::SeqCst);
+    Ok(json!({ "success": true }))
+}
+
+#[tauri::command]
+pub fn panel_auth_change_password(old_password: String, new_password: String) -> Result<Value, String> {
+    if !PANEL_AUTHENTICATED.load(Ordering::SeqCst) {
+        return Err("未登录".to_string());
+    }
+    validate_panel_password_strength(&new_password)?;
+    let _write_guard = PANEL_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "面板配置写入锁不可用".to_string())?;
+    let mut config = read_panel_config_raw()?;
+    if !password_matches(&config, &old_password) {
+        return Err("当前密码错误".to_string());
+    }
+    if old_password == new_password {
+        return Err("新密码不能与旧密码相同".to_string());
+    }
+    let hash = hash_panel_password(&new_password)?;
+    let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+    obj.remove("accessPassword");
+    obj.remove("mustChangePassword");
+    obj.remove("ignoreRisk");
+    obj.insert(PANEL_PASSWORD_HASH_FIELD.to_string(), Value::String(hash));
+    write_panel_config_raw(&config)?;
+    Ok(json!({ "success": true }))
+}
+
+#[tauri::command]
+pub fn panel_auth_ignore_risk(enable: bool) -> Result<Value, String> {
+    let _write_guard = PANEL_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "面板配置写入锁不可用".to_string())?;
+    let mut config = read_panel_config_raw()?;
+    if !panel_ignore_risk(&config) && !PANEL_AUTHENTICATED.load(Ordering::SeqCst) {
+        return Err("未登录".to_string());
+    }
+    if !config.is_object() {
+        config = json!({});
+    }
+    let obj = config.as_object_mut().ok_or_else(|| "面板配置格式无效".to_string())?;
+    if enable {
+        obj.remove("accessPassword");
+        obj.remove(PANEL_PASSWORD_HASH_FIELD);
+        obj.remove("mustChangePassword");
+        obj.insert("ignoreRisk".to_string(), Value::Bool(true));
+        PANEL_AUTHENTICATED.store(false, Ordering::SeqCst);
+    } else {
+        obj.remove("ignoreRisk");
+        PANEL_AUTHENTICATED.store(false, Ordering::SeqCst);
+    }
+    write_panel_config_raw(&config)?;
+    Ok(json!({ "success": true }))
 }
 
 const BUNDLED_RUNTIME_RESOURCE_ROOT: &str = "runtime";
@@ -6809,7 +7577,10 @@ fn update_panel_runtime_binding(
     path_value: &str,
     source_key: &str,
 ) -> Result<(), String> {
-    let mut config = read_panel_config()?;
+    let _write_guard = PANEL_CONFIG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "面板配置写入锁不可用".to_string())?;
+    let mut config = read_panel_config_raw()?;
     if !config.is_object() {
         config = json!({});
     }
@@ -6817,7 +7588,7 @@ fn update_panel_runtime_binding(
         obj.insert(key_path.to_string(), Value::String(path_value.to_string()));
         obj.insert(source_key.to_string(), Value::String("bundled".to_string()));
     }
-    write_panel_config(config)
+    write_panel_config_raw(&config)
 }
 
 fn detect_git_source(git_path: &str, is_custom: bool) -> String {

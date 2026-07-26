@@ -12,7 +12,6 @@ export function isTauriRuntime() {
 // npm 包名映射
 const NPM_PACKAGES = {
   official: 'openclaw',
-  chinese: '@qingchencloud/openclaw-zh',
 }
 
 // 解析版本号用于排序
@@ -406,7 +405,18 @@ export const api = {
   // 版本信息：本地部分走 Rust，远程（latest）走 JS fetch（绕过 Rust 网络限制）
   getVersionInfo: () => getVersionInfoViaJs(),
   getStatusSummary: () => cachedInvoke('get_status_summary', {}, 60000),
+  getRouteGraph: () => invoke('get_route_graph'),
   readOpenclawConfig: () => cachedInvoke('read_openclaw_config'),
+  writeModelChannelPatch: (expectedProviders, operations) => {
+    invalidateGatewayCaches()
+    return invoke('write_model_channel_patch', { expectedProviders, operations }).then(result => {
+      invalidateGatewayCaches()
+      invalidateRemoteModelCaches()
+      _debouncedReloadGateway()
+      notifyConfigChanged({ source: 'writeModelChannelPatch', configChangedAt: Date.now(), modelsChanged: true })
+      return result
+    })
+  },
   getBundledRuntimeStatus: () => invoke('get_bundled_runtime_status'),
   deployBundledNode: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_node', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   deployBundledGit: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_git', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
@@ -434,8 +444,8 @@ export const api = {
       return r
     })
   },
-  listOpenclawVersions: async (source = 'chinese') => fetchNpmAllVersions(source),
-  upgradeOpenclaw: (source = 'chinese', version = null, method = 'auto') => { invalidateInstallationCaches(); return invoke('upgrade_openclaw', { source, version, method }, 300000).then(r => { invalidateInstallationCaches(); return r }) },
+  listOpenclawVersions: async () => fetchNpmAllVersions('official'),
+  upgradeOpenclaw: (_source = 'official', version = null, _method = 'npm') => { invalidateInstallationCaches(); return invoke('upgrade_openclaw', { source: 'official', version, method: 'npm' }, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   uninstallOpenclaw: (cleanConfig = false) => { invalidateInstallationCaches(); return invoke('uninstall_openclaw', { cleanConfig }, 60000).then(r => { invalidateInstallationCaches(); return r }) },
   installGateway: () => { invalidateInstallationCaches(); return invoke('install_gateway', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   uninstallGateway: () => { invalidateInstallationCaches(); return invoke('uninstall_gateway', {}, 60000).then(r => { invalidateInstallationCaches(); return r }) },
@@ -555,6 +565,11 @@ export const api = {
   relaunchApp: () => invoke('relaunch_app'),
   readPanelConfig: () => invoke('read_panel_config'),
   writePanelConfig: (config) => { invalidate(); return invoke('write_panel_config', { config }).then(r => { invoke('invalidate_path_cache').catch(() => {}); return r }) },
+  panelAuthStatus: () => invoke('panel_auth_status'),
+  panelAuthSetup: (password) => invoke('panel_auth_setup', { password }),
+  panelAuthLogin: (password) => invoke('panel_auth_login', { password }),
+  panelAuthChangePassword: (oldPassword, newPassword) => invoke('panel_auth_change_password', { oldPassword, newPassword }),
+  panelAuthIgnoreRisk: (enable) => invoke('panel_auth_ignore_risk', { enable }),
   testProxy: (proxyUrl) => invoke('test_proxy', { proxyUrl: proxyUrl || null }),
 
   // 安装/部署
@@ -697,9 +712,18 @@ export const api = {
     invalidate('check_hermes', 'hermes_list_providers')
     return invoke('install_hermes', { method, extras }, 300000)
   },
-  configureHermes: (provider, apiKey, model, baseUrl) => {
+  configureHermes: (provider, apiKey, model, baseUrl, options = {}) => {
     invalidate('check_hermes', 'hermes_list_providers')
-    return invoke('configure_hermes', { provider, apiKey, model: model || null, baseUrl: baseUrl || null })
+    return invoke('configure_hermes', {
+      provider,
+      apiKey: apiKey || '',
+      model: model || null,
+      baseUrl: baseUrl || null,
+      apiKeyEnv: options.apiKeyEnv || null,
+      preserveExistingKey: Boolean(options.preserveExistingKey),
+      expectedConfigRevision: options.expectedConfigRevision || null,
+      expectedEnvRevision: options.expectedEnvRevision || null,
+    })
   },
   hermesGatewayAction: async (action) => {
     invalidate('check_hermes')
@@ -716,15 +740,38 @@ export const api = {
   },
   hermesHealthCheck: () => invoke('hermes_health_check'),
   hermesApiProxy: (method, path, body, headers) => invoke('hermes_api_proxy', { method, path, body: body || null, headers: headers || null }),
+  hermesDashboardApi: (method, path, body) => invoke('hermes_dashboard_api_proxy', {
+    method,
+    path,
+    body: body == null ? null : JSON.stringify(body),
+  }),
   musicSearch: (q) => invoke('music_search', { query: q }),
   musicSearchNetease: (q, limit) => api.musicSearchAll(q, ['netease'], limit),
   hermesAgentRun: (input, sessionId, conversationHistory, instructions) => invoke('hermes_agent_run', { input, sessionId: sessionId || null, conversationHistory: conversationHistory || null, instructions: instructions || null }, 330000),
-  hermesProfilesList: () => invoke('hermes_profiles_list', {}).catch(() => ({ profiles: [], active: 'default' })),
+  hermesProfilesList: () => invoke('hermes_profiles_list', {}),
   hermesProfileUse: (name) => {
     invalidate('check_hermes', 'hermes_list_providers')
-    return invoke('hermes_profile_use', { name }).catch(() => true).finally(() => invalidate('check_hermes', 'hermes_list_providers'))
+    return invoke('hermes_profile_use', { name }).finally(() => invalidate('check_hermes', 'hermes_list_providers'))
   },
+  hermesProfileGatewayAction: (name, action) => {
+    invalidate('check_hermes')
+    return invoke('hermes_profile_gateway_action', { name, action }, action === 'status' ? 15000 : 60000)
+      .finally(() => invalidate('check_hermes'))
+  },
+  hermesProfileCreate: (name, cloneFrom) => invoke('hermes_profile_create', { name, cloneFrom: cloneFrom || null }),
+  hermesProfileRename: (oldName, newName) => invoke('hermes_profile_rename', { oldName, newName }),
+  hermesProfileDelete: (name) => invoke('hermes_profile_delete', { name }),
   hermesReadConfig: () => invoke('hermes_read_config'),
+  hermesChannelConfigRead: () => invoke('hermes_channel_config_read'),
+  hermesChannelConfigSave: (yaml, envUpdates, expectedConfigRevision, expectedEnvRevision) => {
+    invalidate('check_hermes')
+    return invoke('hermes_channel_config_save', {
+      yamlText: yaml,
+      envUpdates: envUpdates || {},
+      expectedConfigRevision,
+      expectedEnvRevision,
+    })
+  },
   hermesConfigRawRead: () => invoke('hermes_config_raw_read'),
   hermesConfigRawWrite: (yaml) => {
     invalidate('check_hermes', 'hermes_list_providers')
@@ -766,6 +813,7 @@ export const api = {
   hermesSessionDetail: (sessionId, profile) => invoke('hermes_session_detail', { sessionId, profile: profile || null }),
   hermesSessionDelete: (sessionId) => invoke('hermes_session_delete', { sessionId }),
   hermesSessionRename: (sessionId, title) => invoke('hermes_session_rename', { sessionId, title }),
+  hermesDiagnosticRun: (action) => invoke('hermes_diagnostic_run', { action }),
   hermesLogsList: () => invoke('hermes_logs_list'),
   hermesLogsRead: (name, lines, level) => invoke('hermes_logs_read', { name, lines: lines || 200, level: level || null }),
   hermesLogsDownload: (name) => invoke('hermes_logs_download', { name }),

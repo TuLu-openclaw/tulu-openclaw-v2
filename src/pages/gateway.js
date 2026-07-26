@@ -190,7 +190,7 @@ function renderConfig(page, state) {
       <div class="form-group" id="gw-auth-token-group" style="${gw.auth?.mode === 'password' ? 'display:none' : ''}">
         <label class="form-label">${t('gateway.tokenLabel')}</label>
         <div style="display:flex;gap:8px">
-          <input class="form-input" id="gw-token" type="password" value="${_tokenDisplayStr(gw.auth?.token || gw.authToken)}" placeholder="${t('gateway.tokenPlaceholder')}" style="flex:1" ${_isSecretRef(gw.auth?.token) ? 'readonly' : ''}>
+          <input class="form-input" id="gw-token" type="password" placeholder="${t('gateway.tokenPlaceholder')}" style="flex:1" ${_isSecretRef(gw.auth?.token) ? 'readonly' : ''}>
           <button class="btn btn-sm btn-secondary" id="btn-toggle-token">${t('gateway.show')}</button>
         </div>
         <div class="form-hint">${_isSecretRef(gw.auth?.token) ? t('gateway.tokenHintRef') : t('gateway.tokenHintNormal')}</div>
@@ -198,7 +198,7 @@ function renderConfig(page, state) {
       <div class="form-group" id="gw-auth-password-group" style="${gw.auth?.mode === 'password' ? '' : 'display:none'}">
         <label class="form-label">${t('gateway.passwordLabel')}</label>
         <div style="display:flex;gap:8px">
-          <input class="form-input" id="gw-password" type="password" value="${gw.auth?.password || ''}" placeholder="${t('gateway.passwordPlaceholder')}" style="flex:1">
+          <input class="form-input" id="gw-password" type="password" placeholder="${t('gateway.passwordPlaceholder')}" style="flex:1">
           <button class="btn btn-sm btn-secondary" id="btn-toggle-password">${t('gateway.show')}</button>
         </div>
         <div class="form-hint">${t('gateway.passwordHint')}</div>
@@ -268,7 +268,7 @@ function renderConfig(page, state) {
         </div>
         <div class="form-group">
           <label class="form-label">${t('gateway.tailscaleLabel')}</label>
-          <input class="form-input" id="gw-tailscale" value="${gw.tailscale?.address || ''}" placeholder="${t('gateway.tailscalePlaceholder')}">
+          <input class="form-input" id="gw-tailscale" placeholder="${t('gateway.tailscalePlaceholder')}">
           <div class="form-hint">${t('gateway.tailscaleHint')}</div>
         </div>
       </div>
@@ -294,6 +294,10 @@ function bindConfigEvents(el) {
       }
     }
   }
+  el.querySelector('#gw-token').value = _tokenDisplayStr(gw.auth?.token || gw.authToken)
+  el.querySelector('#gw-password').value = typeof gw.auth?.password === 'string' ? gw.auth.password : ''
+  el.querySelector('#gw-tailscale').value = typeof gw.tailscale?.address === 'string' ? gw.tailscale.address : ''
+
   bindToggle('btn-toggle-token', 'gw-token')
   bindToggle('btn-toggle-password', 'gw-password')
 

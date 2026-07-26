@@ -1,31 +1,30 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "=========================================="
-echo "  ClawPanel Web 版 一键部署脚本"
-echo "  在 Linux 上通过浏览器管理 OpenClaw"
-echo "=========================================="
-echo ""
+PRODUCT_NAME="星枢OpenClaw"
+SERVICE_NAME="xingshu-openclaw-web"
+PANEL_PORT="${PANEL_PORT:-1420}"
+REPO="TuLu-openclaw/tulu-openclaw-v2"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 
-PANEL_PORT=1420
-REPO_URL="https://github.com/qingchencloud/clawpanel.git"
-REPO_URL_GITEE="https://gitee.com/QtCodeCreators/clawpanel.git"
-NPM_REGISTRY="https://registry.npmmirror.com"
+log() {
+    echo "$@"
+}
 
-# 检测权限模式
 if [ "$(id -u)" = "0" ]; then
     IS_ROOT=true
-    INSTALL_DIR="/opt/clawpanel"
+    INSTALL_DIR="/opt/tulu-openclaw-v2"
     SYSTEMD_DIR="/etc/systemd/system"
-    echo "🔑 以 root 身份运行，安装到 $INSTALL_DIR"
+    SYSTEMD_SCOPE="system"
+    log "[info] 以 root 身份运行，安装到 $INSTALL_DIR"
 else
     IS_ROOT=false
-    INSTALL_DIR="$HOME/.local/share/clawpanel"
+    INSTALL_DIR="$HOME/.local/share/tulu-openclaw-v2"
     SYSTEMD_DIR="$HOME/.config/systemd/user"
-    echo "👤 以普通用户身份运行，安装到 $INSTALL_DIR"
+    SYSTEMD_SCOPE="user"
+    log "[info] 以普通用户身份运行，安装到 $INSTALL_DIR"
 fi
 
-# 带权限执行（安装系统包时需要）
 run_pkg_cmd() {
     if [ "$IS_ROOT" = true ]; then
         "$@"
@@ -34,90 +33,80 @@ run_pkg_cmd() {
     fi
 }
 
-# 检测系统
 detect_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$ID
-        OS_LIKE=$ID_LIKE
+        OS_LIKE=${ID_LIKE:-}
     elif [ -f /etc/redhat-release ]; then
         OS="centos"
+        OS_LIKE="rhel fedora"
     else
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        OS_LIKE=""
     fi
     ARCH=$(uname -m)
-    echo "🖥️  系统: $OS $ARCH"
-
-    # ARM 架构检测和提示
-    case "$ARCH" in
-        aarch64|arm64)
-            echo "✅ ARM64 架构，Web 模式和 Docker 模式均支持"
-            ;;
-        armv7*|armhf)
-            echo "⚠️  ARM 32位 ($ARCH)：Web 模式可用，Docker 镜像仅支持 arm64"
-            ;;
-        armv6*)
-            echo "⚠️  ARM v6 ($ARCH)：内存和性能可能不足，建议升级到 ARM64 设备"
-            ;;
-        x86_64|amd64)
-            ;;
-        *)
-            echo "ℹ️  架构: $ARCH"
-            ;;
-    esac
+    log "[info] 系统: $OS $ARCH"
 }
 
-# 安装 Node.js
 install_node() {
-    if command -v node &> /dev/null; then
-        local node_major=$(node -v | sed 's/v//' | cut -d. -f1)
-        if [ "$node_major" -ge 18 ]; then
-            echo "✅ Node.js $(node -v) 已安装"
+    if command -v node >/dev/null 2>&1; then
+        local node_version
+        node_version=$(node -v)
+        if printf '%s\n' "$node_version" | grep -Eq '^v(22\.(2[2-9]|[3-9][0-9])\.|2[3-9]\.)|^v(24\.(1[5-9]|[2-9][0-9])\.|2[5-9]\.)|^v(25\.(9|[1-9][0-9])\.|2[6-9]\.)'; then
+            log "[ok] Node.js $node_version 已安装，可满足当前 OpenClaw 新版要求"
             return 0
-        else
-            echo "⚠️  Node.js $(node -v) 版本过低，需要 18+"
         fi
+        log "[warn] 检测到 Node.js $node_version，但它未必满足所安装 OpenClaw 的动态兼容范围。"
+        log "[warn] 已知安全范围示例：OpenClaw 2026.7.1+ 需要 >=22.22.3 <23 或 >=24.15.0 <25 或 >=25.9.0。"
+        log "[info] 将升级到 Node.js 22 最新 LTS，由面板在运行时继续做精确兼容校验。"
+    else
+        log "[info] 未检测到 Node.js，准备安装 Node.js 22 LTS..."
     fi
 
-    echo "📦 安装 Node.js 22 LTS..."
     case "$OS" in
         ubuntu|debian|linuxmint|pop)
             curl -fsSL https://deb.nodesource.com/setup_22.x | run_pkg_cmd bash -
-            run_pkg_cmd apt-get install -y nodejs
+            run_pkg_cmd apt-get install -y nodejs git curl
             ;;
         centos|rhel|fedora|rocky|alma)
             curl -fsSL https://rpm.nodesource.com/setup_22.x | run_pkg_cmd bash -
-            run_pkg_cmd yum install -y nodejs
+            if command -v dnf >/dev/null 2>&1; then
+                run_pkg_cmd dnf install -y nodejs git curl
+            else
+                run_pkg_cmd yum install -y nodejs git curl
+            fi
             ;;
         alpine)
-            run_pkg_cmd apk add nodejs npm git
+            run_pkg_cmd apk add nodejs npm git curl bash
             ;;
         arch|manjaro)
-            run_pkg_cmd pacman -Sy --noconfirm nodejs npm git
+            run_pkg_cmd pacman -Sy --noconfirm nodejs npm git curl
             ;;
         *)
-            echo "❌ 不支持自动安装 Node.js，请手动安装后重试"
-            echo "   参考: https://nodejs.org/en/download/"
+            log "[error] 不支持自动安装 Node.js，请先手动安装兼容版本后重试。"
             exit 1
             ;;
     esac
-    echo "✅ Node.js $(node -v) 安装完成"
+
+    log "[ok] Node.js $(node -v) 安装完成"
 }
 
-# 安装 Git
 install_git() {
-    if command -v git &> /dev/null; then
-        echo "✅ Git 已安装"
+    if command -v git >/dev/null 2>&1; then
+        log "[ok] Git 已安装"
         return 0
     fi
-
-    echo "📦 安装 Git..."
     case "$OS" in
         ubuntu|debian|linuxmint|pop)
             run_pkg_cmd apt-get update && run_pkg_cmd apt-get install -y git
             ;;
         centos|rhel|fedora|rocky|alma)
-            run_pkg_cmd yum install -y git
+            if command -v dnf >/dev/null 2>&1; then
+                run_pkg_cmd dnf install -y git
+            else
+                run_pkg_cmd yum install -y git
+            fi
             ;;
         alpine)
             run_pkg_cmd apk add git
@@ -125,29 +114,31 @@ install_git() {
         arch|manjaro)
             run_pkg_cmd pacman -Sy --noconfirm git
             ;;
+        *)
+            log "[error] 无法自动安装 Git，请先手动安装。"
+            exit 1
+            ;;
     esac
-    echo "✅ Git 安装完成"
+    log "[ok] Git 安装完成"
 }
 
-# 查找 openclaw 可执行文件（兼容各种安装方式）
 find_openclaw() {
-    # 1. 直接在 PATH 中查找
-    if command -v openclaw &> /dev/null; then
-        echo "$(command -v openclaw)"
-        return 0
+    local candidates=()
+    if command -v openclaw >/dev/null 2>&1; then
+        candidates+=("$(command -v openclaw)")
     fi
-    # 2. 常见 npm 全局安装路径
-    local candidates=(
+    candidates+=(
         "/usr/local/bin/openclaw"
         "/usr/bin/openclaw"
         "$HOME/.npm-global/bin/openclaw"
         "$HOME/.local/bin/openclaw"
     )
-    # 3. 从 npm prefix 获取（不使用 sudo，避免触发密码提示）
-    local npm_prefix=$(npm config get prefix 2>/dev/null)
+    local npm_prefix
+    npm_prefix=$(npm config get prefix 2>/dev/null || true)
     if [ -n "$npm_prefix" ]; then
         candidates+=("$npm_prefix/bin/openclaw")
     fi
+    local p
     for p in "${candidates[@]}"; do
         if [ -x "$p" ]; then
             echo "$p"
@@ -157,216 +148,238 @@ find_openclaw() {
     return 1
 }
 
-# 检测 OpenClaw 版本来源（官方 vs 汉化版）
-detect_openclaw_source() {
-    local oc_bin="$1"
-    local ver=$("$oc_bin" --version 2>/dev/null || echo "")
-    if echo "$ver" | grep -qi "zh\|汉化\|chinese"; then
-        echo "chinese"
+verify_official_openclaw() {
+    local cli_path="$1"
+    node - "$cli_path" <<'NODE'
+const fs = require('node:fs')
+const path = require('node:path')
+
+const cliPath = fs.realpathSync(process.argv[2])
+let dir = path.dirname(cliPath)
+let packageRoot = null
+while (true) {
+  const manifestPath = path.join(dir, 'package.json')
+  if (fs.existsSync(manifestPath)) {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    if (manifest.name === 'openclaw') {
+      const bin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.openclaw
+      if (!bin) process.exit(1)
+      const expected = fs.realpathSync(path.resolve(dir, bin))
+      if (expected !== cliPath) process.exit(1)
+      packageRoot = dir
+      break
+    }
+  }
+  const parent = path.dirname(dir)
+  if (parent === dir) break
+  dir = parent
+}
+if (!packageRoot) process.exit(1)
+NODE
+}
+
+install_official_openclaw() {
+    if [ "$IS_ROOT" = true ]; then
+        npm install -g openclaw --registry "$NPM_REGISTRY"
     else
-        echo "official"
+        sudo -E npm install -g openclaw --registry "$NPM_REGISTRY"
     fi
 }
 
-# 安装 OpenClaw
 install_openclaw() {
-    local oc_path=$(find_openclaw)
-    if [ -n "$oc_path" ]; then
-        local oc_ver=$("$oc_path" --version 2>/dev/null || echo "未知版本")
-        local oc_src=$(detect_openclaw_source "$oc_path")
-        if [ "$oc_src" = "chinese" ]; then
-            echo "✅ OpenClaw 汉化版已安装: $oc_ver (${oc_path})"
-        else
-            echo "✅ OpenClaw 已安装: $oc_ver (${oc_path})"
+    local oc_path=""
+    if oc_path=$(find_openclaw); then
+        if verify_official_openclaw "$oc_path"; then
+            log "[ok] 已验证官方 npm OpenClaw CLI: $oc_path"
+            if ! command -v openclaw >/dev/null 2>&1; then
+                export PATH="$(dirname "$oc_path"):$PATH"
+            fi
+            return 0
         fi
-        # 确保 openclaw 在 PATH 中（防止后续步骤找不到）
-        if ! command -v openclaw &> /dev/null; then
-            export PATH="$(dirname "$oc_path"):$PATH"
-            echo "ℹ️  已将 $(dirname "$oc_path") 加入 PATH"
-        fi
+        log "[warn] 检测到无法证明来自官方 npm 包的 openclaw: $oc_path"
+        log "[info] 将通过 npm 安装官方 openclaw 包，不沿用来源不明的可执行文件。"
     else
-        echo "📦 安装 OpenClaw 汉化版..."
-        if [ "$IS_ROOT" = true ]; then
-            npm install -g @qingchencloud/openclaw-zh --registry "$NPM_REGISTRY" || \
-            npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmjs.org
-        else
-            sudo -E npm install -g @qingchencloud/openclaw-zh --registry "$NPM_REGISTRY" || \
-            sudo -E npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmjs.org
-        fi
-        echo "✅ OpenClaw 安装完成"
+        log "[info] 未检测到 OpenClaw CLI，开始安装官方 npm 包..."
     fi
 
-    # 初始化配置（如果不存在）
-    if [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
-        echo "🔧 初始化 OpenClaw 配置..."
-        openclaw init 2>/dev/null || true
+    install_official_openclaw
+    oc_path=$(find_openclaw) || {
+        log "[error] npm 安装完成后仍找不到 OpenClaw CLI"
+        exit 1
+    }
+    if ! verify_official_openclaw "$oc_path"; then
+        log "[error] 无法验证已安装 CLI 属于官方 npm 包 openclaw，安装已停止。"
+        exit 1
     fi
+    if ! command -v openclaw >/dev/null 2>&1; then
+        export PATH="$(dirname "$oc_path"):$PATH"
+    fi
+    log "[ok] 官方 npm OpenClaw CLI 安装并验证完成: $oc_path"
 }
 
-# 克隆并安装 ClawPanel
-install_clawpanel() {
-    if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/package.json" ]; then
-        echo "📦 ClawPanel 已存在，更新中..."
-        cd "$INSTALL_DIR"
-        git pull origin main 2>/dev/null || true
-        npm install --registry "$NPM_REGISTRY"
-    else
-        echo "📦 克隆 ClawPanel..."
-        mkdir -p "$INSTALL_DIR"
-        if ! git clone "$REPO_URL" "$INSTALL_DIR" 2>/dev/null; then
-            echo "⚠️  GitHub 克隆失败，切换到 Gitee 国内镜像..."
-            git clone "$REPO_URL_GITEE" "$INSTALL_DIR"
-        fi
-        cd "$INSTALL_DIR"
-        npm install --registry "$NPM_REGISTRY"
+install_panel() {
+    local latest
+    latest=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+        | grep '"tag_name"' \
+        | sed -E 's/.*"v?([^"]+)".*/\1/' \
+        | head -n 1)
+    if [ -z "$latest" ]; then
+        log "[error] 无法确认 GitHub 最新正式版本；为避免安装未经验证的 main 分支，安装已停止。"
+        exit 1
     fi
-    # 生产构建（生成优化后的静态文件）
-    echo "📦 构建生产版本..."
-    cd "$INSTALL_DIR"
-    npx vite build
-    echo "✅ ClawPanel 安装完成: $INSTALL_DIR"
-    echo "✅ 启动命令: npm run serve"
+
+    local archive sums stage_dir backup_dir source_name release_base expected_sha actual_sha
+    archive=$(mktemp "${TMPDIR:-/tmp}/tulu-openclaw-XXXXXX.tar.gz")
+    sums=$(mktemp "${TMPDIR:-/tmp}/tulu-openclaw-XXXXXX.SHA256SUMS")
+    stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/tulu-openclaw-stage-XXXXXX")
+    backup_dir="${INSTALL_DIR}.previous"
+    source_name="XingShuOpenClaw-v$latest-source.tar.gz"
+    release_base="https://github.com/$REPO/releases/download/v$latest"
+    trap 'rm -f "${archive:-}" "${sums:-}"; if [ -n "${stage_dir:-}" ]; then rm -rf "$stage_dir"; fi' RETURN
+
+    log "[info] 下载并验证正式版本 v$latest..."
+    curl -fsSL -o "$archive" "$release_base/$source_name"
+    curl -fsSL -o "$sums" "$release_base/SHA256SUMS"
+    expected_sha=$(awk -v file="$source_name" '$2 == file { print $1 }' "$sums")
+    if ! printf '%s' "$expected_sha" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+        log "[error] SHA256SUMS 缺少当前版本源码归档的唯一有效记录"
+        exit 1
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual_sha=$(sha256sum "$archive" | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        actual_sha=$(shasum -a 256 "$archive" | awk '{print $1}')
+    else
+        log "[error] 需要 sha256sum 或 shasum 才能验证发布归档"
+        exit 1
+    fi
+    if [ "$actual_sha" != "$expected_sha" ]; then
+        log "[error] 发布归档 SHA-256 校验失败"
+        exit 1
+    fi
+    tar tzf "$archive" >/dev/null
+    tar xzf "$archive" -C "$stage_dir" --strip-components=1
+    [ -f "$stage_dir/package-lock.json" ] || { log "[error] 发布归档缺少 package-lock.json"; exit 1; }
+
+    cd "$stage_dir"
+    npm ci --ignore-scripts --registry "$NPM_REGISTRY"
+    npm run build
+
+    mkdir -p "$(dirname "$INSTALL_DIR")"
+    rm -rf "$backup_dir"
+    if [ -d "$INSTALL_DIR" ]; then mv "$INSTALL_DIR" "$backup_dir"; fi
+    if ! mv "$stage_dir" "$INSTALL_DIR"; then
+        if [ -d "$backup_dir" ]; then mv "$backup_dir" "$INSTALL_DIR"; fi
+        log "[error] 安装目录替换失败，已恢复上一版本"
+        exit 1
+    fi
+    stage_dir=""
+    rm -rf "$backup_dir"
+    rm -f "$archive"
+    trap - RETURN
+    log "[ok] $PRODUCT_NAME v$latest 已构建完成: $INSTALL_DIR"
 }
 
-# 创建 systemd 服务
+setup_initial_auth_state() {
+    local config_dir="$HOME/.openclaw"
+    local config_file="$config_dir/星枢OpenClaw.json"
+    mkdir -p "$config_dir"
+    chmod 700 "$config_dir" 2>/dev/null || true
+    if [ -f "$config_file" ] && grep -q '"accessPassword"' "$config_file"; then
+        log "[info] 已存在访问密码配置，跳过首次访问初始化状态写入"
+        return 0
+    fi
+    umask 077
+    local config_tmp="$config_file.tmp.$$"
+    cat > "$config_tmp" <<EOF
+{}
+EOF
+    chmod 600 "$config_tmp"
+    mv -f "$config_tmp" "$config_file"
+    log "[ok] 已创建首次访问初始化状态；首次打开面板时将直接设置访问密码。"
+}
+
 setup_systemd() {
-    if ! command -v systemctl &> /dev/null; then
-        echo "⚠️  systemd 不可用，请手动启动："
-        echo "   cd $INSTALL_DIR && npm run serve -- --port $PANEL_PORT"
+    if ! command -v systemctl >/dev/null 2>&1; then
+        log "[warn] systemd 不可用，请手动启动：cd $INSTALL_DIR && npm run serve -- --port $PANEL_PORT"
         return 0
     fi
 
-    echo "🔧 创建 systemd 服务..."
     mkdir -p "$SYSTEMD_DIR"
+    local service_path="$SYSTEMD_DIR/$SERVICE_NAME.service"
+    local node_bin
+    node_bin=$(command -v node)
 
-    if [ "$IS_ROOT" = true ]; then
-        cat > "$SYSTEMD_DIR/clawpanel.service" << EOF
+    cat > "$service_path" <<EOF
 [Unit]
-Description=ClawPanel Web - OpenClaw Management Panel
+Description=$PRODUCT_NAME Web Panel
 After=network.target
 
 [Service]
 Type=simple
-User=$(whoami)
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$(which node) scripts/serve.js --port $PANEL_PORT
+ExecStart=$node_bin scripts/serve.js --port $PANEL_PORT
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=HOME=$HOME
-Environment=PATH=$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/.volta/bin:$(dirname $(which node)):$PATH
+Environment=PATH=$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/.volta/bin:$(dirname "$node_bin"):/usr/local/bin:/usr/bin:/bin
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=$( [ "$SYSTEMD_SCOPE" = "system" ] && echo multi-user.target || echo default.target )
 EOF
+
+    if [ "$SYSTEMD_SCOPE" = "system" ]; then
         systemctl daemon-reload
-        systemctl enable clawpanel
-        systemctl start clawpanel
+        systemctl enable "$SERVICE_NAME"
+        systemctl restart "$SERVICE_NAME"
     else
-        cat > "$SYSTEMD_DIR/clawpanel.service" << EOF
-[Unit]
-Description=ClawPanel Web - OpenClaw Management Panel
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$(which node) scripts/serve.js --port $PANEL_PORT
-Restart=on-failure
-RestartSec=5
-Environment=NODE_ENV=production
-Environment=HOME=$HOME
-Environment=PATH=$HOME/.npm-global/bin:$HOME/.local/bin:$HOME/.volta/bin:$(dirname $(which node)):$PATH
-
-[Install]
-WantedBy=default.target
-EOF
         systemctl --user daemon-reload
-        systemctl --user enable clawpanel
-        systemctl --user start clawpanel
-        # 允许用户服务在未登录时继续运行
-        loginctl enable-linger "$(whoami)" 2>/dev/null || true
+        systemctl --user enable "$SERVICE_NAME"
+        systemctl --user restart "$SERVICE_NAME"
+        loginctl enable-linger "$(whoami)" >/dev/null 2>&1 || true
     fi
-    echo "✅ systemd 服务已创建并启动"
+
+    log "[ok] systemd 服务已创建：$SERVICE_NAME"
 }
 
-# 获取本机 IP
 get_local_ip() {
-    ip route get 1 2>/dev/null | awk '{print $7; exit}' || \
-    hostname -I 2>/dev/null | awk '{print $1}' || \
-    echo "localhost"
+    ip route get 1 2>/dev/null | awk '{print $7; exit}' || hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost"
 }
 
-# 生成默认访问密码
-setup_default_password() {
-    local config_dir="$HOME/.openclaw"
-    local config_file="$config_dir/clawpanel.json"
-    mkdir -p "$config_dir"
-
-    # 已存在配置且有密码则跳过
-    if [ -f "$config_file" ]; then
-        local existing_pw=$(grep -o '"accessPassword"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1)
-        if [ -n "$existing_pw" ]; then
-            echo "ℹ️  已有访问密码，跳过生成"
-            DEFAULT_PASSWORD=""
-            return
-        fi
-    fi
-
-    DEFAULT_PASSWORD="123456"
-    cat > "$config_file" <<EOF
-{
-  "accessPassword": "123456",
-  "mustChangePassword": true
-}
-EOF
-    echo "✅ 已设置默认访问密码: 123456"
-}
-
-# 主流程
 main() {
     detect_os
-    echo ""
     install_git
     install_node
     install_openclaw
-    install_clawpanel
-    setup_default_password
+    install_panel
+    setup_initial_auth_state
     setup_systemd
 
-    local ip=$(get_local_ip)
-
-    if [ "$IS_ROOT" = true ]; then
-        local ctl_cmd="systemctl"
+    local ip
+    ip=$(get_local_ip)
+    local ctl_cmd
+    if [ "$SYSTEMD_SCOPE" = "system" ]; then
+        ctl_cmd="systemctl"
     else
-        local ctl_cmd="systemctl --user"
+        ctl_cmd="systemctl --user"
     fi
 
-    echo ""
-    echo "=========================================="
-    echo "  ✅ ClawPanel Web 版部署完成！"
-    echo "=========================================="
-    echo ""
-    echo "  🌐 访问地址: http://${ip}:${PANEL_PORT}"
-    echo "  📁 安装目录: $INSTALL_DIR"
-    echo "  📋 配置目录: $HOME/.openclaw/"
-    if [ -n "$DEFAULT_PASSWORD" ]; then
-        echo ""
-        echo "  🔑 默认访问密码: $DEFAULT_PASSWORD"
-        echo "  ⚠️  首次登录后会要求修改密码，请妥善保管新密码！"
-    fi
-    echo ""
-    echo "  常用命令："
-    echo "    $ctl_cmd status clawpanel    # 查看状态"
-    echo "    $ctl_cmd restart clawpanel   # 重启面板"
-    if [ "$IS_ROOT" = true ]; then
-        echo "    journalctl -u clawpanel -f    # 查看日志"
+    log ""
+    log "=========================================="
+    log "  [ok] $PRODUCT_NAME Web 版部署完成"
+    log "=========================================="
+    log "访问地址: http://$ip:$PANEL_PORT"
+    log "安装目录: $INSTALL_DIR"
+    log "配置目录: $HOME/.openclaw/"
+    log "首次访问将进入初始化设置密码页面"
+    log "状态查看: $ctl_cmd status $SERVICE_NAME"
+    log "重启服务: $ctl_cmd restart $SERVICE_NAME"
+    if [ "$SYSTEMD_SCOPE" = "system" ]; then
+        log "查看日志: journalctl -u $SERVICE_NAME -f"
     else
-        echo "    journalctl --user -u clawpanel -f    # 查看日志"
+        log "查看日志: journalctl --user -u $SERVICE_NAME -f"
     fi
-    echo ""
-    echo "  用浏览器打开上面的地址，即可管理 OpenClaw。"
-    echo "=========================================="
 }
 
 main "$@"

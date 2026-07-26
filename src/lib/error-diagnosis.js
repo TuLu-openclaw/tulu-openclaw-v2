@@ -3,9 +3,9 @@
  * Parses npm error output and returns user-facing title/hint/command.
  */
 
-const NPM_CMD = 'npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com'
+const NPM_CMD = 'npm install -g openclaw'
 const GIT_HTTPS_CMD = 'git config --global url."https://github.com/".insteadOf ssh://git@github.com/ && git config --global --add url."https://github.com/".insteadOf ssh://git@github.com && git config --global --add url."https://github.com/".insteadOf ssh://git@://github.com/ && git config --global --add url."https://github.com/".insteadOf git@github.com: && git config --global --add url."https://github.com/".insteadOf git://github.com/ && git config --global --add url."https://github.com/".insteadOf git+ssh://git@github.com/'
-const GIT_HTTPS_ROOT_CMD = 'sudo git config --global url."https://github.com/".insteadOf ssh://git@github.com/ && sudo git config --global --add url."https://github.com/".insteadOf ssh://git@github.com && sudo git config --global --add url."https://github.com/".insteadOf ssh://git@://github.com/ && sudo git config --global --add url."https://github.com/".insteadOf git@github.com: && sudo git config --global --add url."https://github.com/".insteadOf git://github.com/ && sudo git config --global --add url."https://github.com/".insteadOf git+ssh://git@github.com/'
+const GIT_HTTPS_ROOT_CMD = GIT_HTTPS_CMD
 
 const INSTALL_ERROR_FALLBACK = {
   installGitSshDeniedTitle: '安装失败 — Git SSH 认证被拒绝',
@@ -27,7 +27,7 @@ const INSTALL_ERROR_FALLBACK = {
   installEnoentTitle: '安装失败 — 文件或目录不存在',
   installEnoentHint: '常见原因：npm 全局目录未创建、杀毒软件隔离了文件、或磁盘权限问题。\n建议步骤：\n1. 关闭杀毒软件的实时防护\n2. 以管理员身份打开 PowerShell\n3. 手动运行安装命令：',
   installEaccesTitle: '安装失败 — 权限不足',
-  installEaccesMacHint: '请在终端使用 sudo 安装：',
+  installEaccesMacHint: '请检查 npm 全局目录所有权和写入权限，修复后再安装；不要直接使用 sudo 安装 npm 全局包：',
   installEaccesWinHint: '请以管理员身份打开 PowerShell 安装：',
   installModuleMissingTitle: '安装不完整',
   installModuleMissingHint: '上次安装可能中断了。先清理残留再重装：',
@@ -37,7 +37,7 @@ const INSTALL_ERROR_FALLBACK = {
   installCacheTitle: '安装失败 — npm 缓存异常',
   installCacheHint: '本地缓存可能损坏。清理缓存后重试：',
   installNodeVersionTitle: '安装失败 — Node.js 版本不兼容',
-  installNodeVersionHint: '当前 Node.js 版本过低，OpenClaw 需要 Node.js 18 或更高版本。\n请升级 Node.js：',
+  installNodeVersionHint: '当前 Node.js 不满足目标 OpenClaw 版本的要求。请根据错误中显示的版本范围升级 Node.js：',
   installNodeDownloadCommand: '下载最新版: https://nodejs.org/',
   installNpmErrorTitle: '安装失败 — npm 异常',
   installNpmErrorHint: 'npm 自身可能异常。尝试更新 npm 后重试：',
@@ -92,7 +92,7 @@ export function diagnoseInstallError(errStr, translate) {
     return {
       title: tr('installNativeBindingTitle'),
       hint: tr('installNativeBindingHint'),
-      command: 'npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com',
+      command: 'npm install -g openclaw@latest',
     }
   }
 
@@ -104,7 +104,7 @@ export function diagnoseInstallError(errStr, translate) {
     return {
       title: tr('installEexistTitle'),
       hint: tr('installEexistHint'),
-      command: 'npm install -g @qingchencloud/openclaw-zh --force --registry https://registry.npmmirror.com',
+      command: NPM_CMD,
     }
   }
 
@@ -126,12 +126,12 @@ export function diagnoseInstallError(errStr, translate) {
     return {
       title: tr('installEaccesTitle'),
       hint: isMac ? tr('installEaccesMacHint') : tr('installEaccesWinHint'),
-      command: isMac ? 'sudo ' + NPM_CMD : NPM_CMD,
+      command: NPM_CMD,
     }
   }
 
   if (s.includes('module_not_found') || s.includes('cannot find module')) {
-    return { title: tr('installModuleMissingTitle'), hint: tr('installModuleMissingHint'), command: 'npm cache clean --force && ' + NPM_CMD }
+    return { title: tr('installModuleMissingTitle'), hint: tr('installModuleMissingHint'), command: 'npm cache verify && ' + NPM_CMD }
   }
 
   if (s.includes('etimedout') || s.includes('econnrefused') || s.includes('enotfound')
@@ -141,12 +141,12 @@ export function diagnoseInstallError(errStr, translate) {
     return {
       title: tr('installNetworkTitle'),
       hint: isProxy ? tr('installProxyHint') : tr('installNetworkHint'),
-      command: isProxy ? 'npm config set strict-ssl false && ' + NPM_CMD : NPM_CMD,
+      command: NPM_CMD,
     }
   }
 
   if (s.includes('integrity') || s.includes('sha512') || s.includes('cache')) {
-    return { title: tr('installCacheTitle'), hint: tr('installCacheHint'), command: 'npm cache clean --force && ' + NPM_CMD }
+    return { title: tr('installCacheTitle'), hint: tr('installCacheHint'), command: 'npm cache verify && ' + NPM_CMD }
   }
 
   if (s.includes('engine') || s.includes('unsupported') || s.includes('required:')) {

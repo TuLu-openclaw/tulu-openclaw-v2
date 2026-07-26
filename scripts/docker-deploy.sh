@@ -1,7 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# ClawPanel Docker 部署脚本
+# 星枢OpenClaw Docker 本地构建与部署脚本
 # =============================================================================
+# 说明:
+#   - 仅从当前检出的源码构建，不自动 fetch/pull 任何分支。
+#   - 正式安装和升级请使用 GitHub Release 资产。
+#   - 首次访问 Web 面板时由用户自行设置访问密码。
 # 功能:
 #   1. 检查 Docker 环境
 #   2. 构建 Docker 镜像
@@ -25,8 +29,8 @@ NC='\033[0m' # No Color
 # -----------------------------------------------------------------------------
 # 配置
 # -----------------------------------------------------------------------------
-CONTAINER_NAME="clawpanel"
-IMAGE_NAME="clawpanel"
+CONTAINER_NAME="tulu-openclaw"
+IMAGE_NAME="tulu-openclaw"
 IMAGE_TAG="latest"
 DEFAULT_PORT=1420
 CONFIG_DIR="$HOME/.openclaw"
@@ -120,31 +124,6 @@ check_requirements() {
 }
 
 # -----------------------------------------------------------------------------
-# 拉取最新代码（可选）
-# -----------------------------------------------------------------------------
-pull_latest() {
-    log_step "检查更新..."
-    
-    if [ -d ".git" ]; then
-        git fetch origin main
-        LOCAL=$(git rev-parse @)
-        REMOTE=$(git rev-parse origin/main)
-        
-        if [ "$LOCAL" != "$REMOTE" ]; then
-            log_warn "本地版本落后于远程，是否更新？"
-            read -p "输入 y 更新，其他跳过: " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                log_info "更新代码..."
-                git pull origin main
-            fi
-        else
-            log_info "已是最新版本"
-        fi
-    fi
-}
-
-# -----------------------------------------------------------------------------
 # 构建镜像
 # -----------------------------------------------------------------------------
 build_image() {
@@ -159,7 +138,6 @@ build_image() {
     if docker build \
         --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
         --tag "${IMAGE_NAME}:latest" \
-        --build-arg NPM_REGISTRY=https://registry.npmmirror.com \
         --progress=plain \
         .; then
         log_info "镜像构建成功"
@@ -380,7 +358,7 @@ show_access_info() {
     
     echo ""
     separator
-    log_info "部署完成！"
+    log_info "本地 Docker 部署完成！首次访问时请设置访问密码。"
     separator
     echo ""
     echo -e "  ${CYAN}🌐 访问地址:${NC}"
@@ -441,7 +419,7 @@ compose_down() {
 # -----------------------------------------------------------------------------
 show_help() {
     echo ""
-    echo "ClawPanel Docker 部署脚本"
+    echo "星枢OpenClaw Docker 本地构建与部署脚本"
     echo ""
     echo "用法: $0 [命令]"
     echo ""
@@ -476,7 +454,6 @@ main() {
         build)
             check_docker
             check_requirements
-            pull_latest
             build_image
             ;;
         start)

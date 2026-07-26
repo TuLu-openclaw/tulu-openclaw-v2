@@ -14,11 +14,23 @@
 - **本地历史净化** — IndexedDB 与历史同步只保留可见文本/媒体，升级后读取本地历史时会顺带清除旧的工具结果垃圾行，避免内部过程在本地重现。
 - **中文错误可读化** — 新增结构化聊天错误诊断层，把内部搜索无结果、缺程序/文件、权限不足、额度不足、认证失败、网络中断等错误转换为可执行的中文提示，同时隐藏栈、命令行、环境变量和本地路径；原始错误只保留在开发诊断日志中。
 - **Windows 构建门禁** — 修复 `browser-use-product` 测试的 CRLF 兼容断言，确保 Windows 上完整前端测试门禁稳定通过。
+- **Hermes Gateway/Profile 状态归一化** — Profile 列表新增结构化 `gatewayStatus`，以 Hermes Profile 列表、原生 `gateway status` 与各 Profile 的 `gateway_state.json` 为状态源，区分服务安装、进程运行、健康快照和 multiplex 代管角色；前端 Profile/Gateway 操作优先使用结构化运行态，同时保留 `gatewayRunning` 兼容。
+- **Hermes Files 工作区** — 新增基于现有 Agent workspace 后端 API 的文件浏览、目录导航、文本读取、编辑保存、未保存变更确认和错误状态；UI 层补充路径归一化、越界导航防护、目录优先排序和保存策略测试。
+- **Hermes OAuth 授权页** — 新增真实 Provider 注册表驱动的 OAuth 管理入口，展示官方 CLI 登录命令、支持复制、模型选择和配置应用；不保存 OAuth token，授权仍由官方 Hermes CLI 完成。
+- **Hermes Lazy Dependencies** — 新增按需依赖运维页，复用 `check_hermes`、`hermes_dashboard_probe`、`hermes_dashboard_start` 和 `install_hermes(['web'])`，提供 Web Dashboard 依赖检查、补装、启动和打开；兼容原生 `{ started, port, kind, log_tail }` 返回契约，并补充页面策略测试。
+- **Hermes Kanban** — 新增 Dashboard Kanban 插件运维页，支持多看板切换、任务列、详情、创建、状态移动和优先级；新增受限本机 Dashboard API 代理，仅允许 `127.0.0.1`、`/api/` 路径和固定 HTTP 方法，并自动刷新 Dashboard session token。
+- **Hermes run 事件归属** — started、delta、tool、reasoning、done、error 与通用事件统一携带 `run_id` 和 `session_id`；聊天存储只认领自身 session 的 started 事件并严格匹配 run，避免旁路 Hermes 任务覆盖可见聊天流。
+- **Hermes Channels 安全配置闭环** — 新增 Telegram、Discord、Slack、飞书、钉钉、Microsoft Teams、Google Chat、IRC、LINE、SimpleX 共 10 个平台的结构化配置页；使用 `yaml@2.8.3` 保留未知 YAML 字段，凭据与连接身份写入 `.env`，秘密值只返回掩码。保存同时校验 `config.yaml` 与 `.env` 内容版本并执行双文件事务，支持旧 YAML 凭据无损迁移、空密码保留、精确环境变量白名单和最小平台合并。
+- **Hermes Channels 原生运行态** — 读取 Hermes `gateway_state.json` 中 Gateway 与各平台的 `state/error_code/error_message/updated_at`，结合原生 `hermes gateway status` 进程探测区分已连接、连接/重试、故障、暂停、断开、停止和未知；只投影允许字段，不暴露 PID/argv。无快照或未知上游值不推断健康，且修复 Channels 保存路径引用未定义变量导致的运行时失败。
+- **Hermes 官方诊断入口** — 在运行日志页接入只读的 `gateway status`、`doctor`、默认 `dump` 和固定 200 行 Gateway 日志；后端使用固定参数白名单、60 秒超时、64 KB 输出上限，并清理 ANSI、密钥、Bearer 凭据和 Hermes Home 绝对路径。明确不开放 `doctor --fix/--ack`、`dump --show-keys` 或日志跟随模式。
 
 ### 验证 (Verification)
 
-- `npm test` 52/52 通过
-- `npm run build` 通过
+- `npm test` 120/120 通过
+- Hermes P0 聚焦策略测试 37/37 通过，其中 Channels 策略测试 14/14、诊断策略测试 3/3
+- Hermes Channels 页面/引擎 import、127 个页面国际化键和 84 个环境变量白名单映射检查通过
+- `npm audit` 0 vulnerabilities
+- `npm run build` 通过；保留既有 `app-core` 769.14 KB（gzip 258.26 KB）大包警告
 - 修正版 Windows x64 独立可执行文件跨越多轮历史崩溃周期运行，无新增 Application Error 或 CrashDump
 
 ## [4.4.4] - 2026-07-21

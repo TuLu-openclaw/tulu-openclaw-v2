@@ -141,7 +141,7 @@ async function main() {
     // CORS 头（方便开发调试）
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Setup-Token')
     if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return }
 
     // API 请求

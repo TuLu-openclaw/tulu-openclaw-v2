@@ -2,7 +2,12 @@
  * i18n 国际化核心模块
  * 模块化多语言架构，支持 zh-CN / en / zh-TW / ja / ko
  */
-import { buildLocales } from '../locales/index.js'
+import {
+  buildLocaleModule,
+  buildLocales,
+  getRouteLocaleModules,
+  loadLocaleModule,
+} from '../locales/index.js'
 
 const LANGS = buildLocales()
 const LANG_KEY = '星枢OpenClaw_lang'
@@ -11,6 +16,8 @@ const FALLBACK = 'zh-CN'
 let _lang = FALLBACK
 let _dict = LANGS[FALLBACK]
 let _listeners = []
+const _registeredModules = new Set(Object.keys(LANGS[FALLBACK]))
+const _registrationPromises = new Map()
 
 /**
  * 翻译函数
@@ -63,13 +70,40 @@ export function getAvailableLangs() {
   ]
 }
 
-/** 切换语言 */
+/** 切换语言。所有已注册模块同时可用，无需重新加载。 */
 export function setLang(lang) {
   if (!LANGS[lang]) return
   _lang = lang
   _dict = LANGS[lang]
-  localStorage.setItem(LANG_KEY, lang)
+  try { localStorage.setItem(LANG_KEY, lang) } catch {}
   _listeners.forEach(fn => { try { fn(lang) } catch {} })
+}
+
+/** 注册一个包含全部支持语言的功能模块。并发调用只加载和合并一次。 */
+export function ensureLocaleModule(name) {
+  if (_registeredModules.has(name)) return Promise.resolve()
+  if (_registrationPromises.has(name)) return _registrationPromises.get(name)
+
+  const registration = loadLocaleModule(name).then(entries => {
+    for (const lang of Object.keys(LANGS)) {
+      LANGS[lang][name] = buildLocaleModule(entries, lang)
+    }
+    _registeredModules.add(name)
+  }).finally(() => {
+    _registrationPromises.delete(name)
+  })
+
+  _registrationPromises.set(name, registration)
+  return registration
+}
+
+/** 在页面渲染前注册该路由所需翻译，可与页面动态 import 并行执行。 */
+export function ensureRouteLocale(routePath) {
+  return Promise.all(getRouteLocaleModules(routePath).map(ensureLocaleModule)).then(() => undefined)
+}
+
+export function getLoadedLocaleModules() {
+  return [..._registeredModules]
 }
 
 /** 监听语言变化 */
@@ -80,7 +114,8 @@ export function onLangChange(fn) {
 
 /** 初始化：localStorage 优先；未保存时默认简体中文，仅对繁体中文做自动识别 */
 export function initI18n() {
-  const saved = localStorage.getItem(LANG_KEY)
+  let saved = null
+  try { saved = localStorage.getItem(LANG_KEY) } catch {}
   if (saved && LANGS[saved]) {
     _lang = saved
     _dict = LANGS[saved]

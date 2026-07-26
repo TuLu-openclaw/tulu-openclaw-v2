@@ -263,8 +263,9 @@ async function loadData(page) {
 
     const isInstalled = !!version.current
     const sourceLabel = version.source === 'official' ? t('about.official') : version.source === 'chinese' ? t('about.chinese') : t('about.unknownSource')
+    const isLegacySource = version.source === 'chinese'
     const btnSm = 'padding:2px 8px;font-size:var(--font-size-xs)'
-    const hasRecommended = !!version.recommended
+    const hasRecommended = !isLegacySource && !!version.recommended
     const aheadOfRecommended = isInstalled && hasRecommended && !!version.ahead_of_recommended
     const driftFromRecommended = isInstalled && hasRecommended && !version.is_recommended && !aheadOfRecommended
     const policyRiskHint = aheadOfRecommended
@@ -310,7 +311,7 @@ async function loadData(page) {
 
     const applyRecommendedBtn = cards.querySelector('#btn-apply-recommended')
     if (applyRecommendedBtn && version.recommended) {
-      applyRecommendedBtn.onclick = () => doInstall(page, aheadOfRecommended ? t('about.rollbackToRecommendedStable') : t('about.switchToRecommendedStable'), version.source, version.recommended)
+      applyRecommendedBtn.onclick = () => doInstall(page, aheadOfRecommended ? t('about.rollbackToRecommendedStable') : t('about.switchToRecommendedStable'), 'official', version.source === 'official' ? version.recommended : null)
     }
 
     // 手动检查更新按钮
@@ -370,7 +371,8 @@ async function loadData(page) {
 }
 
 /**
- * 版本选择器弹窗 — 选择版本（汉化版/原版）+ 版本号
+ * 版本选择器弹窗 — 管理官方 OpenClaw 版本。
+ * 历史汉化包仍可被检测，但新安装和升级统一迁移到官方包。
  */
 async function showVersionPicker(page, currentVersion) {
   const isInstalled = !!currentVersion.current
@@ -382,15 +384,8 @@ async function showVersionPicker(page, currentVersion) {
       <div style="display:flex;flex-direction:column;gap:16px;margin:16px 0">
         <div>
           <label style="font-size:var(--font-size-sm);color:var(--text-secondary);display:block;margin-bottom:8px">${t('about.versionLabel')}</label>
-          <div style="display:flex;gap:8px">
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:var(--font-size-sm);flex:1;justify-content:center;transition:all .15s" id="lbl-official">
-              <input type="radio" name="oc-source" value="official" ${currentVersion.source !== 'chinese' ? 'checked' : ''} style="accent-color:var(--primary)">
-              ${t('about.official')}
-            </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:var(--font-size-sm);flex:1;justify-content:center;transition:all .15s" id="lbl-chinese">
-              <input type="radio" name="oc-source" value="chinese" ${currentVersion.source === 'chinese' ? 'checked' : ''} style="accent-color:var(--primary)">
-              ${t('about.chinese')}
-            </label>
+          <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);font-size:var(--font-size-sm)">
+            <strong>${t('about.official')}</strong> <code style="margin-left:6px">openclaw</code>
           </div>
         </div>
         <div>
@@ -418,25 +413,13 @@ async function showVersionPicker(page, currentVersion) {
   const select = overlay.querySelector('#oc-version-select')
   const confirmBtn = overlay.querySelector('#oc-confirm-btn')
   const hintEl = overlay.querySelector('#oc-action-hint')
-  const radios = overlay.querySelectorAll('input[name="oc-source"]')
-  const lblChinese = overlay.querySelector('#lbl-chinese')
-  const lblOfficial = overlay.querySelector('#lbl-official')
-
   const close = () => overlay.remove()
   overlay.querySelector('[data-action="cancel"]').onclick = close
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
   overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close() })
 
-  let versionsCache = {}
-  let currentSelect = currentVersion.source === 'chinese' ? 'chinese' : 'official'
-
-  function updateRadioStyle() {
-    const sel = currentSelect
-    lblChinese.style.borderColor = sel !== 'official' ? 'var(--primary)' : 'var(--border)'
-    lblChinese.style.background = sel !== 'official' ? 'var(--primary-bg, rgba(99,102,241,0.06))' : ''
-    lblOfficial.style.borderColor = sel === 'official' ? 'var(--primary)' : 'var(--border)'
-    lblOfficial.style.background = sel === 'official' ? 'var(--primary-bg, rgba(99,102,241,0.06))' : ''
-  }
+  const versionsCache = {}
+  const currentSelect = 'official'
 
   function updateHint() {
     const targetSource = currentSelect
@@ -527,14 +510,6 @@ async function showVersionPicker(page, currentVersion) {
     }
   }
 
-  radios.forEach(radio => {
-    radio.addEventListener('change', () => {
-      currentSelect = radio.value
-      updateRadioStyle()
-      loadVersions(currentSelect)
-    })
-  })
-
   select.addEventListener('change', updateHint)
 
   confirmBtn.onclick = () => {
@@ -545,7 +520,6 @@ async function showVersionPicker(page, currentVersion) {
     doInstall(page, `${action} OpenClaw`, source, ver)
   }
 
-  updateRadioStyle()
   loadVersions(currentSelect)
 }
 
@@ -730,18 +704,17 @@ const PROJECTS = [
   {
     name: 'OpenClaw-zh',
     desc: t('about.projectOpenClawZh'),
-    url: 'https://github.com/1186258278/OpenClawChineseTranslation',
+    url: 'https://github.com/TuLu-openclaw/tulu-openclaw-v2',
   },
   {
     name: '星枢OpenClaw',
     desc: t('about.projectTuluOpenClaw'),
     url: 'https://github.com/TuLu-openclaw/tulu-openclaw-v2',
-    gitee: 'https://gitee.com/QtCodeCreators/星枢OpenClaw',
   },
   {
     name: 'ClawApp',
     desc: t('about.projectClawApp'),
-    url: 'https://github.com/TuLu-openclaw/clawpanel',
+    url: 'https://github.com/TuLu-openclaw/clawapp',
   },
   {
     name: 'cftunnel',
@@ -779,7 +752,6 @@ function renderProjects(page) {
           </div>
           <div class="service-actions">
             <a class="btn btn-secondary btn-sm" href="${p.url}" target="_blank" rel="noopener">GitHub</a>
-            ${p.gitee ? `<a class="btn btn-secondary btn-sm" href="${p.gitee}" target="_blank" rel="noopener">${t('about.domesticMirror')}</a>` : ''}
           </div>
         </div>
       `).join('')
@@ -796,7 +768,6 @@ function renderProjects(page) {
 
 const LINKS = [
   { label: t('about.contactAuthor'), url: 'https://qm.qq.com/q/FF8D891UWc' },
-  { label: t('about.linkOpenClawZh'), url: 'https://github.com/1186258278/OpenClawChineseTranslation' },
 ]
 
 function renderContribute(page) {
@@ -817,7 +788,6 @@ function renderContribute(page) {
         <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('about.contributeGuide')}</a>
         <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues" target="_blank" rel="noopener">${t('about.viewIssues')}</a>
       </div>
-      <div style="margin-top:8px;font-size:var(--font-size-xs);color:var(--text-tertiary)">${t('about.domesticMirrorHint')}</div>
     </div>
   `
 

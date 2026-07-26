@@ -1,5 +1,5 @@
 /**
- * 安全设置页面 — 访问密码管理 & 无视风险模式
+ * 安全设置页面 — 访问密码管理与免密码访问
  * 支持 Web 部署模式和 Tauri 桌面端
  */
 import { toast } from '../components/toast.js'
@@ -16,39 +16,17 @@ async function getTauriApi() {
 
 async function apiCall(cmd, args = {}) {
   if (isTauri) {
-    // 桌面端：通过 Tauri IPC 读写 星枢OpenClaw.json
     const api = await getTauriApi()
-    const cfg = await api.readPanelConfig()
-
-    if (cmd === 'auth_status') {
-      const isDefault = cfg.accessPassword === '123456'
-      const result = { hasPassword: !!cfg.accessPassword, mustChangePassword: isDefault, ignoreRisk: !!cfg.ignoreRisk }
-      if (isDefault) result.defaultPassword = '123456'
-      return result
-    }
+    if (cmd === 'auth_status') return api.panelAuthStatus()
     if (cmd === 'auth_change_password') {
-      if (cfg.accessPassword && args.oldPassword !== cfg.accessPassword) throw new Error(t('security.wrongPassword'))
       const weakErr = checkPasswordStrengthLocal(args.newPassword)
       if (weakErr) throw new Error(weakErr)
-      if (args.newPassword === cfg.accessPassword) throw new Error(t('security.pwSameAsOld'))
-      cfg.accessPassword = args.newPassword
-      delete cfg.mustChangePassword
-      delete cfg.ignoreRisk
-      await api.writePanelConfig(cfg)
-      sessionStorage.setItem('星枢OpenClaw_authed', '1')
-      return { success: true }
+      return api.panelAuthChangePassword(args.oldPassword, args.newPassword)
     }
     if (cmd === 'auth_ignore_risk') {
-      if (args.enable) {
-        delete cfg.accessPassword
-        delete cfg.mustChangePassword
-        cfg.ignoreRisk = true
-        sessionStorage.removeItem('星枢OpenClaw_authed')
-      } else {
-        delete cfg.ignoreRisk
-      }
-      await api.writePanelConfig(cfg)
-      return { success: true }
+      const result = await api.panelAuthIgnoreRisk(!!args.enable)
+      if (args.enable) sessionStorage.removeItem('星枢OpenClaw_authed')
+      return result
     }
     throw new Error(`${t('common.unknownCommand')}: ${cmd}`)
   }
@@ -108,7 +86,13 @@ async function loadStatus(page) {
     const status = await apiCall('auth_status')
     renderContent(container, status)
   } catch (e) {
-    container.innerHTML = `<div class="config-section"><p style="color:var(--error)">${t('security.loadFailed')}: ${e.message}</p></div>`
+    const section = document.createElement('div')
+    section.className = 'config-section'
+    const message = document.createElement('p')
+    message.style.color = 'var(--error)'
+    message.textContent = `${t('security.loadFailed')}: ${e?.message || String(e)}`
+    section.appendChild(message)
+    container.replaceChildren(section)
   }
 }
 
@@ -118,9 +102,9 @@ function renderContent(container, status) {
   // 当前状态
   const stateIcon = status.hasPassword ? statusIcon('ok', 20) : statusIcon('warn', 20)
   const stateText = status.hasPassword
-    ? (status.mustChangePassword ? t('security.stateDefault') : t('security.stateCustom'))
+    ? t('security.stateCustom')
     : (status.ignoreRisk ? t('security.stateIgnoreRisk') : t('security.stateNone'))
-  const stateColor = status.hasPassword && !status.mustChangePassword ? 'var(--success)' : 'var(--warning)'
+  const stateColor = status.hasPassword ? 'var(--success)' : 'var(--warning)'
 
   html += `
     <div class="config-section">
@@ -139,35 +123,33 @@ function renderContent(container, status) {
     </div>
   `
 
-  // 修改密码区域
-  html += `
-    <div class="config-section">
-      <div class="config-section-title">${status.hasPassword ? t('security.changePassword') : t('security.setPassword')}</div>
-      <form id="form-change-pw" style="max-width:400px">
-        ${status.hasPassword ? `
+  // 修改密码只属于已启用密码保护的状态；免密码访问应先关闭，再回到初始化流程。
+  if (status.hasPassword) {
+    html += `
+      <div class="config-section">
+        <div class="config-section-title">${t('security.changePassword')}</div>
+        <form id="form-change-pw" style="max-width:400px">
           <div style="margin-bottom:12px">
             <label style="display:block;font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:4px">${t('security.currentPassword')}</label>
-            <input type="password" id="sec-old-pw" class="form-input" placeholder="${t('security.currentPasswordPlaceholder')}" autocomplete="current-password" style="width:100%"
-              ${status.defaultPassword ? `value="${status.defaultPassword}"` : ''}>
-            ${status.defaultPassword ? `<div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${t('security.defaultFilled')}</div>` : ''}
+            <input type="password" id="sec-old-pw" class="form-input" placeholder="${t('security.currentPasswordPlaceholder')}" autocomplete="current-password" style="width:100%">
           </div>
-        ` : ''}
-        <div style="margin-bottom:12px">
-          <label style="display:block;font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:4px">${t('security.newPassword')}</label>
-          <input type="password" id="sec-new-pw" class="form-input" placeholder="${t('security.newPasswordPlaceholder')}" autocomplete="new-password" style="width:100%">
-          <div id="pw-strength" style="margin-top:6px;display:flex;align-items:center;gap:8px;min-height:20px"></div>
-        </div>
-        <div style="margin-bottom:16px">
-          <label style="display:block;font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:4px">${t('security.confirmPassword')}</label>
-          <input type="password" id="sec-confirm-pw" class="form-input" placeholder="${t('security.confirmPasswordPlaceholder')}" autocomplete="new-password" style="width:100%">
-        </div>
-        <button type="submit" class="btn btn-primary btn-sm">${status.hasPassword ? t('security.confirmChange') : t('security.setPassword')}</button>
-        <span id="change-pw-msg" style="margin-left:12px;font-size:var(--font-size-xs)"></span>
-      </form>
-    </div>
-  `
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:4px">${t('security.newPassword')}</label>
+            <input type="password" id="sec-new-pw" class="form-input" placeholder="${t('security.newPasswordPlaceholder')}" autocomplete="new-password" style="width:100%">
+            <div id="pw-strength" style="margin-top:6px;display:flex;align-items:center;gap:8px;min-height:20px"></div>
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="display:block;font-size:var(--font-size-xs);color:var(--text-tertiary);margin-bottom:4px">${t('security.confirmPassword')}</label>
+            <input type="password" id="sec-confirm-pw" class="form-input" placeholder="${t('security.confirmPasswordPlaceholder')}" autocomplete="new-password" style="width:100%">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">${t('security.confirmChange')}</button>
+          <span id="change-pw-msg" style="margin-left:12px;font-size:var(--font-size-xs)"></span>
+        </form>
+      </div>
+    `
+  }
 
-  // 无视风险模式
+  // 免密码访问
   html += `
     <div class="config-section">
       <div class="config-section-title" style="display:flex;align-items:center;gap:6px">
@@ -242,21 +224,17 @@ function bindSecurityEvents(container, status) {
         msgEl.textContent = t('security.passwordChanged')
         msgEl.style.color = 'var(--success)'
         toast(t('security.passwordUpdated'), 'success')
-        // 清除默认密码横幅
-        sessionStorage.removeItem('星枢OpenClaw_must_change_pw')
-        const banner = document.getElementById('pw-change-banner')
-        if (banner) banner.remove()
         setTimeout(() => loadStatus(container.closest('.page')), 1000)
       } catch (err) {
         msgEl.textContent = err.message
         msgEl.style.color = 'var(--error)'
         btn.disabled = false
-        btn.textContent = status.hasPassword ? t('security.confirmChange') : t('security.setPassword')
+        btn.textContent = t('security.confirmChange')
       }
     })
   }
 
-  // 无视风险模式开关
+  // 免密码访问开关
   const toggle = container.querySelector('#toggle-ignore-risk')
   const confirmBox = container.querySelector('#ignore-risk-confirm')
   if (toggle && confirmBox) {
@@ -287,6 +265,8 @@ async function handleIgnoreRisk(container, enable) {
       toast(t('security.ignoreRiskEnabled'), 'warning')
     } else {
       toast(t('security.ignoreRiskDisabled'), 'info')
+      setTimeout(() => location.reload(), 500)
+      return
     }
     setTimeout(() => loadStatus(container.closest('.page')), 500)
   } catch (e) {

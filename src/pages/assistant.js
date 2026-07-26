@@ -124,22 +124,22 @@ ${personality}
 - 你善于分析日志、诊断错误、提供解决方案
 
 ## 相关资源
-- **星枢：双引擎管理面板 官网**: https://claw.qt.cool
+- **星枢：双引擎管理面板 官网**: https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest
 - **GitHub**: https://github.com/TuLu-openclaw
 - **开源项目**:
   - **星枢：双引擎管理面板** — OpenClaw 可视化管理面板（Tauri v2）
-  - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @qingchencloud/openclaw-zh
+  - **OpenClaw 官方版** — AI Agent 平台，使用 npm install -g openclaw 安装
 
 ## 星枢：双引擎管理面板 是什么
 - OpenClaw 的可视化管理面板，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
 - 支持仪表盘监控、模型配置、Agent 管理、实时聊天、记忆文件管理、AI 助手工具调用等
-- 官网: https://claw.qt.cool | GitHub: https://github.com/TuLu-openclaw/tulu-openclaw-v2
+- 下载: https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest | GitHub: https://github.com/TuLu-openclaw/tulu-openclaw-v2
 
 ## OpenClaw 是什么
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
 - 核心组件: Gateway（API 网关）、Agent（AI 代理）、Tools（工具系统）
 - 配置文件: ~/.openclaw/openclaw.json（全局配置）
-- 安装方式: npm install -g @qingchencloud/openclaw-zh（汉化版，推荐）或 npm install -g openclaw（官方英文版）
+- 安装方式: npm install -g openclaw
 
 ## OpenClaw CLI 命令速查
 ### 基础命令
@@ -180,7 +180,7 @@ ${personality}
 ## 关键配置结构
 - openclaw.json: 全局配置（models.providers、gateway、tools）
 - models.json: Agent 运行时模型注册表（~/.openclaw/agents/<id>/agent/models.json）
-- clawpanel.json: 星枢：双引擎管理面板 自身配置（~/.openclaw/clawpanel.json）
+- 星枢OpenClaw.json: 面板自身配置（~/.openclaw/星枢OpenClaw.json）
 - gateway.mode: "local"（必须在 gateway 对象内，不能在顶层）
 - gateway.port: 默认 18789
 - gateway.auth.mode: "none" | "token" | "password"
@@ -197,7 +197,6 @@ ${personality}
 
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
-- **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh（推荐国内用户）
 - **OpenClaw 官方版**: npm install -g openclaw
 - **星枢：双引擎管理面板**: 从 https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases 下载
 - **更多项目**: 访问 https://github.com/TuLu-openclaw
@@ -210,7 +209,7 @@ ${t('assistant.systemPromptInstallPathGuidance')}
 ### 提交 Issue
 引导用户到对应仓库提交 Issue，帮用户整理好格式：
 - **星枢：双引擎管理面板**: https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new
-- **OpenClaw 汉化版**: https://github.com/TuLu-openclaw/openclaw-zh/issues/new
+- **OpenClaw 官方版**: https://github.com/openclaw/openclaw/issues/new
 
 Issue 模板（帮用户填好）：
 \`\`\`
@@ -594,7 +593,7 @@ const BUILTIN_SKILLS = [
 4. 对于 main Agent，列出 ~/.openclaw/agents/main/agent/ 子目录
 5. 简要说明每个目录/文件的作用：
    - openclaw.json: 全局配置（模型、Gateway、工具）
-   - clawpanel.json: 星枢：双引擎管理面板 面板配置
+   - 星枢OpenClaw.json: 面板配置
    - mcp.json: MCP 工具配置
    - agents/: Agent 工作目录
    - logs/: 日志文件
@@ -3077,44 +3076,6 @@ function showSettings() {
           </div>
           <div class="form-hint" id="ast-api-hint" style="margin-top:-4px">${apiHintText(c.apiType)}</div>
 
-          <div id="ast-qtcool-promo" style="margin-top:14px;border-radius:var(--radius-lg);border:1px solid var(--border-primary);border-left:3px solid var(--primary);background:var(--bg-secondary);overflow:hidden">
-            <div style="padding:14px 16px 12px">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
-                <div>
-                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-                    <span style="font-weight:700;font-size:var(--font-size-sm)">${icon('zap', 14)} ${t('assistant.qtcoolName')}</span>
-                    <span style="font-size:10px;background:var(--primary);color:#fff;padding:1px 7px;border-radius:8px">${t('assistant.qtcoolRecommend')}</span>
-                  </div>
-                  <div style="font-size:11px;color:var(--text-tertiary);line-height:1.4">
-                    ${t('assistant.qtcoolDesc')}
-                  </div>
-                </div>
-                <a href="${QTCOOL.checkinUrl}" target="_blank" class="btn btn-primary btn-xs" style="flex-shrink:0">${icon('gift', 11)} ${t('assistant.qtcoolCheckin')}</a>
-              </div>
-              <div style="font-size:var(--font-size-xs);color:var(--text-secondary);margin-bottom:8px">
-                ${t('assistant.qtcoolInstructions')}
-              </div>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-                <input class="form-input" id="ast-qtcool-key" placeholder="${t('assistant.qtcoolKeyPlaceholder')}" style="font-size:12px;padding:5px 10px;flex:1;min-width:120px">
-                <input type="checkbox" id="ast-qtcool-customkey" style="display:none">
-              </div>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <select id="ast-qtcool-model" class="form-input" style="font-size:12px;padding:5px 10px;min-width:130px;flex:1">
-                  <option value="" disabled selected>${t('assistant.qtcoolLoadingModels')}</option>
-                </select>
-                <button class="btn btn-sm btn-secondary" id="ast-qtcool-test">${icon('search', 12)} ${t('assistant.testBtn')}</button>
-                <button class="btn btn-sm btn-primary" id="ast-qtcool-apply">${icon('zap', 12)} ${t('assistant.qtcoolApply')}</button>
-              </div>
-              <div id="ast-qtcool-status" style="margin-top:8px;font-size:11px;min-height:16px;line-height:1.5"></div>
-            </div>
-            <div style="border-top:1px solid var(--border-primary);padding:6px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;background:var(--bg-tertiary)">
-              ${!isHermes ? `<div style="display:flex;gap:8px;align-items:center">
-                <button class="btn btn-xs btn-secondary" id="ast-qtcool-sync-to" title="${t('assistant.qtcoolSyncToTitle')}">${icon('upload', 11)} ${t('assistant.qtcoolSyncTo')}</button>
-                <button class="btn btn-xs btn-secondary" id="ast-qtcool-sync-from" title="${t('assistant.qtcoolSyncFromTitle')}">${icon('download', 11)} ${t('assistant.qtcoolSyncFrom')}</button>
-              </div>` : '<div></div>'}
-              <a href="${QTCOOL.site}" target="_blank" style="color:var(--primary);text-decoration:none;font-size:11px">${icon('external-link', 11)} ${t('assistant.qtcoolLearnMore')}</a>
-            </div>
-          </div>
 
           <!-- #Compat-3: 备用模型组（重设计：极简一行 + 厂商预设快捷添加） -->
           <details class="ast-fallback-section" id="ast-fallback-section" ${(c.fallbackModels || []).length ? 'open' : ''} style="margin-top:14px">
@@ -3429,7 +3390,7 @@ function showSettings() {
     }, 30)
   }
   // 渲染厂商预设按钮（6 个最常用 + 从主模型复制 + 自定义 + 更多）
-  const TOP_PRESETS = ['qtcool', 'openai', 'anthropic', 'deepseek', 'google', 'ollama']
+  const TOP_PRESETS = ['openai', 'anthropic', 'deepseek', 'google', 'ollama', 'shengsuanyun']
   let showAllPresets = false
   const renderPresetButtons = () => {
     const shown = showAllPresets
@@ -3715,24 +3676,25 @@ function showSettings() {
     }
   })
 
-  // ── gpt.qt.cool 一键配置 ──
+  // ── 历史 qtcool 兼容入口：仅在界面仍渲染该区域时启用 ──
   const qtcoolModelSelect = overlay.querySelector('#ast-qtcool-model')
   const qtcoolCustomKeyCheckbox = overlay.querySelector('#ast-qtcool-customkey')
   const qtcoolKeyInput = overlay.querySelector('#ast-qtcool-key')
 
-  // 动态获取模型列表（共享逻辑）
-  ;(async () => {
-    const models = await fetchQtcoolModels()
-    qtcoolModelSelect.innerHTML = models.map((m, i) =>
-      `<option value="${m.id}" style="color:#333"${i === 0 ? ' selected' : ''}>${m.name || m.id}${i === 0 ? ' ★' : ''}</option>`
-    ).join('')
-  })()
-
   // key input is always visible now (no more built-in key)
   const qtcoolStatus = overlay.querySelector('#ast-qtcool-status')
 
-  // 测试按钮：快速验证接口可用性
-  overlay.querySelector('#ast-qtcool-test').onclick = async (e) => {
+  if (qtcoolModelSelect && qtcoolKeyInput && qtcoolStatus) {
+    // 动态获取模型列表（共享逻辑）
+    ;(async () => {
+      const models = await fetchQtcoolModels()
+      qtcoolModelSelect.innerHTML = models.map((m, i) =>
+        `<option value="${m.id}" style="color:#333"${i === 0 ? ' selected' : ''}>${m.name || m.id}${i === 0 ? ' ★' : ''}</option>`
+      ).join('')
+    })()
+
+    // 测试按钮：快速验证接口可用性
+    overlay.querySelector('#ast-qtcool-test').onclick = async (e) => {
     const btn = e.target
     const selectedModel = qtcoolModelSelect.value
     if (!selectedModel) { qtcoolStatus.innerHTML = `<span style="color:#fbbf24">${statusIcon('warn', 14)} ${t('assistant.qtcoolSelectModel')}</span>`; return }
@@ -3903,6 +3865,7 @@ function showSettings() {
       toast(t('assistant.qtcoolReadFail') + ': ' + e, 'error')
     }
   })
+  }
 
   const resultEl = overlay.querySelector('#ast-test-result')
   const modelInput = overlay.querySelector('#ast-model')

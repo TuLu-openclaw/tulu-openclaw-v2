@@ -580,6 +580,8 @@ async fn guardian_tick(app: &tauri::AppHandle) {
 }
 
 async fn start_service_impl_internal(label: &str) -> Result<(), String> {
+    crate::commands::config::ensure_node_runtime_compatible()?;
+
     #[cfg(target_os = "macos")]
     let first_start = platform::start_service_impl(label);
     #[cfg(not(target_os = "macos"))]
@@ -1336,7 +1338,7 @@ mod platform {
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先通过 npm install -g openclaw 安装"
                     .into(),
             );
         }
@@ -1685,7 +1687,7 @@ mod platform {
     async fn gateway_command(action: &str) -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先通过 npm install -g openclaw 安装"
                     .into(),
             );
         }
@@ -1749,7 +1751,7 @@ mod platform {
     pub async fn start_service_impl(_label: &str) -> Result<(), String> {
         if !is_cli_installed() {
             return Err(
-                "openclaw CLI 未安装，请先通过 npm install -g @qingchencloud/openclaw-zh 安装"
+                "openclaw CLI 未安装，请先通过 npm install -g openclaw 安装"
                     .into(),
             );
         }

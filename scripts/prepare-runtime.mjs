@@ -3,21 +3,21 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import https from 'https'
-import http from 'http'
 import { fileURLToPath } from 'url'
 import { execFileSync } from 'child_process'
 
-const DEFAULT_RUNTIME_BASE_URL = 'http://124.220.22.11:9002/runtime'
 const OFFICIAL_HOSTS = new Set([
   'nodejs.org',
   'github.com',
   'objects.githubusercontent.com',
   'release-assets.githubusercontent.com',
 ])
-const IS_CI = ['1', 'true', 'yes'].includes(String(process.env.CI || '').toLowerCase())
-const DOWNLOAD_TIMEOUT_MS = Number(process.env.RUNTIME_DOWNLOAD_TIMEOUT_MS || 300_000)
-const DOWNLOAD_RETRIES = Math.max(1, Number(process.env.RUNTIME_DOWNLOAD_RETRIES || 3))
-const RETRY_DELAY_MS = Number(process.env.RUNTIME_RETRY_DELAY_MS || 2_000)
+const DOWNLOAD_TIMEOUT_MS = positiveIntegerEnv('RUNTIME_DOWNLOAD_TIMEOUT_MS', 300_000)
+const DOWNLOAD_RETRIES = positiveIntegerEnv('RUNTIME_DOWNLOAD_RETRIES', 3)
+const RETRY_DELAY_MS = positiveIntegerEnv('RUNTIME_RETRY_DELAY_MS', 2_000)
+const MAX_ARCHIVE_BYTES = positiveIntegerEnv('RUNTIME_MAX_ARCHIVE_BYTES', 512 * 1024 * 1024)
+const MAX_ARCHIVE_ENTRIES = positiveIntegerEnv('RUNTIME_MAX_ARCHIVE_ENTRIES', 100_000)
+const MAX_EXTRACTED_BYTES = positiveIntegerEnv('RUNTIME_MAX_EXTRACTED_BYTES', 2 * 1024 * 1024 * 1024)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -27,11 +27,17 @@ const buildRoot = path.join(repoRoot, '_vendor', `runtime-build-${process.pid}`)
 const outRoot = path.join(repoRoot, '_vendor', 'runtime')
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+validateManifest(manifest)
+if (process.argv.includes('--validate-manifest')) {
+  console.log('Runtime manifest is valid')
+  process.exit(0)
+}
 const target = process.argv[2] || process.env.OPENCLAW_RUNTIME_TARGET || detectTarget()
 if (!target) {
   console.error('Unable to detect OPENCLAW_RUNTIME_TARGET')
   process.exit(1)
 }
+validateTarget(target, manifest)
 
 async function main() {
   fs.mkdirSync(buildRoot, { recursive: true })
@@ -52,14 +58,11 @@ async function main() {
       }
       continue
     }
-    const resolvedSource = resolveRuntimeSource(spec)
     const archivePath = path.join(buildRoot, spec.archive)
-    await downloadWithFallback(resolvedSource, spec.source, archivePath)
-    if (spec.archiveSha256) {
-      const actual = sha256File(archivePath)
-      if (actual !== spec.archiveSha256.toLowerCase()) {
-        throw new Error(`${component} archive sha256 mismatch: expected ${spec.archiveSha256}, got ${actual}`)
-      }
+    await downloadWithRetries(spec.source, archivePath)
+    const actual = sha256File(archivePath)
+    if (actual !== spec.archiveSha256.toLowerCase()) {
+      throw new Error(`${component} archive sha256 mismatch: expected ${spec.archiveSha256}, got ${actual}`)
     }
     const extractDir = path.join(buildRoot, `${component}-extract`)
     fs.mkdirSync(extractDir, { recursive: true })
@@ -68,12 +71,14 @@ async function main() {
     validateExpectedEntry(component, spec, stagedPlatformRoot)
     prepared[component] = {
       ...spec,
-      source: resolvedSource,
-      officialSource: spec.source,
+      source: spec.source,
       prepared: true
     }
   }
 
+  if (!Object.values(prepared).some((spec) => spec?.prepared)) {
+    throw new Error(`Prepared runtime for ${target} contains no bundled components`)
+  }
   const platformManifest = {
     platform: target,
     version: manifest.schemaVersion || 1,
@@ -108,51 +113,76 @@ function detectTarget() {
   return ''
 }
 
+function positiveIntegerEnv(name, fallback) {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`)
+  }
+  return value
+}
+
 function sha256File(filePath) {
   const hash = crypto.createHash('sha256')
   hash.update(fs.readFileSync(filePath))
   return hash.digest('hex')
 }
 
-function resolveRuntimeSource(spec) {
-  const overrideBase = String(process.env.RUNTIME_BASE_URL || process.env.OPENCLAW_RUNTIME_BASE_URL || '').trim()
-  const mirrorBase = overrideBase || (!IS_CI ? DEFAULT_RUNTIME_BASE_URL : '')
-  if (!mirrorBase) return spec.source
-  try {
-    const sourceUrl = new URL(spec.source)
-    if (!OFFICIAL_HOSTS.has(sourceUrl.hostname)) return spec.source
-    return new URL(spec.archive, ensureTrailingSlash(mirrorBase)).toString()
-  } catch {
-    return spec.source
+function validateManifest(value) {
+  if (!value || typeof value !== 'object' || !value.components || typeof value.components !== 'object') {
+    throw new Error('Runtime manifest must define components')
   }
-}
-
-function ensureTrailingSlash(value) {
-  return value.endsWith('/') ? value : `${value}/`
-}
-
-async function downloadWithFallback(primaryUrl, fallbackUrl, dest) {
-  const tried = []
-  if (primaryUrl) {
-    tried.push(primaryUrl)
-    try {
-      await downloadWithRetries(primaryUrl, dest)
-      return
-    } catch (error) {
-      console.warn(`[runtime] primary download failed: ${primaryUrl} -> ${error.message || error}`)
-      fs.rmSync(dest, { force: true })
-      if (!fallbackUrl || fallbackUrl === primaryUrl) throw error
+  for (const [component, targets] of Object.entries(value.components)) {
+    if (!targets || typeof targets !== 'object') {
+      throw new Error(`Runtime component ${component} must define targets`)
+    }
+    for (const [runtimeTarget, spec] of Object.entries(targets)) {
+      if (spec?.strategy === 'system') continue
+      if (!spec || typeof spec !== 'object') {
+        throw new Error(`${component}/${runtimeTarget} must define a runtime specification`)
+      }
+      if (!/^[A-Za-z0-9._-]+$/.test(spec.archive || '') || path.basename(spec.archive) !== spec.archive) {
+        throw new Error(`${component}/${runtimeTarget} archive must be a safe filename`)
+      }
+      if (!isOfficialHttpsUrl(spec.source)) {
+        throw new Error(`${component}/${runtimeTarget} source must use an approved official HTTPS host`)
+      }
+      if (!/^[a-f0-9]{64}$/i.test(spec.archiveSha256 || '')) {
+        throw new Error(`${component}/${runtimeTarget} archiveSha256 must be a 64-character SHA-256 digest`)
+      }
+      if (!isSafeRelativePath(spec.expectedEntry)) {
+        throw new Error(`${component}/${runtimeTarget} expectedEntry must be a safe relative path`)
+      }
+      if (spec.sha256 !== undefined && !/^[a-f0-9]{64}$/i.test(spec.sha256)) {
+        throw new Error(`${component}/${runtimeTarget} sha256 must be a 64-character SHA-256 digest when provided`)
+      }
     }
   }
-  if (!fallbackUrl || tried.includes(fallbackUrl)) {
-    throw new Error(`Download failed for ${tried.join(' , ')}`)
+}
+
+function validateTarget(value, manifestValue) {
+  const supportedTargets = new Set(
+    Object.values(manifestValue.components).flatMap((targets) => Object.keys(targets)),
+  )
+  if (!supportedTargets.has(value)) {
+    throw new Error(`Unsupported OPENCLAW_RUNTIME_TARGET: ${value}`)
   }
+}
+
+function isOfficialHttpsUrl(value) {
   try {
-    await downloadWithRetries(fallbackUrl, dest)
-  } catch (error) {
-    fs.rmSync(dest, { force: true })
-    throw error
+    const url = new URL(value)
+    return url.protocol === 'https:' && OFFICIAL_HOSTS.has(url.hostname) && !url.username && !url.password
+  } catch {
+    return false
   }
+}
+
+function isSafeRelativePath(value) {
+  if (typeof value !== 'string' || !value || path.isAbsolute(value)) return false
+  const normalized = value.replaceAll('\\', '/')
+  return !normalized.split('/').some((segment) => segment === '..' || segment === '')
 }
 
 async function downloadWithRetries(url, dest) {
@@ -177,22 +207,62 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function download(url, dest) {
+function download(url, dest, redirectCount = 0) {
   return new Promise((resolve, reject) => {
-    const client = url.startsWith('https:') ? https : http
-    const request = client.get(url, (res) => {
+    if (!isOfficialHttpsUrl(url)) {
+      reject(new Error(`Runtime download URL is not an approved official HTTPS URL: ${url}`))
+      return
+    }
+    const request = https.get(url, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         request.destroy()
-        return resolve(download(new URL(res.headers.location, url).toString(), dest))
+        if (redirectCount >= 5) {
+          reject(new Error(`Too many redirects while downloading ${url}`))
+          return
+        }
+        const redirectUrl = new URL(res.headers.location, url).toString()
+        if (!isOfficialHttpsUrl(redirectUrl)) {
+          reject(new Error(`Runtime download redirect left approved official HTTPS hosts: ${redirectUrl}`))
+          return
+        }
+        resolve(download(redirectUrl, dest, redirectCount + 1))
+        return
       }
       if (res.statusCode !== 200) {
         reject(new Error(`Download failed ${res.statusCode} for ${url}`))
         return
       }
+      const contentLength = Number(res.headers['content-length'] || 0)
+      if (contentLength > MAX_ARCHIVE_BYTES) {
+        res.destroy()
+        reject(new Error(`Runtime archive exceeds ${MAX_ARCHIVE_BYTES} byte download limit: ${url}`))
+        return
+      }
       const file = fs.createWriteStream(dest)
+      let downloadedBytes = 0
+      let settled = false
+      const fail = (error) => {
+        if (settled) return
+        settled = true
+        res.destroy()
+        file.destroy()
+        reject(error)
+      }
+      res.on('data', (chunk) => {
+        downloadedBytes += chunk.length
+        if (downloadedBytes > MAX_ARCHIVE_BYTES) {
+          fail(new Error(`Runtime archive exceeds ${MAX_ARCHIVE_BYTES} byte download limit: ${url}`))
+        }
+      })
+      res.on('aborted', () => fail(new Error(`Runtime download response was aborted: ${url}`)))
+      res.on('error', fail)
       res.pipe(file)
-      file.on('finish', () => file.close(resolve))
-      file.on('error', reject)
+      file.on('finish', () => {
+        if (settled) return
+        settled = true
+        file.close(resolve)
+      })
+      file.on('error', fail)
     })
     request.setTimeout(DOWNLOAD_TIMEOUT_MS, () => {
       request.destroy(new Error(`Download timed out after ${DOWNLOAD_TIMEOUT_MS}ms for ${url}`))
@@ -203,15 +273,90 @@ function download(url, dest) {
 
 function extractArchive(archivePath, dest) {
   const lower = archivePath.toLowerCase()
-  if (lower.endsWith('.zip')) {
-    execFileSync('tar', ['-xf', archivePath, '-C', dest], { stdio: 'inherit' })
-    return
+  if (!lower.endsWith('.zip') && !lower.endsWith('.tar.gz') && !lower.endsWith('.tgz') && !lower.endsWith('.tar.xz')) {
+    throw new Error(`Unsupported archive format: ${archivePath}`)
   }
-  if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.tar.xz')) {
-    execFileSync('tar', ['-xf', archivePath, '-C', dest], { stdio: 'inherit' })
-    return
+
+  validateArchiveMembers(archivePath)
+  execFileSync('tar', ['-xf', archivePath, '-C', dest, '--no-same-owner', '--no-same-permissions'], {
+    stdio: 'inherit',
+  })
+  validateExtractedTree(dest)
+}
+
+function validateArchiveMembers(archivePath) {
+  const names = execFileSync('tar', ['-tf', archivePath], {
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  }).split(/\r?\n/).filter(Boolean)
+  if (names.length === 0 || names.length > MAX_ARCHIVE_ENTRIES) {
+    throw new Error(`Runtime archive entry count must be between 1 and ${MAX_ARCHIVE_ENTRIES}`)
   }
-  throw new Error(`Unsupported archive format: ${archivePath}`)
+  for (const name of names) {
+    if (!isSafeArchiveMemberPath(name)) {
+      throw new Error(`Runtime archive contains an unsafe member path: ${JSON.stringify(name)}`)
+    }
+  }
+
+  const listing = execFileSync('tar', ['-tvf', archivePath], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  }).split(/\r?\n/).filter(Boolean)
+  if (listing.length !== names.length) {
+    throw new Error('Runtime archive member listing is inconsistent')
+  }
+  for (const line of listing) {
+    const type = line[0]
+    if (type !== '-' && type !== 'd') {
+      throw new Error(`Runtime archive contains a link or special file: ${line}`)
+    }
+  }
+}
+
+function isSafeArchiveMemberPath(value) {
+  if (typeof value !== 'string' || !value || value.includes('\0')) return false
+  const normalized = value.replaceAll('\\', '/')
+  if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return false
+  return !normalized.split('/').some((segment) => segment === '..')
+}
+
+function validateExtractedTree(root) {
+  const rootReal = fs.realpathSync(root)
+  let entryCount = 0
+  let totalBytes = 0
+
+  function visit(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      entryCount += 1
+      if (entryCount > MAX_ARCHIVE_ENTRIES) {
+        throw new Error(`Extracted runtime exceeds ${MAX_ARCHIVE_ENTRIES} entries`)
+      }
+      const entryPath = path.join(dir, entry.name)
+      const stat = fs.lstatSync(entryPath)
+      if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) {
+        throw new Error(`Extracted runtime contains a link or special file: ${entryPath}`)
+      }
+      const real = fs.realpathSync(entryPath)
+      if (!isPathInside(rootReal, real)) {
+        throw new Error(`Extracted runtime escaped its destination: ${entryPath}`)
+      }
+      if (stat.isDirectory()) {
+        visit(entryPath)
+      } else {
+        totalBytes += stat.size
+        if (totalBytes > MAX_EXTRACTED_BYTES) {
+          throw new Error(`Extracted runtime exceeds ${MAX_EXTRACTED_BYTES} bytes`)
+        }
+      }
+    }
+  }
+
+  visit(root)
+}
+
+function isPathInside(root, candidate) {
+  const relative = path.relative(root, candidate)
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
 }
 
 function materializeComponent(component, target, extractDir, outPlatformRoot) {
@@ -237,9 +382,22 @@ function materializeComponent(component, target, extractDir, outPlatformRoot) {
 
 function validateExpectedEntry(component, spec, outPlatformRoot) {
   if (!spec.expectedEntry) return
+  const rootReal = fs.realpathSync(outPlatformRoot)
   const entryPath = path.join(outPlatformRoot, spec.expectedEntry)
-  if (!fs.existsSync(entryPath)) {
+  let stat
+  try {
+    stat = fs.lstatSync(entryPath)
+  } catch {
     throw new Error(`${component} expected entry missing after prepare: ${spec.expectedEntry}`)
+  }
+  if (!stat.isFile() || stat.isSymbolicLink() || !isPathInside(rootReal, fs.realpathSync(entryPath))) {
+    throw new Error(`${component} expected entry is not a contained regular file: ${spec.expectedEntry}`)
+  }
+  if (spec.sha256) {
+    const actual = sha256File(entryPath)
+    if (actual !== spec.sha256.toLowerCase()) {
+      throw new Error(`${component} entry sha256 mismatch: expected ${spec.sha256}, got ${actual}`)
+    }
   }
 }
 
@@ -274,8 +432,10 @@ function copyDir(src, dst) {
     if (entry.isDirectory()) {
       fs.mkdirSync(to, { recursive: true })
       copyDir(from, to)
-    } else {
+    } else if (entry.isFile()) {
       fs.copyFileSync(from, to)
+    } else {
+      throw new Error(`Runtime materialization rejected a link or special file: ${from}`)
     }
   }
 }

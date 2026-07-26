@@ -4,6 +4,7 @@
  */
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
+import { gatewayRuntime } from '../lib/gateway-policy.js'
 
 function esc(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -94,7 +95,7 @@ export function render() {
     try {
       try {
         const info = await api.checkHermes()
-        gwOnline = !!info?.gatewayRunning
+        gwOnline = gatewayRuntime(info).running
       } catch (_) {}
       await loadJobs()
     } finally {

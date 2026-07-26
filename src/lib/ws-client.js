@@ -57,6 +57,7 @@ export class WsClient {
     this._autoPairAttempts = 0
     this._authRefreshAttempts = 0
     this._serverVersion = null
+    this._negotiatedProtocol = null
     this._status = 'idle'
     this._statusDetail = ''
     this._lastHandshakeAt = null
@@ -82,6 +83,7 @@ export class WsClient {
   get hello() { return this._hello }
   get sessionKey() { return this._sessionKey }
   get serverVersion() { return this._serverVersion }
+  get negotiatedProtocol() { return this._negotiatedProtocol }
   get reconnectState() { return this._reconnectState }
   get reconnectAttempts() { return this._reconnectAttempts }
   get lastConnectedAt() { return this._lastConnectedAt }
@@ -102,6 +104,7 @@ export class WsClient {
       reconnectAttempts: this._reconnectAttempts,
       reconnectState: this._reconnectState,
       serverVersion: this._serverVersion,
+      negotiatedProtocol: this._negotiatedProtocol,
       missedHeartbeats: this._missedHeartbeats,
       pendingReconnect: this._pendingReconnect,
       intentionalClose: this._intentionalClose,
@@ -530,7 +533,9 @@ export class WsClient {
     this._authRefreshAttempts = 0
     this._hello = payload || null
     this._snapshot = payload?.snapshot || null
-    this._serverVersion = payload?.serverVersion || null
+    this._serverVersion = payload?.serverVersion || payload?.server?.version || null
+    const protocol = Number(payload?.protocol || payload?.protocolVersion || payload?.server?.protocol)
+    this._negotiatedProtocol = Number.isInteger(protocol) ? protocol : null
     const defaults = this._snapshot?.sessionDefaults
     if (defaults?.mainSessionKey) {
       this._sessionKey = defaults.mainSessionKey
@@ -690,9 +695,10 @@ export class WsClient {
         if (!this._intentionalClose && (this._reconnectAttempts > 0 || !this._gatewayReady)) {
           const waitTimeout = setTimeout(() => { unsub(); reject(new Error('等待重连超时')) }, 15000)
           const unsub = this.onReady((hello, sessionKey, err) => {
-            clearTimeout(waitTimeout); unsub()
+            clearTimeout(waitTimeout)
+            unsub()
             if (err?.error) { reject(new Error(err.message || 'Gateway 握手失败')); return }
-            this.request(method, params).then(resolve, reject)
+            this.request(method, params, opts).then(resolve, reject)
           })
           return
         }

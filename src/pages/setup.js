@@ -174,7 +174,9 @@ async function autoEnterWhenReady(page, delayMs = 1200) {
     api.getServicesStatus(),
     api.checkInstallation(),
   ])
-  const nodeOk = nodeRes.status === 'fulfilled' && nodeRes.value?.installed
+  const nodeOk = nodeRes.status === 'fulfilled'
+    && nodeRes.value?.installed
+    && nodeRes.value?.compatible !== false
   const cliOk = clawRes.status === 'fulfilled'
     && clawRes.value?.length > 0
     && clawRes.value[0]?.cli_installed !== false
@@ -257,10 +259,10 @@ export async function render() {
             <h1 class="setup-hero-title">${t('setup.headerTitle')}</h1>
             <p class="setup-hero-desc">${t('setup.headerDesc')}</p>
             <div class="setup-hero-site-row">
-              <a class="setup-hero-site-link" href="https://claw.qt.cool" target="_blank" rel="noopener noreferrer" title="https://claw.qt.cool">
+              <a class="setup-hero-site-link" href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest" target="_blank" rel="noopener noreferrer" title="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest">
                 ${icon('link', 14)}
                 <span class="setup-hero-site-label">${t('setup.officialWebsite')}</span>
-                <span class="setup-hero-site-value">claw.qt.cool</span>
+                <span class="setup-hero-site-value">GitHub Releases</span>
               </a>
             </div>
           </div>
@@ -326,12 +328,18 @@ function stepIcon(ok) {
 
 function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
   const stepsEl = page.querySelector('#setup-steps')
-  const nodeOk = node.installed
+  const nodeOk = node.installed && node.compatible !== false
+  const nodeTooOld = node.installed && node.compatible === false
   const gitOk = git?.installed || false
   const allOk = nodeOk && cliOk && config.installed
-  const nodeStatusMeta = nodeOk
-    ? buildStatusMeta(node.version || t('setup.statusReady'), runtimeSourceLabel(node?.detectedFrom), node.path)
-    : t('setup.statusActionNeeded')
+  const nodeStatusMeta = nodeTooOld
+    ? t('setup.nodeVersionUnsupported', {
+        version: node.version || t('common.unknown'),
+        required: node.requiredVersion || t('common.unknown'),
+      })
+    : nodeOk
+      ? buildStatusMeta(node.version || t('setup.statusReady'), runtimeSourceLabel(node?.detectedFrom), node.path)
+      : t('setup.statusActionNeeded')
   const gitBundledStrategy = bundled?.manifest?.git?.strategy || 'bundled'
   const gitStatusMeta = gitOk
     ? buildStatusMeta(git.version || t('setup.statusReady'), runtimeSourceLabel(git?.source || (git?.isCustom ? 'custom' : 'system')), git.path)
@@ -367,20 +375,25 @@ function renderSteps(page, { node, git, cliOk, config, version, bundled }) {
           ${stepIcon(nodeOk)} ${t('setup.stepNode')}
         </div>
         <p style="color:var(--text-secondary);font-size:var(--font-size-sm);margin-bottom:var(--space-sm)">
-          ${t('setup.stepNodeHint')}
+          ${nodeTooOld
+            ? t('setup.nodeUpgradeHint', {
+                version: node.version || t('common.unknown'),
+                required: node.requiredVersion || t('common.unknown'),
+              })
+            : t('setup.stepNodeHint')}
         </p>
         <button class="btn btn-primary btn-sm" id="btn-deploy-bundled-runtime">${t('setup.deployBundledRuntimeBtn')}</button>
         <button class="btn btn-secondary btn-sm" id="btn-deploy-bundled-node">${t('setup.deployBundledNodeBtn')}</button>
-        <button class="btn btn-secondary btn-sm" id="btn-auto-install-node">${t('setup.autoInstallNodeBtn')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://nodejs.org/" target="_blank" rel="noopener">${t('setup.downloadNode')}</a>
+        <button class="btn btn-secondary btn-sm" id="btn-auto-install-node">${nodeTooOld ? t('setup.autoUpgradeNodeBtn') : t('setup.autoInstallNodeBtn')}</button>
+        <a class="btn btn-secondary btn-sm" href="https://nodejs.org/" target="_blank" rel="noopener">${nodeTooOld ? t('setup.downloadLatestNode') : t('setup.downloadNode')}</a>
         ${bundled?.supported ? `<div class="setup-inline-note" style="margin-top:8px">${t('setup.bundledRuntimeSource')}</div>${renderBundledMeta('Node.js', 'node', bundled)}` : ''}
         <span class="form-hint" style="margin-left:8px">${t('setup.recheckAfterInstall')}</span>
         <div style="margin-top:var(--space-sm);padding:10px 12px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.6">
-          <strong>${t('setup.nodeInstalledButNotDetected')}</strong>
+          <strong>${nodeTooOld ? t('setup.nodeUnsupportedTitle') : t('setup.nodeInstalledButNotDetected')}</strong>
           ${isMacPlatform()
-            ? `${t('setup.macNodeHint')}<br>
+            ? `${nodeTooOld ? t('setup.macNodeUpgradeHint') : t('setup.macNodeHint')}<br>
                <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px;user-select:all">open /Applications/星枢OpenClaw.app</code>`
-            : `${t('setup.winNodeHint')}`
+            : `${nodeTooOld ? t('setup.winNodeUpgradeHint') : t('setup.winNodeHint')}`
           }
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-secondary btn-sm" id="btn-scan-node" style="font-size:11px;padding:3px 10px">${icon('search', 12)} ${t('setup.scanNodeBtn')}</button>
@@ -590,31 +603,12 @@ function renderInstallSection() {
       <p style="color:var(--text-tertiary);font-size:var(--font-size-xs);line-height:1.6;margin:-4px 0 var(--space-sm)">
         ${t('setup.installHint2')}
       </p>
-      <div style="display:flex;gap:var(--space-sm);margin-bottom:var(--space-sm)">
-        <label class="setup-source-option" style="flex:1;cursor:pointer">
-          <input type="radio" name="install-source" value="chinese" checked style="margin-right:6px">
-          <div>
-            <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceChineseLabel')}</div>
-            <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">@qingchencloud/openclaw-zh</div>
-          </div>
-        </label>
-        <label class="setup-source-option" style="flex:1;cursor:pointer">
-          <input type="radio" name="install-source" value="official" style="margin-right:6px">
-          <div>
-            <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceOfficialLabel')}</div>
-            <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">openclaw</div>
-          </div>
-        </label>
-      </div>
-      <div style="margin-bottom:var(--space-sm)" id="install-method-section">
-        <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.installMethodLabel')}</label>
-        <select id="install-method" style="width:100%;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm)">
-          <option value="auto">${t('setup.methodAuto')}</option>
-          <option value="standalone-r2">${t('setup.methodStandaloneR2')}</option>
-          <option value="standalone-github">${t('setup.methodStandaloneGithub')}</option>
-          <option value="npm">${t('setup.methodNpm')}</option>
-        </select>
-        <div id="method-hint" style="font-size:var(--font-size-xs);color:var(--text-tertiary);margin-top:4px;line-height:1.5"></div>
+      <div class="setup-source-option" style="margin-bottom:var(--space-sm)">
+        <input type="hidden" name="install-source" value="official">
+        <div>
+          <div style="font-weight:600;font-size:var(--font-size-sm)">${t('setup.sourceOfficialLabel')}</div>
+          <div style="font-size:var(--font-size-xs);color:var(--text-tertiary)">openclaw</div>
+        </div>
       </div>
       <div style="margin-bottom:var(--space-sm)" id="registry-section">
         <label style="font-size:var(--font-size-xs);color:var(--text-tertiary);display:block;margin-bottom:4px">${t('setup.registryLabel')}</label>
@@ -669,23 +663,20 @@ function renderEnvironmentHint() {
             <div class="setup-help-block">
               <div class="setup-help-label">${t('setup.wslWebHint')}</div>
               <div class="setup-help-copy">${t('setup.wslWebDesc')}</div>
-              <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/TuLu-openclaw/tulu-openclaw-v2/main/deploy.sh | bash</code>
-              <div class="setup-help-copy">${t('setup.domesticMirror')} <code>curl -fsSL https://gitee.com/QtCodeCreators/星枢OpenClaw/raw/main/deploy.sh | bash</code></div>
+              <code class="setup-help-code">curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh</code>
               <div class="setup-help-copy">${t('setup.wslWebPostDeploy')}</div>
             </div>
           ` : ''}
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.dockerHint')}</div>
             <div class="setup-help-copy">${t('setup.dockerDesc')}</div>
-            <code class="setup-help-code">npm i -g @qingchencloud/openclaw-zh</code>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/TuLu-openclaw/tulu-openclaw-v2/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/星枢OpenClaw/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">npm install -g openclaw</code>
+            <code class="setup-help-code">curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh</code>
           </div>
           <div class="setup-help-block">
             <div class="setup-help-label">${t('setup.remoteHint')}</div>
             <div class="setup-help-copy">${t('setup.remoteDesc')}</div>
-            <code class="setup-help-code">curl -fsSL https://raw.githubusercontent.com/TuLu-openclaw/tulu-openclaw-v2/main/deploy.sh | bash</code>
-            <div class="setup-help-copy">${t('setup.domesticMirrorShort')} <code>curl -fsSL https://gitee.com/QtCodeCreators/星枢OpenClaw/raw/main/deploy.sh | bash</code></div>
+            <code class="setup-help-code">curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh</code>
           </div>
         </div>
       </details>
@@ -697,7 +688,12 @@ function renderEnvironmentHint() {
 function buildSetupProblemPrompt({ node, git, cliOk, config }) {
   const problems = []
   if (!node.installed) problems.push(`- ${t('setup.promptNodeMissing')}`)
-  else problems.push(`- ${t('setup.promptNodeOk', { version: node.version || t('common.unknown') })}`)
+  else if (node.compatible === false) {
+    problems.push(`- ${t('setup.promptNodeUnsupported', {
+      version: node.version || t('common.unknown'),
+      required: node.requiredVersion || t('common.unknown'),
+    })}`)
+  } else problems.push(`- ${t('setup.promptNodeOk', { version: node.version || t('common.unknown') })}`)
   if (!git?.installed) problems.push(`- ${t('setup.promptGitMissing')}`)
   else problems.push(`- ${t('setup.promptGitOk', { version: git.version || t('common.unknown') })}`)
   if (!cliOk) problems.push(`- ${t('setup.promptCliMissing')}`)
@@ -1109,11 +1105,16 @@ function bindEvents(page, nodeOk, detectState) {
     resultEl.innerHTML = `<span style="color:var(--text-tertiary)">${t('setup.detecting2')}</span>`
     try {
       const result = await api.checkNodeAtPath(dir)
-      if (result.installed) {
+      if (result.installed && result.compatible !== false) {
         await api.saveCustomNodePath(dir)
         resultEl.innerHTML = `<span style="color:var(--success)">✓ ${t('setup.nodeFoundSaved', { version: result.version })}</span>`
         toast(t('setup.nodeSaved'), 'success')
         setTimeout(() => runDetect(page), 300)
+      } else if (result.installed) {
+        resultEl.innerHTML = `<span style="color:var(--warning)">${t('setup.nodeVersionUnsupported', {
+          version: result.version || t('common.unknown'),
+          required: result.requiredVersion || t('common.unknown'),
+        })}</span>`
       } else {
         resultEl.innerHTML = `<span style="color:var(--warning)">${t('setup.nodeNotFoundAtPath')}</span>`
       }
@@ -1266,57 +1267,23 @@ function bindEvents(page, nodeOk, detectState) {
     }
   })
 
-  // 安装方式联动：源切换时更新方式选项可见性
-  const methodSection = page.querySelector('#install-method-section')
   const registrySection = page.querySelector('#registry-section')
   const installPathInput = page.querySelector('#install-path')
   page.querySelector('#btn-browse-install-path')?.addEventListener('click', async () => {
     const selected = await chooseDirectoryPath()
     if (selected && installPathInput) installPathInput.value = selected
   })
-  const methodSelect = page.querySelector('#install-method')
-  const methodHint = page.querySelector('#method-hint')
-  const sourceRadios = page.querySelectorAll('input[name="install-source"]')
-
-  const METHOD_HINTS = {
-    'auto': t('setup.methodHintAuto'),
-    'standalone-r2': t('setup.methodHintR2'),
-    'standalone-github': t('setup.methodHintGithub'),
-    'npm': t('setup.methodHintNpm'),
-  }
-
-  function updateMethodVisibility() {
-    const source = page.querySelector('input[name="install-source"]:checked')?.value || 'chinese'
-    if (installPathInput) installPathInput.disabled = source === 'official'
-    if (source === 'official') {
-      if (methodSection) methodSection.style.display = 'none'
-      if (registrySection) registrySection.style.display = ''
-    } else {
-      if (methodSection) methodSection.style.display = ''
-      const method = methodSelect?.value || 'auto'
-      if (registrySection) registrySection.style.display = (method === 'npm') ? '' : 'none'
-    }
-    if (methodHint && methodSelect) methodHint.textContent = METHOD_HINTS[methodSelect.value] || ''
-  }
-
-  sourceRadios.forEach(r => r.addEventListener('change', updateMethodVisibility))
-  if (methodSelect) methodSelect.addEventListener('change', updateMethodVisibility)
-  api.readPanelConfig().then(cfg => {
-    if (installPathInput && cfg?.openclawStandaloneInstallDir) {
-      installPathInput.value = cfg.openclawStandaloneInstallDir
-    }
-  }).catch(() => {})
-  updateMethodVisibility()
+  if (installPathInput) installPathInput.disabled = true
+  if (registrySection) registrySection.style.display = ''
 
   // 一键安装
   const installBtn = page.querySelector('#btn-install')
   if (!installBtn || !nodeOk) return
 
   installBtn.addEventListener('click', async () => {
-    const source = page.querySelector('input[name="install-source"]:checked')?.value || 'chinese'
-    const method = (source === 'official') ? 'npm' : (page.querySelector('#install-method')?.value || 'auto')
+    const source = 'official'
+    const method = 'npm'
     const registry = page.querySelector('#registry-select')?.value
-    const installPath = (page.querySelector('#install-path')?.value || '').trim()
     const modal = showUpgradeModal(t('setup.installOpenclaw'))
     let unlistenLog, unlistenProgress
 
@@ -1413,9 +1380,6 @@ function bindEvents(page, nodeOk, detectState) {
           try { await api.setNpmRegistry(registry) } catch {}
         }
 
-        const normalizedInstallPath = normalizeOpenclawInstallDir(installPath)
-        if (source !== 'official' && normalizedInstallPath) await api.saveStandaloneInstallDir(normalizedInstallPath)
-
         // 发起后台任务（立即返回）
         await api.upgradeOpenclaw(source, null, method)
         modal.appendLog(t('setup.bgTaskStarted'))
@@ -1426,8 +1390,6 @@ function bindEvents(page, nodeOk, detectState) {
           modal.appendLog(t('setup.setRegistry', { url: registry }))
           try { await api.setNpmRegistry(registry) } catch {}
         }
-        const normalizedInstallPath = normalizeOpenclawInstallDir(installPath)
-        if (source !== 'official' && normalizedInstallPath) await api.saveStandaloneInstallDir(normalizedInstallPath)
         const msg = await api.upgradeOpenclaw(source, null, method)
         modal.setDone(msg)
         await autoBindDetectedOpenclawCli(modal).catch(() => '')

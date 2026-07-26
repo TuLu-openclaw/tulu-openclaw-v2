@@ -15,6 +15,7 @@ import { version as APP_VERSION } from '../package.json'
 import { statusIcon } from './lib/icons.js'
 import { isForeignGatewayError, showGatewayConflictGuidance } from './lib/gateway-ownership.js'
 import { escapeHtml } from './lib/html-utils.js'
+import { initKernelGates } from './lib/kernel.js'
 
 import { initI18n, t } from './lib/i18n.js'
 import { initEngineManager, registerEngine } from './lib/engine-manager.js'
@@ -77,33 +78,59 @@ async function openGatewayConflict(error = null) {
 
 // === 访问密码保护（Web + 桌面端通用） ===
 const isTauri = isTauriRuntime()
+let _setupTokenRequired = false
 
 async function checkAuth() {
   if (isTauri) {
-    // 桌面端：读 星枢OpenClaw.json，检查密码配置
     try {
       const { api } = await import('./lib/tauri-api.js')
-      const cfg = await api.readPanelConfig()
-      if (!cfg.accessPassword) return { ok: true }
-      if (sessionStorage.getItem('星枢OpenClaw_authed') === '1') return { ok: true }
-      // 默认密码：直接传给登录页，避免二次读取
-      const defaultPw = (cfg.mustChangePassword && cfg.accessPassword) ? cfg.accessPassword : null
-      return { ok: false, defaultPw }
-    } catch { return { ok: true } }
+      const status = await api.panelAuthStatus()
+      if (status.ignoreRisk) return { ok: true, mode: 'ignore' }
+      if (status.state === 'setup_required') return { ok: false, mode: 'setup' }
+      if (status.authenticated) return { ok: true, mode: 'login' }
+      return { ok: false, mode: 'login' }
+    } catch { return { ok: false, mode: 'unavailable' } }
   }
-  // Web 模式
   try {
     const resp = await fetch('/__api/auth_check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     const data = await resp.json()
-    if (!data.required || data.authenticated) return { ok: true }
-    return { ok: false, defaultPw: data.defaultPassword || null }
-  } catch { return { ok: true } }
+    if (data.state === 'setup_required') {
+      _setupTokenRequired = !!data.setupTokenRequired
+      return { ok: false, mode: 'setup' }
+    }
+    if (data.state === 'login_required' && !data.authenticated) return { ok: false, mode: 'login' }
+    return { ok: true, mode: data.state || 'authenticated' }
+  } catch { return { ok: false, mode: 'unavailable' } }
 }
 
 const _logoSvg = `<svg class="login-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
   <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
   <path d="M18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/>
 </svg>`
+
+function checkPasswordStrength(pw) {
+  if (!pw || pw.length < 6) return t('security.pwMin6')
+  if (pw.length > 64) return t('security.pwMax64')
+  if (/^\d+$/.test(pw)) return t('security.pwNoDigitOnly')
+  const weak = ['123456', '654321', 'password', 'admin', 'qwerty', 'abc123', '111111', '000000', 'letmein', 'welcome', '星枢openclaw', 'openclaw']
+  if (weak.includes(String(pw).toLowerCase())) return t('security.pwTooCommon')
+  return null
+}
+
+function strengthLevel(pw) {
+  if (!pw) return { level: 0, text: '', color: '' }
+  if (pw.length < 6) return { level: 1, text: t('security.strengthTooShort'), color: 'var(--error)' }
+  if (/^\d+$/.test(pw)) return { level: 1, text: t('security.strengthDigitOnly'), color: 'var(--error)' }
+  let score = 0
+  if (pw.length >= 8) score++
+  if (pw.length >= 12) score++
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
+  if (/\d/.test(pw)) score++
+  if (/[^a-zA-Z0-9]/.test(pw)) score++
+  if (score <= 1) return { level: 2, text: t('security.strengthFair'), color: 'var(--warning)' }
+  if (score <= 3) return { level: 3, text: t('security.strengthGood'), color: 'var(--primary)' }
+  return { level: 4, text: t('security.strengthStrong'), color: 'var(--success)' }
+}
 
 export function _hideSplash() {
   const splash = document.getElementById('splash')
@@ -269,7 +296,6 @@ function showKamiFallbackModal() {
 
 let _loginFailCount = 0
 const CAPTCHA_THRESHOLD = 3
-const PW_CHANGE_SESSION_KEY = '星枢OpenClaw_must_change_pw'
 
 function _genCaptcha() {
   const a = Math.floor(Math.random() * 20) + 1
@@ -277,8 +303,7 @@ function _genCaptcha() {
   return { q: `${a} + ${b} = ?`, a: a + b }
 }
 
-function showLoginOverlay(defaultPw) {
-  const hasDefault = !!defaultPw
+function showLoginOverlay() {
   const overlay = document.createElement('div')
   overlay.id = 'login-overlay'
   let _captcha = _loginFailCount >= CAPTCHA_THRESHOLD ? _genCaptcha() : null
@@ -289,11 +314,9 @@ function showLoginOverlay(defaultPw) {
     <div class="login-card">
       ${_logoSvg}
       <div class="login-title">星枢OpenClaw</div>
-      <div class="login-desc">${hasDefault
-        ? `${t('security.firstLoginHint')}<br><span style="font-size:12px;color:#6366f1;font-weight:600">${t('security.firstLoginChangeHint', { security: securityLabel })}</span>`
-        : (isTauri ? t('security.appLocked') : t('security.loginPrompt'))}</div>
+      <div class="login-desc">${isTauri ? t('security.appLocked') : t('security.loginPrompt')}</div>
       <form id="login-form">
-        <input class="login-input" type="${hasDefault ? 'text' : 'password'}" id="login-pw" placeholder="${t('security.accessPasswordPlaceholder')}" autocomplete="current-password" autofocus value="${hasDefault ? defaultPw : ''}" />
+        <input class="login-input" type="password" id="login-pw" placeholder="${t('security.accessPasswordPlaceholder')}" autocomplete="current-password" autofocus />
         <div id="login-captcha" style="display:${_captcha ? 'block' : 'none'};margin-bottom:10px">
           <div style="font-size:12px;color:#888;margin-bottom:6px">${t('security.captchaPrompt')}<strong id="captcha-q" style="color:var(--text-primary,#333)">${_captcha ? _captcha.q : ''}</strong></div>
           <input class="login-input" type="number" id="login-captcha-input" placeholder="${t('security.captchaPlaceholder')}" style="text-align:center" />
@@ -301,7 +324,7 @@ function showLoginOverlay(defaultPw) {
         <button class="login-btn" type="submit">${t('security.loginAction')}</button>
         <div class="login-error" id="login-error"></div>
       </form>
-      ${!hasDefault ? `<details class="login-forgot" style="margin-top:16px;text-align:center">
+      <details class="login-forgot" style="margin-top:16px;text-align:center">
         <summary style="font-size:11px;color:#aaa;cursor:pointer;list-style:none;user-select:none">${t('security.forgotPassword')}</summary>
         <div style="margin-top:8px;font-size:11px;color:#888;line-height:1.8;text-align:left;background:rgba(0,0,0,.03);border-radius:8px;padding:10px 14px">
           ${isTauri
@@ -309,8 +332,8 @@ function showLoginOverlay(defaultPw) {
             : `${t('security.resetPasswordRemote', { field: accessPasswordField })}<br>${resetPath}`
           }
         </div>
-      </details>` : ''}
-      <div style="margin-top:${hasDefault ? '20' : '12'}px;font-size:11px;color:#aaa;text-align:center">
+      </details>
+      <div style="margin-top:12px;font-size:11px;color:#aaa;text-align:center">
         <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">${t('sidebar.feedbackGroup')}: 916149901</a>
         <span style="margin:0 6px">·</span>v${APP_VERSION}
       </div>
@@ -344,10 +367,10 @@ function showLoginOverlay(defaultPw) {
       }
       try {
         if (isTauri) {
-          // 桌面端：本地比对密码
           const { api } = await import('./lib/tauri-api.js')
-          const cfg = await api.readPanelConfig()
-          if (pw !== cfg.accessPassword) {
+          try {
+            await api.panelAuthLogin(pw)
+          } catch {
             _loginFailCount++
             if (_loginFailCount >= CAPTCHA_THRESHOLD && !_captcha) {
               _captcha = _genCaptcha()
@@ -360,19 +383,8 @@ function showLoginOverlay(defaultPw) {
             return
           }
           sessionStorage.setItem('星枢OpenClaw_authed', '1')
-          // 同步建立 web session（WEB_ONLY_CMDS 需要 cookie 认证）
-          try {
-            await fetch('/__api/auth_login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ password: pw }),
-            })
-          } catch {}
           overlay.classList.add('hide')
           setTimeout(() => overlay.remove(), 400)
-          if (cfg.accessPassword === '123456') {
-            sessionStorage.setItem(PW_CHANGE_SESSION_KEY, '1')
-          }
           resolve()
         } else {
           // Web 模式：调后端
@@ -396,15 +408,107 @@ function showLoginOverlay(defaultPw) {
           }
           overlay.classList.add('hide')
           setTimeout(() => overlay.remove(), 400)
-          if (data.mustChangePassword || data.defaultPassword === '123456') {
-            sessionStorage.setItem(PW_CHANGE_SESSION_KEY, '1')
-          }
           resolve()
         }
       } catch (err) {
         errEl.textContent = `${t('common.networkError')}: ${err.message || err}`
         btn.disabled = false
         btn.textContent = t('security.loginAction')
+      }
+    })
+  })
+}
+
+function showSetupOverlay() {
+  const overlay = document.createElement('div')
+  overlay.id = 'login-overlay'
+  overlay.innerHTML = `
+    <div class="login-card">
+      ${_logoSvg}
+      <div class="login-title">星枢OpenClaw</div>
+      <div class="login-desc">${t('security.setupTitle')}<br><span style="font-size:12px;color:#71717a;line-height:1.6">${t('security.setupDesc')}</span></div>
+      <form id="setup-form">
+        ${!isTauri && _setupTokenRequired ? '<input class="login-input" type="password" id="setup-token" placeholder="服务器控制台中的初始化令牌" autocomplete="one-time-code" autofocus />' : ''}
+        <input class="login-input" type="password" id="setup-pw" placeholder="${t('security.newPasswordPlaceholder')}" autocomplete="new-password" ${!isTauri && _setupTokenRequired ? '' : 'autofocus'} />
+        <input class="login-input" type="password" id="setup-confirm-pw" placeholder="${t('security.confirmPasswordPlaceholder')}" autocomplete="new-password" />
+        <div id="setup-strength" style="margin:-2px 0 12px;display:flex;align-items:center;gap:8px;min-height:20px"></div>
+        <button class="login-btn" type="submit">${t('security.setupAction')}</button>
+        <div class="login-error" id="setup-error"></div>
+      </form>
+      <div style="margin-top:12px;font-size:11px;color:#aaa;text-align:center">
+        <a href="https://qm.qq.com/q/JAxVNbg2I4" target="_blank" rel="noopener" style="color:#aaa;text-decoration:none">${t('sidebar.feedbackGroup')}: 916149901</a>
+        <span style="margin:0 6px">·</span>v${APP_VERSION}
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+  _hideSplash()
+
+  const pwInput = overlay.querySelector('#setup-pw')
+  const strengthEl = overlay.querySelector('#setup-strength')
+  if (pwInput && strengthEl) {
+    pwInput.addEventListener('input', () => {
+      const pw = pwInput.value
+      if (!pw) { strengthEl.innerHTML = ''; return }
+      const s = strengthLevel(pw)
+      const bars = [1, 2, 3, 4].map(i =>
+        `<div style="width:32px;height:4px;border-radius:2px;background:${i <= s.level ? s.color : 'var(--border-primary)'}"></div>`
+      ).join('')
+      strengthEl.innerHTML = `${bars}<span style="font-size:11px;color:${s.color};font-weight:500">${s.text}</span>`
+    })
+  }
+
+  return new Promise((resolve) => {
+    overlay.querySelector('#setup-form').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const pw = overlay.querySelector('#setup-pw').value
+      const confirmPw = overlay.querySelector('#setup-confirm-pw').value
+      const btn = overlay.querySelector('.login-btn')
+      const errEl = overlay.querySelector('#setup-error')
+      if (pw !== confirmPw) {
+        errEl.textContent = t('security.passwordMismatch')
+        return
+      }
+      const weakErr = checkPasswordStrength(pw)
+      if (weakErr) {
+        errEl.textContent = weakErr
+        return
+      }
+      btn.disabled = true
+      btn.textContent = t('security.setupSubmitting')
+      errEl.textContent = ''
+      try {
+        if (isTauri) {
+          const { api } = await import('./lib/tauri-api.js')
+          const status = await api.panelAuthStatus()
+          if (status.ignoreRisk || status.initialized) {
+            overlay.remove()
+            await showLoginOverlay()
+            resolve()
+            return
+          }
+          await api.panelAuthSetup(pw)
+          sessionStorage.setItem('星枢OpenClaw_authed', '1')
+        } else {
+          const setupToken = overlay.querySelector('#setup-token')?.value || ''
+          const resp = await fetch('/__api/auth_setup', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(_setupTokenRequired ? { 'X-Setup-Token': setupToken } : {}),
+            },
+            body: JSON.stringify({ password: pw }),
+          })
+          const data = await resp.json()
+          if (!resp.ok) throw new Error(data.error || t('security.operationFailed'))
+        }
+        overlay.classList.add('hide')
+        setTimeout(() => overlay.remove(), 400)
+        resolve()
+      } catch (err) {
+        errEl.textContent = err.message || err
+        btn.disabled = false
+        btn.textContent = t('security.setupAction')
       }
     })
   })
@@ -423,6 +527,7 @@ const content = document.getElementById('content')
 async function boot() {
   // 初始化引擎管理器（加载上次选中的引擎）
   try { await initEngineManager() } catch (e) { console.warn('[boot] initEngineManager 失败:', e) }
+  initKernelGates()
 
   // 先注册所有路由，立即渲染 UI（不等后端检测）
   registerRoute('/dashboard', () => import('./pages/dashboard.js'))
@@ -432,6 +537,10 @@ async function boot() {
   registerRoute('/logs', () => import('./pages/logs.js'))
   registerRoute('/models', () => import('./pages/models.js'))
   registerRoute('/agents', () => import('./pages/agents.js'))
+  registerRoute('/route-graph', () => Promise.all([
+    import('./pages/route-graph.js'),
+    import('./style/route-graph.css'),
+  ]).then(([page]) => page))
   registerRoute('/agency-agents', () => import('./pages/agency-agents.js'))
   registerRoute('/agent-detail', () => import('./pages/agent-detail.js'))
   registerRoute('/gateway', () => import('./pages/gateway.js'))
@@ -613,38 +722,7 @@ window.addEventListener('lobster-work-end', () => {
     setTimeout(() => splash.remove(), 500)
   }
 
-  // 默认密码提醒横幅
-  if (sessionStorage.getItem(PW_CHANGE_SESSION_KEY) === '1') {
-    const banner = document.createElement('div')
-    banner.id = 'pw-change-banner'
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:13px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,0.15)'
-    banner.innerHTML = `
-      <span>${statusIcon('warn', 14)} ${t('common.defaultPasswordBanner')}</span>
-      <a id="pw-change-banner-link" href="#/security" style="color:#fff;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600">${t('common.goSecurity')}</a>
-      <button id="pw-change-banner-close" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px">&times;</button>
-    `
-    banner.querySelector('#pw-change-banner-link')?.addEventListener('click', () => {
-      banner.remove()
-      sessionStorage.removeItem(PW_CHANGE_SESSION_KEY)
-    })
-    banner.querySelector('#pw-change-banner-close')?.addEventListener('click', () => banner.remove())
-    document.body.prepend(banner)
-  }
-
-  // Tauri 模式：确保 web session 存在（页面刷新后 cookie 可能丢失），然后加载实例和检测状态
-  const ensureWebSession = isTauri
-    ? api.readPanelConfig().then(cfg => {
-        if (cfg.accessPassword) {
-          return fetch('/__api/auth_login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: cfg.accessPassword }),
-          }).catch(() => {})
-        }
-      }).catch(() => {})
-    : Promise.resolve()
-
-  ensureWebSession.then(() => loadLobsterPhaseOverrides()).then(() => loadActiveInstance()).then(() => detectOpenclawStatus()).then(() => {
+  Promise.resolve().then(() => loadLobsterPhaseOverrides()).then(() => loadActiveInstance()).then(() => detectOpenclawStatus()).then(() => {
     // 重新渲染侧边栏（检测完成后 isOpenclawReady 状态已更新）
     renderSidebar(sidebar)
     if (!isOpenclawReady()) {
@@ -1241,6 +1319,17 @@ function startUpdateChecker() {
     }
   }
 
+  // 访问控制优先于产品授权：首次访问只进入密码初始化，已初始化用户先正常登录。
+  const auth = await checkAuth()
+  if (!auth.ok) {
+    if (auth.mode === 'setup') await showSetupOverlay()
+    else if (auth.mode === 'login') await showLoginOverlay()
+    else {
+      showBackendDownOverlay()
+      return
+    }
+  }
+
   // === 微验卡密验证（启动时必须通过，失败时循环重试，最多3次内置模块，之后显示 fallback）===
   let kamiVerified = false
   let kamiFailCount = 0
@@ -1262,9 +1351,6 @@ function startUpdateChecker() {
     }
   }
 
-  const auth = await checkAuth()
-  if (!auth.ok) await showLoginOverlay(auth.defaultPw)
-
   try {
     await boot()
   } catch (bootErr) {
@@ -1277,7 +1363,7 @@ function startUpdateChecker() {
         <div style="font-size:18px;font-weight:600;margin-bottom:8px;color:#18181b">${t('common.pageLoadFailed')}</div>
         <div style="font-size:13px;color:#71717a;max-width:400px;line-height:1.6;margin-bottom:16px">${String(bootErr?.message || bootErr).replace(/</g,'&lt;')}</div>
         <button id="boot-reload-btn" style="padding:8px 20px;border-radius:8px;border:none;background:#6366f1;color:#fff;font-size:13px;cursor:pointer">${t('common.reloadRetry')}</button>
-        <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}<br><a href="https://github.com/qingchencloud/星枢OpenClaw/issues" target="_blank" style="color:#6366f1">GitHub Issues</a></div>
+        <div style="margin-top:24px;font-size:11px;color:#a1a1aa">${t('common.pageLoadFailedHint')}<br><a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues" target="_blank" rel="noopener" style="color:#6366f1">GitHub Issues</a></div>
       </div>`
     app.querySelector('#boot-reload-btn')?.addEventListener('click', () => location.reload())
   }

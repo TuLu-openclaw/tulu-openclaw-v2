@@ -26,6 +26,11 @@ export async function render() {
       <h1 class="page-title">${t('ext.title')}</h1>
       <p class="page-desc">${t('ext.desc')}</p>
     </div>
+    <div class="config-section">
+      <div class="config-section-title">${t('ext.centerTitle')}</div>
+      <div class="form-hint" style="margin-bottom:var(--space-sm)">${t('ext.centerIntro')}</div>
+      <div class="form-hint">${t('ext.kernelHint')}</div>
+    </div>
     <div id="cftunnel-card" class="config-section">
       <div class="config-section-title">${t('ext.cftunnelTitle')}</div>
       <div class="form-hint" style="margin-bottom:var(--space-md)">${t('ext.cftunnelDesc')}</div>
@@ -161,7 +166,7 @@ function renderClawapp(el, s) {
       <div style="color:var(--text-tertiary);margin-bottom:var(--space-md)">${t('ext.clawappNotInstalled')}</div>
       <div style="display:flex;gap:var(--space-sm);align-items:center">
         <button class="btn btn-primary btn-sm" data-action="install-clawapp">${t('ext.installBtn')}</button>
-        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/clawpanel" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
+        <a class="btn btn-secondary btn-sm" href="https://github.com/TuLu-openclaw/clawapp" target="_blank" rel="noopener">${t('ext.viewDocs')}</a>
       </div>
       <div id="install-clawapp-progress-area"></div>
     `

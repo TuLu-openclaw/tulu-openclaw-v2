@@ -12,6 +12,7 @@ import {
   inferProviderByBaseUrl,
   findProviderById,
 } from '../lib/providers.js'
+import { gatewayRuntime } from '../lib/gateway-policy.js'
 
 // SVG 图标
 const ICONS = {
@@ -122,7 +123,7 @@ export function render() {
       if (hermesInfo) {
         if (hermesInfo.installed) {
           rows.push(`<div class="hermes-detect-row ok">${ICONS.check} <span>${t('engine.hermesFound', { version: hermesInfo.version })}</span></div>`)
-          if (hermesInfo.gatewayRunning) {
+          if (gatewayRuntime(hermesInfo).running) {
             rows.push(`<div class="hermes-detect-row ok">${ICONS.check} <span>${t('engine.hermesReady')}</span></div>`)
           }
         } else {
@@ -280,7 +281,7 @@ export function render() {
 
   // --- Gateway 阶段 ---
   function renderGateway() {
-    const running = hermesInfo?.gatewayRunning
+    const running = gatewayRuntime(hermesInfo).running
     return `<div class="card" style="margin-bottom:16px">
       <div class="card-body" style="padding:24px">
         <h3 style="margin:0 0 4px;font-size:16px">${t('engine.gatewayTitle')}</h3>

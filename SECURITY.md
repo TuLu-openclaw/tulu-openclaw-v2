@@ -2,11 +2,9 @@
 
 ## 支持的版本
 
-| 版本 | 支持状态 |
-|------|----------|
-| 0.5.x | ✅ 安全更新 |
-| 0.4.x | ⚠️ 仅关键修复 |
-| < 0.4 | ❌ 不再维护 |
+安全修复面向 GitHub Releases 中的最新正式版本发布。旧版本不单独维护安全补丁；发现安全问题或准备部署到联网环境时，请先升级到最新正式版。
+
+当前源码版本可在 `package.json` 中查看，实际可安装版本以 [GitHub Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases) 为准。
 
 ## 报告安全漏洞
 
@@ -15,7 +13,7 @@
 请通过以下方式私下报告：
 
 1. 发送邮件至项目维护者（在 GitHub 个人主页查看联系方式）
-2. 或使用 [GitHub Security Advisories](https://github.com/qingchencloud/clawpanel/security/advisories/new) 私下报告
+2. 或使用 [GitHub Security Advisories](https://github.com/TuLu-openclaw/tulu-openclaw-v2/security/advisories/new) 私下报告
 
 ### 报告内容应包含
 
@@ -36,5 +34,6 @@
 使用 星枢OpenClaw 时，建议注意以下安全事项：
 
 - **Gateway Token**：如果开启局域网共享，务必设置访问密钥
+- **访问密码**：Web 面板首次访问时请立即完成初始化并设置你自己的访问密码，不要在公网暴露未初始化面板
 - **网络访问**：默认仅监听本机（loopback），如无必要不要开启局域网模式
 - **API Key**：模型服务商的 API Key 存储在本地 `openclaw.json` 中，请确保文件权限安全

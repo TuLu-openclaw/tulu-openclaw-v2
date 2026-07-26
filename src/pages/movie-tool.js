@@ -1786,7 +1786,7 @@ async function fetchTextWithFallback(url, options = {}) {
 async function webFetch(url) {
   return (await fetchTextWithFallback(url, {
     timeoutMs: 8000,
-    headers: { 'Accept': 'text/html,application/xhtml+xml', 'Referer': 'https://claw.qt.cool/' },
+    headers: { 'Accept': 'text/html,application/xhtml+xml' },
   })).text
 }
 

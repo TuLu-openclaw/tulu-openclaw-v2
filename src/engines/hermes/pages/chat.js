@@ -20,6 +20,7 @@ import { showConfirm } from '../../../components/modal.js'
 import { getActiveEngineId } from '../../../lib/engine-manager.js'
 import { runDualEngineCollab } from '../../../lib/collab-orchestrator.js'
 import { getChatStore, getSourceLabel } from '../lib/chat-store.js'
+import { gatewayRuntime } from '../lib/gateway-policy.js'
 
 const HERMES_COMMANDS_PROMPT = `Hermes，以下是你必须学会并熟练掌握的最全指令大全，涵盖了你所有的工作场景。你必须将这些指令烂熟于心，做到随用随取，执行无误。
 
@@ -554,7 +555,7 @@ export function render() {
     api.checkHermes(),
   ]).then(results => {
     const info = results[2]?.status === 'fulfilled' ? results[2].value : null
-    gwOnline = !!info?.gatewayRunning
+    gwOnline = gatewayRuntime(info).running
     currentModel = info?.model || ''
     providerConfigured = !!info?.providerConfigured
     configuredProvider = info?.configuredProvider || ''
@@ -662,7 +663,7 @@ export function render() {
                     ${store.state.streaming ? 'disabled' : ''}
                     title="${escHtml(p.model || '')}">
               <span class="hm-chat-profile-item-name">${escHtml(p.name)}</span>
-              ${p.gatewayRunning ? `<span class="hm-chat-profile-item-badge">${escHtml(t('engine.chatProfileRunning'))}</span>` : ''}
+              ${gatewayRuntime(p).running ? `<span class="hm-chat-profile-item-badge">${escHtml(t('engine.chatProfileRunning'))}</span>` : ''}
               ${p.name === active ? `<span class="hm-chat-profile-item-active" aria-hidden="true">${ICONS.check}</span>` : ''}
             </button>
           `).join('')}

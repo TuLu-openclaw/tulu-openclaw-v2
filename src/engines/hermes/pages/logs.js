@@ -15,6 +15,7 @@
 import { t } from '../../../lib/i18n.js'
 import { api } from '../../../lib/tauri-api.js'
 import { toast } from '../../../components/toast.js'
+import { HERMES_DIAGNOSTIC_ACTIONS, normalizeHermesDiagnosticResult } from '../lib/diagnostic-policy.js'
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -95,6 +96,8 @@ export function render() {
   let tailing = false          // auto-refresh tick active
   let downloading = false
   let tailTimer = null
+  let diagnosticResult = null
+  let diagnosticLoading = ''
 
   // --- Data ---
   async function loadFiles() {
@@ -147,6 +150,25 @@ export function render() {
   function toggleTail() { tailing ? stopTail() : startTail() }
 
   // --- Actions ---
+  async function runDiagnostic(action) {
+    if (!HERMES_DIAGNOSTIC_ACTIONS.includes(action) || diagnosticLoading) return
+    stopTail()
+    diagnosticLoading = action
+    diagnosticResult = null
+    draw()
+    try {
+      diagnosticResult = normalizeHermesDiagnosticResult(await api.hermesDiagnosticRun(action), action)
+    } catch (e) {
+      diagnosticResult = normalizeHermesDiagnosticResult({
+        action,
+        success: false,
+        output: e?.message || String(e),
+      }, action)
+    }
+    diagnosticLoading = ''
+    draw()
+  }
+
   async function doDownload() {
     if (!activeFile || downloading) return
     downloading = true
@@ -246,6 +268,16 @@ export function render() {
 
       <div class="hm-logs-layout">
         <aside class="hm-logs-sidebar">
+          <div class="hm-logs-diagnostics">
+            <div class="hm-field-label">${t('engine.logsDiagnostics')}</div>
+            ${HERMES_DIAGNOSTIC_ACTIONS.map(action => `
+              <button class="hm-logs-diagnostic-action ${diagnosticResult?.action === action ? 'is-active' : ''}" data-action="${action}" ${diagnosticLoading ? 'disabled' : ''}>
+                <span>${t(`engine.logsDiagnostic_${action}`)}</span>
+                ${diagnosticLoading === action ? '<span>…</span>' : ''}
+              </button>
+            `).join('')}
+            <div class="hm-muted hm-logs-diagnostic-note">${t('engine.logsDiagnosticSafety')}</div>
+          </div>
           <div class="hm-panel-title hm-logs-sidebar-title">${t('engine.logsFiles')}</div>
           <div class="hm-logs-file-list">
             ${logFiles.length === 0
@@ -260,6 +292,20 @@ export function render() {
         </aside>
 
         <section class="hm-logs-main">
+          ${diagnosticResult || diagnosticLoading ? `
+            <div class="hm-logs-diagnostic-header">
+              <div>
+                <div class="hm-panel-title">${t(`engine.logsDiagnostic_${diagnosticResult?.action || diagnosticLoading}`)}</div>
+                <div class="hm-muted">${diagnosticLoading
+                  ? t('engine.logsDiagnosticRunning')
+                  : (diagnosticResult.success ? t('engine.logsDiagnosticPassed') : t('engine.logsDiagnosticFailed'))}
+                  ${diagnosticResult?.exitCode !== null && diagnosticResult?.exitCode !== undefined ? ` · ${t('engine.logsDiagnosticExitCode')} ${diagnosticResult.exitCode}` : ''}
+                </div>
+              </div>
+              <button class="hm-btn hm-btn--ghost hm-btn--sm hm-logs-diagnostic-close">${t('engine.logsDiagnosticBack')}</button>
+            </div>
+            <pre class="hm-logs-diagnostic-output">${escHtml(diagnosticResult?.output || t('engine.logsDiagnosticRunning'))}${diagnosticResult?.truncated ? `\n\n${escHtml(t('engine.logsDiagnosticTruncated'))}` : ''}</pre>
+          ` : `
           <div class="hm-logs-toolbar">
             <label class="hm-logs-toolbar-item">
               <span class="hm-field-label">${t('engine.logsLevel')}</span>
@@ -299,6 +345,7 @@ export function render() {
             ${!loading && totalVisible === 0 ? `<div class="hm-logs-empty-content hm-muted">${t('engine.logsEmpty')}</div>` : ''}
             ${!loading ? filtered.map(renderEntry).join('') : ''}
           </div>
+          `}
         </section>
       </div>
     `
@@ -315,11 +362,17 @@ export function render() {
     el.querySelector('.hm-logs-tail')?.addEventListener('click', toggleTail)
     el.querySelector('.hm-logs-download')?.addEventListener('click', doDownload)
     el.querySelector('.hm-logs-clear')?.addEventListener('click', doClearView)
+    el.querySelector('.hm-logs-diagnostic-close')?.addEventListener('click', () => { diagnosticResult = null; diagnosticLoading = ''; draw() })
+    el.querySelectorAll('.hm-logs-diagnostic-action').forEach(item => {
+      item.addEventListener('click', () => runDiagnostic(item.dataset.action))
+    })
 
     el.querySelectorAll('.hm-logs-file-item').forEach(item => {
       item.addEventListener('click', () => {
         if (item.dataset.file === activeFile) return
         activeFile = item.dataset.file
+        diagnosticResult = null
+        diagnosticLoading = ''
         loadEntries()
       })
     })

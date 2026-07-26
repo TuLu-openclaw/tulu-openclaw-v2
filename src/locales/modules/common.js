@@ -54,7 +54,6 @@ export default {
   devMode: _('开发模式', 'Development', '開發模式', '開発モード', '개발 모드', 'Chế độ phát triển'),
   prodMode: _('生产模式', 'Production', '生產模式', '本番モード', '프로덕션 모드', 'Chế độ sản xuất'),
   networkError: _('网络错误', 'Network error', '網路錯誤', 'ネットワークエラー', '네트워크 오류', 'Lỗi mạng'),
-  defaultPasswordBanner: _('当前使用的是系统生成的默认密码，为了安全请尽快修改', 'You are using a system-generated default password. Please change it as soon as possible.', '目前使用的是系統產生的預設密碼，為了安全請盡快修改。', '現在はシステム生成のデフォルトパスワードを使用しています。安全のため早めに変更してください。', '현재 시스템이 생성한 기본 비밀번호를 사용 중입니다. 보안을 위해 가능한 빨리 변경하세요.', 'Bạn đang dùng mật khẩu mặc định do hệ thống tạo. Hãy đổi sớm để đảm bảo an toàn.'),
   goSecurity: _('前往安全设置', 'Open Security', '前往安全設定', 'セキュリティ設定へ', '보안 설정으로 이동', 'Mở Bảo mật'),
   pageLoadFailed: _('页面加载失败', 'Page failed to load', '頁面載入失敗', 'ページの読み込みに失敗しました', '페이지 로드 실패', 'Tải trang thất bại'),
   reloadRetry: _('刷新重试', 'Reload', '重新整理重試', '再読み込み', '새로고침', 'Tải lại'),

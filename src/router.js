@@ -1,4 +1,4 @@
-import { t } from './lib/i18n.js'
+import { ensureRouteLocale, t } from './lib/i18n.js'
 
 /**
  * 极简 hash 路由
@@ -84,13 +84,18 @@ async function loadRoute() {
       </div>`
 
     try {
-      mod = await retryLoad(loader, 3, 500)
+      mod = await retryLoad(() => Promise.all([
+        loader(),
+        ensureRouteLocale(routePath),
+      ]).then(([pageModule]) => pageModule), 3, 500)
     } catch (e) {
       console.error('[router] 模块加载失败:', routePath, e)
       if (thisLoad === _loadId) showLoadError(_contentEl, routePath, e)
       return
     }
     _moduleCache[routePath] = mod
+  } else {
+    await ensureRouteLocale(routePath)
   }
 
   // 如果加载期间路由又变了，丢弃本次结果

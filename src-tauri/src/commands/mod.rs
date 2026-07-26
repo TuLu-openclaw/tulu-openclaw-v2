@@ -30,6 +30,7 @@ pub mod music;
 pub mod openmontage;
 pub mod pairing;
 pub mod proxy;
+pub mod route_graph;
 pub mod service;
 pub mod skillhub;
 pub mod skills;

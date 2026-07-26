@@ -35,7 +35,7 @@ const PANEL_STATE_DIR = path.dirname(PANEL_CONFIG_PATH)
 const DOCKER_NODES_PATH = path.join(PANEL_STATE_DIR, 'docker-nodes.json')
 const INSTANCES_PATH = path.join(PANEL_STATE_DIR, 'instances.json')
 const DEFAULT_DOCKER_SOCKET = process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'
-const DEFAULT_OPENCLAW_IMAGE = 'ghcr.io/qingchencloud/openclaw'
+const DEFAULT_OPENCLAW_IMAGE = 'ghcr.io/openclaw/openclaw'
 const PANEL_VERSION = (() => {
   try {
     return JSON.parse(fs.readFileSync(path.join(__dev_dirname, '..', 'package.json'), 'utf8')).version || '0.0.0'
@@ -825,7 +825,7 @@ async function _tryR2Install(version, source, logs) {
   return true
 }
 
-function recommendedVersionFor(source = 'chinese') {
+function recommendedVersionFor(source = 'official') {
   const policy = loadVersionPolicy()
   const panelEntry = findPanelPolicyEntry(policy, PANEL_VERSION)
   return panelEntry?.[source]?.recommended
@@ -835,8 +835,8 @@ function recommendedVersionFor(source = 'chinese') {
 
 const OPENCLAW_IMAGE_DEPENDENCY = 'sharp@latest'
 
-function npmPackageName(source = 'chinese') {
-  return source === 'official' ? 'openclaw' : '@qingchencloud/openclaw-zh'
+function npmPackageName(source = 'official') {
+  return source === 'chinese' ? '@qingchencloud/openclaw-zh' : 'openclaw'
 }
 
 function npmGlobalModulesDir() {
@@ -1195,8 +1195,8 @@ function getLocalOpenclawVersion() {
   return current || null
 }
 
-async function getLatestVersionFor(source = 'chinese') {
-  const pkg = npmPackageName(source)
+async function getLatestVersionFor() {
+  const pkg = npmPackageName('official')
   const encodedPkg = pkg.replace('/', '%2F').replace('@', '%40')
   const firstRegistry = pickRegistryForPackage(pkg)
   const registries = [...new Set([firstRegistry, 'https://registry.npmjs.org'])]
@@ -1215,7 +1215,9 @@ async function getLatestVersionFor(source = 'chinese') {
 
 const _sessions = new Map() // token → { expires }
 const SESSION_TTL = 24 * 60 * 60 * 1000 // 24h
-const AUTH_EXEMPT = new Set(['auth_check', 'auth_login', 'auth_logout'])
+const PASSWORD_HASH_ITERATIONS = 120_000
+const AUTH_EXEMPT = new Set(['auth_check', 'auth_login', 'auth_setup', 'auth_logout'])
+let _remoteSetupToken = null
 
 // 登录限速：防暴力破解（IP 级别，5次失败后锁定60秒）
 const _loginAttempts = new Map() // ip → { count, lockedUntil }
@@ -1364,10 +1366,77 @@ function invalidateConfigCache() {
   _panelConfigCacheTime = 0
 }
 
+function writePanelConfigSecure(config) {
+  const panelDir = path.dirname(PANEL_CONFIG_PATH)
+  if (!fs.existsSync(panelDir)) fs.mkdirSync(panelDir, { recursive: true, mode: 0o700 })
+  const tempPath = `${PANEL_CONFIG_PATH}.tmp-${process.pid}-${crypto.randomUUID()}`
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(config, null, 2), { mode: 0o600 })
+    if (!isWindows) fs.chmodSync(tempPath, 0o600)
+    fs.renameSync(tempPath, PANEL_CONFIG_PATH)
+    if (!isWindows) fs.chmodSync(PANEL_CONFIG_PATH, 0o600)
+  } catch (error) {
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath) } catch {}
+    throw error
+  }
+  invalidateConfigCache()
+}
+
 applyOpenclawPathConfig(readPanelConfig())
 
-function getAccessPassword() {
-  return readPanelConfig().accessPassword || ''
+function hasAccessPassword(config = readPanelConfig()) {
+  return !!(config.accessPasswordHash || config.accessPassword)
+}
+
+function hashAccessPassword(password) {
+  const salt = crypto.randomBytes(16)
+  const digest = crypto.pbkdf2Sync(password, salt, PASSWORD_HASH_ITERATIONS, 32, 'sha256')
+  return `pbkdf2-sha256$${PASSWORD_HASH_ITERATIONS}$${salt.toString('base64')}$${digest.toString('base64')}`
+}
+
+function verifyAccessPassword(password, config = readPanelConfig()) {
+  if (config.accessPasswordHash) {
+    const parts = String(config.accessPasswordHash).split('$')
+    if (parts.length !== 4 || parts[0] !== 'pbkdf2-sha256') return false
+    const iterations = Number(parts[1])
+    if (!Number.isInteger(iterations) || iterations <= 0 || iterations > 1_000_000) return false
+    try {
+      const salt = Buffer.from(parts[2], 'base64')
+      const expected = Buffer.from(parts[3], 'base64')
+      const actual = crypto.pbkdf2Sync(password, salt, iterations, expected.length, 'sha256')
+      return expected.length > 0 && crypto.timingSafeEqual(actual, expected)
+    } catch {
+      return false
+    }
+  }
+  const legacy = typeof config.accessPassword === 'string' ? Buffer.from(config.accessPassword) : Buffer.alloc(0)
+  const supplied = Buffer.from(typeof password === 'string' ? password : '')
+  return legacy.length > 0 && legacy.length === supplied.length && crypto.timingSafeEqual(legacy, supplied)
+}
+
+function migrateLegacyAccessPassword(config, password) {
+  if (typeof config.accessPassword !== 'string') return
+  config.accessPasswordHash = hashAccessPassword(password)
+  delete config.accessPassword
+  delete config.mustChangePassword
+  writePanelConfigSecure(config)
+}
+
+function isLoopbackAddress(value) {
+  const address = String(value || '').trim().toLowerCase()
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
+}
+
+function isLoopbackRequest(req) {
+  const socketAddress = req.socket?.remoteAddress || ''
+  if (!isLoopbackAddress(socketAddress)) return false
+  const forwardedAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+  return !forwardedAddress || isLoopbackAddress(forwardedAddress)
+}
+
+function remoteSetupTokenRequired(req) {
+  const cfg = readPanelConfig()
+  return !cfg.ignoreRisk && !hasAccessPassword(cfg) && !isLoopbackRequest(req)
 }
 
 function parseCookies(req) {
@@ -1380,8 +1449,9 @@ function parseCookies(req) {
 }
 
 function isAuthenticated(req) {
-  const pw = getAccessPassword()
-  if (!pw) return true // 未设密码，放行
+  const cfg = readPanelConfig()
+  if (cfg.ignoreRisk) return true
+  if (!hasAccessPassword(cfg)) return false
   const cookies = parseCookies(req)
   const token = cookies.tulu_openclaw_session
   if (!token) return false
@@ -4806,8 +4876,8 @@ const handlers = {
       const cliInstallSource = normalizeCliInstallSource(cli_source)
       if (cliInstallSource !== 'unknown') source = cliInstallSource
     }
-    const latest = source === 'unknown' ? null : await getLatestVersionFor(source)
-    const recommended = source === 'unknown' ? null : recommendedVersionFor(source)
+    const latest = await getLatestVersionFor()
+    const recommended = recommendedVersionFor('official')
     const all_installations = scanAllOpenclawInstallations(cli_path)
 
     return {
@@ -5492,7 +5562,8 @@ const handlers = {
     return execOpenclawSync(['gateway', 'install'], { windowsHide: true, cwd: homedir() }, 'Gateway 服务安装失败') || 'Gateway 服务已安装'
   },
 
-  async list_openclaw_versions({ source = 'chinese' } = {}) {
+  async list_openclaw_versions() {
+    const source = 'official'
     const pkg = npmPackageName(source)
     const encodedPkg = pkg.replace('/', '%2F').replace('@', '%40')
     const firstRegistry = pickRegistryForPackage(pkg)
@@ -5523,7 +5594,8 @@ const handlers = {
     throw new Error('查询版本失败: ' + (lastError?.message || lastError || 'unknown error'))
   },
 
-  async upgrade_openclaw({ source = 'chinese', version, method = 'auto' } = {}) {
+  async upgrade_openclaw({ version } = {}) {
+    const source = 'official'
     const currentSource = detectInstalledSource()
     const pkg = npmPackageName(source)
     const recommended = recommendedVersionFor(source)
@@ -5534,29 +5606,6 @@ const handlers = {
     const registry = pickRegistryForPackage(pkg)
     const logs = []
 
-    // ── standalone 安装（auto / standalone-r2 / standalone-github） ──
-    const tryStandalone = source !== 'official' && ['auto', 'standalone-r2', 'standalone-github'].includes(method)
-    if (tryStandalone) {
-      try {
-        const githubBase = method === 'standalone-github'
-          ? `https://github.com/qingchencloud/openclaw-standalone/releases/download/v${ver}`
-          : null
-        const saResult = await _tryStandaloneInstall(ver, logs, githubBase)
-        if (saResult) {
-          const label = method === 'standalone-github' ? 'GitHub' : 'CDN'
-          logs.push(`✅ standalone (${label}) 安装完成`)
-          return logs.join('\n')
-        }
-      } catch (e) {
-        if (method === 'auto') {
-          logs.push(`standalone 不可用（${e.message}），降级到 npm 安装...`)
-        } else {
-          throw new Error(`standalone 安装失败: ${e.message}`)
-        }
-      }
-    }
-
-    // ── npm install（兜底或用户明确选择） ──
 
     if (!version && recommended) {
       logs.push(`星枢OpenClaw ${PANEL_VERSION} 默认绑定 OpenClaw 稳定版: ${recommended}`)
@@ -6074,11 +6123,25 @@ const handlers = {
   },
 
   read_panel_config() {
-    return readPanelConfig()
+    const config = readPanelConfig()
+    delete config.accessPassword
+    delete config.accessPasswordHash
+    delete config.mustChangePassword
+    delete config.ignoreRisk
+    return config
   },
 
   write_panel_config({ config }) {
+    const currentConfig = readPanelConfig()
     const nextConfig = config && typeof config === 'object' ? { ...config } : {}
+    // 通用配置接口不得读取或改写认证凭据；密码状态只能通过专用 auth_* 接口修改。
+    delete nextConfig.accessPassword
+    delete nextConfig.accessPasswordHash
+    delete nextConfig.mustChangePassword
+    delete nextConfig.ignoreRisk
+    if (currentConfig.accessPassword) nextConfig.accessPassword = currentConfig.accessPassword
+    if (currentConfig.accessPasswordHash) nextConfig.accessPasswordHash = currentConfig.accessPasswordHash
+    if (currentConfig.ignoreRisk) nextConfig.ignoreRisk = true
     if (typeof nextConfig.openclawDir === 'string') {
       const trimmed = nextConfig.openclawDir.trim()
       if (trimmed) nextConfig.openclawDir = trimmed
@@ -6102,10 +6165,7 @@ const handlers = {
         delete nextConfig[key]
       }
     }
-    const panelDir = path.dirname(PANEL_CONFIG_PATH)
-    if (!fs.existsSync(panelDir)) fs.mkdirSync(panelDir, { recursive: true })
-    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(nextConfig, null, 2))
-    invalidateConfigCache()
+    writePanelConfigSecure(nextConfig)
     applyOpenclawPathConfig(nextConfig)
     return true
   },
@@ -6276,29 +6336,16 @@ const handlers = {
   save_custom_node_path({ nodeDir }) {
     const cfg = readPanelConfig()
     cfg.customNodePath = nodeDir
-    if (!fs.existsSync(OPENCLAW_DIR)) fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
-    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2))
-    invalidateConfigCache()
+    writePanelConfigSecure(cfg)
     return true
   },
 
-  // === 访问密码认证 ===
-  auth_check() {
-    const pw = getAccessPassword()
-    return { required: !!pw, authenticated: false /* 由中间件覆写 */ }
-  },
+  // === 访问密码认证（HTTP 中间件专用，禁止通用命令旁路） ===
+  auth_check() { throw new Error('由中间件处理') },
   auth_login() { throw new Error('由中间件处理') },
   auth_logout() { throw new Error('由中间件处理') },
-  auth_set_password({ password }) {
-    const cfg = readPanelConfig()
-    cfg.accessPassword = password || ''
-    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2))
-    // 清除所有 session（密码变更后强制重新登录）
-    _sessions.clear()
-    return true
-  },
 
-  check_panel_update() { return { latest: null, url: 'https://github.com/qingchencloud/星枢OpenClaw/releases' } },
+  check_panel_update() { return { latest: null, url: 'https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases' } },
 
   // 前端热更新
   async check_frontend_update() {
@@ -6307,17 +6354,19 @@ const handlers = {
     const currentVersion = pkg.version
 
     try {
-      const resp = await globalThis.fetch('https://claw.qt.cool/update/latest.json', {
+      const resp = await globalThis.fetch('https://api.github.com/repos/TuLu-openclaw/tulu-openclaw-v2/releases/latest', {
         signal: AbortSignal.timeout(8000),
-        headers: { 'User-Agent': '星枢OpenClaw-Web' },
+        headers: { 'User-Agent': 'XingShuOpenClaw-Web', Accept: 'application/vnd.github+json' },
       })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const manifest = await resp.json()
-      const latestVersion = manifest.version || ''
-      const minAppVersion = manifest.minAppVersion || '0.0.0'
-      const compatible = versionGe(currentVersion, minAppVersion)
-      const hasUpdate = !!latestVersion && latestVersion !== currentVersion && compatible && versionGt(latestVersion, currentVersion)
-      return { currentVersion, latestVersion, hasUpdate, compatible, updateReady: false, manifest }
+      const release = await resp.json()
+      const latestVersion = String(release.tag_name || '').replace(/^v/, '')
+      const hasUpdate = !!latestVersion && latestVersion !== currentVersion && versionGt(latestVersion, currentVersion)
+      const manifest = {
+        version: latestVersion || currentVersion,
+        url: release.html_url || 'https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest',
+      }
+      return { currentVersion, latestVersion, hasUpdate, compatible: true, updateReady: false, manifest }
     } catch {
       return { currentVersion, latestVersion: currentVersion, hasUpdate: false, compatible: true, updateReady: false, manifest: { version: currentVersion } }
     }
@@ -6344,19 +6393,23 @@ const handlers = {
 // 初始化：密码检测 + 启动日志 + 定时清理
 function _initApi() {
   const cfg = readPanelConfig()
-  if (!cfg.accessPassword && !cfg.ignoreRisk) {
-    cfg.accessPassword = '123456'
-    cfg.mustChangePassword = true
-    if (!fs.existsSync(OPENCLAW_DIR)) fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
-    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2))
-    invalidateConfigCache()
-    console.log('[api] ⚠️  首次启动，默认访问密码: 123456')
-    console.log('[api] ⚠️  首次登录后将强制要求修改密码')
+  const hasLegacyDefault = cfg.accessPassword === '123456'
+  if (hasLegacyDefault) {
+    delete cfg.accessPassword
+    delete cfg.mustChangePassword
+    writePanelConfigSecure(cfg)
+    console.log('[api] 检测到旧默认密码配置，已清理为首次访问初始化状态')
   }
-  const pw = getAccessPassword()
+  const initialized = hasAccessPassword(cfg)
+  _remoteSetupToken = !initialized && !cfg.ignoreRisk
+    ? (process.env.XINGSHU_SETUP_TOKEN || crypto.randomBytes(24).toString('base64url'))
+    : null
   console.log('[api] API 已启动，配置目录:', OPENCLAW_DIR)
   console.log('[api] 平台:', isMac ? 'macOS' : process.platform)
-  console.log('[api] 访问密码:', pw ? '已设置' : (cfg.ignoreRisk ? '无视风险模式（无密码）' : '未设置'))
+  console.log('[api] 访问密码:', initialized ? '已设置' : (cfg.ignoreRisk ? '已开启免密码访问' : '等待首次设置'))
+  if (_remoteSetupToken) {
+    console.log('[api] 远程首次初始化令牌（仅初始化使用，成功后失效）:', _remoteSetupToken)
+  }
 
   // 定时清理过期 session 和登录限速记录（每 10 分钟）
   setInterval(() => {
@@ -6386,14 +6439,17 @@ async function _apiMiddleware(req, res, next) {
   // --- 认证特殊处理 ---
   if (cmd === 'auth_check') {
     const cfg = readPanelConfig()
-    const pw = cfg.accessPassword || ''
-    const isDefault = pw === '123456'
-    const resp = {
-      required: !!pw,
-      authenticated: !pw || isAuthenticated(req),
-      mustChangePassword: isDefault,
+    const initialized = hasAccessPassword(cfg)
+    let resp
+    if (cfg.ignoreRisk) {
+      resp = { state: 'authenticated', required: false, authenticated: true, setupRequired: false, setupTokenRequired: false }
+    } else if (!initialized) {
+      resp = { state: 'setup_required', required: false, authenticated: false, setupRequired: true, setupTokenRequired: remoteSetupTokenRequired(req) }
+    } else if (isAuthenticated(req)) {
+      resp = { state: 'authenticated', required: true, authenticated: true, setupRequired: false }
+    } else {
+      resp = { state: 'login_required', required: true, authenticated: false, setupRequired: false }
     }
-    if (isDefault) resp.defaultPassword = '123456'
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(resp))
     return
@@ -6410,39 +6466,88 @@ async function _apiMiddleware(req, res, next) {
     }
     const args = await readBody(req)
     const cfg = readPanelConfig()
-    const pw = cfg.accessPassword || ''
-    if (!pw) {
+    if (!hasAccessPassword(cfg)) {
+      res.statusCode = 409
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ success: true }))
+      res.end(JSON.stringify({ error: '请先完成访问密码初始化', code: 'SETUP_REQUIRED' }))
       return
     }
-    if (args.password !== pw) {
+    if (!verifyAccessPassword(args.password, cfg)) {
       recordLoginFailure(clientIp)
       res.statusCode = 401
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: '密码错误' }))
       return
     }
+    migrateLegacyAccessPassword(cfg, args.password)
     clearLoginAttempts(clientIp)
     const token = crypto.randomUUID()
     _sessions.set(token, { expires: Date.now() + SESSION_TTL })
     res.setHeader('Set-Cookie', `tulu_openclaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
     res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({ success: true, mustChangePassword: !!cfg.mustChangePassword }))
+    res.end(JSON.stringify({ success: true }))
+    return
+  }
+
+  if (cmd === 'auth_setup') {
+    const cfg = readPanelConfig()
+    if (cfg.ignoreRisk || hasAccessPassword(cfg)) {
+      res.statusCode = 409
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: '访问密码已初始化' }))
+      return
+    }
+    if (remoteSetupTokenRequired(req)) {
+      const suppliedToken = String(req.headers['x-setup-token'] || '')
+      const expectedToken = String(_remoteSetupToken || '')
+      const supplied = Buffer.from(suppliedToken)
+      const expected = Buffer.from(expectedToken)
+      if (!expected.length || supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+        res.statusCode = 403
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: '远程首次初始化令牌无效', code: 'SETUP_TOKEN_REQUIRED' }))
+        return
+      }
+    }
+    const args = await readBody(req)
+    const weakErr = checkPasswordStrength(args.password)
+    if (weakErr) {
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: weakErr }))
+      return
+    }
+    cfg.accessPasswordHash = hashAccessPassword(args.password)
+    delete cfg.accessPassword
+    delete cfg.mustChangePassword
+    delete cfg.ignoreRisk
+    writePanelConfigSecure(cfg)
+    _remoteSetupToken = null
+    const token = crypto.randomUUID()
+    _sessions.clear()
+    _sessions.set(token, { expires: Date.now() + SESSION_TTL })
+    res.setHeader('Set-Cookie', `tulu_openclaw_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`)
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ success: true, initialized: true }))
     return
   }
 
   if (cmd === 'auth_change_password') {
     const args = await readBody(req)
     const cfg = readPanelConfig()
-    const pw = cfg.accessPassword || ''
-    if (pw && !isAuthenticated(req)) {
+    if (!hasAccessPassword(cfg)) {
+      res.statusCode = 409
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: '请先完成访问密码初始化', code: 'SETUP_REQUIRED' }))
+      return
+    }
+    if (!isAuthenticated(req)) {
       res.statusCode = 401
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: '未登录' }))
       return
     }
-    if (pw && args.oldPassword !== pw) {
+    if (!verifyAccessPassword(args.oldPassword, cfg)) {
       res.statusCode = 400
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: '当前密码错误' }))
@@ -6455,17 +6560,17 @@ async function _apiMiddleware(req, res, next) {
       res.end(JSON.stringify({ error: weakErr }))
       return
     }
-    if (args.newPassword === pw) {
+    if (verifyAccessPassword(args.newPassword, cfg)) {
       res.statusCode = 400
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: '新密码不能与旧密码相同' }))
       return
     }
-    cfg.accessPassword = args.newPassword
+    cfg.accessPasswordHash = hashAccessPassword(args.newPassword)
+    delete cfg.accessPassword
     delete cfg.mustChangePassword
     delete cfg.ignoreRisk
-    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2))
-    invalidateConfigCache()
+    writePanelConfigSecure(cfg)
     _sessions.clear()
     const token = crypto.randomUUID()
     _sessions.set(token, { expires: Date.now() + SESSION_TTL })
@@ -6477,20 +6582,22 @@ async function _apiMiddleware(req, res, next) {
 
   if (cmd === 'auth_status') {
     const cfg = readPanelConfig()
-    if (cfg.accessPassword && !isAuthenticated(req)) {
+    if (!cfg.ignoreRisk && !hasAccessPassword(cfg)) {
+      res.statusCode = 409
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: '请先完成访问密码初始化', code: 'SETUP_REQUIRED' }))
+      return
+    }
+    if (hasAccessPassword(cfg) && !isAuthenticated(req)) {
       res.statusCode = 401
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: '未登录' }))
       return
     }
-    const isDefault = cfg.accessPassword === '123456'
     const result = {
-      hasPassword: !!cfg.accessPassword,
-      mustChangePassword: isDefault,
+      initialized: hasAccessPassword(cfg),
+      hasPassword: hasAccessPassword(cfg),
       ignoreRisk: !!cfg.ignoreRisk,
-    }
-    if (isDefault) {
-      result.defaultPassword = '123456'
     }
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(result))
@@ -6508,14 +6615,14 @@ async function _apiMiddleware(req, res, next) {
     const cfg = readPanelConfig()
     if (args.enable) {
       delete cfg.accessPassword
+      delete cfg.accessPasswordHash
       delete cfg.mustChangePassword
       cfg.ignoreRisk = true
       _sessions.clear()
     } else {
       delete cfg.ignoreRisk
     }
-    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2))
-    invalidateConfigCache()
+    writePanelConfigSecure(cfg)
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ success: true }))
     return
@@ -6531,11 +6638,20 @@ async function _apiMiddleware(req, res, next) {
   }
 
   // --- 认证中间件：非豁免接口必须校验 ---
-  if (!isAuthenticated(req)) {
-    res.statusCode = 401
-    res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({ error: '未登录', code: 'AUTH_REQUIRED' }))
-    return
+  if (!AUTH_EXEMPT.has(cmd)) {
+    const cfg = readPanelConfig()
+    if (!cfg.ignoreRisk && !hasAccessPassword(cfg)) {
+      res.statusCode = 409
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: '请先完成访问密码初始化', code: 'SETUP_REQUIRED' }))
+      return
+    }
+    if (!isAuthenticated(req)) {
+      res.statusCode = 401
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: '未登录', code: 'AUTH_REQUIRED' }))
+      return
+    }
   }
 
   // --- 实例代理：非 ALWAYS_LOCAL 命令，活跃实例非本机时代理转发 ---

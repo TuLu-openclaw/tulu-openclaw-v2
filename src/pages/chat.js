@@ -14,6 +14,14 @@ import { t } from '../lib/i18n.js'
 import { enhanceModelCallError } from '../lib/model-error-diagnosis.js'
 import { hasVisibleChatContent, isInternalChatPayload, isInternalContentBlock, shouldFinalizeChatRun } from '../lib/chat-visibility.js'
 import { diagnoseChatError } from '../lib/chat-error-diagnosis.js'
+import { ChatRunCoordinator } from '../lib/chat-run-coordinator.js'
+import { ChatHostedAgentController } from '../lib/chat-hosted-agent-controller.js'
+import { ChatWorkspaceController } from '../lib/chat-workspace-controller.js'
+import { VoiceConversationController } from '../lib/voice-conversation-controller.js'
+import {
+  renderChatWorkspacePanel,
+} from '../lib/chat-workspace-panel.js'
+import { ChatEcomWorkbench, renderChatEcomWorkbench } from '../lib/chat-ecom-workbench.js'
 
 const RENDER_THROTTLE = 16
 const STREAM_RENDER_MAX_PENDING_MS = 64
@@ -25,16 +33,12 @@ const STORAGE_MODEL_KEY = '星枢OpenClaw-chat-selected-model'
 const STORAGE_SIDEBAR_KEY = '星枢OpenClaw-chat-sidebar-open'
 const STORAGE_SESSION_NAMES_KEY = '星枢OpenClaw-chat-session-names'
 const STORAGE_WORKSPACE_PANEL_KEY = '星枢OpenClaw-chat-workspace-open'
+const VOICE_SETTINGS_KEY = '星枢OpenClaw-chat-voice-v1'
 const GROUP_SESSIONS_KEY = '星枢OpenClaw-group-sessions-v1'
 const ACTIVE_GROUP_KEY = '星枢OpenClaw-active-group-v1'
 const GROUP_SESSION_CHANNEL_PREFIX = 'group-'
 const TASK_BOARD_KEY = '星枢OpenClaw-task-board-v1'
 const TASK_CONTEXT_KEY = '星枢OpenClaw-task-context-v1'
-const ECOM_INTRO_SEEN_KEY = '星枢OpenClaw-ecom-intro-seen-v1'
-const ECOM_WORKBENCH_SETTINGS_KEY = '星枢OpenClaw-ecom-workbench-settings-v1'
-const ECOM_WORKBENCH_COLLAPSED_KEY = '星枢OpenClaw-ecom-workbench-collapsed-v1'
-const ECOM_TOOLS_SECTION_START = '<!-- ECOM_WORKBENCH_SETTINGS:START -->'
-const ECOM_TOOLS_SECTION_END = '<!-- ECOM_WORKBENCH_SETTINGS:END -->'
 const ECOM_VAULT_FILENAME = 'ECOM_VAULT.md'
 const ECOM_SKILL_SUGGESTIONS = [
   { label: '1688货源/采集', keywords: ['1688', '阿里巴巴', '采集', '货源', '采购'], queries: ['1688', '1688 sourcing', '1688 product search', '电商 1688'], targets: ['openclaw', 'hermes'] },
@@ -87,6 +91,9 @@ const COMMANDS = [
 
 let _sessionKey = null, _lastDirectSessionKey = '', _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
+let _voiceController = null, _voiceBtn = null, _voicePanelEl = null, _voiceStatusEl = null
+let _voiceModeEl = null, _voiceWakeWordEl = null, _voiceAutoSendEl = null
+let _voiceHoldTimer = null
 let _replyStatusRowEl = null
 let _replyStatusTextEl = null
 let _replyStatusPhaseEl = null
@@ -130,7 +137,8 @@ let _mentionPanelEl = null
 let _modelSelectEl = null
 let _currentAiBubble = null, _currentAiText = '', _currentAiImages = [], _currentAiVideos = [], _currentAiAudios = [], _currentAiFiles = [], _currentAiTools = [], _currentRunId = null
 let _lastStreamDeltaFingerprint = ''
-let _isStreaming = false, _isSending = false, _messageQueue = [], _streamStartTime = 0
+let _isStreaming = false, _isSending = false, _streamStartTime = 0
+const _runCoordinator = new ChatRunCoordinator()
 let _lastRenderTime = 0, _renderPending = false, _renderTimer = null, _lastHistoryHash = ''
 // ── 打字机匀速消费缓冲区 ──
 // 网络 delta 一阵一阵到达（缓冲/分块），若来多少渲染多少会出现"卡顿→爆发→卡顿"。
@@ -184,51 +192,11 @@ const MODEL_CONFIG_CHANGED_EVENT = 'openclaw-config-changed'
 let _modelConfigRefreshTimer = null
 let _modelConfigChangeHandler = null
 
-// ── 托管 Agent ──
-const HOSTED_STATUS = { IDLE: 'idle', RUNNING: 'running', WAITING: 'waiting_reply', PAUSED: 'paused', ERROR: 'error' }
-const HOSTED_SESSIONS_KEY = '星枢OpenClaw-hosted-agent-sessions'
-const HOSTED_SYSTEM_PROMPT = `你是一个托管调度 Agent。你的职责是：根据用户设定的目标，持续引导 OpenClaw AI Agent 完成任务。
-规则：
-1. 你每一轮只输出一条简洁的指令（1-3 句话），发给 OpenClaw 执行
-2. 根据 OpenClaw 的回复评估进展，决定下一步指令
-3. 如果任务已完成或无法继续，回复包含"完成"或"停止"来结束循环
-4. 不要重复相同的指令，不要输出解释性文字，只输出下一步要执行的指令`
-const HOSTED_DEFAULTS = { enabled: false, prompt: '', autoRunAfterTarget: true, stopPolicy: 'self', maxSteps: 50, stepDelayMs: 1200, retryLimit: 2, autoStopMinutes: 0 }
-const HOSTED_RUNTIME_DEFAULT = { status: HOSTED_STATUS.IDLE, stepCount: 0, lastRunAt: 0, lastRunId: '', lastError: '', pending: false, errorCount: 0 }
-const HOSTED_CONTEXT_MAX = 30
-const HOSTED_COMPRESS_THRESHOLD = 20
-let _hostedBtn = null, _hostedPanelEl = null, _hostedBadgeEl = null
-let _hostedPromptEl = null, _hostedMaxStepsEl = null, _hostedStepDelayEl = null, _hostedRetryLimitEl = null
-let _hostedAutoStopEl = null
-let _hostedSaveBtn = null, _hostedStopBtn = null, _hostedCloseBtn = null
-let _hostedDefaults = null
-let _hostedSessionConfig = null
-let _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT }
-let _hostedBusy = false
-let _hostedAbort = null
-let _hostedLastTargetTs = 0
-let _hostedAutoStopTimer = null
-let _hostedRetryTimer = null
-let _hostedStartTime = 0
-let _workspaceBtn = null, _workspacePanelEl = null, _workspaceAgentBadgeEl = null, _workspaceAgentTitleEl = null
-let _workspacePathEl = null, _workspaceCoreListEl = null, _workspaceTreeEl = null, _workspaceCurrentFileEl = null
-let _workspaceMetaEl = null, _workspaceEditorEl = null, _workspacePreviewEl = null, _workspaceEmptyEl = null
-let _workspaceSaveBtn = null, _workspaceReloadBtn = null, _workspacePreviewBtn = null
-let _workspaceInfo = null, _workspaceCoreFiles = [], _workspaceTreeCache = new Map(), _workspaceExpandedDirs = new Set()
-let _workspaceCurrentAgentId = 'main', _workspaceCurrentFile = null, _workspacePreviewMode = false, _workspaceDirty = false
-let _workspaceLoadedContent = '', _workspaceLoading = false
-let _workspaceLoadSeq = 0, _workspaceOpenSeq = 0
-let _ecomWorkbenchEl = null
-let _ecomWorkbenchSettings = loadEcomWorkbenchSettings()
-let _ecomWorkbenchLoadedAgentId = ''
-let _ecomWorkbenchLoading = false
-let _ecomWorkbenchCollapsed = false
+let _hostedController = null
+let _workspaceController = null
+let _ecomWorkbench = null
 let _ecomSkillCatalogCache = null
 let _ecomSkillCatalogTs = 0
-let _ecomOrchestrationState = { groupId: '', members: [], lastPrompt: '', lastDispatchAt: 0 }
-let _ecomRunState = { active: false, phase: 'idle', detail: '', tasks: [], startedAt: 0, updatedAt: 0 }
-let _ecomProgressMessageEl = null
-let _ecomProgressListEl = null
 
 export async function render() {
   const page = document.createElement('div')
@@ -325,112 +293,8 @@ export async function render() {
         </div>
         <div class="chat-reply-status-meta" id="chat-reply-status-meta"></div>
       </div>
-      <div class="chat-workspace-panel" id="chat-workspace-panel" style="display:none">
-        <div class="chat-workspace-header">
-          <div class="chat-workspace-header-copy">
-            <div class="chat-workspace-title-row">
-              <strong>${t('chat.workspaceFiles')}</strong>
-              <span class="chat-workspace-agent-badge" id="chat-workspace-agent-badge">main</span>
-            </div>
-            <div class="chat-workspace-agent-title" id="chat-workspace-agent-title"></div>
-            <div class="chat-workspace-path" id="chat-workspace-path"></div>
-          </div>
-          <div class="chat-workspace-header-actions">
-            <button class="chat-workspace-icon-btn" id="chat-workspace-refresh" title="${t('common.refresh')}">${svgIcon('refresh-cw', 14)}</button>
-            <button class="chat-workspace-icon-btn" id="chat-workspace-close" title="${t('common.close')}">${svgIcon('x', 14)}</button>
-          </div>
-        </div>
-        <div class="chat-workspace-body">
-          <div class="chat-workspace-sidebar-pane">
-            <div class="chat-workspace-section">
-              <div class="chat-workspace-section-title">${t('chat.coreFiles')}</div>
-              <div class="chat-workspace-core-list" id="chat-workspace-core-list"></div>
-            </div>
-            <div class="chat-workspace-section">
-              <div class="chat-workspace-section-title">${t('chat.workspaceExplorer')}</div>
-              <div class="chat-workspace-tree" id="chat-workspace-tree"></div>
-            </div>
-          </div>
-          <div class="chat-workspace-editor-pane">
-            <div class="chat-workspace-editor-toolbar">
-              <div class="chat-workspace-current-file" id="chat-workspace-current-file">${t('chat.selectWorkspaceFile')}</div>
-              <div class="chat-workspace-editor-actions">
-                <button class="btn btn-sm btn-ghost" id="chat-workspace-reload" disabled>${svgIcon('refresh-cw', 14)} ${t('chat.reloadWorkspaceFile')}</button>
-                <button class="btn btn-sm btn-ghost" id="chat-workspace-preview-toggle" disabled>${svgIcon('eye', 14)} <span id="chat-workspace-preview-label">${t('chat.previewWorkspaceFile')}</span></button>
-                <button class="btn btn-sm btn-primary" id="chat-workspace-save" disabled>${t('common.save')}</button>
-              </div>
-            </div>
-            <div class="chat-workspace-editor-meta" id="chat-workspace-editor-meta"></div>
-            <textarea class="chat-workspace-editor" id="chat-workspace-editor" spellcheck="false" disabled placeholder="${t('chat.selectWorkspaceFile')}"></textarea>
-            <div class="chat-workspace-preview" id="chat-workspace-preview" style="display:none"></div>
-            <div class="chat-workspace-empty" id="chat-workspace-empty">${t('chat.workspaceEmptyState')}</div>
-          </div>
-        </div>
-      </div>
-      <div class="chat-ecom-workbench" id="chat-ecom-workbench" style="display:none">
-        <div class="chat-ecom-header">
-          <div>
-            <div class="chat-ecom-title">全自动店铺搬运工作清单</div>
-            <div class="chat-ecom-subtitle">SPU 主档优先 · 每轮选品强制刷新 · 支持多线路并行与子Agent调度</div>
-          </div>
-          <div class="chat-ecom-header-right">
-            <div class="chat-ecom-badges">
-              <span class="chat-ecom-badge">SPU First</span>
-              <span class="chat-ecom-badge">实时刷新</span>
-              <span class="chat-ecom-badge">并行执行</span>
-            </div>
-            <button class="chat-ecom-collapse-btn" id="btn-ecom-toggle" title="折叠/展开工作台">收起</button>
-          </div>
-        </div>
-        <div class="chat-ecom-body" id="chat-ecom-body">
-          <div class="chat-ecom-toolbar">
-            <button class="btn btn-sm btn-ghost" id="btn-ecom-settings">配置凭据/策略</button>
-            <button class="btn btn-sm btn-ghost" id="btn-ecom-vault">密码保险箱</button>
-            <button class="btn btn-sm btn-ghost" id="btn-ecom-skills">自动补技能</button>
-            <button class="btn btn-sm btn-ghost" id="btn-ecom-orch">协同面板</button>
-            <button class="btn btn-sm btn-ghost" id="btn-ecom-intro">查看首次说明</button>
-            <button class="btn btn-sm btn-primary" id="btn-ecom-start-chat">开始对话</button>
-          </div>
-          <div class="chat-ecom-progress" id="chat-ecom-progress">
-            <div class="chat-ecom-progress-head">
-              <div class="chat-ecom-progress-title">实时任务进度</div>
-              <div class="chat-ecom-progress-phase" id="chat-ecom-progress-phase">待机</div>
-            </div>
-            <div class="chat-ecom-progress-message" id="chat-ecom-progress-message">还没有正在执行的电商任务。</div>
-            <div class="chat-ecom-progress-list" id="chat-ecom-progress-list"></div>
-          </div>
-          <div class="chat-ecom-grid">
-            <section class="chat-ecom-card">
-              <div class="chat-ecom-card-title">进货清单</div>
-              <ul class="chat-ecom-list">
-                <li>SPU 主档 / 平台来源 / 供应商店铺 / 起批量 / 采购价 / 运费 / 库存状态</li>
-                <li>SKU 规格明细 / 图片素材状态 / 最近刷新时间 / 异常备注</li>
-                <li>每轮选品结束后强制刷新数据，防止继续在旧数据中决策</li>
-              </ul>
-            </section>
-            <section class="chat-ecom-card">
-              <div class="chat-ecom-card-title">售卖清单</div>
-              <ul class="chat-ecom-list">
-                <li>SPU 上架目标 / 目标平台 / 目标店铺 / 售价 / 利润率 / 标题优化状态</li>
-                <li>SKU 挂载关系 / 主图与详情页状态 / 库存同步状态 / 风险提示</li>
-                <li>关键动作需经过质量闸门，异常时第一时间询问用户</li>
-              </ul>
-            </section>
-            <section class="chat-ecom-card">
-              <div class="chat-ecom-card-title">执行策略</div>
-              <ul class="chat-ecom-list">
-                <li>默认允许多线路同步并行，优先保证质量再追求速度</li>
-                <li>遇到复杂任务可主动调度子Agent拆分处理后统一回收结果</li>
-                <li>支持主动补技能、凭据管理、平台地址管理与人工接管</li>
-              </ul>
-            </section>
-            <section class="chat-ecom-card chat-ecom-card-full">
-              <div class="chat-ecom-card-title">当前策略</div>
-              <div class="chat-ecom-settings-summary" id="chat-ecom-settings-summary"></div>
-            </section>
-          </div>
-        </div>
-      </div>
+      ${renderChatWorkspacePanel(t)}
+      ${renderChatEcomWorkbench()}
       <div class="chat-messages" id="chat-messages">
         <div class="typing-indicator" id="typing-indicator" style="display:none">
           <span></span><span></span><span></span>
@@ -448,6 +312,9 @@ export async function render() {
         <button class="chat-attach-btn" id="chat-attach-btn" title="${t('chat.uploadImage')}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
         </button>
+        <button class="chat-voice-btn" id="chat-voice-btn" type="button" title="语音对话：点击切换，按住说话">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+        </button>
         <div class="chat-input-wrapper">
           <textarea id="chat-input" rows="1" placeholder="${t('chat.inputPlaceholder')}"></textarea>
           <div class="chat-mention-panel" id="chat-mention-panel" style="display:none"></div>
@@ -459,6 +326,23 @@ export async function render() {
           <span class="chat-hosted-label">⊕</span>
           <span class="chat-hosted-badge idle" id="chat-hosted-badge">${t('chat.hostedBadge')}</span>
         </button>
+      </div>
+      <div class="chat-voice-panel" id="chat-voice-panel" style="display:none">
+        <div class="chat-voice-panel-row">
+          <label for="chat-voice-mode">语音模式</label>
+          <select id="chat-voice-mode">
+            <option value="short">短句对话</option>
+            <option value="continuous">连续对话</option>
+            <option value="wake">唤醒词</option>
+          </select>
+          <label class="chat-voice-toggle"><input id="chat-voice-auto-send" type="checkbox" checked> 自动发送</label>
+        </div>
+        <div class="chat-voice-panel-row chat-voice-wake-row">
+          <label for="chat-voice-wake-word">唤醒词</label>
+          <input id="chat-voice-wake-word" type="text" maxlength="24" value="小鱼儿" autocomplete="off">
+          <button class="btn btn-sm btn-secondary" id="chat-voice-toggle" type="button">开始语音</button>
+        </div>
+        <div class="chat-voice-status" id="chat-voice-status" role="status" aria-live="polite">点击麦克风选择模式，或按住麦克风直接说话</div>
       </div>
       <div class="hosted-agent-panel" id="hosted-agent-panel" style="display:none">
         <div class="hosted-agent-header">
@@ -519,6 +403,12 @@ export async function render() {
   _messagesEl = page.querySelector('#chat-messages')
   _textarea = page.querySelector('#chat-input')
   _sendBtn = page.querySelector('#chat-send-btn')
+  _voiceBtn = page.querySelector('#chat-voice-btn')
+  _voicePanelEl = page.querySelector('#chat-voice-panel')
+  _voiceStatusEl = page.querySelector('#chat-voice-status')
+  _voiceModeEl = page.querySelector('#chat-voice-mode')
+  _voiceWakeWordEl = page.querySelector('#chat-voice-wake-word')
+  _voiceAutoSendEl = page.querySelector('#chat-voice-auto-send')
   _statusDot = page.querySelector('#chat-status-dot')
   _typingEl = page.querySelector('#typing-indicator')
   _scrollBtn = page.querySelector('#chat-scroll-btn')
@@ -537,51 +427,60 @@ export async function render() {
   _fileInputEl = page.querySelector('#chat-file-input')
   _mentionPanelEl = page.querySelector('#chat-mention-panel')
   _modelSelectEl = page.querySelector('#chat-model-select')
-  _hostedBtn = page.querySelector('#chat-hosted-btn')
-  _hostedBadgeEl = page.querySelector('#chat-hosted-badge')
-  _hostedPanelEl = page.querySelector('#hosted-agent-panel')
-  _hostedPromptEl = page.querySelector('#hosted-agent-prompt')
-  _hostedMaxStepsEl = page.querySelector('#hosted-agent-max-steps')
-  _hostedStepDelayEl = page.querySelector('#hosted-agent-step-delay')
-  _hostedRetryLimitEl = page.querySelector('#hosted-agent-retry')
-  _hostedAutoStopEl = page.querySelector('#hosted-agent-auto-stop')
-  _hostedSaveBtn = page.querySelector('#hosted-agent-save')
-  _hostedCloseBtn = page.querySelector('#hosted-agent-close')
-  _workspaceBtn = page.querySelector('#btn-chat-workspace')
-  _workspacePanelEl = page.querySelector('#chat-workspace-panel')
-  _workspaceAgentBadgeEl = page.querySelector('#chat-workspace-agent-badge')
-  _workspaceAgentTitleEl = page.querySelector('#chat-workspace-agent-title')
-  _workspacePathEl = page.querySelector('#chat-workspace-path')
-  _workspaceCoreListEl = page.querySelector('#chat-workspace-core-list')
-  _workspaceTreeEl = page.querySelector('#chat-workspace-tree')
-  _workspaceCurrentFileEl = page.querySelector('#chat-workspace-current-file')
-  _workspaceMetaEl = page.querySelector('#chat-workspace-editor-meta')
-  _workspaceEditorEl = page.querySelector('#chat-workspace-editor')
-  _workspacePreviewEl = page.querySelector('#chat-workspace-preview')
-  _workspaceEmptyEl = page.querySelector('#chat-workspace-empty')
-  _workspaceSaveBtn = page.querySelector('#chat-workspace-save')
-  _workspaceReloadBtn = page.querySelector('#chat-workspace-reload')
-  _workspacePreviewBtn = page.querySelector('#chat-workspace-preview-toggle')
-  _ecomWorkbenchEl = page.querySelector('#chat-ecom-workbench')
-  _ecomProgressMessageEl = page.querySelector('#chat-ecom-progress-message')
-  _ecomProgressListEl = page.querySelector('#chat-ecom-progress-list')
+  _hostedController = new ChatHostedAgentController({
+    page,
+    storage: localStorage,
+    readPanelConfig: () => api.readPanelConfig(),
+    gatewayReady: () => wsClient.gatewayReady,
+    sendGateway: (sessionKey, instruction) => wsClient.chatSend(sessionKey, instruction),
+    t,
+    toast,
+    output: appendHostedOutput,
+  })
+  _workspaceController = new ChatWorkspaceController({
+    page,
+    api,
+    t,
+    toast,
+    showConfirm,
+    renderMarkdown,
+    escapeAttr,
+    storage: localStorage,
+    storageKey: STORAGE_WORKSPACE_PANEL_KEY,
+    getContext: getWorkspaceContext,
+  })
   page.querySelector('#chat-sidebar')?.classList.toggle('open', getSidebarOpen())
-  page.querySelector('#btn-ecom-settings')?.addEventListener('click', showEcomWorkbenchSettings)
-  page.querySelector('#btn-ecom-vault')?.addEventListener('click', () => showEcomVaultEditor())
-  page.querySelector('#btn-ecom-skills')?.addEventListener('click', () => showEcomSkillAssistant())
-  page.querySelector('#btn-ecom-orch')?.addEventListener('click', () => showEcomOrchestrationPanel())
-  page.querySelector('#btn-ecom-intro')?.addEventListener('click', () => appendEcomIntroMessage({ force: true }))
-  page.querySelector('#btn-ecom-start-chat')?.addEventListener('click', startEcomChatTemplate)
-  page.querySelector('#btn-ecom-toggle')?.addEventListener('click', toggleEcomWorkbenchCollapse)
-  applyEcomWorkbenchCollapseState(getEcomWorkbenchCollapsed())
-  renderEcomWorkbenchSummary()
-  renderEcomProgressState()
+  _ecomWorkbench = new ChatEcomWorkbench({
+    page,
+    api,
+    storage: localStorage,
+    escapeHtml,
+    getContext: () => ({
+      agentId: parseSessionAgent(_sessionKey) || 'main',
+      sessionKey: _sessionKey || '',
+      hasMessages: () => Boolean(_messagesEl?.querySelector('.msg')),
+    }),
+    callbacks: {
+      settings: showEcomWorkbenchSettings,
+      vault: showEcomVaultEditor,
+      skills: showEcomSkillAssistant,
+      orchestration: showEcomOrchestrationPanel,
+      systemMessage: appendSystemMessage,
+      startTemplate: template => {
+        if (!_textarea) return
+        if (!_textarea.value.trim()) _textarea.value = template
+        _textarea.focus()
+        const pos = _textarea.value.length
+        _textarea.setSelectionRange(pos, pos)
+        _textarea.dispatchEvent(new Event('input', { bubbles: true }))
+      },
+    },
+  })
 
   bindEvents(page)
+  setupVoiceConversation(page)
   bindConnectOverlay(page)
-  const workspaceOpen = getWorkspacePanelOpen()
-  applyWorkspacePanelVisibility(workspaceOpen)
-  if (!workspaceOpen) syncWorkspaceContext(false)
+  _workspaceController.initialize()
 
   // 首次使用引导提示
   showPageGuide(_messagesEl)
@@ -591,7 +490,8 @@ export async function render() {
   loadTaskBoard()
   loadTaskContexts()
 
-  loadHostedDefaults().then(() => { loadHostedSessionConfig(); renderHostedPanel(); updateHostedBadge() })
+  _hostedController.activateSession(_sessionKey || localStorage.getItem(STORAGE_SESSION_KEY) || '', parseSessionAgent(_sessionKey) || 'main')
+  void _hostedController.initialize()
   bindModelConfigSync()
   loadModelOptions()
   // 非阻塞：先返回 DOM，后台连接 Gateway
@@ -685,13 +585,14 @@ function bindEvents(page) {
     else sendMessage()
   })
 
-  if (_hostedBtn) _hostedBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleHostedPanel() })
-  if (_hostedCloseBtn) _hostedCloseBtn.addEventListener('click', () => hideHostedPanel())
-  if (_hostedSaveBtn) _hostedSaveBtn.addEventListener('click', () => toggleHostedRun())
+  page.querySelector('#chat-hosted-btn')?.addEventListener('click', (e) => { e.stopPropagation(); _hostedController?.togglePanel() })
+  page.querySelector('#hosted-agent-close')?.addEventListener('click', () => _hostedController?.hidePanel())
+  page.querySelector('#hosted-agent-save')?.addEventListener('click', () => { void _hostedController?.toggleRun() })
   // 滑块实时值显示
-  if (_hostedMaxStepsEl) _hostedMaxStepsEl.addEventListener('input', () => {
+  const hostedMaxSteps = page.querySelector('#hosted-agent-max-steps')
+  if (hostedMaxSteps) hostedMaxSteps.addEventListener('input', () => {
     const valEl = page.querySelector('#ha-steps-val')
-    if (valEl) valEl.textContent = parseInt(_hostedMaxStepsEl.value) >= 205 ? '∞' : _hostedMaxStepsEl.value
+    if (valEl) valEl.textContent = parseInt(hostedMaxSteps.value) >= 205 ? '∞' : hostedMaxSteps.value
   })
   // 定时器开关
   const timerToggle = page.querySelector('#hosted-agent-timer-on')
@@ -721,84 +622,6 @@ function bindEvents(page) {
   page.querySelector('#btn-cmd').addEventListener('click', () => toggleCmdPanel())
   page.querySelector('#btn-reset-session').addEventListener('click', () => resetCurrentSession())
   page.querySelector('#btn-refresh-models')?.addEventListener('click', () => loadModelOptions(true))
-  _workspaceBtn?.addEventListener('click', async (e) => {
-    e.stopPropagation()
-    if (getWorkspacePanelOpen() && _workspaceDirty) {
-      const yes = await confirmWorkspaceDiscardIfNeeded()
-      if (!yes) return
-      discardWorkspaceChanges()
-    }
-    toggleWorkspacePanel()
-  })
-  page.querySelector('#chat-workspace-close')?.addEventListener('click', async () => {
-    if (_workspaceDirty) {
-      const yes = await confirmWorkspaceDiscardIfNeeded()
-      if (!yes) return
-      discardWorkspaceChanges()
-    }
-    toggleWorkspacePanel(false)
-  })
-  page.querySelector('#chat-workspace-refresh')?.addEventListener('click', async () => {
-    if (_workspaceDirty) {
-      const yes = await confirmWorkspaceDiscardIfNeeded()
-      if (!yes) return
-      discardWorkspaceChanges()
-    }
-    loadWorkspacePanelData(true)
-  })
-  _workspaceCoreListEl?.addEventListener('click', async (e) => {
-    const item = e.target.closest('[data-core-path]')
-    if (!item) return
-    const relativePath = item.dataset.corePath || ''
-    if (!relativePath) return
-    if (item.dataset.coreExists === '1') await openWorkspaceFile(relativePath, { kind: 'core' })
-    else {
-      const yes = await confirmWorkspaceDiscardIfNeeded()
-      if (!yes) return
-      discardWorkspaceChanges()
-      prepareWorkspaceDraftFile(relativePath, { kind: 'core' })
-    }
-  })
-  _workspaceTreeEl?.addEventListener('click', async (e) => {
-    const toggle = e.target.closest('[data-tree-toggle]')
-    if (toggle) {
-      try {
-        await toggleWorkspaceDirectory(toggle.dataset.treeToggle || '')
-      } catch (err) {
-        toast(`${t('chat.workspaceLoadFailed')}: ${err?.message || err}`, 'error')
-      }
-      return
-    }
-    const link = e.target.closest('[data-tree-path]')
-    if (!link) return
-    const relativePath = link.dataset.treePath || ''
-    if (!relativePath) return
-    if (link.dataset.treeType === 'dir') {
-      try {
-        await toggleWorkspaceDirectory(relativePath)
-      } catch (err) {
-        toast(`${t('chat.workspaceLoadFailed')}: ${err?.message || err}`, 'error')
-      }
-      return
-    }
-    await openWorkspaceFile(relativePath, { kind: 'tree' })
-  })
-  _workspaceEditorEl?.addEventListener('input', () => {
-    if (!_workspaceCurrentFile || !_workspaceEditorEl) return
-    _workspaceDirty = _workspaceEditorEl.value !== _workspaceLoadedContent
-    if (_workspacePreviewMode) renderWorkspacePreview()
-    updateWorkspaceEditorState()
-  })
-  _workspaceEditorEl?.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-      e.preventDefault()
-      saveWorkspaceCurrentFile()
-    }
-  })
-  _workspaceReloadBtn?.addEventListener('click', () => reloadWorkspaceCurrentFile())
-  _workspacePreviewBtn?.addEventListener('click', () => toggleWorkspacePreview())
-  _workspaceSaveBtn?.addEventListener('click', () => saveWorkspaceCurrentFile())
-
   // 文件上传
   page.querySelector('#chat-attach-btn').addEventListener('click', () => _fileInputEl.click())
   _fileInputEl.addEventListener('change', handleFileSelect)
@@ -1128,385 +951,20 @@ function setSidebarOpen(open) {
   localStorage.setItem(STORAGE_SIDEBAR_KEY, open ? '1' : '0')
 }
 
-function getWorkspacePanelOpen() {
-  return localStorage.getItem(STORAGE_WORKSPACE_PANEL_KEY) === '1'
-}
-
-function setWorkspacePanelOpen(open) {
-  localStorage.setItem(STORAGE_WORKSPACE_PANEL_KEY, open ? '1' : '0')
-}
-
-function formatWorkspaceFileSize(bytes) {
-  const size = Number(bytes) || 0
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatWorkspaceFileTime(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString()
-}
-
-function isMarkdownWorkspaceFile(relativePath) {
-  return /\.(md|markdown|mdx)$/i.test(relativePath || '')
-}
-
-async function confirmWorkspaceDiscardIfNeeded() {
-  if (!_workspaceDirty) return true
-  return showConfirm(t('chat.confirmDiscardWorkspaceChanges'))
-}
-
-function discardWorkspaceChanges() {
-  if (!_workspaceCurrentFile) {
-    _workspaceDirty = false
-    updateWorkspaceEditorState()
-    return
-  }
-  if (_workspaceEditorEl) _workspaceEditorEl.value = _workspaceLoadedContent
-  _workspaceDirty = false
-  if (_workspacePreviewMode) renderWorkspacePreview()
-  updateWorkspaceEditorState()
-}
-
-function getCurrentWorkspaceAgentId() {
+function getWorkspaceContext() {
   const group = getActiveGroup()
-  if (group) return parseSessionAgent(getGroupFallbackSessionKey(group)) || 'main'
-  return parseSessionAgent(_sessionKey) || wsClient.snapshot?.sessionDefaults?.defaultAgentId || 'main'
-}
-
-function getWorkspaceAgentTitle() {
-  const group = getActiveGroup()
-  if (group) return t('chat.groupChatTitle', { name: group.name })
-  if (_sessionKey) return getDisplayLabel(_sessionKey)
-  if (_workspaceCurrentAgentId === 'main') return t('chat.mainSession')
-  return _workspaceCurrentAgentId || t('chat.workspace')
+  const agentId = group
+    ? (parseSessionAgent(getGroupFallbackSessionKey(group)) || 'main')
+    : (parseSessionAgent(_sessionKey) || wsClient.snapshot?.sessionDefaults?.defaultAgentId || 'main')
+  let title = agentId
+  if (group) title = t('chat.groupChatTitle', { name: group.name })
+  else if (_sessionKey) title = getDisplayLabel(_sessionKey)
+  else if (agentId === 'main') title = t('chat.mainSession')
+  return { agentId, title }
 }
 
 async function syncWorkspaceContext(reload = true) {
-  const nextAgentId = getCurrentWorkspaceAgentId()
-  const prevAgentId = _workspaceCurrentAgentId
-  _workspaceCurrentAgentId = nextAgentId || 'main'
-
-  const triggerAgentEl = _page?.querySelector('#chat-workspace-trigger-agent')
-  if (triggerAgentEl) triggerAgentEl.textContent = _workspaceCurrentAgentId
-  if (_workspaceAgentBadgeEl) _workspaceAgentBadgeEl.textContent = _workspaceCurrentAgentId
-  if (_workspaceAgentTitleEl) {
-    _workspaceAgentTitleEl.textContent = getWorkspaceAgentTitle()
-  }
-
-  if (!_workspacePanelEl || !getWorkspacePanelOpen()) return
-  if (!reload && prevAgentId === _workspaceCurrentAgentId && _workspaceInfo) return
-
-  if (prevAgentId !== _workspaceCurrentAgentId) {
-    _workspaceDirty = false
-    _workspaceCurrentFile = null
-  }
-
-  await loadWorkspacePanelData(prevAgentId === _workspaceCurrentAgentId)
-}
-
-function applyWorkspacePanelVisibility(open) {
-  if (!_workspacePanelEl) return
-  _workspacePanelEl.style.display = open ? '' : 'none'
-  _workspaceBtn?.classList.toggle('is-active', open)
-  if (open) syncWorkspaceContext(true)
-}
-
-function toggleWorkspacePanel(force) {
-  const nextOpen = typeof force === 'boolean' ? force : !getWorkspacePanelOpen()
-  setWorkspacePanelOpen(nextOpen)
-  applyWorkspacePanelVisibility(nextOpen)
-}
-
-function renderWorkspacePanelMeta() {
-  if (_workspaceAgentBadgeEl) _workspaceAgentBadgeEl.textContent = _workspaceCurrentAgentId
-  if (_workspaceAgentTitleEl) {
-    _workspaceAgentTitleEl.textContent = getWorkspaceAgentTitle()
-  }
-  if (_workspacePathEl) {
-    const path = _workspaceInfo?.workspacePath || ''
-    _workspacePathEl.textContent = path || t('chat.workspaceUnavailable')
-    _workspacePathEl.title = path || ''
-  }
-}
-
-function renderWorkspaceCoreFiles() {
-  if (!_workspaceCoreListEl) return
-  if (!_workspaceCoreFiles.length) {
-    _workspaceCoreListEl.innerHTML = `<div class="chat-workspace-note">${t('chat.workspaceNoCoreFiles')}</div>`
-    return
-  }
-
-  _workspaceCoreListEl.innerHTML = _workspaceCoreFiles.map(file => {
-    const active = _workspaceCurrentFile?.relativePath === file.name ? ' active' : ''
-    const status = file.exists ? t('common.edit') : t('common.add')
-    return `
-      <button class="chat-workspace-core-item${active}" data-core-path="${escapeAttr(file.name)}" data-core-exists="${file.exists ? '1' : '0'}" title="${escapeAttr(file.path || file.name)}">
-        <span class="chat-workspace-core-icon">${svgIcon(file.exists ? 'file-text' : 'file-plain', 14)}</span>
-        <span class="chat-workspace-core-copy">
-          <span class="chat-workspace-core-name">${escapeAttr(file.name)}</span>
-          <span class="chat-workspace-core-status ${file.exists ? 'exists' : 'missing'}">${status}</span>
-        </span>
-      </button>
-    `
-  }).join('')
-}
-
-function renderWorkspaceTreeNode(entry, depth) {
-  const isDir = entry.type === 'dir'
-  const expanded = isDir && _workspaceExpandedDirs.has(entry.relativePath)
-  const active = _workspaceCurrentFile?.relativePath === entry.relativePath ? ' active' : ''
-  const children = expanded
-    ? (_workspaceTreeCache.get(entry.relativePath) || []).map(child => renderWorkspaceTreeNode(child, depth + 1)).join('')
-    : ''
-
-  return `
-    <div class="chat-workspace-tree-node">
-      <div class="chat-workspace-tree-row${active}" style="padding-left:${12 + depth * 14}px">
-        ${isDir
-          ? `<button class="chat-workspace-tree-toggle" data-tree-toggle="${escapeAttr(entry.relativePath)}">${expanded ? '▾' : '▸'}</button>`
-          : '<span class="chat-workspace-tree-toggle is-spacer"></span>'}
-        <button class="chat-workspace-tree-link" data-tree-path="${escapeAttr(entry.relativePath)}" data-tree-type="${entry.type}" data-tree-editable="${entry.editable ? '1' : '0'}" title="${escapeAttr(entry.relativePath)}">
-          ${svgIcon(isDir ? 'folder' : (entry.previewable ? 'file-text' : 'file'), 14)}
-          <span class="chat-workspace-tree-name">${escapeAttr(entry.name)}</span>
-        </button>
-      </div>
-      ${children}
-    </div>
-  `
-}
-
-function renderWorkspaceTree() {
-  if (!_workspaceTreeEl) return
-  const rootEntries = _workspaceTreeCache.get('') || []
-  if (!rootEntries.length) {
-    _workspaceTreeEl.innerHTML = `<div class="chat-workspace-note">${t('chat.workspaceTreeEmpty')}</div>`
-    return
-  }
-  _workspaceTreeEl.innerHTML = rootEntries.map(entry => renderWorkspaceTreeNode(entry, 0)).join('')
-}
-
-function renderWorkspacePreview() {
-  if (!_workspacePreviewEl || !_workspaceEditorEl) return
-  _workspacePreviewEl.innerHTML = renderMarkdown(_workspaceEditorEl.value || '')
-}
-
-function updateWorkspaceEditorState() {
-  const hasFile = !!_workspaceCurrentFile
-  const canSaveDraft = hasFile && _workspaceCurrentFile?.exists === false
-  if (_workspaceCurrentFileEl) {
-    _workspaceCurrentFileEl.textContent = hasFile
-      ? `${_workspaceCurrentFile.relativePath}${_workspaceDirty ? ' *' : ''}`
-      : t('chat.selectWorkspaceFile')
-  }
-  if (_workspaceSaveBtn) _workspaceSaveBtn.disabled = !hasFile || (!canSaveDraft && !_workspaceDirty) || _workspaceLoading
-  if (_workspaceReloadBtn) _workspaceReloadBtn.disabled = !hasFile || _workspaceLoading
-  if (_workspacePreviewBtn) _workspacePreviewBtn.disabled = !hasFile || !_workspaceCurrentFile?.previewable || _workspaceLoading
-  const previewLabelEl = _page?.querySelector('#chat-workspace-preview-label')
-  if (previewLabelEl) previewLabelEl.textContent = _workspacePreviewMode ? t('chat.editWorkspaceFile') : t('chat.previewWorkspaceFile')
-  if (_workspaceEditorEl) {
-    _workspaceEditorEl.disabled = !hasFile || _workspaceLoading
-    _workspaceEditorEl.style.display = hasFile && !_workspacePreviewMode ? '' : 'none'
-  }
-  if (_workspacePreviewEl) {
-    _workspacePreviewEl.style.display = hasFile && _workspacePreviewMode ? '' : 'none'
-  }
-  if (_workspaceEmptyEl) {
-    _workspaceEmptyEl.style.display = hasFile ? 'none' : ''
-  }
-  if (hasFile && _workspacePreviewMode) renderWorkspacePreview()
-}
-
-function resetWorkspaceEditor(emptyText = t('chat.workspaceEmptyState')) {
-  _workspaceCurrentFile = null
-  _workspacePreviewMode = false
-  _workspaceDirty = false
-  _workspaceLoadedContent = ''
-  if (_workspaceMetaEl) _workspaceMetaEl.textContent = ''
-  if (_workspaceEditorEl) {
-    _workspaceEditorEl.value = ''
-    _workspaceEditorEl.placeholder = t('chat.selectWorkspaceFile')
-  }
-  if (_workspacePreviewEl) {
-    _workspacePreviewEl.innerHTML = ''
-    _workspacePreviewEl.style.display = 'none'
-  }
-  if (_workspaceEmptyEl) _workspaceEmptyEl.textContent = emptyText
-  renderWorkspaceCoreFiles()
-  renderWorkspaceTree()
-  updateWorkspaceEditorState()
-}
-
-function prepareWorkspaceDraftFile(relativePath, options = {}) {
-  const { kind = 'core', previewable = isMarkdownWorkspaceFile(relativePath) } = options
-  _workspaceCurrentFile = { agentId: _workspaceCurrentAgentId, relativePath, kind, previewable, exists: false }
-  _workspacePreviewMode = false
-  _workspaceDirty = false
-  _workspaceLoadedContent = ''
-  if (_workspaceEditorEl) {
-    _workspaceEditorEl.value = ''
-    _workspaceEditorEl.placeholder = t('chat.workspaceDraftHint')
-  }
-  if (_workspaceMetaEl) _workspaceMetaEl.textContent = t('chat.workspaceDraftHint')
-  renderWorkspaceCoreFiles()
-  renderWorkspaceTree()
-  updateWorkspaceEditorState()
-}
-
-async function loadWorkspacePanelData(preserveCurrentFile = false) {
-  if (!_workspaceCoreListEl || !_workspaceTreeEl) return
-  const loadSeq = ++_workspaceLoadSeq
-  const agentId = _workspaceCurrentAgentId || 'main'
-  _workspaceLoading = true
-  renderWorkspacePanelMeta()
-  _workspaceCoreListEl.innerHTML = `<div class="chat-workspace-note">${t('common.loading')}</div>`
-  _workspaceTreeEl.innerHTML = `<div class="chat-workspace-note">${t('common.loading')}</div>`
-  updateWorkspaceEditorState()
-
-  try {
-    const previousFile = preserveCurrentFile ? _workspaceCurrentFile : null
-    const [info, coreFiles, rootEntries] = await Promise.all([
-      api.getAgentWorkspaceInfo(agentId),
-      api.listAgentFiles(agentId),
-      api.listAgentWorkspaceEntries(agentId, ''),
-    ])
-
-    if (loadSeq !== _workspaceLoadSeq || agentId !== _workspaceCurrentAgentId) return
-
-    _workspaceInfo = info || null
-    _workspaceCoreFiles = Array.isArray(coreFiles) ? coreFiles : []
-    _workspaceTreeCache = new Map([['', Array.isArray(rootEntries) ? rootEntries : []]])
-    _workspaceExpandedDirs = new Set()
-    renderWorkspacePanelMeta()
-    renderWorkspaceCoreFiles()
-    renderWorkspaceTree()
-
-    if (previousFile && previousFile.agentId === agentId) {
-      if (previousFile.kind === 'core' && previousFile.exists === false) {
-        prepareWorkspaceDraftFile(previousFile.relativePath, previousFile)
-      } else {
-        await openWorkspaceFile(previousFile.relativePath, { kind: previousFile.kind, force: true, silent: true })
-      }
-    } else {
-      resetWorkspaceEditor(t('chat.workspaceEmptyState'))
-    }
-  } catch (e) {
-    if (loadSeq !== _workspaceLoadSeq || agentId !== _workspaceCurrentAgentId) return
-    _workspaceInfo = null
-    _workspaceCoreFiles = []
-    _workspaceTreeCache = new Map([['', []]])
-    _workspaceExpandedDirs = new Set()
-    resetWorkspaceEditor(t('chat.workspaceUnavailable'))
-    renderWorkspacePanelMeta()
-    const message = e?.message || String(e)
-    _workspaceCoreListEl.innerHTML = `<div class="chat-workspace-note is-error">${escapeAttr(message)}</div>`
-    _workspaceTreeEl.innerHTML = `<div class="chat-workspace-note is-error">${escapeAttr(message)}</div>`
-    toast(`${t('chat.workspaceLoadFailed')}: ${message}`, 'error')
-  } finally {
-    if (loadSeq !== _workspaceLoadSeq) return
-    _workspaceLoading = false
-    updateWorkspaceEditorState()
-  }
-}
-
-async function toggleWorkspaceDirectory(relativePath) {
-  if (!relativePath) return
-  if (_workspaceExpandedDirs.has(relativePath)) {
-    _workspaceExpandedDirs.delete(relativePath)
-    renderWorkspaceTree()
-    return
-  }
-
-  try {
-    if (!_workspaceTreeCache.has(relativePath)) {
-      const entries = await api.listAgentWorkspaceEntries(_workspaceCurrentAgentId, relativePath)
-      _workspaceTreeCache.set(relativePath, Array.isArray(entries) ? entries : [])
-    }
-
-    _workspaceExpandedDirs.add(relativePath)
-    renderWorkspaceTree()
-  } catch (e) {
-    toast(`${t('common.loadFailed')}: ${e?.message || e}`, 'error')
-  }
-}
-
-async function openWorkspaceFile(relativePath, options = {}) {
-  const { kind = 'tree', force = false, silent = false } = options
-  if (!force && !(await confirmWorkspaceDiscardIfNeeded())) return
-  const openSeq = ++_workspaceOpenSeq
-  const agentId = _workspaceCurrentAgentId
-
-  try {
-    const file = await api.readAgentWorkspaceFile(agentId, relativePath)
-    if (openSeq !== _workspaceOpenSeq || agentId !== _workspaceCurrentAgentId) return
-    _workspaceCurrentFile = {
-      agentId,
-      relativePath,
-      kind,
-      previewable: !!file.previewable,
-      exists: true,
-    }
-    _workspaceLoadedContent = file.content || ''
-    _workspacePreviewMode = false
-    _workspaceDirty = false
-
-    if (_workspaceEditorEl) {
-      _workspaceEditorEl.value = _workspaceLoadedContent
-      _workspaceEditorEl.placeholder = t('chat.selectWorkspaceFile')
-    }
-
-    const metaParts = []
-    if (typeof file.size === 'number') metaParts.push(formatWorkspaceFileSize(file.size))
-    const timeText = formatWorkspaceFileTime(file.mtime)
-    if (timeText) metaParts.push(timeText)
-    if (_workspaceMetaEl) _workspaceMetaEl.textContent = metaParts.join(' · ')
-
-    renderWorkspaceCoreFiles()
-    renderWorkspaceTree()
-    updateWorkspaceEditorState()
-  } catch (e) {
-    if (openSeq !== _workspaceOpenSeq || agentId !== _workspaceCurrentAgentId) return
-    if (!silent) toast(`${t('chat.workspaceOpenFailed')}: ${e?.message || e}`, 'error')
-  }
-}
-
-async function reloadWorkspaceCurrentFile(force = false) {
-  if (!_workspaceCurrentFile) return
-  if (!force && !(await confirmWorkspaceDiscardIfNeeded())) return
-  if (_workspaceCurrentFile.kind === 'core' && _workspaceCurrentFile.exists === false) {
-    prepareWorkspaceDraftFile(_workspaceCurrentFile.relativePath, _workspaceCurrentFile)
-    return
-  }
-  await openWorkspaceFile(_workspaceCurrentFile.relativePath, { kind: _workspaceCurrentFile.kind, force: true })
-}
-
-function toggleWorkspacePreview() {
-  if (!_workspaceCurrentFile?.previewable) return
-  _workspacePreviewMode = !_workspacePreviewMode
-  updateWorkspaceEditorState()
-}
-
-async function saveWorkspaceCurrentFile() {
-  if (!_workspaceCurrentFile || !_workspaceEditorEl) return
-  const text = _workspaceEditorEl.value
-  const wasExisting = _workspaceCurrentFile.exists !== false
-  try {
-    await api.writeAgentWorkspaceFile(_workspaceCurrentAgentId, _workspaceCurrentFile.relativePath, text)
-    _workspaceCurrentFile = { ..._workspaceCurrentFile, exists: true }
-    _workspaceLoadedContent = text
-    _workspaceDirty = false
-    try {
-      await loadWorkspacePanelData(true)
-    } catch (refreshError) {
-      console.warn('[chat] workspace refresh after save failed:', refreshError)
-    }
-    toast(wasExisting ? t('common.saveSuccess') : t('chat.workspaceFileCreated'), 'success')
-  } catch (e) {
-    toast(`${t('common.saveFailed')}: ${e?.message || e}`, 'error')
-  }
+  await _workspaceController?.syncContext(reload)
 }
 
 async function applySelectedModel() {
@@ -1723,6 +1181,8 @@ async function connectGateway() {
         const saved = localStorage.getItem(STORAGE_SESSION_KEY)
         const savedGroupId = localStorage.getItem(ACTIVE_GROUP_KEY) || ''
         _sessionKey = saved || sessionKey
+        _runCoordinator.activateSession(_sessionKey)
+        _hostedController?.activateSession(_sessionKey, parseSessionAgent(_sessionKey) || 'main')
         if (savedGroupId && _chatGroups.some(g => g.id === savedGroupId)) {
           switchGroupSession(savedGroupId, { restore: true })
         } else {
@@ -1746,6 +1206,8 @@ async function connectGateway() {
       const saved = localStorage.getItem(STORAGE_SESSION_KEY)
       const savedGroupId = localStorage.getItem(ACTIVE_GROUP_KEY) || ''
       _sessionKey = saved || wsClient.sessionKey
+      _runCoordinator.activateSession(_sessionKey)
+      _hostedController?.activateSession(_sessionKey, parseSessionAgent(_sessionKey) || 'main')
       updateStatusDot('ready')
       showTyping(false)  // 确保关闭加载动画
       if (savedGroupId && _chatGroups.some(g => g.id === savedGroupId)) {
@@ -1973,24 +1435,29 @@ async function switchSession(newKey, options = {}) {
   const { forceWorkspace = false } = options
   if (!_currentGroupId && newKey === _sessionKey) return false
   const nextAgentId = parseSessionAgent(newKey) || 'main'
-  if (!forceWorkspace && _workspaceDirty && nextAgentId !== _workspaceCurrentAgentId) {
-    const yes = await confirmWorkspaceDiscardIfNeeded()
+  if (!forceWorkspace && _workspaceController?.isDirty() && nextAgentId !== _workspaceController.getAgentId()) {
+    const yes = await _workspaceController.confirmDiscardIfNeeded()
     if (!yes) return false
-    discardWorkspaceChanges()
+    _workspaceController.discardChanges()
   }
   _currentGroupId = ''
   _lastDirectSessionKey = newKey
   _sessionKey = newKey
+  _runCoordinator.activateSession(newKey)
+  _hostedController?.activateSession(newKey, parseSessionAgent(newKey) || 'main')
   localStorage.removeItem(ACTIVE_GROUP_KEY)
   localStorage.setItem(STORAGE_SESSION_KEY, newKey)
   updateSessionListActiveState()
   _lastHistoryHash = ''
   resetStreamState()
+  _isSending = false
+  updateSendState()
   updateSessionTitle()
   applyRuntimeModelToSelect(newKey)
   clearMessages()
   loadHistory()
   refreshSessionListSoon()
+  processMessageQueue()
   return true
 }
 
@@ -2269,223 +1736,29 @@ function updateSessionTitle() {
 }
 
 function updateEcomWorkbenchVisibility() {
-  if (!_ecomWorkbenchEl) return
-  const agentId = parseSessionAgent(_sessionKey) || 'main'
-  const visible = agentId === 'ecom-mover'
-  _ecomWorkbenchEl.style.display = visible ? '' : 'none'
-  const hint = _page?.querySelector('#chat-ecom-hint')
-  if (hint) hint.style.display = visible ? '' : 'none'
-  if (visible) {
-    void loadEcomWorkbenchSettingsForAgent(agentId)
-    renderEcomWorkbenchSummary()
-    appendEcomIntroMessage()
-  }
+  _ecomWorkbench?.updateContext()
 }
 
 function loadEcomWorkbenchSettings() {
-  try {
-    return {
-      platforms: '1688,淘宝,抖音',
-      credentialsNote: '',
-      vaultSummary: '',
-      forceRefreshEachRound: true,
-      enableParallelRoutes: true,
-      enableSubAgents: true,
-      enableVision: true,
-      autoSkillDetect: true,
-      autoEnableInstalledSkills: false,
-      orchestrationAutoDispatch: false,
-      skillPool: '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境',
-      ...(JSON.parse(localStorage.getItem(ECOM_WORKBENCH_SETTINGS_KEY) || '{}') || {}),
-    }
-  } catch {
-    return {
-      platforms: '1688,淘宝,抖音',
-      credentialsNote: '',
-      vaultSummary: '',
-      forceRefreshEachRound: true,
-      enableParallelRoutes: true,
-      enableSubAgents: true,
-      enableVision: true,
-      autoSkillDetect: true,
-      autoEnableInstalledSkills: false,
-      orchestrationAutoDispatch: false,
-      skillPool: '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境',
-    }
-  }
+  return _ecomWorkbench?.getSettings() || {}
 }
 
 function saveEcomWorkbenchSettings() {
-  try { localStorage.setItem(ECOM_WORKBENCH_SETTINGS_KEY, JSON.stringify(_ecomWorkbenchSettings || {})) } catch {}
-}
-
-function getEcomWorkbenchCollapsed() {
-  try {
-    if (_ecomWorkbenchCollapsed) return true
-    return localStorage.getItem(ECOM_WORKBENCH_COLLAPSED_KEY) === '1'
-  } catch {
-    return !!_ecomWorkbenchCollapsed
-  }
-}
-
-function applyEcomWorkbenchCollapseState(collapsed) {
-  _ecomWorkbenchCollapsed = !!collapsed
-  if (!_ecomWorkbenchEl) return
-  _ecomWorkbenchEl.classList.toggle('collapsed', _ecomWorkbenchCollapsed)
-  const toggleBtn = _page?.querySelector('#btn-ecom-toggle')
-  if (toggleBtn) toggleBtn.textContent = _ecomWorkbenchCollapsed ? '展开' : '收起'
-}
-
-function setEcomWorkbenchCollapsed(collapsed) {
-  _ecomWorkbenchCollapsed = !!collapsed
-  try { localStorage.setItem(ECOM_WORKBENCH_COLLAPSED_KEY, _ecomWorkbenchCollapsed ? '1' : '0') } catch {}
-  applyEcomWorkbenchCollapseState(_ecomWorkbenchCollapsed)
-}
-
-function toggleEcomWorkbenchCollapse() {
-  setEcomWorkbenchCollapsed(!getEcomWorkbenchCollapsed())
+  if (_ecomWorkbench) _ecomWorkbench.setSettings(_ecomWorkbench.getSettings())
 }
 
 function setEcomRunState(patch = {}) {
-  _ecomRunState = {
-    ..._ecomRunState,
-    ...patch,
-    updatedAt: Date.now(),
-  }
-  renderEcomProgressState()
-}
-
-function renderEcomProgressState() {
-  const phaseEl = _page?.querySelector('#chat-ecom-progress-phase')
-  if (phaseEl) phaseEl.textContent = _ecomRunState.active ? (_ecomRunState.phase || '执行中') : '待机'
-  if (_ecomProgressMessageEl) {
-    _ecomProgressMessageEl.textContent = _ecomRunState.detail || '还没有正在执行的电商任务。'
-  }
-  if (_ecomProgressListEl) {
-    const tasks = Array.isArray(_ecomRunState.tasks) ? _ecomRunState.tasks : []
-    _ecomProgressListEl.innerHTML = tasks.length
-      ? tasks.map(task => `<div class="chat-ecom-progress-item"><span>${escapeHtml(task.title || task.name || '子任务')}</span><strong>${escapeHtml(task.status || '等待中')}</strong></div>`).join('')
-      : ''
-  }
+  return _ecomWorkbench?.setRunState(patch)
 }
 
 function renderEcomWorkbenchSummary() {
-  const el = _page?.querySelector('#chat-ecom-settings-summary')
-  if (!el) return
-  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
-  const rows = [
-    ['平台范围', settings.platforms || '未设置'],
-    ['凭据备注', settings.credentialsNote || '未填写（建议仅记录说明，不直接裸写真实密码）'],
-    ['密码保险箱', settings.vaultSummary || '未维护摘要'],
-    ['每轮强制刷新', settings.forceRefreshEachRound ? '已开启' : '已关闭'],
-    ['多线路并行', settings.enableParallelRoutes ? '已开启（允许自动并行）' : '已关闭'],
-    ['子Agent调度', settings.enableSubAgents ? '已开启（允许自动派发）' : '已关闭'],
-    ['眼睛能力', settings.enableVision ? '已启用（页面观察/视觉分析）' : '未启用'],
-    ['自动补技能', settings.autoSkillDetect ? '已启用（按任务识别并给出安装/启用流程）' : '已关闭'],
-    ['技能自动启用', settings.autoEnableInstalledSkills ? '已启用（安装后自动写入 Agent）' : '手动启用'],
-    ['协同自动派发', settings.orchestrationAutoDispatch ? '已启用（会按成员分发子任务）' : '手动派发'],
-    ['技能池', settings.skillPool || '1688,阿里,淘宝,天猫,抖音,小红书,京东,拼多多,闲鱼,转转,58同城,跨境'],
-  ]
-  el.innerHTML = rows.map(([label, value]) => `<div class="chat-ecom-summary-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`).join('')
-}
-
-function encodeEcomWorkbenchSettings(settings) {
-  return `${ECOM_TOOLS_SECTION_START}\n\
-
-ecom_workbench:\n  platforms: ${JSON.stringify(settings.platforms || '')}\n  credentialsNote: ${JSON.stringify(settings.credentialsNote || '')}\n  vaultSummary: ${JSON.stringify(settings.vaultSummary || '')}\n  forceRefreshEachRound: ${settings.forceRefreshEachRound ? 'true' : 'false'}\n  enableParallelRoutes: ${settings.enableParallelRoutes ? 'true' : 'false'}\n  enableSubAgents: ${settings.enableSubAgents ? 'true' : 'false'}\n  enableVision: ${settings.enableVision ? 'true' : 'false'}\n  autoSkillDetect: ${settings.autoSkillDetect ? 'true' : 'false'}\n  autoEnableInstalledSkills: ${settings.autoEnableInstalledSkills ? 'true' : 'false'}\n  orchestrationAutoDispatch: ${settings.orchestrationAutoDispatch ? 'true' : 'false'}\n  skillPool: ${JSON.stringify(settings.skillPool || '')}\n${ECOM_TOOLS_SECTION_END}`
-}
-
-function parseEcomWorkbenchSettingsFromTools(content) {
-  const start = content.indexOf(ECOM_TOOLS_SECTION_START)
-  const end = content.indexOf(ECOM_TOOLS_SECTION_END)
-  if (start === -1 || end === -1 || end <= start) return null
-  const block = content.slice(start, end)
-  const parseQuoted = (key) => {
-    const m = block.match(new RegExp(`${key}:\\s+("(?:[^"\\\\]|\\\\.)*")`))
-    if (!m) return ''
-    try { return JSON.parse(m[1]) } catch { return '' }
-  }
-  const parseBool = (key, fallback = false) => {
-    const m = block.match(new RegExp(`${key}:\\s+(true|false)`))
-    return m ? m[1] === 'true' : fallback
-  }
-  return {
-    platforms: parseQuoted('platforms'),
-    credentialsNote: parseQuoted('credentialsNote'),
-    vaultSummary: parseQuoted('vaultSummary'),
-    forceRefreshEachRound: parseBool('forceRefreshEachRound', true),
-    enableParallelRoutes: parseBool('enableParallelRoutes', true),
-    enableSubAgents: parseBool('enableSubAgents', true),
-    enableVision: parseBool('enableVision', true),
-    autoSkillDetect: parseBool('autoSkillDetect', true),
-    autoEnableInstalledSkills: parseBool('autoEnableInstalledSkills', false),
-    orchestrationAutoDispatch: parseBool('orchestrationAutoDispatch', false),
-    skillPool: parseQuoted('skillPool'),
-  }
-}
-
-async function loadEcomWorkbenchSettingsForAgent(agentId) {
-  if (!agentId || agentId !== 'ecom-mover' || _ecomWorkbenchLoading) return
-  if (_ecomWorkbenchLoadedAgentId === agentId) return
-  _ecomWorkbenchLoading = true
-  try {
-    const res = await api.readAgentFile(agentId, 'TOOLS.md')
-    const parsed = parseEcomWorkbenchSettingsFromTools(res?.content || '')
-    if (parsed) {
-      _ecomWorkbenchSettings = { ...loadEcomWorkbenchSettings(), ...parsed }
-      saveEcomWorkbenchSettings()
-      renderEcomWorkbenchSummary()
-    }
-    _ecomWorkbenchLoadedAgentId = agentId
-  } catch {
-  } finally {
-    _ecomWorkbenchLoading = false
-  }
+  _ecomWorkbench?.renderSummary()
 }
 
 async function persistEcomWorkbenchSettingsForAgent(agentId) {
-  if (!agentId || agentId !== 'ecom-mover') return
-  let current = ''
-  try {
-    const res = await api.readAgentFile(agentId, 'TOOLS.md')
-    current = res?.content || ''
-  } catch {}
-  const block = encodeEcomWorkbenchSettings(_ecomWorkbenchSettings)
-  let next = current || '# TOOLS.md\n\n'
-  if (next.includes(ECOM_TOOLS_SECTION_START) && next.includes(ECOM_TOOLS_SECTION_END)) {
-    next = next.replace(new RegExp(`${ECOM_TOOLS_SECTION_START}[\\s\\S]*?${ECOM_TOOLS_SECTION_END}`), block)
-  } else {
-    next = `${next.trimEnd()}\n\n${block}\n`
-  }
-  await api.writeAgentFile(agentId, 'TOOLS.md', next)
-  _ecomWorkbenchLoadedAgentId = agentId
+  return _ecomWorkbench?.persistForAgent(agentId)
 }
 
-
-function appendEcomIntroMessage(options = {}) {
-  const { force = false } = options
-  if (!_messagesEl || (parseSessionAgent(_sessionKey) || 'main') !== 'ecom-mover') return
-  const seenKey = `${ECOM_INTRO_SEEN_KEY}:${_sessionKey}`
-  if (!force) {
-    try {
-      if (localStorage.getItem(seenKey) === '1') return
-    } catch {}
-    if (_messagesEl.querySelector('.msg')) return
-  }
-  appendSystemMessage('你好，我是“全自动店铺搬运”。我会先按 SPU 主档组织商品，再挂 SKU 子规格；每轮选品结束后强制刷新平台数据；复杂任务会优先并行拆分并在关键节点向你确认。需要你提供的平台范围、店铺/账号信息、凭据保存方式、目标利润率，我不会默认执行未经确认的高风险搬运动作。你可以直接在下方输入框发任务，也可以点“开始对话”快速填入任务模板。')
-  try { localStorage.setItem(seenKey, '1') } catch {}
-}
-
-function startEcomChatTemplate() {
-  if (!_textarea) return
-  const template = '帮我先从 1688 找 10 个适合搬到淘宝的商品 SPU，目标利润率 25%，先不要自动上架，先给我候选清单和风险提示。'
-  if (!_textarea.value.trim()) _textarea.value = template
-  setEcomWorkbenchCollapsed(true)
-  _textarea.focus()
-  const pos = _textarea.value.length
-  _textarea.setSelectionRange(pos, pos)
-  _textarea.dispatchEvent(new Event('input', { bubbles: true }))
-}
 
 function parseEcomVaultAccounts(content = '') {
   const text = String(content || '')
@@ -2588,7 +1861,7 @@ async function showEcomVaultEditor() {
     const content = buildEcomVaultContent(readAccounts())
     await api.writeAgentFile(agentId, ECOM_VAULT_FILENAME, content)
     const saved = parseEcomVaultAccounts(content).filter(item => item.platform || item.account || item.url)
-    _ecomWorkbenchSettings = { ...(_ecomWorkbenchSettings || loadEcomWorkbenchSettings()), vaultSummary: saved.length ? `${saved.length} 组账号：${saved.map(item => item.platform || item.account || item.url).slice(0, 3).join(' / ')}` : '未配置账号' }
+    _ecomWorkbench?.setSettings({ ...loadEcomWorkbenchSettings(), vaultSummary: saved.length ? `${saved.length} 组账号：${saved.map(item => item.platform || item.account || item.url).slice(0, 3).join(' / ')}` : '未配置账号' })
     saveEcomWorkbenchSettings()
     renderEcomWorkbenchSummary()
     await persistEcomWorkbenchSettingsForAgent(agentId)
@@ -2598,7 +1871,7 @@ async function showEcomVaultEditor() {
 }
 
 function showEcomWorkbenchSettings() {
-  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  const settings = loadEcomWorkbenchSettings()
   showModal({
     title: '全自动店铺搬运配置',
     fields: [
@@ -2615,7 +1888,7 @@ function showEcomWorkbenchSettings() {
       { name: 'enableVision', label: '眼睛能力', type: 'select', value: settings.enableVision ? 'true' : 'false', options: [ { value: 'true', label: '启用页面观察/视觉分析' }, { value: 'false', label: '关闭' } ] },
     ],
     onConfirm: async (result) => {
-      _ecomWorkbenchSettings = {
+      _ecomWorkbench?.setSettings({
         platforms: (result.platforms || '').trim(),
         skillPool: (result.skillPool || '').trim(),
         credentialsNote: (result.credentialsNote || '').trim(),
@@ -2627,7 +1900,7 @@ function showEcomWorkbenchSettings() {
         autoSkillDetect: String(result.autoSkillDetect) !== 'false',
         autoEnableInstalledSkills: String(result.autoEnableInstalledSkills) !== 'false',
         orchestrationAutoDispatch: String(result.orchestrationAutoDispatch) === 'true',
-      }
+      })
       saveEcomWorkbenchSettings()
       renderEcomWorkbenchSummary()
       try {
@@ -2793,7 +2066,7 @@ async function installEcomSkillsFromRules(rules = []) {
           changed = true
           try { await api.hermesSkillToggle(slug, true) } catch {}
         }
-        if (_ecomWorkbenchSettings?.autoEnableInstalledSkills) enabled.push(slug)
+        if (loadEcomWorkbenchSettings().autoEnableInstalledSkills) enabled.push(slug)
         tasks[taskIndex] = formatEcomSkillTask(item, changed ? '已安装' : '已存在')
         setEcomRunState({ tasks: [...tasks] })
       } catch (e) {
@@ -2805,7 +2078,7 @@ async function installEcomSkillsFromRules(rules = []) {
     }
   }
 
-  if (enabled.length && _ecomWorkbenchSettings?.autoEnableInstalledSkills) {
+  if (enabled.length && loadEcomWorkbenchSettings().autoEnableInstalledSkills) {
     await enableSkillsForEcomAgent(enabled)
   }
   _ecomSkillCatalogCache = null
@@ -2813,7 +2086,7 @@ async function installEcomSkillsFromRules(rules = []) {
 }
 
 async function maybeAutoInstallEcomSkills(taskText, options = {}) {
-  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  const settings = loadEcomWorkbenchSettings()
   if (!settings.autoSkillDetect) return false
   const rules = detectEcomSkillNeeds(taskText)
   if (!rules.length) return false
@@ -2840,7 +2113,7 @@ async function maybeAutoInstallEcomSkills(taskText, options = {}) {
 
 async function showEcomSkillAssistant() {
   const text = _textarea?.value?.trim() || ''
-  const seed = text || (_ecomWorkbenchSettings?.skillPool || '')
+  const seed = text || (loadEcomWorkbenchSettings().skillPool || '')
   if (!seed) {
     toast('先输入任务，或在配置里补充技能池关键词，再使用自动补技能', 'warning')
     return
@@ -2958,14 +2231,15 @@ async function dispatchEcomOrchestration(prompt, members = []) {
       appendSystemMessage(`协同成员派发失败：${member.label || member.sessionKey} - ${userFacingChatError(e, 'group-dispatch')}`, { severity: 'error' })
     }
   }
-  _ecomOrchestrationState = { groupId, members, lastPrompt: prompt, lastDispatchAt: Date.now() }
+  _ecomWorkbench?.setOrchestrationState({ groupId, members, lastPrompt: prompt, lastDispatchAt: Date.now() })
   syncEcomProgressFromTaskBoard()
   setEcomRunState({ active: true, phase: '结果回收中', detail: '子任务已派发，正在等待各成员回传结果', tasks: members.map(member => ({ title: member.label || member.agentId || member.sessionKey, status: '执行中' })) })
   return true
 }
 
 async function showEcomOrchestrationPanel() {
-  const initialPrompt = _textarea?.value?.trim() || _ecomOrchestrationState.lastPrompt || ''
+  const orchestrationState = _ecomWorkbench?.getOrchestrationState() || {}
+  const initialPrompt = _textarea?.value?.trim() || orchestrationState.lastPrompt || ''
   const overlay = showContentModal({
     title: '电商协同面板',
     width: 720,
@@ -2994,12 +2268,13 @@ async function showEcomOrchestrationPanel() {
     if (list) list.innerHTML = '<div class="form-hint">正在自动创建/复用子Agent...</div>'
     const members = await buildEcomOrchestrationCandidates(prompt)
     if (list) list.innerHTML = renderEcomOrchestrationMembers(members)
-    _ecomOrchestrationState = {
-      groupId: _ecomOrchestrationState.groupId || `ecom-orch-${Date.now()}`,
+    const currentState = _ecomWorkbench?.getOrchestrationState() || {}
+    _ecomWorkbench?.setOrchestrationState({
+      groupId: currentState.groupId || `ecom-orch-${Date.now()}`,
       members,
       lastPrompt: prompt,
-      lastDispatchAt: _ecomOrchestrationState.lastDispatchAt || 0,
-    }
+      lastDispatchAt: currentState.lastDispatchAt || 0,
+    })
     renderEcomWorkbenchSummary()
     return members
   }
@@ -3020,7 +2295,7 @@ function analyzeEcomTask(text = '') {
   const raw = String(text || '').trim()
   if (!raw) return { isEcom: false, shouldParallel: false, shouldDispatch: false, hits: [] }
   const hits = detectEcomSkillNeeds(raw)
-  const settings = _ecomWorkbenchSettings || loadEcomWorkbenchSettings()
+  const settings = loadEcomWorkbenchSettings()
   const shouldParallel = !!settings.enableParallelRoutes && /(同时|并行|分别|多平台|多个平台|1688.*淘宝|淘宝.*抖音|抖音.*小红书|采集.*对比|对比.*利润)/i.test(raw)
   const shouldDispatch = !!settings.enableSubAgents && !!settings.orchestrationAutoDispatch && shouldParallel
   return { isEcom: hits.length > 0 || (parseSessionAgent(_sessionKey) === 'ecom-mover'), shouldParallel, shouldDispatch, hits }
@@ -3051,8 +2326,9 @@ function maybeFinalizeEcomRunState(status = 'done', detail = '') {
     : status === 'aborted'
       ? '当前任务已中止。'
       : '当前任务执行失败，请检查报错或重试。')
-  const nextTasks = Array.isArray(_ecomRunState.tasks)
-    ? _ecomRunState.tasks.map(task => ({ ...task, status: status === 'done' ? '已完成' : status === 'aborted' ? '已中止' : '失败' }))
+  const currentRunState = _ecomWorkbench?.getRunState() || {}
+  const nextTasks = Array.isArray(currentRunState.tasks)
+    ? currentRunState.tasks.map(task => ({ ...task, status: status === 'done' ? '已完成' : status === 'aborted' ? '已中止' : '失败' }))
     : []
   setEcomRunState({ active: false, phase: status === 'done' ? '待机' : status === 'aborted' ? '已中止' : '失败', detail: message, tasks: nextTasks })
 }
@@ -3291,10 +2567,11 @@ function updateTask(taskId, patch = {}) {
 }
 
 function syncEcomProgressFromTaskBoard(task = null) {
-  if (!_ecomOrchestrationState?.groupId) return
-  const members = Array.isArray(_ecomOrchestrationState.members) ? _ecomOrchestrationState.members : []
+  const orchestrationState = _ecomWorkbench?.getOrchestrationState() || {}
+  if (!orchestrationState.groupId) return
+  const members = Array.isArray(orchestrationState.members) ? orchestrationState.members : []
   if (!members.length) return
-  const relatedTasks = _taskBoard.filter(item => item.groupId === _ecomOrchestrationState.groupId)
+  const relatedTasks = _taskBoard.filter(item => item.groupId === orchestrationState.groupId)
   if (!relatedTasks.length && !task) return
   const nextItems = members.map(member => {
     const related = relatedTasks.find(item => item.sessionKey === member.sessionKey) || (task && task.sessionKey === member.sessionKey ? task : null)
@@ -3329,16 +2606,13 @@ function syncEcomProgressFromTaskBoard(task = null) {
       ? `协同成员执行中：已完成 ${doneCount} / ${nextItems.length}。`
       : doneCount
         ? `协同成员已全部完成，共 ${doneCount} 个。`
-        : (_ecomRunState.detail || '还没有正在执行的电商任务。')
-  _ecomRunState = {
-    ..._ecomRunState,
+        : (_ecomWorkbench?.getRunState()?.detail || '还没有正在执行的电商任务。')
+  setEcomRunState({
     active: activeCount > 0,
     phase,
     detail,
     tasks: nextItems,
-    updatedAt: Date.now(),
-  }
-  renderEcomProgressState()
+  })
 }
 
 function updateTaskByRunOrSession(runId, sessionKey, patch = {}) {
@@ -3624,6 +2898,8 @@ async function switchGroupSession(groupId, options = {}) {
   updateSessionListActiveState()
   localStorage.setItem(ACTIVE_GROUP_KEY, groupId)
   if (!_sessionKey) _sessionKey = getGroupFallbackSessionKey(group)
+  _runCoordinator.activateSession(_sessionKey)
+  _hostedController?.activateSession(_sessionKey, parseSessionAgent(_sessionKey) || 'main')
   updateSessionTitle()
   clearMessages()
   if (isStorageAvailable()) {
@@ -3816,9 +3092,12 @@ async function sendMessage() {
     doGroupSend(activeGroup, text, attachments)
     return
   }
-  if (_isSending || _isStreaming) { _messageQueue.push({ text, attachments }); return }
+  if (_isSending || _isStreaming) {
+    _runCoordinator.enqueue(_sessionKey, text, attachments)
+    return
+  }
   if (parseSessionAgent(_sessionKey) === 'ecom-mover') {
-    setEcomRunState({ active: true, phase: '主任务执行中', detail: `正在执行：${text.slice(0, 64)}`, tasks: _ecomRunState.tasks || [] })
+    setEcomRunState({ active: true, phase: '主任务执行中', detail: `正在执行：${text.slice(0, 64)}`, tasks: _ecomWorkbench?.getRunState()?.tasks || [] })
     setReplyStatus('thinking', `正在处理电商任务：${text.slice(0, 48)}`, { activity: '电商工作流执行中' })
   }
   doSend(text, attachments)
@@ -3901,13 +3180,15 @@ async function doSend(text, attachments = []) {
     toast(t('chat.gatewayNotReadySend'), 'warning')
     return
   }
+  const sendSessionKey = _sessionKey
+  const sendContext = _runCoordinator.beginSend(sendSessionKey)
   appendUserMessage(text, attachments)
   emitLobsterPhase(text.includes('主导引擎') || text.includes('协作引擎') ? 'working' : 'thinking', text.includes('主导引擎') || text.includes('协作引擎') ? t('chat.lobsterCollaborativeTask') : t('chat.lobsterAiProcessing'))
   saveMessage({
-    id: uuid(), sessionKey: _sessionKey, role: 'user', content: text, timestamp: Date.now(),
+    id: uuid(), sessionKey: sendSessionKey, role: 'user', content: text, timestamp: Date.now(),
     attachments: attachments?.length ? attachments.map(a => ({ category: a.category || 'image', mimeType: a.mimeType || '', content: a.content || '', url: a.url || '' })) : undefined
   })
-  const currentTask = createTaskRecord({ sessionKey: _sessionKey, model: getSessionDisplayModel(_sessionKey), prompt: text, source: 'single', title: text.slice(0, 48) })
+  const currentTask = createTaskRecord({ sessionKey: sendSessionKey, model: getSessionDisplayModel(sendSessionKey), prompt: text, source: 'single', title: text.slice(0, 48) })
   showTyping(true)
   _isSending = true
   updateSendState()
@@ -3915,17 +3196,23 @@ async function doSend(text, attachments = []) {
   _startResponseWatchdog()
   let sendFailed = false
   try {
-    await wsClient.chatSend(_sessionKey, text, attachments.length ? attachments : undefined)
+    const result = await wsClient.chatSend(sendSessionKey, text, attachments.length ? attachments : undefined)
+    const acceptedRunId = result?.runId || result?.run_id || result?.id || ''
+    if (acceptedRunId) _runCoordinator.registerRun(acceptedRunId, sendSessionKey)
   } catch (err) {
     sendFailed = true
-    showTyping(false)
-    _cancelResponseWatchdog()
     const errText = translateGatewayError(err.message)
-    appendSystemMessage(`${t('chat.sendFailed')}${errText}`)
-    setReplyStatus('error', `${t('chat.sendFailed')}${errText}`, { runId: _currentRunId || '', activity: t('chat.sendFailedBeforeModel') })
-    maybeFinalizeEcomRunState('error', errText)
     updateTask(currentTask.id, { status: 'error', progress: 100, error: errText })
+    if (_runCoordinator.isCurrent(sendContext)) {
+      showTyping(false)
+      _cancelResponseWatchdog()
+      appendSystemMessage(`${t('chat.sendFailed')}${errText}`)
+      setReplyStatus('error', `${t('chat.sendFailed')}${errText}`, { runId: _currentRunId || '', activity: t('chat.sendFailedBeforeModel') })
+      maybeFinalizeEcomRunState('error', errText)
+    }
   } finally {
+    _runCoordinator.settleSend(sendContext)
+    if (!_runCoordinator.isCurrent(sendContext)) return
     _isSending = false
     updateSendState()
     if (!sendFailed && !_isStreaming) {
@@ -3940,15 +3227,16 @@ async function doSend(text, attachments = []) {
 }
 
 function processMessageQueue() {
-  if (_messageQueue.length === 0 || _isSending || _isStreaming) return
-  const msg = _messageQueue.shift()
-  if (typeof msg === 'string') doSend(msg, [])
-  else doSend(msg.text, msg.attachments || [])
+  if (_runCoordinator.queuedCount === 0 || _isSending || _isStreaming || !_sessionKey) return
+  const msg = _runCoordinator.takeNext(_sessionKey)
+  if (msg) doSend(msg.text, msg.attachments || [])
 }
 
 function stopGeneration() {
   if (!_sessionKey) return
-  wsClient.chatAbort(_sessionKey, _currentRunId || undefined).catch(() => {})
+  const abortSessionKey = _sessionKey
+  const abortRunId = _currentRunId || undefined
+  wsClient.chatAbort(abortSessionKey, abortRunId).catch(() => {})
   showTyping(false)
   setReplyStatus('aborted', replyStatusText('aborted'), { runId: _currentRunId || '', activity: t('chat.replyActivityAborted') })
   maybeFinalizeEcomRunState('aborted')
@@ -3974,7 +3262,7 @@ function normalizeChatEventPayload(event, payload = {}) {
     ...payload,
     state,
     runId: payload.runId || payload.run_id || payload.id || message?.runId || message?.run_id || '',
-    sessionKey: payload.sessionKey || payload.session_key || message?.sessionKey || message?.session_key || _sessionKey,
+    sessionKey: payload.sessionKey || payload.session_key || message?.sessionKey || message?.session_key || '',
     message,
   }
 }
@@ -3986,6 +3274,11 @@ function handleEvent(msg) {
   if (event === 'agent' && payload?.stream === 'tool' && payload?.data?.toolCallId) {
     const ts = payload.ts
     const toolCallId = payload.data.toolCallId
+    const runId = payload.runId || ''
+    const eventSessionKey = _runCoordinator.resolveEventSession(payload.sessionKey, runId)
+    const renderInCurrentSession = Boolean(eventSessionKey)
+      && eventSessionKey === _sessionKey
+      && (!_currentRunId || !runId || runId === _currentRunId)
     const runKey = `${payload.runId}:${toolCallId}`
     if (_toolEventSeen.has(runKey)) return
     _toolEventSeen.add(runKey)
@@ -3994,7 +3287,7 @@ function handleEvent(msg) {
     if (payload.data?.args && current.input == null) current.input = payload.data.args
     if (payload.data?.meta && current.output == null) current.output = payload.data.meta
     const mediaRefs = extractMediaRefsFromValue(payload.data?.meta || payload.data?.output || payload.data?.result || payload.data?.content)
-    if (mediaRefs.length && (!payload.sessionKey || payload.sessionKey === _sessionKey) && (!_currentRunId || !payload.runId || payload.runId === _currentRunId)) {
+    if (mediaRefs.length && renderInCurrentSession) {
       renderStreamMediaRefs(mediaRefs, payload.runId || _currentRunId)
     }
     if (typeof payload.data?.isError === 'boolean' && current.status == null) current.status = payload.data.isError ? 'error' : 'ok'
@@ -4008,8 +3301,10 @@ function handleEvent(msg) {
     // 工具执行反馈：更新 typing 提示文字
     const toolName = payload.data?.name || payload.data?.toolName || ''
     if (toolName) {
-      if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) return
-      if (_currentRunId && payload.runId && payload.runId !== _currentRunId) return
+      if (eventSessionKey) {
+        updateTaskByRunOrSession(runId, eventSessionKey, { status: 'tool', progress: TASK_PROGRESS.tool })
+      }
+      if (!renderInCurrentSession) return
       if (payload.runId) _currentRunId = payload.runId
       _isStreaming = true
       if (!_streamStartTime) _streamStartTime = Date.now()
@@ -4029,6 +3324,11 @@ function handleEvent(msg) {
 
   // Compaction 状态指示：上游 2026.3.12 新增 status_reaction 事件
   if (event === 'chat.status_reaction' || event === 'status_reaction') {
+    const eventSessionKey = _runCoordinator.resolveEventSession(
+      payload.sessionKey || payload.session_key || '',
+      payload.runId || payload.run_id || '',
+    )
+    if (!eventSessionKey || eventSessionKey !== _sessionKey) return
     const reaction = payload.reaction || payload.emoji || ''
     if (reaction.includes('compact') || reaction === '🗜️' || reaction === '📦') {
       showCompactionHint(true)
@@ -4345,7 +3645,11 @@ function renderStreamMediaRefs(refs = [], runId = _currentRunId) {
 function handleChatEvent(payload) {
   const { state } = payload
   const runId = payload.runId
-  const eventSessionKey = payload.sessionKey || _sessionKey
+  const eventSessionKey = _runCoordinator.resolveEventSession(payload.sessionKey, runId)
+  if (!eventSessionKey) {
+    console.warn('[chat] 忽略无法确定会话归属的事件:', state, runId || '(no-run)')
+    return
+  }
   const taskPatchState = state === 'delta' ? 'streaming' : (state === 'final' ? 'finalizing' : state)
   const trackedTask = ['queued', 'delta', 'final', 'aborted', 'error'].includes(state)
     ? updateTaskByRunOrSession(runId, eventSessionKey, { status: taskPatchState, progress: TASK_PROGRESS[taskPatchState] || TASK_PROGRESS[state] || 50 })
@@ -4372,7 +3676,7 @@ function handleChatEvent(payload) {
       const errMsg = translateGatewayError(payload.errorMessage || payload.error?.message || t('common.error'))
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'error', progress: 100, error: errMsg })
       if (renderIntoCurrentGroup) appendSystemMessage(t('chat.groupMemberReplyFailedNotice', { member: getGroupMemberLabel(getGroupMemberBySession(eventGroup, eventSessionKey), eventSessionKey), msg: errMsg }))
-      setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
+      if (renderIntoCurrentGroup) setReplyStatus('error', errMsg, { runId, sessionKey: eventSessionKey, activity: t('chat.groupMemberReplyFailed') })
     } else if (state === 'aborted') {
       updateTaskByRunOrSession(runId, eventSessionKey, { status: 'aborted', progress: 100 })
     }
@@ -4380,7 +3684,7 @@ function handleChatEvent(payload) {
   }
 
   // 群聊会同时把任务发给多个真实会话；非当前会话的事件只更新任务清单和轮次，不渲染到当前聊天窗口，避免串流。
-  if (payload.sessionKey && payload.sessionKey !== _sessionKey && _sessionKey) {
+  if (eventSessionKey !== _sessionKey) {
     if (state === 'final') {
       if (!shouldFinalizeBackgroundPayload(payload)) return
       const doneTask = updateTaskByRunOrSession(runId, eventSessionKey, { status: 'done', progress: 100, completedAt: Date.now(), highlighted: true }) || trackedTask
@@ -4489,6 +3793,7 @@ function handleChatEvent(payload) {
       }
       return
     }
+    if (runId && !_runCoordinator.markTerminal(runId)) return
     if (runId) rememberSeenRunId(runId)
     showTyping(false)
     // 如果流式阶段没有创建 bubble，从 final message 中提取
@@ -4547,28 +3852,16 @@ function handleChatEvent(payload) {
     refreshSessionList()
     if (_currentAiText || _currentAiImages.length || _currentAiVideos.length || _currentAiAudios.length || _currentAiFiles.length) {
       saveMessage({
-        id: payload.runId || uuid(), sessionKey: _sessionKey, role: 'assistant',
+        id: payload.runId || uuid(), sessionKey: eventSessionKey, role: 'assistant',
         content: _currentAiText, timestamp: Date.now(),
-        usage: extractMessageUsage(finalMetaSource), cost: extractMessageCost(finalMetaSource), model: extractMessageModel(finalMetaSource) || getSessionRuntimeModel(_sessionKey), contextWindow: getContextWindow(_sessionKey),
+        usage: extractMessageUsage(finalMetaSource), cost: extractMessageCost(finalMetaSource), model: extractMessageModel(finalMetaSource) || getSessionRuntimeModel(eventSessionKey), contextWindow: getContextWindow(eventSessionKey),
         attachments: _currentAiImages.map(i => ({ category: 'image', mimeType: i.mediaType || 'image/png', url: i.url, content: i.data })).filter(a => a.url || a.content),
         videos: _currentAiVideos,
         audios: _currentAiAudios,
         files: _currentAiFiles,
       })
     }
-    // 托管 Agent：捕获 AI 回复，检测停止信号，决定是否继续
-    if (shouldCaptureHostedTarget(payload)) {
-      const capturedText = finalText || _currentAiText || ''
-      if (capturedText) {
-        appendHostedTarget(capturedText)
-        if (detectStopFromText(capturedText)) {
-          appendHostedOutput(t('chat.hostedAutoStopSignal'))
-          stopHostedAgent()
-        } else {
-          maybeTriggerHostedRun()
-        }
-      }
-    }
+    _hostedController?.acceptTarget({ ...payload, sessionKey: eventSessionKey, runId }, finalText || _currentAiText || '')
     resetStreamState()
     _schedulePostFinalCheck()
     processMessageQueue()
@@ -4576,6 +3869,7 @@ function handleChatEvent(payload) {
   }
 
   if (state === 'aborted') {
+    if (runId && !_runCoordinator.markTerminal(runId)) return
     showTyping(false)
     if (_currentAiBubble && _currentAiText) {
       _currentAiBubble.innerHTML = renderMarkdown(makeStreamRenderSnapshot(_currentAiText))
@@ -4622,6 +3916,7 @@ function handleChatEvent(payload) {
 
     // 如果流式输出中收到错误，保留已收到的内容，但必须结束当前流，避免发送按钮和队列卡死。
     if (keepRunWaitingAfterRecoverableError(errMsg, runId, eventSessionKey)) return
+    if (runId && !_runCoordinator.markTerminal(runId)) return
 
     if (_isStreaming || _currentAiBubble) {
       console.warn('[chat] 流式中收到错误，保留部分输出并结束当前流:', errMsg)
@@ -5337,6 +4632,7 @@ function resetStreamState() {
   _streamStartTime = 0
   _lastErrorMsg = null
   _errorTimer = null
+  _isSending = false
   showTyping(false)
   updateSendState()
 }
@@ -5379,7 +4675,7 @@ async function loadHistory() {
     _lastHistoryHash = hash
 
     // 正在发送/流式输出时不全量重绘，避免覆盖本地乐观渲染
-    if (hasExisting && (_isSending || _isStreaming || _messageQueue.length > 0)) {
+    if (hasExisting && (_isSending || _isStreaming || _runCoordinator.queuedCount > 0)) {
       saveMessages(result.messages.map(m => localHistoryMessage(m, sessionKey)).filter(Boolean))
       _isLoadingHistory = false
       return
@@ -6056,6 +5352,154 @@ function isAtBottom() {
   return _messagesEl.scrollHeight - _messagesEl.scrollTop - _messagesEl.clientHeight < 80
 }
 
+function loadVoiceSettings() {
+  const fallback = { mode: 'short', wakeWord: '小鱼儿', autoSend: true }
+  try {
+    const saved = JSON.parse(localStorage.getItem(VOICE_SETTINGS_KEY) || '{}')
+    return { ...fallback, ...saved }
+  } catch {
+    return fallback
+  }
+}
+
+function saveVoiceSettings() {
+  const settings = {
+    mode: _voiceModeEl?.value || 'short',
+    wakeWord: _voiceWakeWordEl?.value?.trim() || '小鱼儿',
+    autoSend: _voiceAutoSendEl?.checked !== false,
+  }
+  try { localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings)) } catch {}
+  _voiceController?.setWakeWord(settings.wakeWord)
+  return settings
+}
+
+function setVoiceStatus(message, state = 'idle') {
+  if (_voiceStatusEl) {
+    _voiceStatusEl.textContent = message
+    _voiceStatusEl.dataset.state = state
+  }
+  if (_voiceBtn) {
+    _voiceBtn.dataset.state = state
+    _voiceBtn.classList.toggle('active', state !== 'idle' && state !== 'error')
+  }
+}
+
+function applyVoiceTranscript(text, meta = {}) {
+  const transcript = String(text || '').trim()
+  if (!transcript || !_textarea) return
+  _textarea.value = transcript
+  _textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  const shouldSend = _voiceAutoSendEl?.checked !== false
+  if (shouldSend) {
+    setVoiceStatus(meta.mode === 'continuous' ? '已识别，正在发送并继续监听' : '已识别，正在发送', 'sending')
+    sendMessage()
+  } else {
+    _textarea.focus()
+    setVoiceStatus('语音已转成文字，请确认后发送', 'ready')
+  }
+}
+
+function voiceStatusMessage(status, wakeWord) {
+  const messages = {
+    idle: '语音已停止',
+    listening: '正在聆听，请说话',
+    'waiting-wake-word': `等待唤醒词“${wakeWord || '小鱼儿'}”`,
+    'wake-armed': '已唤醒，请说出指令',
+    error: '语音服务已停止',
+  }
+  return messages[status] || '语音对话已就绪'
+}
+
+function setupVoiceConversation(page) {
+  if (!_voiceBtn || !_voicePanelEl) return
+  const settings = loadVoiceSettings()
+  _voiceModeEl.value = settings.mode
+  _voiceWakeWordEl.value = settings.wakeWord
+  _voiceAutoSendEl.checked = settings.autoSend
+
+  _voiceController = new VoiceConversationController({
+    language: navigator.language?.toLowerCase().startsWith('zh') ? navigator.language : 'zh-CN',
+    wakeWord: settings.wakeWord,
+    onCommand: applyVoiceTranscript,
+    onInterim: (text) => {
+      if (text) setVoiceStatus(`正在识别：${text}`, 'listening')
+    },
+    onStatus: ({ status, wakeWord }) => setVoiceStatus(voiceStatusMessage(status, wakeWord), status),
+    onError: ({ code, message }) => {
+      if (code === 'no-speech' || code === 'aborted') return
+      setVoiceStatus(message, 'error')
+      toast(message, 'error')
+    },
+  })
+
+  if (!_voiceController.supported) {
+    setVoiceStatus('当前系统 WebView 不支持在线语音识别；文字聊天不受影响', 'error')
+  }
+
+  const toggleButton = page.querySelector('#chat-voice-toggle')
+  const startSelectedMode = () => {
+    const current = saveVoiceSettings()
+    if (_voiceController.active) {
+      _voiceController.stop()
+      if (toggleButton) toggleButton.textContent = '开始语音'
+      return
+    }
+    const started = current.mode === 'continuous'
+      ? _voiceController.startContinuous()
+      : current.mode === 'wake'
+        ? _voiceController.startWake()
+        : _voiceController.startShort()
+    if (started && toggleButton) toggleButton.textContent = '停止语音'
+  }
+
+  let pushToTalk = false
+  let suppressNextClick = false
+  const cancelHoldTimer = () => {
+    if (_voiceHoldTimer) clearTimeout(_voiceHoldTimer)
+    _voiceHoldTimer = null
+  }
+  _voiceBtn.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return
+    cancelHoldTimer()
+    _voiceHoldTimer = setTimeout(() => {
+      _voiceHoldTimer = null
+      if (!_voicePanelEl || !_voiceController) return
+      pushToTalk = true
+      suppressNextClick = true
+      _voicePanelEl.style.display = 'none'
+      _voiceController.startPushToTalk()
+    }, 320)
+  })
+  const finishPointer = () => {
+    cancelHoldTimer()
+    if (pushToTalk) {
+      pushToTalk = false
+      _voiceController.stopPushToTalk()
+    }
+  }
+  _voiceBtn.addEventListener('pointerup', finishPointer)
+  _voiceBtn.addEventListener('pointercancel', finishPointer)
+  _voiceBtn.addEventListener('pointerleave', () => {
+    if (pushToTalk) finishPointer()
+  })
+  _voiceBtn.addEventListener('click', () => {
+    if (suppressNextClick) {
+      suppressNextClick = false
+      return
+    }
+    _voicePanelEl.style.display = _voicePanelEl.style.display === 'none' ? 'block' : 'none'
+  })
+
+  toggleButton?.addEventListener('click', startSelectedMode)
+  _voiceModeEl?.addEventListener('change', () => {
+    saveVoiceSettings()
+    if (_voiceController.active) _voiceController.stop()
+    if (toggleButton) toggleButton.textContent = '开始语音'
+  })
+  _voiceWakeWordEl?.addEventListener('change', saveVoiceSettings)
+  _voiceAutoSendEl?.addEventListener('change', saveVoiceSettings)
+}
+
 function updateSendState() {
   if (!_sendBtn || !_textarea) return
   if (_isStreaming) {
@@ -6075,465 +5519,6 @@ function updateStatusDot(status) {
   if (status === 'ready' || status === 'connected') _statusDot.classList.add('online')
   else if (status === 'connecting' || status === 'reconnecting') _statusDot.classList.add('connecting')
   else _statusDot.classList.add('offline')
-}
-
-// ── 托管 Agent 核心逻辑 ──
-
-function toggleHostedPanel() {
-  if (!_hostedPanelEl) return
-  const next = _hostedPanelEl.style.display !== 'block'
-  _hostedPanelEl.style.display = next ? 'block' : 'none'
-  if (next) renderHostedPanel()
-}
-
-function hideHostedPanel() {
-  if (_hostedPanelEl) _hostedPanelEl.style.display = 'none'
-}
-
-function getHostedSessionKey() {
-  return _sessionKey || localStorage.getItem(STORAGE_SESSION_KEY) || 'agent:main:main'
-}
-
-async function loadHostedDefaults() {
-  try {
-    const panel = await api.readPanelConfig()
-    _hostedDefaults = panel?.hostedAgent?.default || null
-  } catch { _hostedDefaults = null }
-}
-
-function loadHostedSessionConfig() {
-  let data = {}
-  try { data = JSON.parse(localStorage.getItem(HOSTED_SESSIONS_KEY) || '{}') } catch { data = {} }
-  const key = getHostedSessionKey()
-  const current = data[key] || {}
-  _hostedSessionConfig = { ...HOSTED_DEFAULTS, ..._hostedDefaults, ...current }
-  if (!_hostedSessionConfig.state) _hostedSessionConfig.state = { ...HOSTED_RUNTIME_DEFAULT }
-  if (!_hostedSessionConfig.history) _hostedSessionConfig.history = []
-  _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT, ..._hostedSessionConfig.state }
-  updateHostedBadge()
-}
-
-function saveHostedSessionConfig(nextConfig) {
-  let data = {}
-  try { data = JSON.parse(localStorage.getItem(HOSTED_SESSIONS_KEY) || '{}') } catch { data = {} }
-  data[getHostedSessionKey()] = nextConfig
-  localStorage.setItem(HOSTED_SESSIONS_KEY, JSON.stringify(data))
-}
-
-function persistHostedRuntime() {
-  if (!_hostedSessionConfig) return
-  _hostedSessionConfig.state = { ..._hostedRuntime }
-  saveHostedSessionConfig(_hostedSessionConfig)
-}
-
-function updateHostedBadge() {
-  if (!_hostedBadgeEl || !_hostedSessionConfig) return
-  const status = _hostedRuntime.status || HOSTED_STATUS.IDLE
-  const enabled = _hostedSessionConfig.enabled
-  let text = t('chat.hostedNotEnabled'), cls = 'chat-hosted-badge'
-  if (!enabled) { text = t('chat.hostedNotEnabled'); cls += ' idle' }
-  else if (status === HOSTED_STATUS.RUNNING) { text = t('chat.hostedRunning'); cls += ' running' }
-  else if (status === HOSTED_STATUS.WAITING) { text = t('chat.hostedWaiting'); cls += ' waiting' }
-  else if (status === HOSTED_STATUS.PAUSED) { text = t('chat.hostedPaused'); cls += ' paused' }
-  else if (status === HOSTED_STATUS.ERROR) { text = t('chat.hostedErrorStatus'); cls += ' error' }
-  else { text = t('chat.hostedStandby'); cls += ' idle' }
-  _hostedBadgeEl.className = cls
-  _hostedBadgeEl.textContent = text
-}
-
-let _countdownInterval = null
-
-function renderHostedPanel() {
-  if (!_hostedPanelEl || !_hostedSessionConfig) return
-  const isRunning = _hostedSessionConfig.enabled && _hostedRuntime.status !== HOSTED_STATUS.IDLE
-  if (_hostedPromptEl) { _hostedPromptEl.value = _hostedSessionConfig.prompt || ''; _hostedPromptEl.disabled = isRunning }
-  if (_hostedMaxStepsEl) {
-    _hostedMaxStepsEl.value = _hostedSessionConfig.maxSteps || HOSTED_DEFAULTS.maxSteps
-    _hostedMaxStepsEl.disabled = isRunning
-    const valEl = _hostedPanelEl.querySelector('#ha-steps-val')
-    if (valEl) valEl.textContent = _hostedMaxStepsEl.value
-  }
-  if (_hostedAutoStopEl) { _hostedAutoStopEl.value = _hostedSessionConfig.autoStopMinutes || 30; _hostedAutoStopEl.disabled = isRunning }
-  const timerToggle = _hostedPanelEl.querySelector('#hosted-agent-timer-on')
-  const timerBody = _hostedPanelEl.querySelector('#ha-timer-body')
-  if (timerToggle) { timerToggle.checked = (_hostedSessionConfig.autoStopMinutes || 0) > 0; timerToggle.disabled = isRunning }
-  if (timerBody) timerBody.style.display = timerToggle?.checked ? '' : 'none'
-  if (_hostedSaveBtn) {
-    _hostedSaveBtn.textContent = isRunning ? `⏹ ${t('chat.stopHosted')}` : `▶ ${t('chat.startHosted')}`
-    _hostedSaveBtn.className = isRunning ? 'btn btn-ghost' : 'btn btn-primary'
-    _hostedSaveBtn.style.flex = '1'
-  }
-  // 主按钮同时作为停止按钮，无需额外 stop btn
-  // 状态栏
-  const statusEl = _hostedPanelEl.querySelector('#hosted-agent-status')
-  if (statusEl) {
-    let msg = t('chat.ready')
-    if (_hostedRuntime.lastError) msg = `${t('chat.errorPrefix')}${_hostedRuntime.lastError}`
-    else if (isRunning) {
-      const remaining = Math.max(0, _hostedSessionConfig.maxSteps - _hostedRuntime.stepCount)
-      msg = `${t('chat.hostedRunning')} · ${t('chat.remaining')} ${remaining}`
-    }
-    statusEl.textContent = msg
-  }
-  // 倒计时
-  updateCountdown()
-}
-
-function updateCountdown() {
-  const cdEl = _hostedPanelEl?.querySelector('#ha-countdown')
-  const fillEl = _hostedPanelEl?.querySelector('#ha-countdown-fill')
-  const textEl = _hostedPanelEl?.querySelector('#ha-countdown-text')
-  if (!cdEl || !fillEl || !textEl) return
-  if (!_hostedAutoStopTimer || !_hostedStartTime || !_hostedSessionConfig?.autoStopMinutes) {
-    cdEl.style.display = 'none'
-    clearInterval(_countdownInterval); _countdownInterval = null
-    return
-  }
-  cdEl.style.display = ''
-  const totalMs = _hostedSessionConfig.autoStopMinutes * 60000
-  const elapsed = Date.now() - _hostedStartTime
-  const remaining = Math.max(0, totalMs - elapsed)
-  const pct = Math.max(0, Math.min(100, (remaining / totalMs) * 100))
-  fillEl.style.width = pct + '%'
-  const mins = Math.floor(remaining / 60000)
-  const secs = Math.floor((remaining % 60000) / 1000)
-  textEl.textContent = `${t('chat.remaining')} ${mins}:${secs.toString().padStart(2, '0')}`
-  if (!_countdownInterval) {
-    _countdownInterval = setInterval(() => updateCountdown(), 1000)
-  }
-  if (remaining <= 0) { clearInterval(_countdownInterval); _countdownInterval = null }
-}
-
-function toggleHostedRun() {
-  if (!_hostedSessionConfig) return
-  if (_hostedSessionConfig.enabled && _hostedRuntime.status !== HOSTED_STATUS.IDLE) {
-    stopHostedAgent()
-  } else {
-    startHostedAgent()
-  }
-}
-
-async function startHostedAgent() {
-  if (!_hostedSessionConfig) return
-  const prompt = (_hostedPromptEl?.value || '').trim()
-  if (!prompt) { toast(t('chat.enterTaskGoal'), 'warning'); return }
-  const rawSteps = parseInt(_hostedMaxStepsEl?.value || HOSTED_DEFAULTS.maxSteps, 10)
-  const maxSteps = rawSteps >= 205 ? 999999 : Math.max(1, rawSteps)
-  const stepDelayMs = Math.max(200, parseInt(_hostedStepDelayEl?.value || HOSTED_DEFAULTS.stepDelayMs, 10))
-  const retryLimit = Math.max(0, parseInt(_hostedRetryLimitEl?.value || HOSTED_DEFAULTS.retryLimit, 10))
-  const timerOn = _page?.querySelector('#hosted-agent-timer-on')?.checked
-  const autoStopMinutes = timerOn ? Math.max(0, parseInt(_hostedAutoStopEl?.value || 0, 10)) : 0
-  _hostedSessionConfig = { ..._hostedSessionConfig, prompt, enabled: true, maxSteps, stepDelayMs, retryLimit, autoStopMinutes }
-  const sysContent = HOSTED_SYSTEM_PROMPT + '\n\nUser goal: ' + prompt
-  if (!_hostedSessionConfig.history?.length) _hostedSessionConfig.history = [{ role: 'system', content: sysContent }]
-  else if (_hostedSessionConfig.history[0]?.role === 'system') _hostedSessionConfig.history[0].content = sysContent
-  else _hostedSessionConfig.history.unshift({ role: 'system', content: sysContent })
-  _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT, status: HOSTED_STATUS.RUNNING }
-  _hostedStartTime = Date.now()
-  persistHostedRuntime()
-  renderHostedPanel()
-  updateHostedBadge()
-  // 启动定时停止
-  clearTimeout(_hostedAutoStopTimer)
-  if (autoStopMinutes > 0) {
-    _hostedAutoStopTimer = setTimeout(() => {
-      if (!_pageActive || !_hostedSessionConfig?.enabled) return
-      appendHostedOutput(t('chat.hostedTimerExpired', { min: autoStopMinutes }))
-      stopHostedAgent()
-    }, autoStopMinutes * 60000)
-  }
-  if (!wsClient.gatewayReady || !_sessionKey) { toast(t('chat.gatewayNotReadySend'), 'warning'); return }
-  toast(t('chat.hostedStarted'), 'success')
-  runHostedAgentStep()
-}
-
-function stopHostedAgent() {
-  if (!_hostedSessionConfig) return
-  if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
-  clearTimeout(_hostedAutoStopTimer); _hostedAutoStopTimer = null
-  clearTimeout(_hostedRetryTimer); _hostedRetryTimer = null
-  clearInterval(_countdownInterval); _countdownInterval = null
-  _hostedBusy = false
-  _hostedSessionConfig.enabled = false
-  _hostedRuntime.status = HOSTED_STATUS.IDLE
-  _hostedRuntime.pending = false
-  _hostedRuntime.stepCount = 0
-  _hostedRuntime.lastError = ''
-  _hostedRuntime.errorCount = 0
-  _hostedStartTime = 0
-  persistHostedRuntime()
-  renderHostedPanel()
-  updateHostedBadge()
-  toast(t('chat.hostedStopped'), 'info')
-}
-
-function shouldCaptureHostedTarget(payload) {
-  if (!_hostedSessionConfig?.enabled) return false
-  if (_hostedRuntime.status === HOSTED_STATUS.PAUSED || _hostedRuntime.status === HOSTED_STATUS.ERROR || _hostedRuntime.status === HOSTED_STATUS.IDLE) return false
-  if (payload?.message?.role && payload.message.role !== 'assistant') return false
-  const ts = payload?.timestamp || Date.now()
-  if (ts && ts === _hostedLastTargetTs) return false
-  _hostedLastTargetTs = ts
-  return true
-}
-
-function appendHostedTarget(text) {
-  if (!_hostedSessionConfig) return
-  if (!_hostedSessionConfig.history) _hostedSessionConfig.history = []
-  _hostedSessionConfig.history.push({ role: 'target', content: text, ts: Date.now() })
-  persistHostedRuntime()
-}
-
-function maybeTriggerHostedRun() {
-  if (!_hostedSessionConfig?.enabled) return
-  if (_hostedRuntime.status === HOSTED_STATUS.IDLE || _hostedRuntime.status === HOSTED_STATUS.PAUSED || _hostedRuntime.status === HOSTED_STATUS.ERROR) return
-  if (_hostedRuntime.pending || _hostedBusy) return
-  if (!wsClient.gatewayReady) { _hostedRuntime.status = HOSTED_STATUS.PAUSED; persistHostedRuntime(); updateHostedBadge(); renderHostedPanel(); return }
-  _hostedRuntime.status = HOSTED_STATUS.IDLE
-  runHostedAgentStep()
-}
-
-function compressHostedContext() {
-  if (!_hostedSessionConfig?.history) return
-  const history = _hostedSessionConfig.history
-  if (history.length <= HOSTED_COMPRESS_THRESHOLD) return
-  const sysEntry = history[0]?.role === 'system' ? history[0] : null
-  const recent = history.slice(-8)
-  const older = history.slice(sysEntry ? 1 : 0, -8)
-  const summary = older.map(h => `[${h.role}] ${(h.content || '').slice(0, 80)}`).join('\n')
-  const compressed = []
-  if (sysEntry) compressed.push(sysEntry)
-  compressed.push({ role: 'user', content: `[Context summary - compressed ${older.length} entries]\n${summary}`, ts: Date.now() })
-  compressed.push(...recent)
-  _hostedSessionConfig.history = compressed
-  persistHostedRuntime()
-}
-
-function buildHostedMessages() {
-  compressHostedContext()
-  const history = _hostedSessionConfig?.history || []
-  const mapped = history.slice(-HOSTED_CONTEXT_MAX).map(item => {
-    if (item.role === 'system') return { role: 'system', content: item.content }
-    if (item.role === 'assistant') return { role: 'assistant', content: item.content }
-    return { role: 'user', content: item.content }
-  })
-  const hasUserMsg = mapped.some(m => m.role === 'user' || m.role === 'assistant')
-  if (!hasUserMsg && _hostedSessionConfig?.prompt) {
-    mapped.push({ role: 'user', content: _hostedSessionConfig.prompt })
-  }
-  return mapped
-}
-
-function detectStopFromText(text) {
-  if (!text) return false
-  return /\b(完成|无需继续|结束|停止|done|stop|final)\b/i.test(text)
-}
-
-async function runHostedAgentStep() {
-  if (!_pageActive || !_page?.isConnected) return
-  if (_hostedBusy || !_hostedSessionConfig?.enabled) return
-  const prompt = (_hostedSessionConfig.prompt || '').trim()
-  if (!prompt) return
-  if (!wsClient.gatewayReady || !_sessionKey) {
-    _hostedRuntime.status = HOSTED_STATUS.PAUSED
-    _hostedRuntime.lastError = 'Gateway not ready'
-    persistHostedRuntime(); updateHostedBadge()
-    appendHostedOutput(t('chat.hostedNeedIntervention', { reason: _hostedRuntime.lastError }))
-    return
-  }
-  if (_hostedRuntime.errorCount >= _hostedSessionConfig.retryLimit) {
-    _hostedRuntime.status = HOSTED_STATUS.ERROR
-    persistHostedRuntime(); updateHostedBadge()
-    appendHostedOutput(t('chat.hostedErrorThreshold'))
-    return
-  }
-  if (_hostedRuntime.stepCount >= _hostedSessionConfig.maxSteps) {
-    _hostedRuntime.status = HOSTED_STATUS.IDLE
-    persistHostedRuntime(); updateHostedBadge()
-    return
-  }
-  _hostedBusy = true
-  _hostedRuntime.pending = true
-  _hostedRuntime.status = HOSTED_STATUS.RUNNING
-  _hostedRuntime.lastRunAt = Date.now()
-  _hostedRuntime.lastRunId = uuid()
-  persistHostedRuntime(); updateHostedBadge()
-
-  const delay = _hostedSessionConfig.stepDelayMs || HOSTED_DEFAULTS.stepDelayMs
-  if (delay > 0) {
-    await new Promise(resolve => {
-      _hostedRetryTimer = setTimeout(() => {
-        _hostedRetryTimer = null
-        resolve()
-      }, delay)
-    })
-    if (!_pageActive || !_page?.isConnected || !_hostedSessionConfig?.enabled) {
-      _hostedBusy = false
-      _hostedRuntime.pending = false
-      return
-    }
-  }
-
-  try {
-    const messages = buildHostedMessages()
-    let resultText = ''
-    await callHostedAI(messages, (chunk) => { resultText += chunk })
-
-    _hostedRuntime.stepCount += 1
-    _hostedRuntime.errorCount = 0
-    _hostedRuntime.lastError = ''
-
-    _hostedSessionConfig.history.push({ role: 'assistant', content: resultText, ts: Date.now() })
-    persistHostedRuntime()
-    appendHostedOutput(resultText + ` | step=${_hostedRuntime.stepCount}`)
-
-    // 如果 AI 回复中有「执行命令」类内容，通过 Gateway 发送给 Agent
-    const instruction = resultText.trim()
-    if (instruction && !detectStopFromText(instruction)) {
-      _hostedRuntime.status = HOSTED_STATUS.WAITING
-      _hostedRuntime.pending = false
-      persistHostedRuntime(); updateHostedBadge()
-      // 将指令发给 Gateway Agent
-      try { await wsClient.chatSend(_sessionKey, instruction) } catch {}
-    } else {
-      _hostedRuntime.status = HOSTED_STATUS.IDLE
-      _hostedRuntime.pending = false
-      persistHostedRuntime(); updateHostedBadge()
-    }
-  } catch (e) {
-    _hostedRuntime.errorCount = (_hostedRuntime.errorCount || 0) + 1
-    _hostedRuntime.lastError = e.message || String(e)
-    _hostedRuntime.pending = false
-    if (_hostedRuntime.errorCount >= _hostedSessionConfig.retryLimit) {
-      _hostedRuntime.status = HOSTED_STATUS.ERROR
-      persistHostedRuntime(); updateHostedBadge()
-      appendHostedOutput(t('chat.hostedNeedIntervention', { reason: _hostedRuntime.lastError }))
-      return
-    }
-    persistHostedRuntime(); updateHostedBadge()
-    clearTimeout(_hostedRetryTimer)
-    _hostedRetryTimer = setTimeout(() => {
-      _hostedRetryTimer = null
-      if (!_pageActive || !_page?.isConnected || !_hostedSessionConfig?.enabled) return
-      _hostedBusy = false
-      runHostedAgentStep()
-    }, delay)
-    return
-  } finally {
-    _hostedBusy = false
-  }
-}
-
-function loadHostedAssistantConfig() {
-  const keys = ['clawpanel-assistant', '星枢OpenClaw-assistant']
-  for (const key of keys) {
-    try {
-      const raw = localStorage.getItem(key)
-      if (!raw) continue
-      const stored = JSON.parse(raw)
-      if (stored && typeof stored === 'object') {
-        return {
-          baseUrl: stored.baseUrl || '',
-          apiKey: stored.apiKey || '',
-          model: stored.model || '',
-          temperature: stored.temperature || 0.7,
-          apiType: stored.apiType || 'openai-completions',
-        }
-      }
-    } catch {}
-  }
-  return { baseUrl: '', apiKey: '', model: '', temperature: 0.7, apiType: 'openai-completions' }
-}
-
-async function callHostedAI(messages, onChunk) {
-  const config = loadHostedAssistantConfig()
-
-  if (!config.baseUrl || !config.model) throw new Error(t('chat.hostedModelNotConfigured'))
-
-  const apiType = normalizeHostedApiType(config.apiType)
-  const base = normalizeHostedBaseUrl(config.baseUrl, apiType)
-  if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
-  _hostedAbort = new AbortController()
-  const signal = _hostedAbort.signal
-  const timeout = setTimeout(() => { if (_hostedAbort) _hostedAbort.abort() }, 120000)
-
-  try {
-    const headers = { 'Content-Type': 'application/json' }
-    if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`
-    const body = { model: config.model, messages, stream: true, temperature: config.temperature || 0.7 }
-    const resp = await fetch(base + '/chat/completions', { method: 'POST', headers, body: JSON.stringify(body), signal })
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '')
-      let errMsg = `API error ${resp.status}`
-      try { errMsg = JSON.parse(errText).error?.message || errMsg } catch {}
-      throw new Error(errMsg)
-    }
-    const reader = resp.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data:')) continue
-        const data = trimmed.slice(5).trim()
-        if (data === '[DONE]') return
-        try { const json = JSON.parse(data); if (json.choices?.[0]?.delta?.content) onChunk(json.choices[0].delta.content) } catch {}
-      }
-    }
-  } finally {
-    clearTimeout(timeout)
-    _hostedAbort = null
-  }
-}
-
-function normalizeHostedApiType(raw) {
-  const type = (raw || '').trim()
-  if (type === 'anthropic' || type === 'anthropic-messages') return 'anthropic-messages'
-  if (type === 'google-gemini' || type === 'google-generative-ai') return 'google-generative-ai'
-  if (type === 'ollama') return 'ollama'
-  return 'openai-completions'
-}
-
-function normalizeHostedBaseUrl(raw, apiType) {
-  let base = (raw || '').trim()
-  if (!base) throw new Error(t('chat.hostedModelNotConfigured'))
-  if (/^\/\//.test(base)) base = `http:${base}`
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(base) && /^(localhost|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:.]+\]|[^/\s]+:\d+)(?:\/|$)/i.test(base)) {
-    base = `http://${base}`
-  }
-  let url
-  try {
-    url = new URL(base)
-  } catch {
-    throw new Error(t('chat.hostedModelUrlInvalid'))
-  }
-  if (!/^https?:$/.test(url.protocol) || url.hostname === 'tauri.localhost') {
-    throw new Error(t('chat.hostedModelUrlInvalid'))
-  }
-  base = `${url.origin}${url.pathname}`
-    .replace(/\/+$/, '')
-    .replace(/\/api\/chat\/?$/, '')
-    .replace(/\/api\/generate\/?$/, '')
-    .replace(/\/api\/tags\/?$/, '')
-    .replace(/\/api\/?$/, '')
-    .replace(/\/chat\/completions\/?$/, '')
-    .replace(/\/completions\/?$/, '')
-    .replace(/\/responses\/?$/, '')
-    .replace(/\/messages\/?$/, '')
-    .replace(/\/models\/?$/, '')
-  const type = normalizeHostedApiType(apiType)
-  if (type === 'anthropic-messages') {
-    if (!base.endsWith('/v1')) base += '/v1'
-    return base
-  }
-  if (type === 'google-generative-ai') return base
-  if (/:(11434)$/i.test(base) && !base.endsWith('/v1')) return `${base}/v1`
-  return base
 }
 
 function appendHostedOutput(text) {
@@ -6562,17 +5547,23 @@ export function cleanup() {
   _cancelResponseWatchdog()
   clearTimeout(_postFinalCheck)
   _postFinalCheck = null
-  clearTimeout(_hostedAutoStopTimer)
-  _hostedAutoStopTimer = null
-  clearTimeout(_hostedRetryTimer)
-  _hostedRetryTimer = null
-  clearInterval(_countdownInterval)
-  _countdownInterval = null
-  if (_hostedAbort) { _hostedAbort.abort(); _hostedAbort = null }
+  _hostedController?.destroy()
+  _hostedController = null
   _sessionKey = null
+  _runCoordinator.reset()
   _page = null
   _messagesEl = null
   _textarea = null
+  if (_voiceHoldTimer) clearTimeout(_voiceHoldTimer)
+  _voiceHoldTimer = null
+  _voiceController?.dispose()
+  _voiceController = null
+  _voiceBtn = null
+  _voicePanelEl = null
+  _voiceStatusEl = null
+  _voiceModeEl = null
+  _voiceWakeWordEl = null
+  _voiceAutoSendEl = null
   _sendBtn = null
   _statusDot = null
   _typingEl = null
@@ -6589,48 +5580,10 @@ export function cleanup() {
   _currentRunId = null
   _isStreaming = false
   _isSending = false
-  _messageQueue = []
+  _runCoordinator.clearPageQueue()
   _lastHistoryHash = ''
-  _hostedBtn = null
-  _hostedPanelEl = null
-  _hostedBadgeEl = null
-  _hostedPromptEl = null
-  _hostedMaxStepsEl = null
-  _hostedStepDelayEl = null
-  _hostedRetryLimitEl = null
-  _hostedSaveBtn = null
-  _hostedStopBtn = null
-  _hostedCloseBtn = null
-  _hostedSessionConfig = null
-  _hostedDefaults = null
-  _hostedRuntime = { ...HOSTED_RUNTIME_DEFAULT }
-  _hostedBusy = false
-  _workspaceBtn = null
-  _workspacePanelEl = null
-  _workspaceAgentBadgeEl = null
-  _workspaceAgentTitleEl = null
-  _workspacePathEl = null
-  _workspaceCoreListEl = null
-  _workspaceTreeEl = null
-  _workspaceCurrentFileEl = null
-  _workspaceMetaEl = null
-  _workspaceEditorEl = null
-  _workspacePreviewEl = null
-  _workspaceEmptyEl = null
-  _workspaceSaveBtn = null
-  _workspaceReloadBtn = null
-  _workspacePreviewBtn = null
-  _workspaceInfo = null
-  _workspaceCoreFiles = []
-  _workspaceTreeCache = new Map()
-  _workspaceExpandedDirs = new Set()
-  _workspaceCurrentAgentId = 'main'
-  _workspaceCurrentFile = null
-  _workspacePreviewMode = false
-  _workspaceDirty = false
-  _workspaceLoadedContent = ''
-  _workspaceLoading = false
-  _workspaceLoadSeq = 0
-  _workspaceOpenSeq = 0
+  _workspaceController?.destroy()
+  _workspaceController = null
+  _ecomWorkbench?.destroy()
+  _ecomWorkbench = null
 }
-

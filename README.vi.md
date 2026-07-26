@@ -11,13 +11,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/qingchencloud/clawpanel/releases/latest">
-    <img src="https://img.shields.io/github/v/release/qingchencloud/clawpanel?style=flat-square&color=6366f1" alt="Release">
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest">
+    <img src="https://img.shields.io/github/v/release/TuLu-openclaw/tulu-openclaw-v2?style=flat-square&color=6366f1" alt="Release">
   </a>
-  <a href="https://github.com/qingchencloud/clawpanel/releases/latest">
-    <img src="https://img.shields.io/github/downloads/qingchencloud/clawpanel/total?style=flat-square&color=8b5cf6" alt="Downloads">
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest">
+    <img src="https://img.shields.io/github/downloads/TuLu-openclaw/tulu-openclaw-v2/total?style=flat-square&color=8b5cf6" alt="Downloads">
   </a>
-  <a href="https://github.com/qingchencloud/clawpanel/blob/main/LICENSE">
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg?style=flat-square" alt="License">
   </a>
 </p>
@@ -28,31 +28,14 @@
   <img src="docs/feature-showcase.gif" width="800" alt="星枢OpenClaw Showcase">
 </p>
 
-星枢OpenClaw là bảng quản lý trực quan cho framework AI Agent [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation). Tích hợp **trợ lý AI thông minh**, giúp bạn cài đặt OpenClaw một cú nhấp, tự động chẩn đoán cấu hình, xử lý sự cố và sửa lỗi. 8 công cụ + 4 chế độ + hỏi đáp tương tác — dễ dàng quản lý cho cả người mới và chuyên gia.
+星枢OpenClaw là bảng quản lý trực quan cho framework AI Agent [OpenClaw](https://github.com/openclaw/openclaw). Tích hợp **trợ lý AI thông minh**, giúp bạn cài đặt OpenClaw một cú nhấp, tự động chẩn đoán cấu hình, xử lý sự cố và sửa lỗi. 8 công cụ + 4 chế độ + hỏi đáp tương tác — dễ dàng quản lý cho cả người mới và chuyên gia.
 
-> 🌐 **Website**: [claw.qt.cool](https://claw.qt.cool/) | 📦 **Tải xuống**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
-
-### 🎁 QingchenCloud AI API
-
-> Nền tảng kiểm thử kỹ thuật nội bộ, mở cho một số người dùng. Điểm danh hàng ngày để nhận tín dụng.
-
-<p align="center">
-  <a href="https://gpt.qt.cool"><img src="https://img.shields.io/badge/🔑 QingchenCloud AI-gpt.qt.cool-6366f1?style=for-the-badge" alt="QingchenCloud AI"></a>
-</p>
-
-- **Tín dụng điểm danh** — Điểm danh hàng ngày + mời bạn bè để nhận tín dụng kiểm thử
-- **API tương thích OpenAI** — Tích hợp liền mạch với OpenClaw
-- **Chính sách tài nguyên** — Giới hạn tốc độ + giới hạn yêu cầu, có thể xếp hàng giờ cao điểm
-- **Khả dụng mô hình** — Mô hình/API theo hiển thị thực tế, có thể chuyển phiên bản
-
-> ⚠️ **Tuân thủ**: Chỉ dành cho kiểm thử kỹ thuật. Cấm sử dụng bất hợp pháp. Bảo quản API Key an toàn. Quy tắc theo chính sách mới nhất của nền tảng.
+> 🌐 **Website**: [GitHub Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest) | 📦 **Tải xuống**: [GitHub Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest)
 
 ### 🔥 Hỗ trợ Bo mạch phát triển / Thiết bị nhúng
 
 - **Orange Pi / Raspberry Pi / RK3588** — `npm run serve` để chạy
-- **Docker ARM64** — `docker run ghcr.io/qingchencloud/openclaw:latest`
 - **Armbian / Debian / Ubuntu Server** — Tự động phát hiện kiến trúc
-- Không cần Rust / Tauri / GUI — **chỉ cần Node.js 18+**
 
 ## Cộng đồng
 
@@ -61,9 +44,9 @@ Cộng đồng các nhà phát triển và người dùng đam mê AI Agent — 
 <p align="center">
   <a href="https://discord.gg/U9AttmsNHh"><strong>Discord</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/qingchencloud/clawpanel/discussions"><strong>Discussions</strong></a>
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/discussions"><strong>Discussions</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/qingchencloud/clawpanel/issues/new"><strong>Báo cáo Issue</strong></a>
+  <a href="https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues/new"><strong>Báo cáo Issue</strong></a>
 </p>
 
 ## Tính năng
@@ -82,37 +65,22 @@ Cộng đồng các nhà phát triển và người dùng đam mê AI Agent — 
 - **Tác vụ định kỳ** — Thực thi theo lịch Cron, gửi đa kênh
 - **Xem nhật ký** — Nhật ký thời gian thực đa nguồn và tìm kiếm
 - **Quản lý bộ nhớ** — Xem/sửa tệp bộ nhớ, xuất ZIP, chuyển Agent
-- **QingchenCloud AI API** — Nền tảng kiểm thử nội bộ, tương thích OpenAI
 - **Công cụ mở rộng** — Quản lý tunnel cftunnel, giám sát ClawApp
 - **Giới thiệu** — Thông tin phiên bản, liên kết cộng đồng, dự án liên quan
 
 ## Tải xuống & Cài đặt
 
-Truy cập [Releases](https://github.com/qingchencloud/clawpanel/releases/latest) để tải phiên bản mới nhất:
+Truy cập [Releases](https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest) để tải phiên bản mới nhất:
 
 | Nền tảng | Trình cài đặt |
 |----------|--------------|
-| **Windows** | `.exe` (khuyến nghị) hoặc `.msi` |
 | **macOS Apple Silicon** | `.dmg` (aarch64) |
 | **macOS Intel** | `.dmg` (x64) |
-| **Linux** | `.AppImage` / `.deb` / `.rpm` |
 
 ### Linux Server (Phiên bản Web)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
-```
-
-### Docker
-
-```bash
-docker run -d --name clawpanel --restart unless-stopped \
-  -p 1420:1420 -v clawpanel-data:/root/.openclaw \
-  node:22-slim \
-  sh -c "apt-get update && apt-get install -y git && \
-    npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com && \
-    git clone https://github.com/qingchencloud/clawpanel.git /app && \
-    cd /app && npm install && npm run build && npm run serve"
+curl -fsSL -o deploy.sh https://github.com/TuLu-openclaw/tulu-openclaw-v2/releases/latest/download/deploy.sh && bash deploy.sh
 ```
 
 ## Bắt đầu nhanh
@@ -134,8 +102,8 @@ docker run -d --name clawpanel --restart unless-stopped \
 ## Build từ mã nguồn
 
 ```bash
-git clone https://github.com/qingchencloud/clawpanel.git
-cd clawpanel && npm install
+git clone https://github.com/TuLu-openclaw/tulu-openclaw-v2.git
+cd tulu-openclaw-v2 && npm install
 
 # Desktop (cần Rust + Tauri v2)
 npm run tauri dev        # Phát triển
@@ -150,9 +118,9 @@ npm run build && npm run serve  # Production
 
 | Dự án | Mô tả |
 |-------|-------|
-| [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) | Framework AI Agent |
-| [ClawApp](https://github.com/qingchencloud/clawapp) | Ứng dụng chat di động đa nền tảng |
-| [cftunnel](https://github.com/qingchencloud/cftunnel) | Công cụ Cloudflare Tunnel |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Framework AI Agent |
+| [ClawApp](https://github.com/TuLu-openclaw/clawapp) | Ứng dụng chat di động đa nền tảng |
+| [cftunnel](https://github.com/TuLu-openclaw/cftunnel) | Công cụ Cloudflare Tunnel |
 
 ## Đóng góp
 
@@ -172,11 +140,10 @@ If you find this project useful, consider supporting us via USDT (BNB Smart Chai
 ## Contact
 
 - **Email**: [support@qctx.net](mailto:support@qctx.net)
-- **Website**: [qingchencloud.com](https://qingchencloud.com)
-- **Product**: [claw.qt.cool](https://claw.qt.cool)
+- **Product**: [GitHub Repository](https://github.com/TuLu-openclaw/tulu-openclaw-v2)
 
 ## Giấy phép
 
 [AGPL-3.0](LICENSE). Liên hệ để được cấp phép thương mại.
 
-© 2026 QingchenCloud | [claw.qt.cool](https://claw.qt.cool)
+© 2026 QingchenCloud | [GitHub Repository](https://github.com/TuLu-openclaw/tulu-openclaw-v2)

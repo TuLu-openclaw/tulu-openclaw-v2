@@ -3455,7 +3455,7 @@ pub async fn install_channel_plugin(
         let _ = app.emit("plugin-log", "请在终端手动执行以下命令重装 OpenClaw：");
         let _ = app.emit(
             "plugin-log",
-            "  npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com",
+            "  npm i -g openclaw@latest --registry https://registry.npmjs.org",
         );
         let _ = app.emit("plugin-log", "重装完成后再回来安装该插件。");
         let _ = cleanup_failed_plugin_install(plugin_id, had_existing_plugin, had_existing_config);
@@ -3478,7 +3478,7 @@ pub async fn install_channel_plugin(
                 "plugin-log",
                 "  前往「服务管理」页面点击升级，或在终端执行：",
             );
-            let _ = app.emit("plugin-log", "  npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com");
+            let _ = app.emit("plugin-log", "  npm i -g openclaw@latest --registry https://registry.npmjs.org");
         }
         let rollback_err =
             cleanup_failed_plugin_install(plugin_id, had_existing_plugin, had_existing_config)
@@ -3673,7 +3673,7 @@ pub async fn install_qqbot_plugin(
             "这是 OpenClaw 的上游依赖问题，非 QQBot 插件本身的问题。",
         );
         let _ = app.emit("plugin-log", "请在终端手动执行以下命令重装 OpenClaw：");
-        let _ = app.emit("plugin-log", "  npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com");
+        let _ = app.emit("plugin-log", "  npm i -g openclaw@latest --registry https://registry.npmjs.org");
         let _ = app.emit("plugin-log", "重装完成后再回来安装 QQBot 插件。");
         let _ = cleanup_failed_extension_install(
             &plugin_dir,
@@ -3705,7 +3705,7 @@ pub async fn install_qqbot_plugin(
                 "plugin-log",
                 "  前往「服务管理」页面点击升级，或在终端执行：",
             );
-            let _ = app.emit("plugin-log", "  npm i -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com");
+            let _ = app.emit("plugin-log", "  npm i -g openclaw@latest --registry https://registry.npmjs.org");
         } else {
             let _ = app.emit(
                 "plugin-log",
