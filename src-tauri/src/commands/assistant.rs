@@ -341,16 +341,23 @@ pub async fn transcribe_voice_audio(
         .args(["infer", "audio", "transcribe", "--file"])
         .arg(&file_path)
         .arg("--json");
-    if let Some(language) = language.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(language) = language
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         command.args(["--language", language]);
     }
-    let output = tokio::time::timeout(std::time::Duration::from_secs(120), command.output()).await;
+    let output =
+        tokio::time::timeout(std::time::Duration::from_secs(120), command.output()).await;
     let _ = tokio::fs::remove_file(&file_path).await;
     let output = output
         .map_err(|_| "语音转写超时，请缩短录音后重试".to_string())?
         .map_err(|_| "未找到可用的 OpenClaw 语音转写服务".to_string())?;
     if !output.status.success() {
-        return Err("OpenClaw 语音转写暂不可用，请检查语音模型配置或改用文字输入".to_string());
+        return Err(
+            "OpenClaw 语音转写暂不可用，请检查语音模型配置或改用文字输入".to_string(),
+        );
     }
 
     let value: serde_json::Value = serde_json::from_slice(&output.stdout)
@@ -359,7 +366,10 @@ pub async fn transcribe_voice_audio(
         .ok_or_else(|| "没有识别到可用文字，请靠近麦克风后重试".to_string())?;
     Ok(serde_json::json!({
         "text": text,
-        "provider": value.get("provider").cloned().unwrap_or(serde_json::Value::Null),
+        "provider": value
+            .get("provider")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null),
         "model": value.get("model").cloned().unwrap_or(serde_json::Value::Null),
         "engine": "openclaw"
     }))
