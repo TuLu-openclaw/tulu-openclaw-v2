@@ -2355,6 +2355,7 @@ fn write_hermes_config_transactionally(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn configure_hermes(
     provider: String,
@@ -4939,7 +4940,7 @@ pub async fn hermes_profiles_list() -> Result<Value, String> {
                 .is_some_and(|snapshot| gateway_snapshot_serves_profile(snapshot, name));
         let gateway_snapshot = profile_gateway_snapshot.as_ref().or_else(|| {
             served_by_default_gateway
-                .then(|| default_gateway_snapshot.as_ref())
+                .then_some(default_gateway_snapshot.as_ref())
                 .flatten()
         });
         let native_status = if name == "default" || served_by_default_gateway {

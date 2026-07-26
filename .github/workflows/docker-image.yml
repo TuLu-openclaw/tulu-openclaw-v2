@@ -15,4 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Build the Docker image for validation
-        run: docker build . --file Dockerfile --tag tulu-openclaw:ci
+        run: |
+          for attempt in 1 2 3; do
+            if docker build . --file Dockerfile --tag tulu-openclaw:ci; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Docker build attempt $attempt failed; retrying in 15 seconds"
+            sleep 15
+          done

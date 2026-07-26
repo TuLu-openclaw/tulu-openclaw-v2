@@ -87,6 +87,7 @@ struct R2Config {
     enabled: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 struct StandaloneConfig {
     #[serde(default)]
@@ -96,6 +97,7 @@ struct StandaloneConfig {
     enabled: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 struct VersionPolicy {
     #[serde(default)]
@@ -435,11 +437,13 @@ fn r2_config() -> R2Config {
     load_version_policy().r2
 }
 
+#[allow(dead_code)]
 fn standalone_config() -> StandaloneConfig {
     load_version_policy().standalone
 }
 
 /// standalone 包的平台 key（与 CI 构建矩阵一致）
+#[allow(dead_code)]
 fn standalone_platform_key() -> &'static str {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
@@ -474,6 +478,7 @@ fn standalone_platform_key() -> &'static str {
 }
 
 /// standalone 包的文件扩展名
+#[allow(dead_code)]
 fn standalone_archive_ext() -> &'static str {
     #[cfg(target_os = "windows")]
     {
@@ -3910,6 +3915,7 @@ fn npm_global_modules_dir() -> Option<PathBuf> {
     }
 }
 
+#[allow(dead_code)]
 fn openclaw_package_dir(modules_dir: &std::path::Path, source: &str) -> PathBuf {
     if source == "official" {
         modules_dir.join("openclaw")
@@ -3918,6 +3924,7 @@ fn openclaw_package_dir(modules_dir: &std::path::Path, source: &str) -> PathBuf 
     }
 }
 
+#[allow(dead_code)]
 fn verify_openclaw_image_dependency_at(
     package_dir: &std::path::Path,
     node_executable: &std::path::Path,
@@ -3956,6 +3963,7 @@ fn verify_openclaw_image_dependency_at(
     })
 }
 
+#[allow(dead_code)]
 fn verify_standalone_image_dependency(install_dir: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let node_executable = install_dir.join("node.exe");
@@ -4091,6 +4099,7 @@ pub(crate) fn npm_global_bin_dir() -> Option<PathBuf> {
 /// 尝试从 standalone 独立安装包安装 OpenClaw（自带 Node.js，零依赖）
 /// 动态查询 latest.json 获取最新版本，下载对应平台的归档并解压
 /// 成功返回 Ok(版本号)，失败返回 Err(原因) 供 caller 降级到 R2/npm
+#[allow(dead_code)]
 async fn try_standalone_install(
     app: &tauri::AppHandle,
     version: &str,
