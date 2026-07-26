@@ -8,6 +8,7 @@
 
 import '../style/movie-tool.css'
 import { t, getLang } from '../lib/i18n.js'
+import { extractCzMediaUrl, getCzDetailRef, getCzMovieId, parseCzDetailHtml, parseCzListHtml } from '../lib/cz-movie-source.js'
 
 function mt(key, params) {
   return t('movieTool.' + key, params)
@@ -184,27 +185,6 @@ async function resolvePlayableUrl(url) {
 }
 
 const CZ_BASE = 'https://www.4kcz.com'
-const CZ_SOURCE_NAME = '厂长资源片库'
-
-function ip51122ImageUrl(item) {
-  const imagePath = item?.imagePath || item?.cover || item?.pic || ''
-  if (!imagePath) return ''
-  if (/^https?:\/\//i.test(imagePath)) return fixIp51122PosterUrl(imagePath)
-  const group = item?.imageGroup || 'vod1'
-  const path = /^\/vod\d+\//i.test(imagePath) ? imagePath : '/' + String(group).replace(/^\/+|\/+$/g, '') + '/' + String(imagePath).replace(/^\/+/, '')
-  return fixIp51122PosterUrl(path)
-}
-
-async function loadIp51122Detail(detailId, name, pic) {
-  const id = String(detailId || '').match(/\/detail\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
-  if (!id) throw new Error('云岚详情缺少 movie id')
-  const detailUrl = `${IP51122_DETAIL_BASE}/detail/${id}.html`
-  const html = await fetchIp51122Page(detailUrl, IP51122_DETAIL_BASE)
-  if (/403 Forbidden|openresty|Access Denied|850/i.test(html)) throw new Error('云岚实时站点当前返回 403 / 防护页，详情页暂不可用')
-  const detail = parseNapp03DetailHtml(html, IP51122_DETAIL_BASE, id, name, pic)
-  if (!detail) throw new Error('云岚详情页未解析到播放列表')
-  return { ...detail, _srcKey: 'ip51122', _api: IP51122_DETAIL_BASE }
-}
 
 function isDirectVideoUrl(url) {
   return /\.(m3u8|mp4|mpd)(?:[?#]|$)/i.test(String(url || ''))
@@ -223,16 +203,6 @@ function getPlayableSourceKey(source) {
   return source.key || source.name || ''
 }
 
-const IP51122_LIST_BASE = 'https://www.ncat21.com'
-const IP51122_DETAIL_BASE = 'https://www.ncat21.com'
-const IP51122_FALLBACK_BASE = 'https://43.248.100.69:51080'
-const IP51122_IMAGE_BASE = 'https://vres.zyxpedu.com'
-let _ip51122SearchToken = ''
-
-function isCdndefendHtml(html) {
-  return /Protected by cdndefend|cdndefend_js_cookie|verifying your browser/i.test(String(html || ''))
-}
-
 function cleanLineName(value, fallback) {
   const raw = decodeHtmlEntities(String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
   if (!raw) return fallback
@@ -240,120 +210,6 @@ function cleanLineName(value, fallback) {
   return raw.replace(/[•·*★☆]+/g, '').trim() || fallback
 }
 
-function parseNapp03DetailHtml(html, baseUrl, detailId, name, pic) {
-  const title = decodeHtmlEntities((
-    html.match(/<div[^>]+class=["'][^"']*detail-title[^"']*["'][^>]*>[\s\S]*?<strong>(?!𝕜𝕜𝕪𝕤)([^<]+)<\/strong>/i)?.[1]
-    || html.match(/<title[^>]*>([^<-]+)(?:-|<)/i)?.[1]
-    || name
-    || ''
-  ).trim())
-  const posterRaw = html.match(/<div[^>]+class=["'][^"']*detail-pic[^"']*["'][^>]*>[\s\S]*?<img[^>]+data-original=["']([^"']+)["']/i)?.[1]
-    || html.match(/<div[^>]+class=["'][^"']*detail-pic[^"']*["'][^>]*>[\s\S]*?<img[^>]+src=["']([^"']+)["']/i)?.[1]
-    || pic
-    || ''
-  const desc = decodeHtmlEntities((html.match(/<div[^>]+class=["'][^"']*detail-desc[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || '')
-    .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim())
-  const sourceNames = [...html.matchAll(/<span[^>]+class=["'][^"']*source-item-label[^"']*["'][^>]*>([^<]+)<\/span>[\s\S]*?<span[^>]+class=["'][^"']*source-item-sublabel[^"']*["'][^>]*>([^<]*)<\/span>/gi)]
-    .map((m, i) => cleanLineName(m[1] || m[2], '线路' + (i + 1)))
-  const lines = []
-  const lineBlocks = [...html.matchAll(/<div[^>]+class=["'][^"']*(?:episode-list|playlist|player-list|play-list|source-item)[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)]
-  if (lineBlocks.length) {
-    lineBlocks.forEach((blockMatch, blockIndex) => {
-      const urls = [...blockMatch[1].matchAll(/<a[^>]+href=["']([^"']*\/play\/[^"']+|[^"']*\/index\.php\/vod\/play\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
-        .map((ep, i) => {
-          const rawName = decodeHtmlEntities(ep[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
-          return { name: rawName || ('集' + (i + 1)), url: normalizeEpisodeUrl(ep[1], baseUrl) }
-        })
-        .filter(ep => ep.url)
-      if (urls.length) lines.push({ name: cleanLineName(sourceNames[blockIndex], '线路' + (blockIndex + 1)), urls })
-    })
-  }
-  if (!lines.length) {
-    const urls = [...html.matchAll(/<a[^>]+href=["']([^"']*\/play\/[^"']+|[^"']*\/index\.php\/vod\/play\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
-      .map((ep, i) => ({
-        name: decodeHtmlEntities(ep[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()) || ('集' + (i + 1)),
-        url: normalizeEpisodeUrl(ep[1], baseUrl),
-      }))
-      .filter(ep => ep.url)
-    if (urls.length) lines.push({ name: '默认线路', urls })
-  }
-  if (!lines.length) return null
-  return {
-    vod_id: detailId,
-    vod_name: title,
-    vod_pic: posterRaw ? new URL(decodeHtmlEntities(posterRaw), baseUrl).href : '',
-    vod_content: desc,
-    vod_play_from: lines.map(l => l.name).join('$$$'),
-    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
-    _episodes: lines,
-    _detailHtml: html,
-    _srcKey: 'a_napp03',
-    _api: baseUrl,
-  }
-}
-
-function parseIp51122ListHtml(html, baseUrl) {
-  const results = []
-  const seen = new Set()
-  const patterns = [
-    /<a[^>]+href=["']([^"']*\/detail\/\d+\.html)["'][^>]*class=["'][^"']*(?:carousel-item|v-item|search-result-item)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi,
-    /<div[^>]+class=["'][^"']*module-item[^"']*["'][^>]*>([\s\S]*?)(?=<div[^>]+class=["'][^"']*module-item|<\/section>|<\/main>)/gi,
-  ]
-  for (const re of patterns) {
-    let match
-    while ((match = re.exec(html)) && results.length < 60) {
-      const block = match[2] || match[1]
-      const href = match[2] ? match[1] : block.match(/href=["']([^"']*\/detail\/\d+\.html)["']/i)?.[1]
-      if (!href) continue
-      const id = href.match(/\/detail\/(\d+)\.html/i)?.[1] || href
-      if (seen.has(id)) continue
-      seen.add(id)
-      const title = decodeHtmlEntities((
-        block.match(/carousel-item-title[^>]*>([^<]+)/i)?.[1] ||
-        block.match(/search-result-item-main[\s\S]*?<div[^>]+class=["']title["'][^>]*>([^<]+)/i)?.[1] ||
-        [...block.matchAll(/v-item-title[^>]*>([^<]+)/gi)].map(m => m[1].trim()).find(v => v && !/可可影视|kekys/i.test(v)) ||
-        block.match(/title=["']([^"']+)["']/i)?.[1] ||
-        ''
-      ).trim())
-      if (!title || /可可影视|kekys/i.test(title)) continue
-      const picCandidates = [
-        ...[...block.matchAll(/data-original=["']([^"']+)["']/gi)].map(m => m[1]),
-        ...[...block.matchAll(/src=["']([^"']+)["']/gi)].map(m => m[1]),
-      ].filter(Boolean)
-      const picRaw = picCandidates.findLast(pic => !/placeholder|logo_placeholder|noneCover/i.test(pic)) || picCandidates.find(Boolean) || ''
-      results.push({
-        vod_id: id,
-        vod_name: title,
-        vod_pic: picRaw ? fixIp51122PosterUrl(decodeHtmlEntities(picRaw)) : '',
-        type_name: '影视',
-        _detailUrl: new URL(href, baseUrl).href,
-        _api: baseUrl,
-        _srcKey: 'ip51122',
-      })
-    }
-    if (results.length) break
-  }
-  return results
-}
-
-function parseIp51122HomeSections(html, baseUrl) {
-  const sections = []
-  const seenTitles = new Set()
-  const re = /<div[^>]+class=["'][^"']*section-header-title[^"']*["'][^>]*>([\s\S]*?)<\/div>([\s\S]*?)(?=<div[^>]+class=["'][^"']*section-header-title|<\/body>|$)/gi
-  let match
-  while ((match = re.exec(html))) {
-    const title = decodeHtmlEntities(String(match[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
-    if (!title || seenTitles.has(title) || /专题|排行|留言/.test(title)) continue
-    const list = parseIp51122ListHtml(match[2] || '', baseUrl)
-    if (!list.length) continue
-    seenTitles.add(title)
-    sections.push({ id: 'section:' + encodeURIComponent(title), name: title, title, typeId: 'section:' + title, list })
-  }
-  return sections
-}
 
 function parseLibraryCategoryLinks(html, baseUrl, options = {}) {
   const categories = []
@@ -394,76 +250,6 @@ async function loadYinghuaCategories() {
   return [home, ...list.filter(cat => cat.id !== 'home')]
 }
 
-async function loadIp51122Categories() {
-  const html = await fetchIp51122Page('/', IP51122_FALLBACK_BASE)
-  const sections = parseIp51122HomeSections(html, IP51122_FALLBACK_BASE)
-  if (sections.length) return [{ id: 'home', name: '首页推荐', typeId: 'home' }, ...sections.map(({ id, name, typeId }) => ({ id, name, typeId }))]
-  const parsed = parseLibraryCategoryLinks(html, IP51122_FALLBACK_BASE, {
-    idRegex: /\/channel\/([^\/.'"?#]+)(?:\.html|\/)?/i,
-    idPrefix: 'ip_',
-    typeId: id => id,
-    exclude: [/首页|搜索|排行|专题|留言|明星/],
-    patterns: [/<a[^>]+href=["']([^"']*\/channel\/[^"']+?)["'][^>]*>([\s\S]*?)<\/a>/gi],
-  })
-  return parsed.length ? [{ id: 'home', name: '首页推荐', typeId: 'home' }, ...parsed] : PAGE_LIBRARY_CATEGORIES
-}
-
-async function fetchIp51122Page(path, baseUrl = IP51122_FALLBACK_BASE) {
-  const pathUrl = /^https?:\/\//i.test(path) ? path : new URL(path, baseUrl).href
-  const urls = []
-  const addUrl = candidate => { if (candidate && !urls.includes(candidate)) urls.push(candidate) }
-  if (/^https:\/\/www\.ncat21\.com/i.test(pathUrl)) {
-    addUrl(pathUrl.replace(/^https:\/\/www\.ncat21\.com/i, IP51122_FALLBACK_BASE))
-    addUrl(pathUrl)
-  } else if (/^https:\/\/43\.248\.100\.69:51080/i.test(pathUrl)) {
-    addUrl(pathUrl)
-  } else {
-    addUrl(pathUrl)
-    if (!/^https?:\/\//i.test(path)) addUrl(new URL(path, IP51122_FALLBACK_BASE).href)
-  }
-
-  let lastError = ''
-  for (const targetUrl of urls) {
-    try {
-      const result = await fetchTextWithFallback(targetUrl, {
-        timeoutMs: 18000,
-        directTimeoutMs: 16000,
-        proxyTimeoutMs: 5000,
-        preferTauri: true,
-        forceRetry: true,
-        headers: { 'Accept': 'text/html,application/xhtml+xml' },
-        credentials: 'omit',
-      })
-      const html = result.text || ''
-      if (html && !isCdndefendHtml(html)) return html
-      lastError = '云岚实时站点 cdndefend 防护未通过: ' + targetUrl
-    } catch (error) {
-      lastError = error?.message || String(error)
-      clearCachedMovieRequest('text:' + targetUrl)
-    }
-  }
-  throw new Error(lastError || '云岚实时站点请求失败')
-}
-
-async function getIp51122SearchToken() {
-  if (_ip51122SearchToken) return _ip51122SearchToken
-  const html = await fetchIp51122Page('/search?k=%E4%BB%99%E9%80%86', IP51122_LIST_BASE).catch(() => '')
-  const encoded = html.match(/(?:[?&]|&amp;)t=([^"'&<\s]+)/i)?.[1]
-  if (encoded) {
-    _ip51122SearchToken = decodeURIComponent(encoded)
-    return _ip51122SearchToken
-  }
-  throw new Error('云岚实时搜索 token 未生成，原站脚本/防护未通过')
-}
-
-async function searchIp51122(keyword, page = 1) {
-  const token = await getIp51122SearchToken()
-  const path = keyword ? `/search?k=${encodeURIComponent(keyword)}&t=${encodeURIComponent(token)}` : `/?t=${encodeURIComponent(token)}`
-  const html = await fetchIp51122Page(path, IP51122_FALLBACK_BASE)
-  const list = parseIp51122ListHtml(html, IP51122_FALLBACK_BASE)
-  return { list, total: list.length, page }
-}
-
 async function fetchCzPage(path) {
   const url = /^https?:\/\//i.test(path) ? path : new URL(path, CZ_BASE).href
   const result = await fetchTextWithFallback(url, {
@@ -474,44 +260,6 @@ async function fetchCzPage(path) {
     headers: { 'Accept': 'text/html,application/xhtml+xml' },
   })
   return result.text || ''
-}
-
-function parseCzListHtml(html, baseUrl, limit = Number.MAX_SAFE_INTEGER) {
-  const results = []
-  const seen = new Set()
-  const re = /\u003ca[^\u003e]+href=["']([^"']*\/movie\/(\d+)\.html)["'][^\u003e]*\u003e([\s\S]*?)\u003c\/a\u003e/gi
-  let m
-  while ((m = re.exec(html)) && results.length < limit) {
-    const href = m[1]
-    const id = m[2]
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    const block = m[0]
-    const context = html.slice(Math.max(0, m.index - 400), Math.min(html.length, m.index + m[0].length + 400))
-    const title = decodeHtmlEntities((
-      block.match(/title=["']([^"']+)["']/i)?.[1] ||
-      block.match(/alt=["']([^"']+)["']/i)?.[1] ||
-      block.match(/\u003e([^\u003c]{2,40})\u003c\/a\u003e/i)?.[1] ||
-      ''
-    ).trim())
-    if (!title) continue
-    const picRaw =
-      block.match(/data-original=["']([^"']+)["']/i)?.[1] ||
-      block.match(/src=["']([^"']+)["']/i)?.[1] ||
-      context.match(/data-original=["']([^"']+)["']/i)?.[1] ||
-      context.match(/src=["']([^"']+)["']/i)?.[1] ||
-      ''
-    results.push({
-      vod_id: id,
-      vod_name: title,
-      vod_pic: picRaw ? new URL(picRaw, baseUrl).href : '',
-      type_name: '影视',
-      _detailUrl: new URL(href, baseUrl).href,
-      _api: baseUrl,
-      _srcKey: 'a_napp03',
-    })
-  }
-  return results
 }
 
 function parseCzHomeSections(html, baseUrl) {
@@ -600,42 +348,22 @@ async function searchCz(keyword, page = 1) {
 }
 
 async function loadCzDetail(detailId, name, pic) {
-  const id = String(detailId || '').match(/\/movie\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
-  if (!id) throw new Error('厂长资源详情缺少 movie id')
+  let id = getCzMovieId(detailId)
+  if (!id && name) {
+    const result = await searchCz(name, 1)
+    const match = result.list.find(item => item.vod_name === name) || result.list[0]
+    id = getCzMovieId(getCzDetailRef(match))
+  }
+  if (!id) throw new Error('厂长资源详情标识无效，请返回列表重新选择')
   const detailUrl = `${CZ_BASE}/movie/${id}.html`
   const html = await fetchCzPage(detailUrl)
-  if (/403 Forbidden|openresty|Access Denied/i.test(html)) throw new Error('源站返回 403，当前详情页不可用')
-  const title = decodeHtmlEntities((html.match(/\u003ch1[^\u003e]*\u003e([\s\S]*?)\u003c\/h1\u003e/i)?.[1] || name || '').replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim())
-  const poster = html.match(/\u003cmeta[^\u003e]+property=["']og:image["'][^\u003e]+content=["']([^"']+)["']/i)?.[1] || pic || ''
-  const desc = decodeHtmlEntities((html.match(/\u003cdiv[^\u003e]+class=["'][^"']*(?:summary|content|desc|intro|story)[^"']*["'][^\u003e]*\u003e([\s\S]*?)\u003c\/div\u003e/i)?.[1] || '').replace(/\u003cbr\s*\/?\s*\u003e/gi, '\n').replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim())
-  const re = /\u003ca[^\u003e]*href=["']([^"']*\/v_play\/[^"']+)["'][^\u003e]*\u003e([\s\S]*?)\u003c\/a\u003e/gi
-  let m
-  const eps = []
-  const seen = new Set()
-  while ((m = re.exec(html))) {
-    const url = decodeHtmlEntities(m[1])
-    const epName = decodeHtmlEntities(m[2].replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim()) || '播放'
-    if (!url || seen.has(url)) continue
-    seen.add(url)
-    eps.push({ name: epName, url: new URL(url, CZ_BASE).href })
-  }
-  if (!eps.length) throw new Error('厂长资源详情页未解析到播放列表')
-  return {
-    vod_id: id,
-    vod_name: title || name || '未命名',
-    vod_pic: poster,
-    vod_content: desc,
-    vod_play_from: '默认线路',
-    vod_play_url: eps.map(ep => `${ep.name}$${ep.url}`).join('#'),
-    _episodes: [{ name: '默认线路', urls: eps }],
-    _detailUrl: detailUrl,
-    _srcKey: 'a_napp03',
-    _api: CZ_BASE,
-  }
+  return parseCzDetailHtml(html, CZ_BASE, id, { name, pic })
 }
 
 async function resolveCzPlayUrl(playPageUrl) {
   const html = await fetchCzPage(playPageUrl)
+  const extracted = extractCzMediaUrl(html)
+  if (extracted) return extracted
   const candidates = [...html.matchAll(/(https?:\/\/[^\s\'\"\u003c\u003e]+(?:m3u8|mp4))/gi)]
     .map(match => decodeHtmlEntities(match[1]))
   for (const candidate of [...new Set(candidates)]) {
@@ -670,48 +398,6 @@ async function searchAiyiNapp(keyword, page = 1) {
 async function loadAiyiCategory(category, page = 1, filters = {}) {
   const config = typeof category === 'object' && category ? category : { typeId: category }
   return loadCzCategory(config.typeId || 'home', page)
-}
-
-async function loadIp51122Category(typeId, page = 1) {
-  if (String(typeId || '') === 'home') {
-    const html = await fetchIp51122Page('/', IP51122_FALLBACK_BASE)
-    const sections = parseIp51122HomeSections(html, IP51122_FALLBACK_BASE)
-    const list = sections.length ? mergeVodLists(sections.map(section => section.list), 240) : parseIp51122ListHtml(html, IP51122_FALLBACK_BASE)
-    return { list, sections, total: list.length, page: 1, hasMore: false, aggregated: true }
-  }
-  if (String(typeId || '').startsWith('section:')) {
-    const sectionName = String(typeId).slice('section:'.length)
-    const html = await fetchIp51122Page('/', IP51122_FALLBACK_BASE)
-    const section = parseIp51122HomeSections(html, IP51122_FALLBACK_BASE).find(item => item.name === sectionName)
-    const list = section?.list || []
-    return { list, total: list.length, page: 1, hasMore: false, aggregated: true, message: list.length ? '该分类来自云岚首页真实分区，原站独立分类页当前返回 403。' : '该首页分区暂未解析到资源。' }
-  }
-  const pages = []
-  let lastError = ''
-  const maxPages = typeId && typeId !== 'home' ? 4 : 1
-  let categoryBlocked = false
-  for (let p = 1; p <= maxPages; p++) {
-    const paths = typeId && typeId !== 'home'
-      ? [`/channel/${encodeURIComponent(typeId)}${p > 1 ? '-' + p : ''}.html`, `/channel/${encodeURIComponent(typeId)}/page/${p}.html`, `/channel/${encodeURIComponent(typeId)}.html?pg=${p}`]
-      : ['/']
-    let pageList = []
-    for (const path of paths) {
-      const html = await fetchIp51122Page(path, IP51122_FALLBACK_BASE).catch(e => { lastError = e?.message || String(e); if (/403|850|Forbidden|防护|cdndefend/i.test(lastError)) categoryBlocked = true; return '' })
-      pageList = parseIp51122ListHtml(html, IP51122_FALLBACK_BASE)
-      if (pageList.length) break
-    }
-    if (!pageList.length) break
-    pages.push(pageList)
-    if (p > 1 && mergeVodLists([pages[p - 2], pageList], 120).length <= pages[p - 2].length) break
-  }
-  const list = mergeVodLists(pages, 120)
-  if (list.length) return { list, total: list.length, page: 1, hasMore: false, aggregated: true }
-  if (typeId && typeId !== 'home' && categoryBlocked) {
-    const homeHtml = await fetchIp51122Page('/', IP51122_FALLBACK_BASE).catch(() => '')
-    const homeList = homeHtml ? parseIp51122ListHtml(homeHtml, IP51122_FALLBACK_BASE) : []
-    if (homeList.length) return { list: homeList, total: homeList.length, page: 1, hasMore: false, aggregated: true, message: '该分类页被原站防护拦截，已显示云岚首页真实推荐内容。' }
-  }
-  return { list: [], total: 0, page, message: lastError || '该站点实时返回为空或防护未通过，没有使用离线兜底。' }
 }
 
 async function fetchYinghuaPage(url) {
@@ -1080,7 +766,6 @@ const YINGHUA_BASE = 'https://www.yinghua289.com'
 const YINGHUA_SOURCE_NAME = '樱境天幕片库'
 const YINGHUA_ALT_NAME = '🌸樱华片库'
 const A_NAPP03_SOURCE_NAME = '厂长资源片库'
-const IP51122_SOURCE_NAME = '云岚星幕片库'
 const YINGHUA_CATEGORIES = [
   { id: 'home', name: '首页推荐', typeId: 'home' },
   { id: 'jp_anime', name: '日本动漫', typeId: 20 },
@@ -1088,15 +773,6 @@ const YINGHUA_CATEGORIES = [
   { id: 'eu_anime', name: '欧美动漫', typeId: 22 },
   { id: 'anime_movie', name: '动漫电影', typeId: 23 },
   { id: 'other_anime', name: '其他动漫', typeId: 24 },
-]
-
-const PAGE_LIBRARY_CATEGORIES = [
-  { id: 'home', name: '首页推荐', typeId: 'home' },
-  { id: 'movie', name: '电影', typeId: 1 },
-  { id: 'tv', name: '连续剧', typeId: 2 },
-  { id: 'anime', name: '动漫', typeId: 3 },
-  { id: 'variety', name: '综艺纪录', typeId: 4 },
-  { id: 'short', name: '短剧', typeId: 6 },
 ]
 
 const VOD_CATEGORIES = [
@@ -1434,7 +1110,7 @@ async function fetchTextWithFallback(url, options = {}) {
     }
   }
 
-  if (options.tauriOnly) throw new Error('Tauri 后端请求失败，已按云岚专用链路停止浏览器/CORS 降级')
+  if (options.tauriOnly) throw new Error('Tauri 后端请求失败，已停止浏览器/CORS 降级')
 
   try {
     const resp = await fetch(url, {
@@ -1584,15 +1260,17 @@ function renderPosterImg(url, alt, itemSrcKey, itemApi, placeholder = '🎬') {
 function normalizeVodItem(item, source) {
   const name = item?.vod_name || item?.name || item?.title || item?.vod_title || ''
   const pic = item?.vod_pic || item?.pic || item?.thumb || item?.cover || item?.poster || item?.image || item?.img || ''
+  const sourceKey = item?._srcKey || source?.key || getActiveTvboxKey() || VOD_SOURCES[0]?.key || ''
+  const detailRef = sourceKey === 'a_napp03' ? getCzDetailRef(item) : ''
   return {
     ...item,
-    vod_id: item?.vod_id || item?.id || item?.player_id || name,
+    vod_id: detailRef || item?.vod_id || item?.id || item?.player_id || name,
     vod_name: name,
     vod_pic: pic,
     type_name: item?.type_name || item?.type || item?.class || '影视',
     vod_actor: item?.vod_actor || item?.actor || item?.stars || '',
     vod_content: item?.vod_content || item?.content || item?.desc || item?.des || item?.vod_blurb || '',
-    _srcKey: item?._srcKey || source?.key || getActiveTvboxKey() || VOD_SOURCES[0]?.key || '',
+    _srcKey: sourceKey,
     _srcName: item?._srcName || source?.name || VOD_SOURCES.find(s => s.key === getActiveTvboxKey())?.name || VOD_SOURCES[0]?.name || '',
     _api: item?._api || source?.api || '',
   }
@@ -2423,7 +2101,7 @@ function initApp(el) {
         }
         try {
           const detailId = item.detailId || item.id
-          if (source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') {
+          if (source.key !== 'yinghua' && source.key !== 'a_napp03') {
             const resolved = await fetchCmsVodDetail(source.api || '', detailId, item.name, item.pic)
             return showEpisodePicker(resolved, source.name || item.source)
           }
@@ -2462,12 +2140,10 @@ function initApp(el) {
       ...VOD_SOURCES,
       { key: 'yinghua', name: YINGHUA_SOURCE_NAME, api: YINGHUA_BASE },
       { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: CZ_BASE },
-      { key: 'ip51122', name: IP51122_SOURCE_NAME, api: IP51122_LIST_BASE },
     ]
     return all.find(s => s.key === sourceKey || s.name === sourceName || s.api === api)
       || (sourceName.includes('樱') ? { key: 'yinghua', name: YINGHUA_SOURCE_NAME, api: YINGHUA_BASE } : null)
       || (sourceName.includes('厂长') || sourceName.includes('4kcz') ? { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: CZ_BASE } : null)
-      || (sourceName.includes('云岚') || sourceName.includes('51122') ? { key: 'ip51122', name: IP51122_SOURCE_NAME, api: IP51122_LIST_BASE } : null)
   }
 
   async function openHistoryPlayer(item) {
@@ -2488,8 +2164,8 @@ function initApp(el) {
         const source = resolveHistorySource(item)
         const detailId = item.detailId || item.id
         let resolved = null
-        if (source && detailId) {
-          if (source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') resolved = await fetchCmsVodDetail(source.api || '', detailId, name, pic)
+        if (source && (detailId || (source.key === 'a_napp03' && name))) {
+          if (source.key !== 'yinghua' && source.key !== 'a_napp03') resolved = await fetchCmsVodDetail(source.api || '', detailId, name, pic)
           else resolved = source.key === 'yinghua'
             ? await openYinghuaDetail({ vod_id: detailId, vod_name: name, vod_pic: pic, _detailUrl: item.detailUrl })
             : await fetchPageApiDetail(source, detailId, name, pic)
@@ -2512,10 +2188,10 @@ function initApp(el) {
     if (!hasUsableEpisodeContext) {
       const source = resolveHistorySource(item)
       const detailId = item.detailId || item.id
-      if (source && detailId) {
+      if (source && (detailId || (source.key === 'a_napp03' && name))) {
         try {
           let resolved = null
-          if (source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') resolved = await fetchCmsVodDetail(source.api || '', detailId, name, pic)
+          if (source.key !== 'yinghua' && source.key !== 'a_napp03') resolved = await fetchCmsVodDetail(source.api || '', detailId, name, pic)
           else resolved = source.key === 'yinghua'
             ? await openYinghuaDetail({ vod_id: detailId, vod_name: name, vod_pic: pic, _detailUrl: item.detailUrl })
             : await fetchPageApiDetail(source, detailId, name, pic)
@@ -2649,7 +2325,7 @@ function setDebug(msg, detail) {
     const t0 = Date.now()
     try {
       if (source.key === 'yinghua') json = await loadYinghuaCategory((YINGHUA_CATEGORIES.find(c => c.id === cat) || YINGHUA_CATEGORIES[0]).typeId, page)
-      else if (source.key === 'a_napp03' || source.key === 'ip51122') json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
+      else if (source.key === 'a_napp03') json = await loadAiyiCategory(typeId, page)
       else {
         try {
           json = await fetchJSONFast(source.api + '?ac=list&t=' + typeId + '&pg=' + page)
@@ -2693,11 +2369,10 @@ function setDebug(msg, detail) {
         try {
           if (source.key === 'yinghua') json = await searchYinghua(q, 1)
           else if (source.key === 'a_napp03') json = await searchAiyiNapp(q, 1)
-          else if (source.key === 'ip51122') json = await searchIp51122(q, 1)
           else json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + qe + '&pg=1', ctrl.signal)
         } catch {}
-        if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
-        if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03' && source.key !== 'ip51122') { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
+        if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03') { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + qe + '&pg=1', ctrl.signal) } catch {} }
+        if (!json.list?.length && source.key !== 'yinghua' && source.key !== 'a_napp03') { try { json = await fetchJSONFast(source.api + '?ac=detail&wd=' + qe, ctrl.signal) } catch {} }
         const items = await enrichVodListPosters(source.api, (json.list || []).map(item => normalizeVodItem(item, source)))
         let added = 0
         for (const item of items) {
@@ -2739,8 +2414,6 @@ function setDebug(msg, detail) {
         json = { list: parseYinghuaListHtml(html, YINGHUA_BASE), total: 0 }
       } else if (source.key === 'a_napp03') {
         json = await searchAiyiNapp(query, page)
-      } else if (source.key === 'ip51122') {
-        json = await searchIp51122(query, page)
       } else {
         try { json = await fetchJSONFast(source.api + '?ac=videolist&wd=' + q + '&pg=' + page) } catch {}
         if (!json.list?.length) { try { json = await fetchJSONFast(source.api + '?ac=videolist&zm=' + q + '&pg=' + page) } catch {} }
@@ -3007,7 +2680,7 @@ function setDebug(msg, detail) {
     const d = card.dataset
     const source = resolveHistorySource({ source: d.source, _srcKey: d.srcKey, _api: d.api })
     try {
-      if (source && ['yinghua', 'a_napp03', 'ip51122'].includes(source.key)) {
+      if (source && ['yinghua', 'a_napp03'].includes(source.key)) {
         const item = { vod_id: d.id, vod_name: d.name, vod_pic: d.pic, _detailUrl: d.detailUrl || '' }
         const resolved = source.key === 'yinghua'
           ? await openYinghuaDetail(item)
@@ -3126,16 +2799,9 @@ async function fetchCmsVodDetail(api, detailId, fallbackName, fallbackPic) {
 }
 
 async function fetchPageApiDetail(source, detailId, name, pic) {
-  const base = source.key === 'ip51122' ? IP51122_DETAIL_BASE : source.key === 'a_napp03' ? CZ_BASE : source.api
+  const base = source.key === 'a_napp03' ? CZ_BASE : source.api
   if (source.key === 'a_napp03') {
-    const id = String(detailId || '').match(/\/movie\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^\d+$/)?.[1]
-    if (!id) throw new Error('厂长资源详情缺少 movie id')
-    return loadCzDetail(id, name, pic)
-  }
-  if (source.key === 'ip51122') {
-    const id = String(detailId || '').match(/\/detail\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
-    if (!id) throw new Error('云岚详情缺少 vodId')
-    return loadIp51122Detail(id, name, pic)
+    return loadCzDetail(detailId, name, pic)
   }
   const urls = [
         `${base}/api.php/provide/vod/?ac=detail&ids=${encodeURIComponent(detailId)}`,
@@ -3179,7 +2845,6 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     const sources = [
       { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, desc: '厂长资源 HTML 源，首页 / 频道 / 搜索 / 播放', categories: [], loadCategories: loadCzCategories, list: loadCzCategory, search: searchCz },
       { key: 'yinghua', name: YINGHUA_SOURCE_NAME, desc: '实时首页 / 动态分类 / 多线路播放', categories: YINGHUA_CATEGORIES, loadCategories: loadYinghuaCategories, list: loadYinghuaCategory, search: searchYinghua },
-      { key: 'ip51122', name: IP51122_SOURCE_NAME, desc: '真实首页 / 搜索结果 / 详情页受原站防护限制', categories: PAGE_LIBRARY_CATEGORIES, loadCategories: loadIp51122Categories, list: loadIp51122Category, search: searchIp51122 },
     ]
     const KEY_LIBRARY_USER_STATE = 'xingshu_movie_library_user_state_v1'
     const readLibraryUserState = () => { try { return JSON.parse(localStorage.getItem(KEY_LIBRARY_USER_STATE) || '{}') || {} } catch { return {} } }
@@ -3390,79 +3055,17 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       const itemSourceKey = item._librarySourceKey || source.key
       const itemApi = item._libraryApi || ''
       const title = escHtml(item.vod_name || item.name || mt('unnamed'))
-      const detailId = escHtml((itemSourceKey === 'ip51122' && item._detailUrl) ? item._detailUrl : (item.vod_id || item._detailUrl || ''))
-      const poster = renderPosterImg(item.vod_pic || '', item.vod_name || '', itemSourceKey, itemApi || (source.key === 'yinghua' ? YINGHUA_BASE : source.key === 'a_napp03' ? CZ_BASE : IP51122_DETAIL_BASE), '影')
+      const detailRef = itemSourceKey === 'a_napp03' ? getCzDetailRef(item) : (item.vod_id || item._detailUrl || '')
+      const detailId = escHtml(detailRef)
+      const poster = renderPosterImg(item.vod_pic || '', item.vod_name || '', itemSourceKey, itemApi || (source.key === 'yinghua' ? YINGHUA_BASE : CZ_BASE), '影')
       const note = escHtml(item.vod_remarks || item.type_name || item.vod_year || '')
-      const followed = isFollowed({ sourceKey: itemSourceKey, api: itemApi, detailId: itemSourceKey === 'ip51122' && item._detailUrl ? item._detailUrl : (item.vod_id || item._detailUrl || ''), name: item.vod_name || item.name, sourceName: itemSourceName })
-      const isTopicEntry = item._libraryAction === 'napp03-url-list'
-      return '<article class="tvbox-library-vod' + (isTopicEntry ? ' tvbox-library-topic' : '') + '" data-source="' + escHtml(source.key) + '" data-item-source="' + escHtml(itemSourceKey) + '" data-api="' + escHtml(itemApi) + '" data-source-name="' + escHtml(itemSourceName) + '" data-detail="' + detailId + '" data-action="' + escHtml(item._libraryAction || '') + '" data-name="' + title + '" data-pic="' + escHtml(item.vod_pic || '') + '" data-desc="' + escHtml(item.vod_content || item.desc || item.content || '') + '" data-year="' + escHtml(item.vod_year || '') + '" data-area="' + escHtml(item.vod_area || '') + '" data-type="' + escHtml(item.type_name || '') + '" data-actor="' + escHtml(item.vod_actor || '') + '">' +
+      const followed = isFollowed({ sourceKey: itemSourceKey, api: itemApi, detailId: detailRef, name: item.vod_name || item.name, sourceName: itemSourceName })
+      return '<article class="tvbox-library-vod" data-source="' + escHtml(source.key) + '" data-item-source="' + escHtml(itemSourceKey) + '" data-api="' + escHtml(itemApi) + '" data-source-name="' + escHtml(itemSourceName) + '" data-detail="' + detailId + '" data-name="' + title + '" data-pic="' + escHtml(item.vod_pic || '') + '" data-desc="' + escHtml(item.vod_content || item.desc || item.content || '') + '" data-year="' + escHtml(item.vod_year || '') + '" data-area="' + escHtml(item.vod_area || '') + '" data-type="' + escHtml(item.type_name || '') + '" data-actor="' + escHtml(item.vod_actor || '') + '">' +
         '<button class="tvbox-library-vod-poster">' + poster + (note ? '<span>' + note + '</span>' : '') + '</button>' +
         '<div class="tvbox-library-vod-title">' + title + '</div>' +
-        '<div class="tvbox-library-vod-meta">' + escHtml(isTopicEntry ? (item.type_name || '子频道') : itemSourceName) + '</div>' +
-        '<div class="tvbox-library-card-actions">' + (isTopicEntry ? '<button data-open-saved>进入频道</button>' : '<button data-open-saved>播放详情</button><button data-follow-card>' + (followed ? '已追剧' : '追剧') + '</button>') + '</div>' +
+        '<div class="tvbox-library-vod-meta">' + escHtml(itemSourceName) + '</div>' +
+        '<div class="tvbox-library-card-actions"><button data-open-saved>播放详情</button><button data-follow-card>' + (followed ? '已追剧' : '追剧') + '</button></div>' +
       '</article>'
-    }
-
-    function startTopicCoverRotators(root) {
-      const cards = Array.from(root.querySelectorAll('.tvbox-library-topic[data-action="napp03-url-list"]')).slice(0, 36)
-      const loadCard = async card => {
-        if (!card || card.dataset.coverRotator === '1') return
-        card.dataset.coverRotator = '1'
-        const detail = card.dataset.detail || ''
-        const title = card.dataset.name || ''
-        if (!detail) return
-        try {
-          const result = await withLibraryTimeout(loadNapp03UrlList(detail, title, ''), 12000)
-          const pics = []
-          for (const item of (result.list || [])) {
-            for (const pic of buildPicCandidates(item.vod_pic || item.pic || '', item._srcKey || 'a_napp03', item._api || CZ_BASE)) {
-              if (pic && !pics.includes(pic)) pics.push(pic)
-              if (pics.length >= 8) break
-            }
-            if (pics.length >= 8) break
-          }
-          if (!(result.list || []).length) { card.remove(); return }
-          if (!pics.length || !card.isConnected) return
-          const poster = card.querySelector('.tvbox-library-vod-poster')
-          if (!poster) return
-          const labelText = poster.querySelector(':scope > span')?.textContent || card.dataset.type || '频道'
-          const img = document.createElement('img')
-          img.alt = title
-          img.loading = 'lazy'
-          img.decoding = 'async'
-          img.referrerPolicy = 'no-referrer'
-          img.src = pics[0]
-          poster.innerHTML = ''
-          poster.appendChild(img)
-          if (labelText) {
-            const label = document.createElement('span')
-            label.textContent = labelText
-            poster.appendChild(label)
-          }
-          if (pics.length <= 1) return
-          let index = 0
-          const timer = setInterval(() => {
-            if (!card.isConnected) { clearInterval(timer); return }
-            index = (index + 1) % pics.length
-            img.src = pics[index]
-          }, 3000)
-        } catch (err) {
-          card.dataset.coverRotator = 'failed'
-          console.warn('[movie] 频道轮播封面加载失败:', title, err?.message || err)
-        }
-      }
-      if ('IntersectionObserver' in window) {
-        const observer = new IntersectionObserver(entries => {
-          entries.forEach(entry => {
-            if (!entry.isIntersecting) return
-            observer.unobserve(entry.target)
-            loadCard(entry.target)
-          })
-        }, { root: root.closest('.tvbox-library-main') || null, rootMargin: '160px' })
-        cards.forEach(card => observer.observe(card))
-      } else {
-        cards.forEach(loadCard)
-      }
     }
 
     const renderLibraryEntryGrid = (title, subtitle, items, emptyText, modeName) => {
@@ -3535,7 +3138,8 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       const directDesc = card?.dataset?.desc || entry?.desc || entry?.vod_content || entry?._history?.desc || entry?._history?.vod_content || ''
       if (directDesc) return { desc: directDesc, year: card?.dataset?.year || entry?.year || entry?.vod_year || '', area: card?.dataset?.area || entry?.area || entry?.vod_area || '', type: card?.dataset?.type || entry?.type || entry?.type_name || '', actor: entry?.actor || entry?.vod_actor || '', sourceKey, api: apiValue }
       const detail = card?.dataset?.detail || entry?.detailId || entry?.id || entry?._history?.detailId || entry?._history?.id || ''
-      if (!detail) return { desc: '', year: '', area: '', type: '', actor: '', sourceKey, api: apiValue }
+      const recoverableCzDetail = sourceKey === 'a_napp03' && Boolean(card?.dataset?.name || entry?.name || entry?._history?.name)
+      if (!detail && !recoverableCzDetail) return { desc: '', year: '', area: '', type: '', actor: '', sourceKey, api: apiValue }
       try {
         const source = sourceByKey(sourceKey)
         const api = apiValue
@@ -3543,7 +3147,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
         const pic = card?.dataset?.pic || entry?.pic || entry?._history?.pic || ''
         let resolved = null
         if ((source?.key === 'a_napp03') || (card?.dataset?.itemSource === 'a_napp03')) resolved = await withLibraryTimeout(fetchPageApiDetail(sourceByKey('a_napp03'), detail, name, pic), 12000)
-        else if (api && (card?.dataset?.itemSource || entry?.sourceKey) !== 'ip51122') resolved = await withLibraryTimeout(fetchCmsVodDetail(api, detail, name, pic), 12000)
+        else if (api) resolved = await withLibraryTimeout(fetchCmsVodDetail(api, detail, name, pic), 12000)
         else if (source?.key === 'yinghua') resolved = await withLibraryTimeout(openYinghuaDetail({ vod_id: detail, vod_name: name, vod_pic: pic, _detailUrl: entry?.detailUrl || entry?._history?.detailUrl || '' }), 12000)
         else resolved = await withLibraryTimeout(fetchPageApiDetail(source, detail, name, pic), 12000)
         return { desc: resolved?.vod_content || resolved?.desc || resolved?.content || '', year: resolved?.vod_year || '', area: resolved?.vod_area || '', type: resolved?.type_name || '', actor: resolved?.vod_actor || '', sourceKey, api: apiValue }
@@ -3637,20 +3241,11 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       }
       const source = sourceByKey(card.dataset.itemSource || card.dataset.source)
       const detail = card.dataset.detail
-      if (!detail) return alert('缺少详情地址')
-      if (card.dataset.action === 'napp03-url-list') {
-        const box = content.querySelector('#library-list')
-        if (!box) return
-        const title = card.dataset.name || '专题'
-        resetLibraryPaging()
-        libraryPaging = { mode: 'napp03-url-list', sourceKey: source.key, rawUrl: detail, title, items: [], nextCursor: '', exhausted: false }
-        await loadPagedLibraryResult(box, source)
-        return
-      }
+      if (!detail && source?.key !== 'a_napp03') return alert('缺少详情地址')
       try {
         let resolved
         if (source.key === 'a_napp03' || card.dataset.itemSource === 'a_napp03') resolved = await withLibraryTimeout(fetchPageApiDetail(sourceByKey('a_napp03'), detail, card.dataset.name, card.dataset.pic), 12000)
-        else if (card.dataset.api && card.dataset.itemSource !== 'ip51122') resolved = await fetchCmsVodDetail(card.dataset.api, detail, card.dataset.name, card.dataset.pic)
+        else if (card.dataset.api) resolved = await fetchCmsVodDetail(card.dataset.api, detail, card.dataset.name, card.dataset.pic)
         else resolved = source.key === 'yinghua'
           ? await withLibraryTimeout(openYinghuaDetail({ vod_id: detail, vod_name: card.dataset.name, vod_pic: card.dataset.pic, _detailUrl: `${YINGHUA_BASE}/index.php/vod/detail/id/${detail}.html` }), 12000)
           : await withLibraryTimeout(fetchPageApiDetail(source, detail, card.dataset.name, card.dataset.pic), 12000)
@@ -3729,12 +3324,6 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     ])
 
     const bindLibraryResult = (box, source, result) => {
-      box.querySelectorAll('.tvbox-library-more').forEach(btn => btn.addEventListener('click', async () => {
-        const title = btn.dataset.title || '专题'
-        resetLibraryPaging()
-        libraryPaging = { mode: 'napp03-url-list', sourceKey: source.key, rawUrl: btn.dataset.url, title, items: [], nextCursor: '', exhausted: false }
-        await loadPagedLibraryResult(box, source)
-      }))
       box.querySelectorAll('[data-follow-card]').forEach(btn => btn.addEventListener('click', e => {
         e.stopPropagation()
         const card = btn.closest('.tvbox-library-vod')
@@ -3747,7 +3336,6 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
         if (e.target.closest('[data-follow-card], [data-remove-follow]')) return
         openLibraryDetail(card)
       }))
-      startTopicCoverRotators(box)
       box.querySelector('#library-prev')?.addEventListener('click', async () => {
         if (libraryPage <= 1) return
         libraryPage--
@@ -3775,9 +3363,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
         libraryPaging.items = libraryPaging.items || []
         while (libraryPaging.items.length < needCount && !libraryPaging.exhausted) {
           const cursor = libraryPaging.nextCursor || ''
-          const result = libraryPaging.mode === 'napp03-url-list'
-            ? await withLibraryTimeout(loadNapp03UrlList(libraryPaging.rawUrl, libraryPaging.title, cursor), 18000)
-            : await withLibraryTimeout(source.list(activeCategory, libraryPage, { ...napp03Filters, cursor }), 18000)
+          const result = await withLibraryTimeout(source.list(activeCategory, libraryPage, { ...napp03Filters, cursor }), 18000)
           libraryPaging.items.push(...(result.list || []))
           libraryPaging.nextCursor = result.next || ''
           if (!result.hasMore || !result.next) libraryPaging.exhausted = true
@@ -3790,8 +3376,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
           next: libraryPaging.nextCursor || '',
           hasMore: libraryPaging.items.length > libraryPage * pageSize || Boolean(libraryPaging.nextCursor),
         }
-        if (libraryPaging.mode === 'napp03-url-list') box.innerHTML = '<div class="tvbox-library-subtitle">' + escHtml(libraryPaging.title) + '</div>' + renderCards(pageItems, source, result)
-        else box.innerHTML = renderCards(pageItems, source, result)
+        box.innerHTML = renderCards(pageItems, source, result)
         bindLibraryResult(box, source, result)
         scrollLibraryTop()
       } catch (e) {

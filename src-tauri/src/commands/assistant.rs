@@ -937,21 +937,7 @@ pub async fn vod_fetch(url: String, timeout_secs: Option<u64>) -> Result<String,
     let resp = match resp_result {
         Ok(resp) => resp,
         Err(first_err) => {
-            let tls_compatible = url.contains("103.194.185.51:51122")
-                || url.contains("43.248.100.69:51080")
-                || url.contains("www.ncat21.com");
-            if tls_compatible {
-                let insecure_client = reqwest::Client::builder()
-                    .timeout(timeout)
-                    .gzip(true)
-                    .user_agent(user_agent)
-                    .danger_accept_invalid_certs(true)
-                    .build()
-                    .map_err(|e| format!("vod_fetch TLS 兼容客户端错误: {e}"))?;
-                send_request(&insecure_client).await.map_err(|e| {
-                    format!("vod_fetch 请求失败: {first_err}; TLS 兼容重试失败: {e}")
-                })?
-            } else if missav_host(&url).is_some() {
+            if missav_host(&url).is_some() {
                 return vod_fetch_missav_with_curl(&url, timeout, user_agent).await;
             } else {
                 return Err(format!("vod_fetch 请求失败: {first_err}"));

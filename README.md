@@ -7,7 +7,7 @@
 - 当前仓库：https://github.com/TuLu-openclaw/tulu-openclaw-v2.git
 - 项目主页：https://github.com/TuLu-openclaw/tulu-openclaw-v2
 - 问题反馈：https://github.com/TuLu-openclaw/tulu-openclaw-v2/issues
-- 当前版本：4.4.7
+- 当前版本：4.4.8
 - 桌面应用标识：ai.openclaw.tulu-openclaw-v2
 
 ## 已验证的发布产物
