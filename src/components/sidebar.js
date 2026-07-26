@@ -221,6 +221,7 @@ const ICONS = {
 
 let _delegated = false
 let _hasMultipleInstances = false
+let _kernelSubscriptionBound = false
 let _kernelUnsubscribe = null
 
 function getKernelBadgeModel() {
@@ -409,14 +410,12 @@ export function renderSidebar(el) {
         if (dataAction === 'deploy-hermes') {
           _closeEngineDropdown()
           if (getActiveEngineId() !== 'hermes') {
-            switchEngine('hermes').then(() => {
+            switchEngine('hermes', { navigateToDefault: false }).then(() => {
               toast(t('sidebar.switchHermesInfo'), 'info')
               navigate('/h/setup')
-              renderSidebar(el)
-            })
+            }).catch(() => {})
           } else {
             navigate('/h/setup')
-            renderSidebar(el)
           }
         } else if (dataAction === 'open-xingshu-chat') {
           _openXingshuChatInIndependentWindow()
@@ -424,10 +423,9 @@ export function renderSidebar(el) {
           if (route === GLOBAL_BUILTIN_ROUTE) {
             _openGlobalBuiltinInIndependentWindow()
           } else if (route.startsWith('/h/') && getActiveEngineId() !== 'hermes') {
-            switchEngine('hermes').then(() => {
+            switchEngine('hermes', { navigateToDefault: false }).then(() => {
               navigate(route)
-              renderSidebar(el)
-            })
+            }).catch(() => {})
           } else {
             navigate(route)
           }
@@ -519,23 +517,6 @@ export function renderSidebar(el) {
         return
       }
       // data-action 处理（扩展按钮如"部署 Hermes"）
-      const dataAction = e.target.closest('[data-action]')?.dataset?.action
-      if (dataAction === 'deploy-hermes') {
-        _closeEngineDropdown()
-        if (getActiveEngineId() !== 'hermes') {
-          switchEngine('hermes').then(() => {
-            toast(t('sidebar.switchHermesInfo'), 'info')
-            navigate('/h/setup')
-            renderSidebar(el)
-          })
-        } else {
-          navigate('/h/setup')
-          renderSidebar(el)
-        }
-        _closeMobileSidebar()
-        return
-      }
-
       // 引擎选项点击
       const engineOpt = e.target.closest('.engine-option[data-engine]')
       if (engineOpt) {
@@ -545,9 +526,7 @@ export function renderSidebar(el) {
           engineOpt.style.opacity = '0.5'
           switchEngine(eid).then(() => {
             toast(t('engine.switchedTo', { name: getActiveEngine()?.name || eid }), 'success')
-            navigate(getActiveEngine().getDefaultRoute())
-            renderSidebar(el)
-          })
+          }).catch(() => {})
         }
         return
       }
@@ -557,8 +536,13 @@ export function renderSidebar(el) {
     onInstanceChange(() => { _checkMultiInstances(el); renderSidebar(el) })
   }
 
-  if (_kernelUnsubscribe) _kernelUnsubscribe()
-  _kernelUnsubscribe = onKernelChange(() => renderSidebar(el))
+  if (!_kernelSubscriptionBound) {
+    _kernelSubscriptionBound = true
+    _kernelUnsubscribe = onKernelChange(() => {
+      const currentEl = document.getElementById('sidebar')
+      if (currentEl) renderSidebar(currentEl)
+    })
+  }
 }
 
 // === 移动端侧边栏 ===

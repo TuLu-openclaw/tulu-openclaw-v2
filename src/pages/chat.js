@@ -158,6 +158,7 @@ let _isLoadingHistory = false
 let _streamSafetyTimer = null, _unsubEvent = null, _unsubReady = null, _unsubStatus = null
 let _seenRunIds = new Set()
 let _pageActive = false
+let _pageGeneration = 0
 const _toolEventTimes = new Map()
 const _toolEventData = new Map()
 const _toolRunIndex = new Map()
@@ -199,6 +200,7 @@ let _ecomSkillCatalogCache = null
 let _ecomSkillCatalogTs = 0
 
 export async function render() {
+  const generation = ++_pageGeneration
   const page = document.createElement('div')
   page.className = 'page chat-page'
   _pageActive = true
@@ -495,7 +497,7 @@ export async function render() {
   bindModelConfigSync()
   loadModelOptions()
   // 非阻塞：先返回 DOM，后台连接 Gateway
-  connectGateway()
+  void connectGateway(generation)
   return page
 }
 
@@ -1120,7 +1122,8 @@ function renderAttachments() {
 
 // ── Gateway 连接 ──
 
-async function connectGateway() {
+async function connectGateway(generation = _pageGeneration) {
+  const isCurrentPage = () => _pageActive && generation === _pageGeneration
   try {
     // 清理旧的订阅，避免重复监听
     if (_unsubStatus) { _unsubStatus(); _unsubStatus = null }
@@ -1129,7 +1132,7 @@ async function connectGateway() {
 
     // 订阅状态变化（订阅式，返回 unsub）
     _unsubStatus = wsClient.onStatusChange((status, errorMsg) => {
-      if (!_pageActive) return
+      if (!isCurrentPage()) return
       updateStatusDot(status)
       const bar = document.getElementById('chat-disconnect-bar')
       const overlay = document.getElementById('chat-connect-overlay')
@@ -1164,7 +1167,7 @@ async function connectGateway() {
     })
 
     _unsubReady = wsClient.onReady((hello, sessionKey, err) => {
-      if (!_pageActive) return
+      if (!isCurrentPage()) return
       const overlay = document.getElementById('chat-connect-overlay')
       if (err?.error) {
         if (overlay) {
@@ -1197,7 +1200,7 @@ async function connectGateway() {
     })
 
     _unsubEvent = wsClient.onEvent((msg) => {
-      if (!_pageActive) return
+      if (!isCurrentPage()) return
       handleEvent(msg)
     })
 
@@ -1225,6 +1228,7 @@ async function connectGateway() {
 
     // 未连接，发起新连接
     const config = await api.readOpenclawConfig()
+    if (!isCurrentPage()) return
     const gw = config?.gateway || {}
     const host = isTauriRuntime() ? `127.0.0.1:${gw.port || 18789}` : location.host
     const token = typeof (gw.auth?.token ?? gw.authToken) === 'string' ? (gw.auth?.token ?? gw.authToken) : ''
@@ -4641,12 +4645,14 @@ function resetStreamState() {
 
 async function loadHistory() {
   if (!_sessionKey || !_messagesEl) return
+  const generation = _pageGeneration
   const sessionKey = _sessionKey
+  const isCurrentPage = () => _pageActive && generation === _pageGeneration
   _isLoadingHistory = true
   const hasExisting = _messagesEl.querySelector('.msg')
   if (!hasExisting && isStorageAvailable()) {
     const local = await getLocalMessages(sessionKey, 200)
-    if (!_pageActive || !_messagesEl || _sessionKey !== sessionKey) { _isLoadingHistory = false; return }
+    if (!isCurrentPage() || !_messagesEl || _sessionKey !== sessionKey) { _isLoadingHistory = false; return }
     if (local.length) {
       clearMessages()
       local.forEach(msg => {
@@ -4664,7 +4670,7 @@ async function loadHistory() {
   if (!wsClient.gatewayReady) { _isLoadingHistory = false; return }
   try {
     const result = await wsClient.chatHistory(sessionKey, 200)
-    if (!_pageActive || !_messagesEl || _sessionKey !== sessionKey) { _isLoadingHistory = false; return }
+    if (!isCurrentPage() || !_messagesEl || _sessionKey !== sessionKey) { _isLoadingHistory = false; return }
     if (!result?.messages?.length) {
       if (_messagesEl && !_messagesEl.querySelector('.msg')) appendSystemMessage(t('chat.noMessages'))
       return
@@ -5534,6 +5540,7 @@ function appendHostedOutput(text) {
 
 export function cleanup() {
   _pageActive = false
+  _pageGeneration += 1
   if (_unsubEvent) { _unsubEvent(); _unsubEvent = null }
   if (_unsubReady) { _unsubReady(); _unsubReady = null }
   if (_unsubStatus) { _unsubStatus(); _unsubStatus = null }
@@ -5544,6 +5551,15 @@ export function cleanup() {
     _modelConfigChangeHandler = null
   }
   clearTimeout(_streamSafetyTimer)
+  clearInterval(_replyStatusTimer)
+  _replyStatusTimer = null
+  clearTimeout(_runtimeStatusSyncTimer)
+  _runtimeStatusSyncTimer = null
+  clearTimeout(_errorTimer)
+  _errorTimer = null
+  clearTimeout(_renderTimer)
+  _renderTimer = null
+  stopTypewriter()
   _cancelResponseWatchdog()
   clearTimeout(_postFinalCheck)
   _postFinalCheck = null
