@@ -35,6 +35,10 @@ export function render() {
   const el = document.createElement('div')
   el.className = 'page'
   el.dataset.engine = 'hermes'
+  const onDocumentClick = (e) => {
+    const dd = el.querySelector('#hm-model-dropdown')
+    if (dd && !e.target.closest('.hermes-field')) dd.style.display = 'none'
+  }
 
   // 状态
   let phase = 'detect' // detect | install | configure | gateway | complete
@@ -382,10 +386,7 @@ export function render() {
       if (dd && dd.children.length > 0) dd.style.display = 'block'
     })
     // 点击其他地方关闭下拉
-    document.addEventListener('click', (e) => {
-      const dd = el.querySelector('#hm-model-dropdown')
-      if (dd && !e.target.closest('.hermes-field')) dd.style.display = 'none'
-    })
+    document.addEventListener('click', onDocumentClick)
     // 配置保存
     el.querySelector('.hermes-config-save')?.addEventListener('click', doSaveConfig)
     el.querySelector('.hermes-config-skip')?.addEventListener('click', () => { phase = 'gateway'; refreshHermes() })
@@ -690,6 +691,7 @@ export function render() {
     detect()
   })()
 
+  el.__cleanup = () => document.removeEventListener('click', onDocumentClick)
   return el
 }
 

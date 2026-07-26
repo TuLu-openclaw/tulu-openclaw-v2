@@ -4741,8 +4741,10 @@ async fn upgrade_openclaw_inner(
 
     // 切换源时需要卸载旧包，但为避免安装失败导致 CLI 丢失，
     // 先安装新包，成功后再卸载旧包
-    let old_pkg = npm_package_name(&current_source);
-    let need_uninstall_old = current_source != source;
+    // Unknown means there is an existing CLI whose owner cannot be proven.
+    // Never guess its package and uninstall it: that was the destructive path
+    // behind the reported "install succeeded, CLI disappeared" failure.
+    let source_changed = current_source != source;
 
     if requested_version.is_none() {
         if let Some(recommended) = &recommended_version {
@@ -4968,49 +4970,39 @@ async fn upgrade_openclaw_inner(
         }
     }
 
-    // 安装成功后再卸载旧包（确保 CLI 始终可用）
-    if need_uninstall_old {
-        let _ = app.emit("upgrade-log", format!("清理旧版本 ({old_pkg})..."));
-        let _ = npm_command_elevated()
-            .args(["uninstall", "-g", old_pkg])
-            .output();
+    // npm exit code 0 is not sufficient. Verify the new CLI before any
+    // uninstall, Gateway replacement, or standalone cleanup can touch the
+    // previously working installation.
+    super::refresh_enhanced_path();
+    crate::commands::service::invalidate_cli_detection_cache();
+    let verified_cli = crate::utils::resolve_openclaw_cli_path()
+        .ok_or_else(|| "npm 已完成安装，但未发现可用的 OpenClaw CLI；已保留原有安装，未清理旧版本".to_string())?;
+    let verified_version = get_local_version()
+        .await
+        .ok_or_else(|| format!("已发现 OpenClaw CLI，但无法读取版本；已保留原有安装: {verified_cli}"))?;
+    let verified_source = detect_installed_source();
+    if verified_source != source {
+        return Err(format!(
+            "安装后的 OpenClaw 来源未切换成功：目标 {source}，检测到 {verified_source}；已保留原有安装"
+        ));
+    }
+    if ver != "latest" && !versions_match(&verified_version, ver) {
+        return Err(format!(
+            "安装后的 OpenClaw 版本与目标不一致：目标 {ver}，检测到 {verified_version}；已保留原有安装"
+        ));
+    }
+    let _ = app.emit("upgrade-log", format!("新 CLI 验证通过: {verified_version}"));
 
-        // 清理 standalone 安装目录（不论从 standalone 切走还是切到 standalone，
-        // npm 路径已经安装了新 CLI，standalone 残留会干扰源检测）
-        // 注意：必须校验目录确实是 OpenClaw standalone 安装，绝不能误删
-        // npm 全局目录（%APPDATA%\npm）等系统/工具链目录。
-        for sa_dir in all_standalone_dirs() {
-            if !sa_dir.exists() {
-                continue;
-            }
-            match remove_standalone_dir_safe(&sa_dir) {
-                Ok(true) => {
-                    let _ = app.emit(
-                        "upgrade-log",
-                        format!("清理 standalone 残留: {}", sa_dir.display()),
-                    );
-                }
-                Ok(false) => {
-                    let _ = app.emit(
-                        "upgrade-log",
-                        format!(
-                            "跳过非 standalone 目录（保护，不删除）: {}",
-                            sa_dir.display()
-                        ),
-                    );
-                }
-                Err(e) => {
-                    let _ = app.emit(
-                        "upgrade-log",
-                        format!("⚠️ 清理 standalone 残留失败: {} ({e})", sa_dir.display()),
-                    );
-                }
-            }
-        }
+    // Both npm editions expose the same `openclaw` shim. Uninstalling the
+    // previously active package after installing the target can remove the
+    // newly verified shim as a side effect. Keep the inactive package as a
+    // rollback copy; explicit uninstall remains available to the user.
+    if source_changed && current_source != "unknown" {
+        let _ = app.emit("upgrade-log", "旧来源包已保留为回退副本，不自动卸载共享 CLI");
     }
 
     // 切换源后重装 Gateway 服务
-    if need_uninstall_old {
+    if source_changed {
         let _ = app.emit("upgrade-log", "正在重装 Gateway 服务（更新启动路径）...");
 
         // 刷新 PATH 缓存和 CLI 检测缓存，确保找到新安装的二进制

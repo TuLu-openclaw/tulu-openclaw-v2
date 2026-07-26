@@ -73,6 +73,7 @@ export function render() {
   const el = document.createElement('div')
   el.className = 'hermes-memory-page'
   el.dataset.engine = 'hermes'
+  let activeOverlay = null
 
   // --- State ---
   const SECTIONS = [
@@ -133,18 +134,21 @@ export function render() {
     })
     overlay.classList.add('hm-mem-modal-overlay')
     overlay.dataset.engine = 'hermes'
+    activeOverlay = overlay
     const ta = overlay.querySelector('#hm-mem-modal-textarea')
     const cancelBtn = overlay.querySelector('[data-action="cancel"]')
     const saveBtn = overlay.querySelector('#hm-mem-modal-save')
     const closeWithConfirm = () => {
       if (!editing) {
         overlay.remove()
+        if (activeOverlay === overlay) activeOverlay = null
         return
       }
       const dirty = editing.buffer !== (data[editing.key] || '')
       if (dirty && !confirm(t('engine.memoryUnsaved'))) return
       editing = null
       overlay.remove()
+      if (activeOverlay === overlay) activeOverlay = null
     }
     cancelBtn.textContent = t('engine.memoryCancel')
     cancelBtn.onclick = closeWithConfirm
@@ -351,5 +355,10 @@ export function render() {
   }
 
   loadAll()
+  el.__cleanup = () => {
+    activeOverlay?.remove()
+    activeOverlay = null
+    editing = null
+  }
   return el
 }

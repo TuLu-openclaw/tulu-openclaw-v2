@@ -8,6 +8,7 @@ import { registerRoute, setDefaultRoute, navigate } from '../router.js'
 const _engines = {}
 let _activeEngine = null
 let _listeners = []
+let _switchPromise = Promise.resolve()
 
 /** 注册引擎 */
 export function registerEngine(engine) {
@@ -88,27 +89,29 @@ export async function activateEngine(id, persist = true) {
     setDefaultRoute(engine.getDefaultRoute())
   }
 
+  // Route navigation must not wait for provider/Gateway health checks.
+  // Slow boot and config persistence continue in the background.
   if (engine.boot) {
-    try { await engine.boot() } catch (e) {
-      console.warn('[engine-manager] boot 失败:', e)
-    }
+    void withTimeout(Promise.resolve().then(() => engine.boot()), 15000, '引擎启动超时')
+      .catch(e => console.warn('[engine-manager] boot 失败:', e))
   }
 
-  // 持久化到 clawpanel.json
   if (persist) {
-    try {
-      const cfg = await api.readPanelConfig()
-      if (cfg.engineMode !== id) {
-        cfg.engineMode = id
-        await api.writePanelConfig(cfg)
+    void (async () => {
+      try {
+        const cfg = await api.readPanelConfig()
+        if (cfg.engineMode !== id) {
+          cfg.engineMode = id
+          await api.writePanelConfig(cfg)
+        }
+      } catch (e) {
+        console.warn('[engine-manager] 保存 engineMode 失败:', e)
       }
-    } catch (e) {
-      console.warn('[engine-manager] 保存 engineMode 失败:', e)
-    }
+    })()
   }
 
-  // 通知监听器
-  _listeners.forEach(fn => { try { fn(engine) } catch {} })
+  // 通知监听器 once. switchEngine used to broadcast the same transition twice.
+  _listeners.slice().forEach(fn => { try { fn(engine) } catch {} })
 }
 
 /**
@@ -117,12 +120,19 @@ export async function activateEngine(id, persist = true) {
  * @param {boolean} persist 是否写入 clawpanel.json
  */
 export async function switchEngine(id, { navigateToDefault = true } = {}) {
-  if (_activeEngine?.id === id) return
-  await activateEngine(id, true)
-  // 通知监听器（引擎切换完成），让 main.js 等外部模块
-  // 有机会在 hashchange 之前完成 UI 刷新
-  _listeners.forEach(fn => { try { fn(_activeEngine, id) } catch {} })
-  if (navigateToDefault) {
-    navigate(_activeEngine.getDefaultRoute())
-  }
+  const transition = _switchPromise.then(async () => {
+    if (_activeEngine?.id === id) return
+    await activateEngine(id, true)
+    if (navigateToDefault && _activeEngine?.id === id) navigate(_activeEngine.getDefaultRoute())
+  })
+  _switchPromise = transition.catch(() => {})
+  return transition
+}
+
+function withTimeout(promise, ms, message) {
+  let timer
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms) }),
+  ]).finally(() => clearTimeout(timer))
 }

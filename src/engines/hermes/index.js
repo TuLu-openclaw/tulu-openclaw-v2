@@ -28,6 +28,7 @@ let _lastRestartTime = 0
 let _gatewayRunningSince = 0
 let _gatewayStatus = 'unknown' // running | degraded | offline | recovering | unknown
 let _checkInFlight = false
+let _bootGeneration = 0
 
 function emitState() {
   const payload = {
@@ -139,11 +140,14 @@ export async function detect() {
 }
 
 export async function boot() {
+  const generation = ++_bootGeneration
   await detectHermesStatus()
+  if (generation !== _bootGeneration) return
   startPoll()
 }
 
 export function cleanup() {
+  _bootGeneration += 1
   stopPoll()
 }
 

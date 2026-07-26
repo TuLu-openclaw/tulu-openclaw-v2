@@ -410,7 +410,7 @@ const SLASH_COMMANDS = [
  * title on confirm, or `null` on cancel. Mirrors `showConfirm`'s pattern
  * so we don't need Vue-style reactivity.
  */
-function showRenameModal(current) {
+function showRenameModal(current, registerCleanup) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div')
     overlay.className = 'modal-overlay'
@@ -434,6 +434,7 @@ function showRenameModal(current) {
     input?.select()
 
     const close = (v) => { overlay.remove(); resolve(v) }
+    registerCleanup?.(() => close(null))
     const confirm = () => {
       const v = input?.value.trim() || ''
       if (!v) { input?.focus(); return }
@@ -502,6 +503,8 @@ export function render() {
   el.dataset.engine = 'hermes'
 
   const store = getChatStore()
+  const pageCleanups = new Set()
+  const registerCleanup = (fn) => { pageCleanups.add(fn); return () => pageCleanups.delete(fn) }
 
   // Local UI-only state (not in store).
   let sidebarOpen = !window.matchMedia('(max-width: 768px)').matches
@@ -1575,7 +1578,7 @@ export function render() {
   async function renameSessionById(sid) {
     const s = store.state.sessions.find(sess => sess.id === sid)
     if (!s) return
-    const next = await showRenameModal(s.title)
+    const next = await showRenameModal(s.title, registerCleanup)
     if (next == null) return
     const ok = await store.renameSession(sid, next)
     toast(ok ? t('engine.chatRenamed') : t('engine.chatRenameFailed'), ok ? 'success' : 'error')
@@ -2166,6 +2169,8 @@ export function render() {
   // MutationObserver watches our parent; when `el` is detached, we run the
   // full teardown (stream listeners, subscription, search modal, keydown).
   const teardown = () => {
+    pageCleanups.forEach(fn => { try { fn() } catch {} })
+    pageCleanups.clear()
     document.removeEventListener('keydown', onGlobalKey)
     document.removeEventListener('click', onGlobalClick)
     closeSearch()
@@ -2178,6 +2183,11 @@ export function render() {
   requestAnimationFrame(() => {
     if (el.parentNode) mountObserver.observe(el.parentNode, { childList: true })
   })
+
+  el.__cleanup = () => {
+    teardown()
+    mountObserver.disconnect()
+  }
 
   // Seed the initial draw (before store load resolves).
   draw()

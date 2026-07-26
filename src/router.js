@@ -7,6 +7,7 @@ const routes = {}
 const _moduleCache = {}
 let _loadId = 0
 let _currentCleanup = null
+let _currentPage = null
 let _initialized = false
 
 let _defaultRoute = '/dashboard'
@@ -70,6 +71,7 @@ async function loadRoute() {
     try { _currentCleanup() } catch (_) {}
     _currentCleanup = null
   }
+  _currentPage = null
 
   // 立即移除旧页面（不等退出动画，消除切换卡顿）
   _contentEl.innerHTML = ''
@@ -114,6 +116,7 @@ async function loadRoute() {
   }
   if (thisLoad !== _loadId) {
     try { mod.cleanup?.() } catch (_) {}
+    try { page?.__cleanup?.() } catch (_) {}
     return
   }
 
@@ -126,11 +129,21 @@ async function loadRoute() {
   } else if (page instanceof HTMLElement) {
     _contentEl.innerHTML = ''
     _contentEl.appendChild(page)
+    _currentPage = page
   }
   // page 为 undefined 时，renderFn 已经直接写入了 innerHTML，勿动
 
-  // 保存页面清理函数
-  _currentCleanup = mod.cleanup || null
+  // Pages historically used both module cleanup and element-scoped cleanup.
+  // Run both exactly once so body overlays and subscriptions cannot outlive
+  // the route that created them.
+  const moduleCleanup = typeof mod.cleanup === 'function' ? mod.cleanup : null
+  const elementCleanup = page instanceof HTMLElement && typeof page.__cleanup === 'function'
+    ? page.__cleanup
+    : null
+  _currentCleanup = () => {
+    if (moduleCleanup) moduleCleanup()
+    if (elementCleanup && elementCleanup !== moduleCleanup) elementCleanup()
+  }
 
   // 更新侧边栏激活状态
   document.querySelectorAll('.nav-item').forEach(item => {
