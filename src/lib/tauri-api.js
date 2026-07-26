@@ -702,6 +702,7 @@ export const api = {
   saveImage: (id, data) => invoke('assistant_save_image', { id, data }),
   loadImage: (id) => invoke('assistant_load_image', { id }),
   loadMediaFile: (path) => invoke('assistant_load_media_file', { path }, 60000),
+  transcribeVoiceAudio: (data, mimeType, language) => invoke('transcribe_voice_audio', { data, mimeType, language }, 130000),
   openContainingFolder: (path) => invoke('assistant_open_containing_folder', { path }),
   deleteImage: (id) => invoke('assistant_delete_image', { id }),
 

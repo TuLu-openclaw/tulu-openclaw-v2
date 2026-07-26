@@ -266,6 +266,105 @@ pub async fn assistant_load_media_file(path: String) -> Result<String, String> {
     Ok(format!("data:{};base64,{}", mime, b64))
 }
 
+fn find_transcript_text(value: &serde_json::Value) -> Option<String> {
+    for key in ["text", "transcript", "content"] {
+        if let Some(text) = value.get(key).and_then(|item| item.as_str()) {
+            let text = text.trim();
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+    for key in ["outputs", "output", "result", "data"] {
+        if let Some(item) = value.get(key) {
+            if let Some(text) = find_transcript_text(item) {
+                return Some(text);
+            }
+        }
+    }
+    if let Some(items) = value.as_array() {
+        for item in items {
+            if let Some(text) = find_transcript_text(item) {
+                return Some(text);
+            }
+        }
+    }
+    None
+}
+
+/// 将聊天页录制的短音频交给 OpenClaw 的统一音频转写能力。
+/// OpenClaw 会按配置选择 provider 或本地 CLI，本命令不持久化录音。
+#[tauri::command]
+pub async fn transcribe_voice_audio(
+    data: String,
+    mime_type: Option<String>,
+    language: Option<String>,
+) -> Result<serde_json::Value, String> {
+    const MAX_AUDIO_BYTES: usize = 25 * 1024 * 1024;
+    let pure_b64 = data.split_once(',').map(|(_, body)| body).unwrap_or(&data);
+    let bytes = general_purpose::STANDARD
+        .decode(pure_b64)
+        .map_err(|_| "录音数据无效，请重新录音".to_string())?;
+    if bytes.is_empty() {
+        return Err("没有录到声音，请重试".to_string());
+    }
+    if bytes.len() > MAX_AUDIO_BYTES {
+        return Err("录音时间过长，请缩短后重试".to_string());
+    }
+
+    let mime = mime_type.unwrap_or_default().to_ascii_lowercase();
+    let ext = if mime.contains("ogg") {
+        "ogg"
+    } else if mime.contains("mp4") || mime.contains("m4a") {
+        "m4a"
+    } else if mime.contains("wav") {
+        "wav"
+    } else {
+        "webm"
+    };
+    let cache_dir = data_dir().join("cache").join("voice");
+    tokio::fs::create_dir_all(&cache_dir)
+        .await
+        .map_err(|_| "无法准备语音转写缓存".to_string())?;
+    let file_path = cache_dir.join(format!(
+        "voice-{}-{}.{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_millis(),
+        ext
+    ));
+    tokio::fs::write(&file_path, bytes)
+        .await
+        .map_err(|_| "无法保存临时录音".to_string())?;
+
+    let mut command = crate::utils::openclaw_command_async();
+    command
+        .args(["infer", "audio", "transcribe", "--file"])
+        .arg(&file_path)
+        .arg("--json");
+    if let Some(language) = language.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        command.args(["--language", language]);
+    }
+    let output = tokio::time::timeout(std::time::Duration::from_secs(120), command.output()).await;
+    let _ = tokio::fs::remove_file(&file_path).await;
+    let output = output
+        .map_err(|_| "语音转写超时，请缩短录音后重试".to_string())?
+        .map_err(|_| "未找到可用的 OpenClaw 语音转写服务".to_string())?;
+    if !output.status.success() {
+        return Err("OpenClaw 语音转写暂不可用，请检查语音模型配置或改用文字输入".to_string());
+    }
+
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "OpenClaw 返回了无法识别的转写结果".to_string())?;
+    let text = find_transcript_text(&value)
+        .ok_or_else(|| "没有识别到可用文字，请靠近麦克风后重试".to_string())?;
+    Ok(serde_json::json!({
+        "text": text,
+        "provider": value.get("provider").cloned().unwrap_or(serde_json::Value::Null),
+        "model": value.get("model").cloned().unwrap_or(serde_json::Value::Null),
+        "engine": "openclaw"
+    }))
+}
+
 #[tauri::command]
 pub async fn assistant_open_containing_folder(path: String) -> Result<(), String> {
     let raw = path.trim().trim_start_matches("file://");

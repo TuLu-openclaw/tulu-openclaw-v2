@@ -1376,7 +1376,8 @@
   cursor: not-allowed;
 }
 
-.chat-voice-btn {
+.chat-voice-btn,
+.chat-voice-settings-btn {
   width: 40px;
   height: 40px;
   padding: 0;
@@ -1395,7 +1396,8 @@
 }
 
 .chat-voice-btn:hover,
-.chat-voice-btn.active {
+.chat-voice-btn.active,
+.chat-voice-settings-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -1413,6 +1415,11 @@
   50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 18%, transparent); }
 }
 
+.chat-voice-settings-btn {
+  width: 36px;
+  height: 40px;
+}
+
 .chat-voice-panel {
   margin: 0 var(--space-md) var(--space-sm);
   padding: 10px 12px;
@@ -1420,6 +1427,26 @@
   border-radius: var(--radius-md, 8px);
   background: var(--bg-secondary, var(--bg-card));
   flex-shrink: 0;
+}
+
+.chat-voice-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-voice-panel-head strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.chat-voice-panel-head div div {
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .chat-voice-panel-row {
@@ -1479,8 +1506,38 @@
   color: var(--accent);
 }
 
+.chat-voice-status[data-state="transcribing"] {
+  color: var(--warning, #b45309);
+}
+
 .chat-voice-status[data-state="error"] {
   color: var(--danger, #dc2626);
+}
+
+.chat-voice-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.chat-voice-actions[hidden] {
+  display: none;
+}
+
+.chat-voice-advanced {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.chat-voice-advanced summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.chat-voice-advanced[open] summary {
+  margin-bottom: 8px;
 }
 
 /* 回到底部按钮 */
@@ -2302,6 +2359,13 @@
   }
   .chat-voice-panel {
     margin: 0 var(--space-sm) var(--space-sm);
+  }
+  .chat-voice-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .chat-voice-panel-head .btn {
+    width: 100%;
   }
   .chat-voice-panel-row {
     align-items: stretch;

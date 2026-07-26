@@ -91,9 +91,8 @@ const COMMANDS = [
 
 let _sessionKey = null, _lastDirectSessionKey = '', _page = null, _messagesEl = null, _textarea = null
 let _sendBtn = null, _statusDot = null, _typingEl = null, _scrollBtn = null
-let _voiceController = null, _voiceBtn = null, _voicePanelEl = null, _voiceStatusEl = null
-let _voiceModeEl = null, _voiceWakeWordEl = null, _voiceAutoSendEl = null
-let _voiceHoldTimer = null
+let _voiceController = null, _voiceBtn = null, _voiceSettingsBtn = null, _voicePanelEl = null, _voiceStatusEl = null
+let _voiceModeEl = null, _voiceWakeWordEl = null, _voiceAutoSendEl = null, _voiceActionsEl = null
 let _replyStatusRowEl = null
 let _replyStatusTextEl = null
 let _replyStatusPhaseEl = null
@@ -314,8 +313,11 @@ export async function render() {
         <button class="chat-attach-btn" id="chat-attach-btn" title="${t('chat.uploadImage')}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
         </button>
-        <button class="chat-voice-btn" id="chat-voice-btn" type="button" title="语音对话：点击切换，按住说话">
+        <button class="chat-voice-btn" id="chat-voice-btn" type="button" title="${t('chat.voiceClickToTalk')}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+        </button>
+        <button class="chat-voice-settings-btn" id="chat-voice-settings-btn" type="button" title="${t('chat.voiceSettings')}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V20h-3v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 14.7a1.7 1.7 0 0 0-1.55-1H5v-3h.45A1.7 1.7 0 0 0 7 9.7a1.7 1.7 0 0 0-.34-1.88l-.06-.06L8.72 5.64l.06.06A1.7 1.7 0 0 0 10.66 6a1.7 1.7 0 0 0 1-1.55V4h3v.45A1.7 1.7 0 0 0 15.66 6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.55 1H21v3h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>
         </button>
         <div class="chat-input-wrapper">
           <textarea id="chat-input" rows="1" placeholder="${t('chat.inputPlaceholder')}"></textarea>
@@ -330,21 +332,31 @@ export async function render() {
         </button>
       </div>
       <div class="chat-voice-panel" id="chat-voice-panel" style="display:none">
-        <div class="chat-voice-panel-row">
-          <label for="chat-voice-mode">语音模式</label>
-          <select id="chat-voice-mode">
-            <option value="short">短句对话</option>
-            <option value="continuous">连续对话</option>
-            <option value="wake">唤醒词</option>
-          </select>
-          <label class="chat-voice-toggle"><input id="chat-voice-auto-send" type="checkbox" checked> 自动发送</label>
+        <div class="chat-voice-panel-head">
+          <div><strong>${t('chat.voicePanelTitle')}</strong><div>${t('chat.voicePanelHint')}</div></div>
+          <button class="btn btn-sm btn-primary" id="chat-voice-toggle" type="button">${t('chat.voiceStart')}</button>
         </div>
-        <div class="chat-voice-panel-row chat-voice-wake-row">
-          <label for="chat-voice-wake-word">唤醒词</label>
-          <input id="chat-voice-wake-word" type="text" maxlength="24" value="小鱼儿" autocomplete="off">
-          <button class="btn btn-sm btn-secondary" id="chat-voice-toggle" type="button">开始语音</button>
+        <div class="chat-voice-status" id="chat-voice-status" role="status" aria-live="polite">${t('chat.voiceReadyHint')}</div>
+        <div class="chat-voice-actions" id="chat-voice-actions" hidden>
+          <button class="btn btn-sm btn-primary" type="button" data-voice-action="retry">${t('chat.voiceRetry')}</button>
+          <button class="btn btn-sm btn-secondary" type="button" data-voice-action="text">${t('chat.voiceUseText')}</button>
         </div>
-        <div class="chat-voice-status" id="chat-voice-status" role="status" aria-live="polite">点击麦克风选择模式，或按住麦克风直接说话</div>
+        <details class="chat-voice-advanced">
+          <summary>${t('chat.voiceAdvanced')}</summary>
+          <div class="chat-voice-panel-row">
+            <label for="chat-voice-mode">${t('chat.voiceMode')}</label>
+            <select id="chat-voice-mode">
+              <option value="short">${t('chat.voiceModeShort')}</option>
+              <option value="continuous">${t('chat.voiceModeContinuous')}</option>
+              <option value="wake">${t('chat.voiceModeWake')}</option>
+            </select>
+            <label class="chat-voice-toggle"><input id="chat-voice-auto-send" type="checkbox" checked> ${t('chat.voiceAutoSend')}</label>
+          </div>
+          <div class="chat-voice-panel-row chat-voice-wake-row">
+            <label for="chat-voice-wake-word">${t('chat.voiceWakeWord')}</label>
+            <input id="chat-voice-wake-word" type="text" maxlength="24" value="小鱼儿" autocomplete="off">
+          </div>
+        </details>
       </div>
       <div class="hosted-agent-panel" id="hosted-agent-panel" style="display:none">
         <div class="hosted-agent-header">
@@ -406,11 +418,13 @@ export async function render() {
   _textarea = page.querySelector('#chat-input')
   _sendBtn = page.querySelector('#chat-send-btn')
   _voiceBtn = page.querySelector('#chat-voice-btn')
+  _voiceSettingsBtn = page.querySelector('#chat-voice-settings-btn')
   _voicePanelEl = page.querySelector('#chat-voice-panel')
   _voiceStatusEl = page.querySelector('#chat-voice-status')
   _voiceModeEl = page.querySelector('#chat-voice-mode')
   _voiceWakeWordEl = page.querySelector('#chat-voice-wake-word')
   _voiceAutoSendEl = page.querySelector('#chat-voice-auto-send')
+  _voiceActionsEl = page.querySelector('#chat-voice-actions')
   _statusDot = page.querySelector('#chat-status-dot')
   _typingEl = page.querySelector('#typing-indicator')
   _scrollBtn = page.querySelector('#chat-scroll-btn')
@@ -5386,8 +5400,9 @@ function setVoiceStatus(message, state = 'idle') {
   }
   if (_voiceBtn) {
     _voiceBtn.dataset.state = state
-    _voiceBtn.classList.toggle('active', state !== 'idle' && state !== 'error')
+    _voiceBtn.classList.toggle('active', !['idle', 'error', 'ready'].includes(state))
   }
+  if (_voiceActionsEl) _voiceActionsEl.hidden = state !== 'error'
 }
 
 function applyVoiceTranscript(text, meta = {}) {
@@ -5407,13 +5422,14 @@ function applyVoiceTranscript(text, meta = {}) {
 
 function voiceStatusMessage(status, wakeWord) {
   const messages = {
-    idle: '语音已停止',
-    listening: '正在聆听，请说话',
-    'waiting-wake-word': `等待唤醒词“${wakeWord || '小鱼儿'}”`,
-    'wake-armed': '已唤醒，请说出指令',
-    error: '语音服务已停止',
+    idle: t('chat.voiceReadyHint'),
+    listening: t('chat.voiceListening'),
+    transcribing: t('chat.voiceTranscribing'),
+    'waiting-wake-word': t('chat.voiceWaitingWake', { word: wakeWord || '小鱼儿' }),
+    'wake-armed': t('chat.voiceWakeArmed'),
+    error: t('chat.voiceFailed'),
   }
-  return messages[status] || '语音对话已就绪'
+  return messages[status] || t('chat.voiceReadyHint')
 }
 
 function setupVoiceConversation(page) {
@@ -5422,86 +5438,57 @@ function setupVoiceConversation(page) {
   _voiceModeEl.value = settings.mode
   _voiceWakeWordEl.value = settings.wakeWord
   _voiceAutoSendEl.checked = settings.autoSend
-
-  _voiceController = new VoiceConversationController({
-    language: navigator.language?.toLowerCase().startsWith('zh') ? navigator.language : 'zh-CN',
-    wakeWord: settings.wakeWord,
-    onCommand: applyVoiceTranscript,
-    onInterim: (text) => {
-      if (text) setVoiceStatus(`正在识别：${text}`, 'listening')
-    },
-    onStatus: ({ status, wakeWord }) => setVoiceStatus(voiceStatusMessage(status, wakeWord), status),
-    onError: ({ code, message }) => {
-      if (code === 'no-speech' || code === 'aborted') return
-      setVoiceStatus(message, 'error')
-      toast(message, 'error')
-    },
-  })
-
-  if (!_voiceController.supported) {
-    setVoiceStatus('当前系统 WebView 不支持在线语音识别；文字聊天不受影响', 'error')
-  }
-
+  const language = navigator.language?.toLowerCase().startsWith('zh') ? navigator.language : 'zh-CN'
   const toggleButton = page.querySelector('#chat-voice-toggle')
   const startSelectedMode = () => {
     const current = saveVoiceSettings()
     if (_voiceController.active) {
       _voiceController.stop()
-      if (toggleButton) toggleButton.textContent = '开始语音'
+      if (toggleButton) toggleButton.textContent = t('chat.voiceStart')
       return
     }
     const started = current.mode === 'continuous'
       ? _voiceController.startContinuous()
-      : current.mode === 'wake'
-        ? _voiceController.startWake()
-        : _voiceController.startShort()
-    if (started && toggleButton) toggleButton.textContent = '停止语音'
+      : current.mode === 'wake' ? _voiceController.startWake() : _voiceController.startShort()
+    if (started && toggleButton) toggleButton.textContent = t('chat.voiceStop')
   }
 
-  let pushToTalk = false
-  let suppressNextClick = false
-  const cancelHoldTimer = () => {
-    if (_voiceHoldTimer) clearTimeout(_voiceHoldTimer)
-    _voiceHoldTimer = null
-  }
-  _voiceBtn.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return
-    cancelHoldTimer()
-    _voiceHoldTimer = setTimeout(() => {
-      _voiceHoldTimer = null
-      if (!_voicePanelEl || !_voiceController) return
-      pushToTalk = true
-      suppressNextClick = true
-      _voicePanelEl.style.display = 'none'
-      _voiceController.startPushToTalk()
-    }, 320)
+  _voiceController = new VoiceConversationController({
+    language,
+    wakeWord: settings.wakeWord,
+    transcribe: (data, mimeType, lang) => api.transcribeVoiceAudio(data, mimeType, lang),
+    onCommand: applyVoiceTranscript,
+    onInterim: (text) => { if (text) setVoiceStatus(`${t('chat.voiceRecognizing')}：${text}`, 'listening') },
+    onStatus: ({ status, wakeWord }) => {
+      setVoiceStatus(voiceStatusMessage(status, wakeWord), status)
+      if (toggleButton && ['idle', 'error'].includes(status)) toggleButton.textContent = t('chat.voiceStart')
+      if (toggleButton && ['listening', 'transcribing', 'waiting-wake-word', 'wake-armed'].includes(status)) toggleButton.textContent = t('chat.voiceStop')
+    },
+    onError: ({ code, message }) => {
+      if (code === 'no-speech' || code === 'aborted') return
+      setVoiceStatus(message || t('chat.voiceFailed'), 'error')
+    },
   })
-  const finishPointer = () => {
-    cancelHoldTimer()
-    if (pushToTalk) {
-      pushToTalk = false
-      _voiceController.stopPushToTalk()
-    }
-  }
-  _voiceBtn.addEventListener('pointerup', finishPointer)
-  _voiceBtn.addEventListener('pointercancel', finishPointer)
-  _voiceBtn.addEventListener('pointerleave', () => {
-    if (pushToTalk) finishPointer()
-  })
+
+  setVoiceStatus(_voiceController.recorderSupported ? t('chat.voiceReadyHint') : t('chat.voiceCompatibilityHint'), 'ready')
   _voiceBtn.addEventListener('click', () => {
-    if (suppressNextClick) {
-      suppressNextClick = false
-      return
-    }
+    _voicePanelEl.style.display = _voicePanelEl.style.display === 'none' ? 'block' : 'none'
+    if (_voicePanelEl.style.display === 'block') startSelectedMode()
+  })
+  _voiceSettingsBtn?.addEventListener('click', () => {
     _voicePanelEl.style.display = _voicePanelEl.style.display === 'none' ? 'block' : 'none'
   })
-
   toggleButton?.addEventListener('click', startSelectedMode)
-  _voiceModeEl?.addEventListener('change', () => {
-    saveVoiceSettings()
-    if (_voiceController.active) _voiceController.stop()
-    if (toggleButton) toggleButton.textContent = '开始语音'
+  _voiceActionsEl?.addEventListener('click', (event) => {
+    const action = event.target.closest('[data-voice-action]')?.dataset.voiceAction
+    if (action === 'retry') startSelectedMode()
+    if (action === 'text') {
+      _voicePanelEl.style.display = 'none'
+      _textarea?.focus()
+      setVoiceStatus(t('chat.voiceTextFallback'), 'ready')
+    }
   })
+  _voiceModeEl?.addEventListener('change', () => { saveVoiceSettings(); if (_voiceController.active) _voiceController.stop() })
   _voiceWakeWordEl?.addEventListener('change', saveVoiceSettings)
   _voiceAutoSendEl?.addEventListener('change', saveVoiceSettings)
 }
@@ -5570,16 +5557,16 @@ export function cleanup() {
   _page = null
   _messagesEl = null
   _textarea = null
-  if (_voiceHoldTimer) clearTimeout(_voiceHoldTimer)
-  _voiceHoldTimer = null
   _voiceController?.dispose()
   _voiceController = null
   _voiceBtn = null
+  _voiceSettingsBtn = null
   _voicePanelEl = null
   _voiceStatusEl = null
   _voiceModeEl = null
   _voiceWakeWordEl = null
   _voiceAutoSendEl = null
+  _voiceActionsEl = null
   _sendBtn = null
   _statusDot = null
   _typingEl = null

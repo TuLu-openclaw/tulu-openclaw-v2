@@ -3046,6 +3046,7 @@ const ALWAYS_LOCAL = new Set([
   'assistant_list_dir', 'assistant_system_info', 'assistant_list_processes',
   'assistant_check_port', 'assistant_web_search', 'assistant_fetch_url',
   'assistant_ensure_data_dir', 'assistant_save_image', 'assistant_load_image', 'assistant_delete_image',
+  'transcribe_voice_audio',
 ])
 
 // === 工具函数 ===
@@ -5862,6 +5863,54 @@ const handlers = {
       if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
     }
     return null
+  },
+
+  async transcribe_voice_audio({ data, mimeType = 'audio/webm', language = '' } = {}) {
+    const pureB64 = String(data || '').includes(',') ? String(data).split(',')[1] : String(data || '')
+    const bytes = Buffer.from(pureB64, 'base64')
+    if (!bytes.length) throw new Error('没有录到声音，请重试')
+    if (bytes.length > 25 * 1024 * 1024) throw new Error('录音时间过长，请缩短后重试')
+    const ext = /ogg/i.test(mimeType) ? 'ogg' : /mp4|m4a/i.test(mimeType) ? 'm4a' : /wav/i.test(mimeType) ? 'wav' : 'webm'
+    const dir = path.join(OPENCLAW_DIR, '星枢OpenClaw', 'cache', 'voice')
+    fs.mkdirSync(dir, { recursive: true })
+    const filepath = path.join(dir, `voice-${process.pid}-${Date.now()}.${ext}`)
+    fs.writeFileSync(filepath, bytes)
+    try {
+      const args = ['infer', 'audio', 'transcribe', '--file', filepath, '--json']
+      if (language) args.push('--language', language)
+      const result = await new Promise((resolve, reject) => {
+        const child = spawnOpenclaw(args, { windowsHide: true })
+        let stdout = ''; let stderr = ''
+        const timer = setTimeout(() => { child.kill(); reject(new Error('timeout')) }, 120000)
+        child.stdout.on('data', chunk => { stdout += chunk })
+        child.stderr.on('data', chunk => { stderr += chunk })
+        child.once('error', reject)
+        child.once('close', code => {
+          clearTimeout(timer)
+          if (code === 0) resolve({ stdout, stderr })
+          else reject(new Error(stderr || `exit ${code}`))
+        })
+      })
+      const value = JSON.parse(result.stdout || result.stderr || '{}')
+      const findText = item => {
+        if (!item) return ''
+        if (typeof item === 'string') return item.trim()
+        for (const key of ['text', 'transcript', 'content']) if (typeof item[key] === 'string' && item[key].trim()) return item[key].trim()
+        for (const key of ['outputs', 'output', 'result', 'data']) {
+          const text = Array.isArray(item[key]) ? item[key].map(findText).find(Boolean) : findText(item[key])
+          if (text) return text
+        }
+        return ''
+      }
+      const text = findText(value)
+      if (!text) throw new Error('没有识别到可用文字，请靠近麦克风后重试')
+      return { text, provider: value.provider || null, model: value.model || null, engine: 'openclaw' }
+    } catch (error) {
+      if (error?.message === 'timeout') throw new Error('语音转写超时，请缩短录音后重试')
+      throw new Error('OpenClaw 语音转写暂不可用，请检查语音模型配置或改用文字输入')
+    } finally {
+      try { fs.unlinkSync(filepath) } catch {}
+    }
   },
 
   // === AI 助手工具（Web 模式真实执行） ===

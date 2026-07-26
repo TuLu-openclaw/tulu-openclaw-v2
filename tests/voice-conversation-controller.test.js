@@ -23,8 +23,24 @@ class FakeRecognition {
   end() { this.onend?.() }
 }
 
+class FakeRecorder {
+  static instances = []
+  constructor() {
+    FakeRecorder.instances.push(this)
+    this.mimeType = 'audio/webm'
+    this.state = 'inactive'
+  }
+  start() { this.state = 'recording'; this.onstart?.() }
+  stop() {
+    this.state = 'inactive'
+    this.ondataavailable?.({ data: { size: 4, marker: 'audio' } })
+    this.onstop?.()
+  }
+}
+
 function resetFakeRecognition() {
   FakeRecognition.instances.length = 0
+  FakeRecorder.instances.length = 0
 }
 
 test('extractWakeCommand matches custom wake words and inline commands', () => {
@@ -35,16 +51,33 @@ test('extractWakeCommand matches custom wake words and inline commands', () => {
   assert.deepEqual(extractWakeCommand('普通聊天内容', '小鱼儿'), { matched: false, command: '' })
 })
 
-test('short voice mode emits one command and becomes idle', () => {
+test('short voice mode records, transcribes once, and becomes idle', async () => {
   resetFakeRecognition()
   const commands = []
-  const voice = new VoiceConversationController({ Recognition: FakeRecognition, onCommand: text => commands.push(text) })
+  const statuses = []
+  globalThis.Blob = class { constructor(chunks) { this.chunks = chunks } }
+  globalThis.FileReader = class {
+    readAsDataURL() { queueMicrotask(() => this.onload?.({ target: { result: 'data:audio/webm;base64,YWJj' } })) }
+  }
+  const voice = new VoiceConversationController({
+    Recognition: FakeRecognition,
+    MediaRecorder: FakeRecorder,
+    getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+    transcribe: async () => ({ text: '发送 一条消息', engine: 'openclaw' }),
+    onCommand: text => commands.push(text),
+    onStatus: state => statuses.push(state.status),
+  })
 
   assert.equal(voice.startShort(), true)
-  FakeRecognition.instances[0].final(' 发送 一条消息 ')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(FakeRecorder.instances[0].state, 'recording')
+  voice.stop()
+  await new Promise(resolve => setImmediate(resolve))
 
   assert.deepEqual(commands, ['发送 一条消息'])
   assert.equal(voice.mode, 'idle')
+  assert.deepEqual(statuses.slice(-3), ['listening', 'transcribing', 'idle'])
+  voice.dispose()
 })
 
 test('continuous mode restarts recognition after the engine ends', async () => {
@@ -87,14 +120,14 @@ test('wake mode accepts inline and two-step commands', () => {
 
 test('unsupported environments fail without throwing', () => {
   const errors = []
-  const voice = new VoiceConversationController({ Recognition: null, onError: error => errors.push(error.code) })
+  const voice = new VoiceConversationController({ Recognition: null, MediaRecorder: null, onError: error => errors.push(error.code) })
   assert.equal(voice.startShort(), false)
   assert.deepEqual(errors, ['not-supported'])
 })
 
-test('chat page owns and clears the push-to-talk hold timer during cleanup', () => {
+test('chat page exposes one-shot voice controls and disposes the controller', () => {
   const source = readFileSync(new URL('../src/pages/chat.js', import.meta.url), 'utf8')
-  assert.match(source, /let _voiceHoldTimer = null/)
-  assert.match(source, /_voiceHoldTimer = setTimeout\(\(\) => \{[\s\S]*if \(!_voicePanelEl \|\| !_voiceController\) return/)
-  assert.match(source, /export function cleanup\(\) \{[\s\S]*if \(_voiceHoldTimer\) clearTimeout\(_voiceHoldTimer\)[\s\S]*_voiceHoldTimer = null[\s\S]*_voiceController\?\.dispose\(\)/)
+  assert.match(source, /chat-voice-settings-btn/)
+  assert.match(source, /chat-voice-actions/)
+  assert.match(source, /_voiceController\?\.dispose\(\)/)
 })

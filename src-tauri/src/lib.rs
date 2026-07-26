@@ -608,6 +608,7 @@ pub fn run() {
             assistant::assistant_save_image,
             assistant::assistant_load_image,
             assistant::assistant_load_media_file,
+            assistant::transcribe_voice_audio,
             assistant::assistant_open_containing_folder,
             assistant::assistant_delete_image,
             // Hermes Agent
