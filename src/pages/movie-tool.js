@@ -175,255 +175,16 @@ async function resolvePlayableUrl(url) {
     if (!playable) throw new Error('樱花播放页未解析到真实播放地址')
     return playable
   }
+  if (/4kcz\.com\/v_play\//i.test(raw)) {
+    const playable = await resolveCzPlayUrl(raw)
+    if (!playable) throw new Error('厂长资源播放页未解析到真实播放地址')
+    return playable
+  }
   return raw
 }
 
-const NAPP03_API_CACHE_BASE = 'https://vcache.zmizr.cn'
-const NAPP03_IMAGE_BASES = {
-  vod1: 'https://vres.dsty29.com/vod1',
-  sres: 'https://sres.dsty29.com',
-}
-
-async function fetchNapp03Api(path, query = {}) {
-  const { invoke } = await import('@tauri-apps/api/core').catch(() => ({}))
-  if (!invoke) throw new Error('天穹接口需要 Tauri 后端解密，当前环境不可用')
-  const text = await invoke('napp03_api_fetch', { path, query, timeoutSecs: 12 })
-  const json = JSON.parse(text)
-  if (json?.code !== 200) throw new Error(json?.message || '天穹接口返回异常')
-  return json.data || {}
-}
-
-function napp03ImageUrl(item) {
-  const imagePath = item?.imagePath || item?.cover || item?.pic || ''
-  if (!imagePath) return ''
-  if (/^https?:\/\//i.test(imagePath)) return imagePath
-  const group = item?.imageGroup || 'vod1'
-  const base = NAPP03_IMAGE_BASES[group] || NAPP03_IMAGE_BASES.vod1
-  return new URL(imagePath.replace(/^\//, ''), base + '/').href
-}
-
-function napp03VodId(item) {
-  const url = String(item?.url || item?._detailUrl || '')
-  const urlId = url.match(/vod\/(?:detail|play)\?vodId=(\d+)/i)?.[1] || url.match(/[?&]vodId=(\d+)/i)?.[1]
-  if (url && !urlId) return ''
-  return item?.vodId || item?.vod_id || urlId || item?.id || ''
-}
-
-function mapNapp03Vod(item) {
-  const id = napp03VodId(item)
-  return {
-    vod_id: id,
-    vod_name: item?.title || item?.name || '未命名',
-    vod_pic: napp03ImageUrl(item),
-    vod_remarks: item?.bottomLabel || item?.topLeftLabel || item?.channelName || '',
-    type_name: item?.channelName || (Array.isArray(item?.labels) ? item.labels.map(x => x.name).filter(Boolean).slice(0, 2).join(' / ') : '天穹'),
-    _detailUrl: id ? `vod/detail?vodId=${id}` : '',
-    _api: NAPP03_API_CACHE_BASE,
-    _srcKey: 'a_napp03',
-  }
-}
-
-function mapNapp03HomeCard(item) {
-  const url = String(item?.url || '')
-  if (/^browser\?/i.test(url) || /^article\//i.test(url)) return null
-  if (/specialTopic\/vods|vod\/timeline|netflixTopic\/vods/i.test(url)) return mapNapp03TopicCard(item)
-  const vod = mapNapp03Vod(item)
-  return vod.vod_id ? vod : null
-}
-
-function napp03FirstText(...values) {
-  for (const value of values) {
-    if (typeof value === 'string' && value.trim()) return value.trim()
-    if (value && typeof value === 'object') {
-      const nested = napp03FirstText(value.title, value.name, value.text, value.label, value.value)
-      if (nested) return nested
-    }
-  }
-  return ''
-}
-
-function mapNapp03TopicCard(item) {
-  const header = item?.header || item
-  const url = header?.url || item?.url || ''
-  const id = header?.id || header?.specialTopicId || header?.topicId || item?.id || item?.specialTopicId || item?.topicId || url
-  const title = napp03FirstText(header?.title, header?.name, header?.topicName, header?.specialTopicName, header?.subjectName, header?.playlistName, header?.collectionName, header?.vodName, header?.displayName, header?.channelName, header?.label, header?.text, item?.title, item?.name, item?.topicName, item?.specialTopicName, item?.subjectName, item?.playlistName, item?.collectionName, item?.vodName, item?.displayName, item?.channelName, item?.label, item?.text)
-  const summary = napp03FirstText(header?.summary, header?.subTitle, header?.subtitle, header?.desc, header?.description, item?.summary, item?.subTitle, item?.subtitle, item?.desc, item?.description)
-  return {
-    vod_id: id,
-    vod_name: title || (id ? '专题 ' + id : '未命名专题'),
-    vod_pic: napp03ImageUrl({ imagePath: header?.coverPathVertical || header?.coverPathHorizontal || header?.imagePath || item?.coverPathVertical || item?.coverPathHorizontal || item?.imagePath, imageGroup: header?.coverGroupVertical || header?.coverGroupHorizontal || header?.imageGroup || item?.coverGroupVertical || item?.coverGroupHorizontal || item?.imageGroup }),
-    vod_remarks: header?.count ? (/部$/.test(String(header.count)) ? String(header.count) : String(header.count).replace(/^共?/, '共') + '部') : (item?.count || summary || '频道'),
-    type_name: summary || '频道',
-    _detailUrl: url || (id ? String(id) : ''),
-    _libraryAction: 'napp03-url-list',
-    _api: NAPP03_API_CACHE_BASE,
-    _srcKey: 'a_napp03',
-  }
-}
-
-function mapNapp03TopicSections(data) {
-  const sections = []
-  ;(Array.isArray(data?.items) ? data.items : []).forEach((block, index) => {
-    const blockType = String(block?._vod || '')
-    if (/^ad/i.test(blockType)) return
-    const rawItems = Array.isArray(block?.data) ? block.data : []
-    const list = rawItems.map(mapNapp03TopicCard).filter(item => item.vod_id && item._detailUrl)
-    if (!list.length) return
-    const title = block?.header?.title || block?.title || ('专题模块 ' + (index + 1))
-    sections.push({ title, list, style: blockType || 'topic', url: block?.header?.url || '' })
-  })
-  return sections
-}
-
-function mapNapp03HomeSections(data) {
-  const sections = []
-  const pushSection = (title, rawItems, options = {}) => {
-    if (!Array.isArray(rawItems) || !rawItems.length) return
-    const list = mergeVodLists([rawItems.map(mapNapp03HomeCard).filter(Boolean).filter(item => item.vod_id && (item._detailUrl || item._libraryAction))], options.limit || 24)
-    if (!list.length) return
-    sections.push({ title: title || '推荐', list, style: options.style || 'grid', url: options.url || '' })
-  }
-  const normalizeHomeSectionTitle = (title) => (title === '推荐模块 1' || title === '推荐模块1') ? '每日推荐' : title
-  pushSection('轮播推荐', data?.banners?.data || data?.banners?.items || data?.banners, { limit: 12, style: 'banner' })
-  ;(Array.isArray(data?.blocks) ? data.blocks : []).forEach((block, index) => {
-    const blockType = String(block?._vod || block?.type || '')
-    if (/^ad/i.test(blockType)) return
-    const rawTitle = block?.header?.title || block?.title || block?.name || ('推荐模块 ' + (index + 1))
-    const title = normalizeHomeSectionTitle(rawTitle)
-    const url = block?.header?.url || block?.url || ''
-    pushSection(title, block?.data || block?.items || block?.list, { limit: 30, style: blockType || 'grid', url })
-  })
-  return sections
-}
-
-function mapNapp03Home(data) {
-  const items = []
-  const seen = new Set()
-  const push = raw => {
-    const mapped = mapNapp03HomeCard(raw)
-    if (!mapped || !mapped.vod_id || seen.has(mapped.vod_id)) return
-    seen.add(mapped.vod_id)
-    items.push(mapped)
-  }
-  const pushMany = value => {
-    if (Array.isArray(value)) value.forEach(push)
-  }
-  pushMany(data?.data)
-  pushMany(data?.items)
-  pushMany(data?.list)
-  return items
-}
-
-function mapNapp03UrlListItems(data, path) {
-  const sections = /categoryTopics|specialTopics|topicListView/i.test(path)
-    ? (path.includes('topicListView') ? mapNapp03HomeSections(data) : mapNapp03TopicSections(data))
-    : []
-  if (sections.length) return sections.flatMap(section => section.list || [])
-  const raw = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.list) ? data.list : (Array.isArray(data?.data) ? data.data : []))
-  return raw.map(item => {
-    const topic = mapNapp03HomeCard(item) || mapNapp03TopicCard(item)
-    if (topic?._libraryAction) return topic
-    return mapNapp03Vod(item)
-  }).filter(item => item?.vod_id && (item._detailUrl || item._libraryAction))
-}
-
-async function loadNapp03UrlList(rawUrl, title = '专题', cursor = '') {
-  const url = String(rawUrl || '')
-  const queryText = url.split('?')[1] || ''
-  const params = Object.fromEntries(new URLSearchParams(queryText))
-  let path = ''
-  let query = {}
-  const titleTopicId = String(title || '').match(/[（(](\d+)[）)]/)?.[1]
-  const plainTopicId = /^\d+$/.test(url.trim()) ? url.trim() : ''
-  const topicCategoryPathId = url.match(/categoryTopics\/(\d+)/i)?.[1]
-  const specialTopicPathId = url.match(/specialTopic\/vods\/(\d+)/i)?.[1] || url.match(/specialTopicId[=/](\d+)/i)?.[1]
-  const channelPathId = url.match(/\/channel\/(\d+)/i)?.[1] || url.match(/channelId[=/](\d+)/i)?.[1]
-  if (/specialTopic\/vods/i.test(url) && (params.specialTopicId || specialTopicPathId)) {
-    path = '/vod/specialTopic/vods.capi'
-    query = { specialTopicId: params.specialTopicId || specialTopicPathId }
-  } else if (plainTopicId || titleTopicId) {
-    path = '/vod/specialTopic/vods.capi'
-    query = { specialTopicId: plainTopicId || titleTopicId }
-  } else if (/specialTopic\/categoryTopics|categoryTopics\.capi/i.test(url) && (params.topicCategoryId || params.categoryId || params.id || topicCategoryPathId)) {
-    path = '/vod/specialTopic/categoryTopics.capi'
-    query = { topicCategoryId: params.topicCategoryId || params.categoryId || params.id || topicCategoryPathId }
-  } else if (/specialTopics|specialTopic\/list/i.test(url)) {
-    path = '/v2/vod/specialTopics.capi'
-    query = {}
-  } else if (/channel\/topicListView|topicListView\.capi/i.test(url) && (params.channelId || params.id || channelPathId)) {
-    path = '/v4/vod/channel/topicListView.capi'
-    query = { channelId: params.channelId || params.id || channelPathId }
-  } else if (/vod\/channel\/list|channel\/list\.capi|\/channel\//i.test(url) && (params.channelId || params.id || channelPathId)) {
-    path = '/vod/channel/list.capi'
-    query = { channelId: params.channelId || params.id || channelPathId }
-  } else if (/vod\/timeline/i.test(url) && params.timelineId) {
-    path = '/vod/timeline.capi'
-    query = { timelineId: params.timelineId }
-  } else if (/netflixTopic\/vods/i.test(url) && params.netflixTopicId) {
-    path = '/vod/netflixNewWatch/vods.capi'
-    query = { netflixTopicId: params.netflixTopicId }
-  } else {
-    throw new Error('该原站模块暂未找到可用接口：' + title + '（' + url + '）')
-  }
-  if (cursor) query.next = cursor
-  const data = await fetchNapp03Api(path, query)
-  const list = mapNapp03UrlListItems(data, path)
-  return { list, total: list.length, page: 1, next: data.next || '', hasMore: Boolean(data.next), cursor: cursor || '', request: { kind: 'napp03-url-list', rawUrl, title, path }, title }
-}
-
-function mapNapp03PlaySourceEpisode(ep, epIndex, source) {
-  const playUrl = ep?.m3u8Url || ep?.url || ep?.playUrl || (Array.isArray(ep?.playUrls) ? ep.playUrls.find(p => p?.url)?.url : '') || ''
-  return {
-    name: ep?.title || ep?.name || `第 ${epIndex + 1} 集`,
-    url: playUrl,
-    _episodeId: ep?.id || ep?.episodeId || '',
-    _episodeVodId: ep?.episodeVodId || source?.episodeVodId || '',
-    _siteId: ep?.siteId || source?.siteId || '',
-    _playUrls: Array.isArray(ep?.playUrls) ? ep.playUrls : [],
-  }
-}
-
-async function loadNapp03PlaySourceEpisodes(source) {
-  const existing = (source?.list || []).map((ep, epIndex) => mapNapp03PlaySourceEpisode(ep, epIndex, source)).filter(ep => ep.url)
-  if (existing.length || !source?.episodeVodId || !source?.siteId) return existing
-  try {
-    const data = await fetchNapp03Api('/v2/vod/episodes.capi', { episodeVodId: source.episodeVodId, siteId: source.siteId })
-    const rows = Array.isArray(data) ? data : (Array.isArray(data?.list) ? data.list : [])
-    return rows.map((ep, epIndex) => mapNapp03PlaySourceEpisode(ep, epIndex, source)).filter(ep => ep.url)
-  } catch (e) {
-    console.warn('[movie] 天穹线路加载失败:', source?.name || source?.siteId, e?.message || e)
-    return []
-  }
-}
-
-async function loadNapp03Detail(detailId, name, pic) {
-  const data = await fetchNapp03Api('/vod/detail.capi', { vodId: detailId })
-  const sources = Array.isArray(data.playSources) ? data.playSources : []
-  const lines = (await Promise.all(sources.map(async (source, lineIndex) => {
-    const eps = await loadNapp03PlaySourceEpisodes(source)
-    return eps.length ? {
-      name: source.name || source.siteId || `线路${lineIndex + 1}`,
-      tag: source.tag || '',
-      tips: source.tips || '',
-      urls: eps,
-      total: source.total || eps.length,
-      siteId: source.siteId || '',
-      episodeVodId: source.episodeVodId || '',
-    } : null
-  }))).filter(Boolean)
-  if (!lines.length) throw new Error('天穹详情已返回，但没有可播放线路')
-  return {
-    vod_id: data.id || detailId,
-    vod_name: data.title || name || '未命名',
-    vod_pic: napp03ImageUrl(data) || pic || '',
-    vod_content: data.summary || '',
-    vod_play_from: lines.map(l => l.name).join('$$$'),
-    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
-    _episodes: lines,
-    _srcKey: 'a_napp03',
-    _api: NAPP03_API_CACHE_BASE,
-  }
-}
+const CZ_BASE = 'https://www.4kcz.com'
+const CZ_SOURCE_NAME = '厂长资源片库'
 
 function ip51122ImageUrl(item) {
   const imagePath = item?.imagePath || item?.cover || item?.pic || ''
@@ -435,32 +196,14 @@ function ip51122ImageUrl(item) {
 }
 
 async function loadIp51122Detail(detailId, name, pic) {
-  const data = await fetchNapp03Api('/vod/detail.capi', { vodId: detailId })
-  const sources = Array.isArray(data.playSources) ? data.playSources : []
-  const lines = (await Promise.all(sources.map(async (source, lineIndex) => {
-    const eps = await loadNapp03PlaySourceEpisodes(source)
-    return eps.length ? {
-      name: source.name || source.siteId || `线路${lineIndex + 1}`,
-      tag: source.tag || '',
-      tips: source.tips || '',
-      urls: eps,
-      total: source.total || eps.length,
-      siteId: source.siteId || '',
-      episodeVodId: source.episodeVodId || '',
-    } : null
-  }))).filter(Boolean)
-  if (!lines.length) throw new Error('云岚详情已返回，但没有可播放线路')
-  return {
-    vod_id: data.id || detailId,
-    vod_name: data.title || name || '未命名',
-    vod_pic: ip51122ImageUrl(data) || pic || '',
-    vod_content: data.summary || '',
-    vod_play_from: lines.map(l => l.name).join('$$$'),
-    vod_play_url: lines.map(l => l.urls.map(ep => `${ep.name}$${ep.url}`).join('#')).join('$$$'),
-    _episodes: lines,
-    _srcKey: 'ip51122',
-    _api: IP51122_LIST_BASE,
-  }
+  const id = String(detailId || '').match(/\/detail\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
+  if (!id) throw new Error('云岚详情缺少 movie id')
+  const detailUrl = `${IP51122_DETAIL_BASE}/detail/${id}.html`
+  const html = await fetchIp51122Page(detailUrl, IP51122_DETAIL_BASE)
+  if (/403 Forbidden|openresty|Access Denied|850/i.test(html)) throw new Error('云岚实时站点当前返回 403 / 防护页，详情页暂不可用')
+  const detail = parseNapp03DetailHtml(html, IP51122_DETAIL_BASE, id, name, pic)
+  if (!detail) throw new Error('云岚详情页未解析到播放列表')
+  return { ...detail, _srcKey: 'ip51122', _api: IP51122_DETAIL_BASE }
 }
 
 function isDirectVideoUrl(url) {
@@ -485,95 +228,9 @@ const IP51122_DETAIL_BASE = 'https://www.ncat21.com'
 const IP51122_FALLBACK_BASE = 'https://43.248.100.69:51080'
 const IP51122_IMAGE_BASE = 'https://vres.zyxpedu.com'
 let _ip51122SearchToken = ''
-let _napp03WarmupPromise = null
 
 function isCdndefendHtml(html) {
   return /Protected by cdndefend|cdndefend_js_cookie|verifying your browser/i.test(String(html || ''))
-}
-
-function warmupNapp03Cdndefend() {
-  if (typeof document === 'undefined') return Promise.resolve()
-  if (_napp03WarmupPromise) return _napp03WarmupPromise
-  _napp03WarmupPromise = new Promise(resolve => {
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:absolute;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;border:0'
-    let done = false
-    const finish = () => {
-      if (done) return
-      done = true
-      setTimeout(() => { try { iframe.remove() } catch {} }, 1000)
-      resolve()
-    }
-    iframe.onload = () => setTimeout(finish, 1600)
-    iframe.onerror = finish
-    setTimeout(finish, 6000)
-    iframe.src = NAPP03_BOOT_BASE + '/'
-    document.body.appendChild(iframe)
-  }).finally(() => { _napp03WarmupPromise = null })
-  return _napp03WarmupPromise
-}
-
-async function fetchNapp03Page(path) {
-  const url = /^https?:\/\//i.test(path) ? path : new URL(path, NAPP03_BASE).href
-  let result = await fetchTextWithFallback(url, {
-    timeoutMs: 9000,
-    proxyTimeoutMs: 5000,
-    preferTauri: true,
-    headers: { 'Accept': 'text/html,application/xhtml+xml' },
-  })
-  let html = result.text
-  if (result.status === 850 || isCdndefendHtml(html)) {
-    clearCachedMovieRequest('text:' + url)
-    await warmupNapp03Cdndefend()
-    result = await fetchTextWithFallback(url, {
-      timeoutMs: 9000,
-      proxyTimeoutMs: 5000,
-      preferTauri: true,
-      headers: { 'Accept': 'text/html,application/xhtml+xml' },
-    })
-    html = result.text
-  }
-  if (result.status === 850 || isCdndefendHtml(html)) throw new Error('ncat 实时站点 cdndefend 防护未通过，请先打开天穹启动页 ' + NAPP03_BOOT_BASE)
-  return html
-}
-
-function extractNapp03Cards(html, baseUrl, limit = 60) {
-  const results = []
-  const seen = new Set()
-  const hrefRe = /<a[^>]+href=["']([^"']*\/detail\/(\d+)\.html)["'][^>]*>[\s\S]*?<\/a>/gi
-  let match
-  while ((match = hrefRe.exec(html)) && results.length < limit) {
-    const block = match[0]
-    const context = html.slice(Math.max(0, match.index - 500), Math.min(html.length, hrefRe.lastIndex + 500))
-    const href = match[1]
-    const id = match[2]
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    const detailUrl = new URL(href, baseUrl).href
-    const picRaw = block.match(/data-original=["']([^"']+)["']/i)?.[1]
-      || block.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]
-      || context.match(/data-original=["']([^"']+)["']/i)?.[1]
-      || context.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]
-      || ''
-    const titleRaw = block.match(/carousel-item-title[^>]*>([^<]+)</i)?.[1]
-      || block.match(/alt=["']([^"']+)["']/i)?.[1]
-      || block.match(/title=["']([^"']+)["']/i)?.[1]
-      || block.match(/class=["'][^"']*(?:video|vod|item|title)[^"']*["'][^>]*>([^<]+)</i)?.[1]
-      || context.match(/carousel-item-title[^>]*>([^<]+)</i)?.[1]
-      || ''
-    const title = decodeHtmlEntities(titleRaw.replace(/𝕜𝕜𝕪𝕤𝟘𝟙\.𝕔𝕠𝕞|kkys01\.com/ig, '').trim())
-    if (!title || /placeholder|logo|网飞猫|可可影视|kekys/i.test(title)) continue
-    results.push({
-      vod_id: id,
-      vod_name: title,
-      vod_pic: picRaw ? new URL(decodeHtmlEntities(picRaw), baseUrl).href : '',
-      type_name: '影视',
-      _detailUrl: detailUrl,
-      _api: baseUrl,
-      _srcKey: 'a_napp03',
-    })
-  }
-  return results
 }
 
 function cleanLineName(value, fallback) {
@@ -636,16 +293,6 @@ function parseNapp03DetailHtml(html, baseUrl, detailId, name, pic) {
     _srcKey: 'a_napp03',
     _api: baseUrl,
   }
-}
-
-function fixIp51122PosterUrl(url) {
-  const raw = String(url || '').trim()
-  if (!raw) return ''
-  let parsed
-  try { parsed = new URL(raw, IP51122_FALLBACK_BASE) } catch { return raw }
-  const pathname = parsed.pathname || ''
-  if (!/^\/vod\d+\//i.test(pathname)) return raw
-  return IP51122_IMAGE_BASE + pathname + (parsed.search || '')
 }
 
 function parseIp51122ListHtml(html, baseUrl) {
@@ -747,24 +394,6 @@ async function loadYinghuaCategories() {
   return [home, ...list.filter(cat => cat.id !== 'home')]
 }
 
-async function loadNapp03Categories() {
-  const validTypeIds = new Set(['home'])
-  for (const typeId of [...new Set(NAPP03_CATEGORIES.map(cat => cat.typeId))]) {
-    if (typeId === 'home') continue
-    try {
-      const data = await fetchNapp03Api('/vod/channel/list.capi', { channelId: typeId, page: 1 })
-      if ((data.items || []).length) validTypeIds.add(typeId)
-    } catch {
-      validTypeIds.add(typeId)
-    }
-  }
-  const groups = NAPP03_GROUPS.map(group => ({
-    ...group,
-    children: group.children.filter(cat => cat.specialPath || cat.unsupported || validTypeIds.has(cat.typeId)),
-  })).filter(group => group.children.length)
-  return { groups, categories: groups.flatMap(group => group.children.map(cat => ({ ...cat, groupId: group.id }))) }
-}
-
 async function loadIp51122Categories() {
   const html = await fetchIp51122Page('/', IP51122_FALLBACK_BASE)
   const sections = parseIp51122HomeSections(html, IP51122_FALLBACK_BASE)
@@ -801,7 +430,6 @@ async function fetchIp51122Page(path, baseUrl = IP51122_FALLBACK_BASE) {
         directTimeoutMs: 16000,
         proxyTimeoutMs: 5000,
         preferTauri: true,
-        tauriOnly: true,
         forceRetry: true,
         headers: { 'Accept': 'text/html,application/xhtml+xml' },
         credentials: 'omit',
@@ -815,38 +443,6 @@ async function fetchIp51122Page(path, baseUrl = IP51122_FALLBACK_BASE) {
     }
   }
   throw new Error(lastError || '云岚实时站点请求失败')
-}
-
-async function searchAiyiNapp(keyword, page = 1) {
-  const target = String(keyword || '').trim()
-  if (!target) return { list: [], total: 0, page, hasMore: false }
-  try {
-    const data = await fetchNapp03Api('/vod/search/query', { next: `page=${Math.max(1, Number(page) || 1)}`, k: target, type: 1, channelId: 0 })
-    const list = (data.items || []).map(mapNapp03Vod).filter(item => item.vod_id)
-    return { list, total: list.length, page, next: data.next || '', hasMore: Boolean(data.next), cursor: data.next || '' }
-  } catch (error) {
-    const channels = [0, 1, 2, 3, 4, 5, 6, 7]
-    const found = []
-    const seen = new Set()
-    for (const channelId of channels) {
-      let next = ''
-      for (let depth = 0; depth < 8; depth++) {
-        const query = { channelId }
-        if (next) query.next = next
-        const data = await fetchNapp03Api('/vod/channel/list.capi', query)
-        for (const raw of (data.items || [])) {
-          const item = mapNapp03Vod(raw)
-          if (!movieNameMatches(item, target)) continue
-          if (!item.vod_id || seen.has(item.vod_id)) continue
-          seen.add(item.vod_id)
-          found.push(item)
-        }
-        if (!data.next || data.next === next) break
-        next = data.next
-      }
-    }
-    return { list: found, total: found.length, page, hasMore: false, message: found.length ? '' : '天穹真实搜索接口暂未完成初始化，已降级跨频道深度检索；原始错误：' + (error?.message || '未知错误') }
-  }
 }
 
 async function getIp51122SearchToken() {
@@ -868,6 +464,190 @@ async function searchIp51122(keyword, page = 1) {
   return { list, total: list.length, page }
 }
 
+async function fetchCzPage(path) {
+  const url = /^https?:\/\//i.test(path) ? path : new URL(path, CZ_BASE).href
+  const result = await fetchTextWithFallback(url, {
+    timeoutMs: 12000,
+    proxyTimeoutMs: 5000,
+    preferTauri: true,
+    forceRetry: true,
+    headers: { 'Accept': 'text/html,application/xhtml+xml' },
+  })
+  return result.text || ''
+}
+
+function parseCzListHtml(html, baseUrl, limit = Number.MAX_SAFE_INTEGER) {
+  const results = []
+  const seen = new Set()
+  const re = /\u003ca[^\u003e]+href=["']([^"']*\/movie\/(\d+)\.html)["'][^\u003e]*\u003e([\s\S]*?)\u003c\/a\u003e/gi
+  let m
+  while ((m = re.exec(html)) && results.length < limit) {
+    const href = m[1]
+    const id = m[2]
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const block = m[0]
+    const context = html.slice(Math.max(0, m.index - 400), Math.min(html.length, m.index + m[0].length + 400))
+    const title = decodeHtmlEntities((
+      block.match(/title=["']([^"']+)["']/i)?.[1] ||
+      block.match(/alt=["']([^"']+)["']/i)?.[1] ||
+      block.match(/\u003e([^\u003c]{2,40})\u003c\/a\u003e/i)?.[1] ||
+      ''
+    ).trim())
+    if (!title) continue
+    const picRaw =
+      block.match(/data-original=["']([^"']+)["']/i)?.[1] ||
+      block.match(/src=["']([^"']+)["']/i)?.[1] ||
+      context.match(/data-original=["']([^"']+)["']/i)?.[1] ||
+      context.match(/src=["']([^"']+)["']/i)?.[1] ||
+      ''
+    results.push({
+      vod_id: id,
+      vod_name: title,
+      vod_pic: picRaw ? new URL(picRaw, baseUrl).href : '',
+      type_name: '影视',
+      _detailUrl: new URL(href, baseUrl).href,
+      _api: baseUrl,
+      _srcKey: 'a_napp03',
+    })
+  }
+  return results
+}
+
+function parseCzHomeSections(html, baseUrl) {
+  const sections = []
+  const seenTitles = new Set()
+  // 4kcz 首页模块：class="mi_btcon"，标题在 <h2>/<h3> 或 .bt_tit 里
+  const re = /\u003c(?:div|section)[^\u003e]*class=["'][^"']*mi_btcon[^"']*["'][^\u003e]*\u003e([\s\S]*?)\u003c\/div\u003e\s*\u003cdiv class="mi_btcon"/gi
+  let m
+  while ((m = re.exec(html))) {
+    const block = m[1] || ''
+    const header = block.match(/\u003c(?:h2|h3)[^\u003e]*\u003e([\s\S]*?)\u003c\/(?:h2|h3)\u003e/i)?.[1] || ''
+    const title = decodeHtmlEntities(header.replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim())
+    if (!title || seenTitles.has(title) || /排行|留言|公告|关于|广告/.test(title)) continue
+    const list = parseCzListHtml(block, baseUrl, 30)
+    if (!list.length) continue
+    seenTitles.add(title)
+    sections.push({ id: 'section:' + encodeURIComponent(title), name: title, title, typeId: 'section:' + title, list })
+  }
+  return sections
+}
+
+async function loadCzCategories() {
+  const html = await fetchCzPage('/')
+  const sections = parseCzHomeSections(html, CZ_BASE)
+  // 主导航作为频道
+  const navRe = /\u003ca[^\u003e]+href=["']([^"']+)["'][^\u003e]*\u003e([\s\S]*?)\u003c\/a\u003e/gi
+  const nav = []
+  const header = html.slice(0, html.indexOf('\u003cmain\u003e') || 60000)
+  let m
+  while ((m = navRe.exec(header))) {
+    const href = decodeHtmlEntities(m[1])
+    const text = decodeHtmlEntities(m[2].replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim())
+    if (!text || !/^\/(?![^/]+\.[^/]+$)/.test(href)) continue
+    if (/wp-content|api|login|register|#|javascript:|czzy\.site|t\.me/.test(href)) continue
+    if (text.includes('首页')) continue
+    if (nav.find(x => x.href === href)) continue
+    nav.push({ id: href.replace(/^\/|\/$/g, '') || 'home', name: text, typeId: href })
+  }
+  const cats = [{ id: 'home', name: '首页推荐', typeId: 'home' }]
+  for (const n of nav) {
+    if (cats.find(c => c.id === n.id)) continue
+    cats.push(n)
+  }
+  if (sections.length) cats.push(...sections.map(({ id, name, typeId }) => ({ id, name, typeId })))
+  return cats
+}
+
+async function loadCzCategory(typeId, page = 1) {
+  if (String(typeId || '') === 'home' || !typeId) {
+    const html = await fetchCzPage('/')
+    const sections = parseCzHomeSections(html, CZ_BASE)
+    const list = sections.length ? mergeVodLists(sections.map(s => s.list), 240) : parseCzListHtml(html, CZ_BASE)
+    return { list, sections, total: list.length, page: 1, hasMore: false, aggregated: true }
+  }
+  if (String(typeId || '').startsWith('section:')) {
+    const sectionName = String(typeId).slice('section:'.length)
+    const html = await fetchCzPage('/')
+    const section = parseCzHomeSections(html, CZ_BASE).find(item => item.name === sectionName)
+    const list = section?.list || []
+    return { list, total: list.length, page: 1, hasMore: false, aggregated: true }
+  }
+  const path = /^\//.test(typeId) ? typeId : '/' + typeId
+  const currentPage = Math.max(1, Number(page) || 1)
+  const pagePath = currentPage === 1 ? path : path.replace(/\/?$/, '') + `/page/${currentPage}`
+  const html = await fetchCzPage(pagePath)
+  const list = parseCzListHtml(html, CZ_BASE)
+  const nextPath = path.replace(/\/?$/, '') + `/page/${currentPage + 1}`
+  const nextHtml = await fetchCzPage(nextPath).catch(() => '')
+  const nextList = nextHtml ? parseCzListHtml(nextHtml, CZ_BASE) : []
+  const currentIds = new Set(list.map(item => String(item.vod_id)))
+  const hasMore = nextList.some(item => !currentIds.has(String(item.vod_id)))
+  return { list, total: list.length, page: currentPage, hasMore }
+}
+
+async function searchCz(keyword, page = 1) {
+  const q = encodeURIComponent(keyword || '')
+  const currentPage = Math.max(1, Number(page) || 1)
+  const path = currentPage === 1 ? `/boss1O1?q=${q}` : `/boss1O1/page/${currentPage}?q=${q}`
+  const html = await fetchCzPage(path)
+  const list = parseCzListHtml(html, CZ_BASE)
+  const nextHtml = await fetchCzPage(`/boss1O1/page/${currentPage + 1}?q=${q}`).catch(() => '')
+  const nextList = nextHtml ? parseCzListHtml(nextHtml, CZ_BASE) : []
+  const currentIds = new Set(list.map(item => String(item.vod_id)))
+  const hasMore = nextList.some(item => !currentIds.has(String(item.vod_id)))
+  return { list, total: list.length, page: currentPage, hasMore }
+}
+
+async function loadCzDetail(detailId, name, pic) {
+  const id = String(detailId || '').match(/\/movie\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
+  if (!id) throw new Error('厂长资源详情缺少 movie id')
+  const detailUrl = `${CZ_BASE}/movie/${id}.html`
+  const html = await fetchCzPage(detailUrl)
+  if (/403 Forbidden|openresty|Access Denied/i.test(html)) throw new Error('源站返回 403，当前详情页不可用')
+  const title = decodeHtmlEntities((html.match(/\u003ch1[^\u003e]*\u003e([\s\S]*?)\u003c\/h1\u003e/i)?.[1] || name || '').replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim())
+  const poster = html.match(/\u003cmeta[^\u003e]+property=["']og:image["'][^\u003e]+content=["']([^"']+)["']/i)?.[1] || pic || ''
+  const desc = decodeHtmlEntities((html.match(/\u003cdiv[^\u003e]+class=["'][^"']*(?:summary|content|desc|intro|story)[^"']*["'][^\u003e]*\u003e([\s\S]*?)\u003c\/div\u003e/i)?.[1] || '').replace(/\u003cbr\s*\/?\s*\u003e/gi, '\n').replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim())
+  const re = /\u003ca[^\u003e]*href=["']([^"']*\/v_play\/[^"']+)["'][^\u003e]*\u003e([\s\S]*?)\u003c\/a\u003e/gi
+  let m
+  const eps = []
+  const seen = new Set()
+  while ((m = re.exec(html))) {
+    const url = decodeHtmlEntities(m[1])
+    const epName = decodeHtmlEntities(m[2].replace(/\u003c[^\u003e]+\u003e/g, ' ').replace(/\s+/g, ' ').trim()) || '播放'
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    eps.push({ name: epName, url: new URL(url, CZ_BASE).href })
+  }
+  if (!eps.length) throw new Error('厂长资源详情页未解析到播放列表')
+  return {
+    vod_id: id,
+    vod_name: title || name || '未命名',
+    vod_pic: poster,
+    vod_content: desc,
+    vod_play_from: '默认线路',
+    vod_play_url: eps.map(ep => `${ep.name}$${ep.url}`).join('#'),
+    _episodes: [{ name: '默认线路', urls: eps }],
+    _detailUrl: detailUrl,
+    _srcKey: 'a_napp03',
+    _api: CZ_BASE,
+  }
+}
+
+async function resolveCzPlayUrl(playPageUrl) {
+  const html = await fetchCzPage(playPageUrl)
+  const candidates = [...html.matchAll(/(https?:\/\/[^\s\'\"\u003c\u003e]+(?:m3u8|mp4))/gi)]
+    .map(match => decodeHtmlEntities(match[1]))
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      const wrappedUrl = new URL(candidate).searchParams.get('url')
+      if (wrappedUrl && isDirectVideoUrl(wrappedUrl)) return wrappedUrl
+    } catch {}
+    if (isDirectVideoUrl(candidate)) return candidate
+  }
+  return ''
+}
+
 function mergeVodLists(lists, limit = 96) {
   const merged = []
   const seen = new Set()
@@ -883,43 +663,13 @@ function mergeVodLists(lists, limit = 96) {
   return merged
 }
 
+async function searchAiyiNapp(keyword, page = 1) {
+  return searchCz(keyword, page)
+}
+
 async function loadAiyiCategory(category, page = 1, filters = {}) {
   const config = typeof category === 'object' && category ? category : { typeId: category }
-  if (config.unsupported) {
-    return { list: [], total: 0, page, hasMore: false, message: '该子频道属于原站独立功能区，当前接口未暴露真实资源列表；为避免分类错配，暂不使用其他频道内容替代。' }
-  }
-  if (config.specialPath) {
-    const query = { ...(config.specialQuery || {}) }
-    if (filters.cursor) query.next = filters.cursor
-    const data = await fetchNapp03Api(config.specialPath, query)
-    if (config.resultKind === 'homeSections') {
-      const sections = mapNapp03HomeSections(data)
-      const list = sections.length ? mergeVodLists(sections.map(section => section.list), Number.MAX_SAFE_INTEGER) : mapNapp03Home(data)
-      return { list, total: list.length, page: 1, next: data.next || '', hasMore: Boolean(data.next), cursor: filters.cursor || '' }
-    }
-    const sections = mapNapp03TopicSections(data)
-    const list = mergeVodLists(sections.map(section => section.list), Number.MAX_SAFE_INTEGER)
-    return { list, total: list.length, page: 1, next: data.next || '', hasMore: Boolean(data.next), cursor: filters.cursor || '' }
-  }
-  const typeId = config.typeId
-  if (typeId === 'home') {
-    const data = await fetchNapp03Api('/v5/vod/home.capi')
-    const sections = mapNapp03HomeSections(data)
-    const list = sections.length ? mergeVodLists(sections.map(section => section.list), 240) : mapNapp03Home(data)
-    return { list, sections, total: list.length, page: 1, hasMore: false, aggregated: false }
-  }
-  const query = { channelId: Number(typeId) || 0 }
-  const sort = NAPP03_SORT_VALUE[filters.sort] ?? filters.sort
-  const year = NAPP03_YEAR_VALUE[filters.year] ?? filters.year
-  const categoryFilter = filters.category || config.category
-  if (categoryFilter) query.category = categoryFilter
-  if (filters.area) query.area = filters.area
-  if (year) query.year = year
-  if (sort) query.sort = sort
-  if (filters.cursor) query.next = filters.cursor
-  const data = await fetchNapp03Api('/vod/channel/list.capi', query)
-  const list = (data.items || []).map(mapNapp03Vod).filter(item => item.vod_id)
-  return { list, total: list.length, page, next: data.next || '', hasMore: Boolean(data.next), cursor: filters.cursor || '' }
+  return loadCzCategory(config.typeId || 'home', page)
 }
 
 async function loadIp51122Category(typeId, page = 1) {
@@ -1327,11 +1077,9 @@ const VOD_TYPE_MAP = {
 }
 
 const YINGHUA_BASE = 'https://www.yinghua289.com'
-const NAPP03_BOOT_BASE = 'https://a.napp03.com'
-const NAPP03_BASE = 'https://www.ncat1.app'
 const YINGHUA_SOURCE_NAME = '樱境天幕片库'
 const YINGHUA_ALT_NAME = '🌸樱华片库'
-const A_NAPP03_SOURCE_NAME = '天穹云影片库'
+const A_NAPP03_SOURCE_NAME = '厂长资源片库'
 const IP51122_SOURCE_NAME = '云岚星幕片库'
 const YINGHUA_CATEGORIES = [
   { id: 'home', name: '首页推荐', typeId: 'home' },
@@ -1341,44 +1089,6 @@ const YINGHUA_CATEGORIES = [
   { id: 'anime_movie', name: '动漫电影', typeId: 23 },
   { id: 'other_anime', name: '其他动漫', typeId: 24 },
 ]
-const NAPP03_HOME_CATEGORIES = [
-  { id: 'home_recommend', name: '推荐', typeId: 'home' },
-  { id: 'home_short', name: '短剧', typeId: 6 },
-  { id: 'home_movie', name: '电影', typeId: 1 },
-  { id: 'home_tv', name: '剧集', typeId: 2 },
-  { id: 'home_anime', name: '动漫', typeId: 3 },
-  { id: 'home_variety', name: '综艺纪录', typeId: 4 },
-  { id: 'home_welfare', name: '福利', typeId: 5 },
-]
-const NAPP03_UNSUPPORTED_CATEGORY = { unsupported: true }
-const NAPP03_GROUPS = [
-  { id: 'home', name: '首页', children: NAPP03_HOME_CATEGORIES },
-  { id: 'discover', name: '发现', children: [
-    { id: 'discover_netflix', name: 'Netflix 新片', specialPath: '/vod/netflixNewWatch.capi', resultKind: 'topicSections' },
-    { id: 'discover_topics', name: '全部专题', specialPath: '/v2/vod/specialTopics.capi', resultKind: 'topicSections' },
-    { id: 'discover_topic_movie', name: '大片合集', specialPath: '/vod/specialTopic/categoryTopics.capi', specialQuery: { topicCategoryId: 1 }, resultKind: 'topicSections' },
-    { id: 'discover_topic_star', name: '明星', specialPath: '/vod/specialTopic/categoryTopics.capi', specialQuery: { topicCategoryId: 35 }, resultKind: 'topicSections' },
-    { id: 'discover_topic_score', name: '高分点评', specialPath: '/vod/specialTopic/categoryTopics.capi', specialQuery: { topicCategoryId: 8 }, resultKind: 'topicSections' },
-    { id: 'discover_channel_movie', name: '电影专题页', specialPath: '/v4/vod/channel/topicListView.capi', specialQuery: { channelId: 1 }, resultKind: 'homeSections' },
-    { id: 'discover_channel_tv', name: '剧集专题页', specialPath: '/v4/vod/channel/topicListView.capi', specialQuery: { channelId: 2 }, resultKind: 'homeSections' },
-  ] },
-  { id: 'watch', name: '看啥片', children: [
-    { id: 'watch_all', name: '全部', typeId: 0 },
-    { id: 'watch_new', name: '新片', typeId: 1, sort: 'new' },
-    { id: 'watch_ethics', name: '伦理', typeId: 5 },
-  ] },
-
-]
-const NAPP03_CATEGORIES = NAPP03_GROUPS.flatMap(group => group.children.map(cat => ({ ...cat, groupId: group.id })))
-
-const NAPP03_FILTERS = [
-  { key: 'sort', label: '排序', values: ['综合', '最新', '最热', '评分'] },
-  { key: 'category', label: '类型', values: ['伦理', '福利', '剧情', '情色', '爱情', '喜剧', '惊悚', '写真', '美女', '恐怖', '犯罪', '悬疑', '动作', '同性', '奇幻', '古装', '青春', '科幻', '文艺'] },
-  { key: 'area', label: '地区', values: ['大陆', '香港', '台湾', '美国', '日本', '韩国', '英国', '法国', '德国', '印度', '泰国', '丹麦', '瑞典', '巴西', '加拿大', '俄罗斯', '意大利', '比利时', '爱尔兰', '西班牙', '澳大利亚', '其它'] },
-  { key: 'year', label: '年份', values: ['2026', '2025', '2024', '2023', '2022', '2021', '2020', '10年代', '00年代', '90年代', '80年代', '更早'] },
-]
-const NAPP03_YEAR_VALUE = { '10年代': '2010', '00年代': '2000', '90年代': '1990', '80年代': '1980', '更早': '1970' }
-const NAPP03_SORT_VALUE = { '综合': '', '最新': '最新', '最热': '最热', '评分': '评分' }
 
 const PAGE_LIBRARY_CATEGORIES = [
   { id: 'home', name: '首页推荐', typeId: 'home' },
@@ -2751,12 +2461,12 @@ function initApp(el) {
     const all = [
       ...VOD_SOURCES,
       { key: 'yinghua', name: YINGHUA_SOURCE_NAME, api: YINGHUA_BASE },
-      { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: NAPP03_BASE },
+      { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: CZ_BASE },
       { key: 'ip51122', name: IP51122_SOURCE_NAME, api: IP51122_LIST_BASE },
     ]
     return all.find(s => s.key === sourceKey || s.name === sourceName || s.api === api)
       || (sourceName.includes('樱') ? { key: 'yinghua', name: YINGHUA_SOURCE_NAME, api: YINGHUA_BASE } : null)
-      || (sourceName.includes('天空') || sourceName.includes('ncat') ? { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: NAPP03_BASE } : null)
+      || (sourceName.includes('厂长') || sourceName.includes('4kcz') ? { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, api: CZ_BASE } : null)
       || (sourceName.includes('云岚') || sourceName.includes('51122') ? { key: 'ip51122', name: IP51122_SOURCE_NAME, api: IP51122_LIST_BASE } : null)
   }
 
@@ -3416,11 +3126,11 @@ async function fetchCmsVodDetail(api, detailId, fallbackName, fallbackPic) {
 }
 
 async function fetchPageApiDetail(source, detailId, name, pic) {
-  const base = source.key === 'ip51122' ? IP51122_DETAIL_BASE : source.key === 'a_napp03' ? NAPP03_BASE : source.api
+  const base = source.key === 'ip51122' ? IP51122_DETAIL_BASE : source.key === 'a_napp03' ? CZ_BASE : source.api
   if (source.key === 'a_napp03') {
-    const id = String(detailId || '').match(/vodId=(\d+)/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
-    if (!id) throw new Error('天穹详情缺少 vodId')
-    return loadNapp03Detail(id, name, pic)
+    const id = String(detailId || '').match(/\/movie\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^\d+$/)?.[1]
+    if (!id) throw new Error('厂长资源详情缺少 movie id')
+    return loadCzDetail(id, name, pic)
   }
   if (source.key === 'ip51122') {
     const id = String(detailId || '').match(/\/detail\/(\d+)\.html/i)?.[1] || String(detailId || '').match(/^(\d+)$/)?.[1]
@@ -3467,7 +3177,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
   async function showLibraryHome(initialQuery = '') {
     const content = el.querySelector('#t-content')
     const sources = [
-      { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, desc: 'PC 实时入口，分类 / 搜索 / 播放列表', categories: NAPP03_CATEGORIES, groups: NAPP03_GROUPS, activeGroupId: 'home', loadCategories: loadNapp03Categories, list: loadAiyiCategory, search: searchAiyiNapp },
+      { key: 'a_napp03', name: A_NAPP03_SOURCE_NAME, desc: '厂长资源 HTML 源，首页 / 频道 / 搜索 / 播放', categories: [], loadCategories: loadCzCategories, list: loadCzCategory, search: searchCz },
       { key: 'yinghua', name: YINGHUA_SOURCE_NAME, desc: '实时首页 / 动态分类 / 多线路播放', categories: YINGHUA_CATEGORIES, loadCategories: loadYinghuaCategories, list: loadYinghuaCategory, search: searchYinghua },
       { key: 'ip51122', name: IP51122_SOURCE_NAME, desc: '真实首页 / 搜索结果 / 详情页受原站防护限制', categories: PAGE_LIBRARY_CATEGORIES, loadCategories: loadIp51122Categories, list: loadIp51122Category, search: searchIp51122 },
     ]
@@ -3481,7 +3191,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
     }
     const libraryUserState = readLibraryUserState()
     const defaultSource = sources[0]
-    if (libraryUserState.groups && libraryUserState.groups[defaultSource.key] && defaultSource.groups?.some(g => g.id === libraryUserState.groups[defaultSource.key])) defaultSource.activeGroupId = libraryUserState.groups[defaultSource.key]
+    if (libraryUserState.groups && libraryUserState.groups[defaultSource.key]) defaultSource.activeGroupId = undefined
     let activeSourceKey = defaultSource.key
     let activeCategory = defaultSource.categories.find(c => c.id === libraryUserState.categories?.[defaultSource.key]) || defaultSource.categories[0]
     let libraryPage = 1
@@ -3534,7 +3244,6 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       } catch {}
       source._categoriesLoaded = true
       if (!source.categories.some(c => c.id === activeCategory?.id)) activeCategory = source.categories[0]
-      if (source.groups && !source.groups.some(group => group.id === source.activeGroupId)) source.activeGroupId = source.groups[0]?.id
       return source.categories
     }
     const renderOriginFallback = (source, message = '') => {
@@ -3545,16 +3254,9 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       '</div>'
     }
     const renderNapp03Filters = (source) => {
-      if (source.key !== 'a_napp03' || activeCategory?.unsupported || activeCategory?.typeId === 'home') return ''
-      return '<div class="tvbox-library-filters">' + NAPP03_FILTERS.map(group => {
-        const current = napp03Filters[group.key] || (group.key === 'sort' ? '综合' : '')
-        const values = group.key === 'category' ? [''].concat(group.values) : [''].concat(group.values)
-        return '<div class="tvbox-library-filter-row"><span>' + escHtml(group.label) + '</span>' + values.map(value => {
-          const label = value || (group.key === 'sort' ? '综合' : '全部')
-          const active = (value || (group.key === 'sort' ? '综合' : '')) === current
-          return '<button class="tvbox-library-filter' + (active ? ' active' : '') + '" data-filter="' + escHtml(group.key) + '" data-value="' + escHtml(value || (group.key === 'sort' ? '综合' : '')) + '">' + escHtml(label) + '</button>'
-        }).join('') + '</div>'
-      }).join('') + '</div>'
+      if (source.key !== 'a_napp03') return ''
+      return '<div class="tvbox-library-filters"><div class="tvbox-library-filter-row"><span>排序</span>' +
+        ['综合', '最新', '最热', '评分'].map(v => '<button class="tvbox-library-filter' + (napp03Filters.sort === v ? ' active' : '') + '" data-filter="sort" data-value="' + escHtml(v) + '">' + escHtml(v) + '</button>').join('') + '</div></div>'
     }
     const renderShell = () => {
       const source = sourceByKey(activeSourceKey)
@@ -3574,8 +3276,8 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
             '<div class="tvbox-library-search"><input id="library-search-input" name="xingshu-library-search" type="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="搜索星枢片库 + 影视点播全部资源" value="' + escHtml(libraryQuery) + '" /><button id="library-search-btn">搜索</button></div>' +
           '</div>' +
           '<div class="tvbox-library-search-history"' + (libraryHistory.length ? '' : ' style="display:none"') + '>' + libraryHistory.map(q => '<span class="tvbox-library-search-chip"><button data-q="' + escHtml(q) + '">' + escHtml(q) + '</button><button class="remove" data-remove-q="' + escHtml(q) + '">×</button></span>').join('') + '</div>' +
-          '<div class="tvbox-library-groups">' + (source.groups ? source.groups.map(group => '<button class="tvbox-library-group' + (group.id === (source.activeGroupId || source.groups[0]?.id) ? ' active' : '') + '" data-group="' + escHtml(group.id) + '">' + escHtml(group.name) + '</button>').join('') : '') + '</div>' +
-          '<div class="tvbox-library-cats">' + source.categories.filter(cat => !source.groups || cat.groupId === (source.activeGroupId || source.groups[0]?.id)).map(cat => '<button class="tvbox-library-cat' + (cat.id === activeCategory.id ? ' active' : '') + '" data-cat="' + escHtml(cat.id) + '">' + escHtml(cat.name) + '</button>').join('') + '</div>' +
+          '<div class="tvbox-library-groups">' + (source.groups && source.key !== 'a_napp03' ? source.groups.map(group => '<button class="tvbox-library-group' + (group.id === (source.activeGroupId || source.groups[0]?.id) ? ' active' : '') + '" data-group="' + escHtml(group.id) + '">' + escHtml(group.name) + '</button>').join('') : '') + '</div>' +
+          '<div class="tvbox-library-cats">' + source.categories.filter(cat => !source.groups || source.key === 'a_napp03' || cat.groupId === (source.activeGroupId || source.groups[0]?.id)).map(cat => '<button class="tvbox-library-cat' + (cat.id === activeCategory.id ? ' active' : '') + '" data-cat="' + escHtml(cat.id) + '">' + escHtml(cat.name) + '</button>').join('') + '</div>' +
           renderNapp03Filters(source) +
           '<div id="library-list" class="tvbox-library-list"><div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">' + escHtml(mt('loading')) + '</span></div></div>' +
         '</main>' +
@@ -3689,7 +3391,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       const itemApi = item._libraryApi || ''
       const title = escHtml(item.vod_name || item.name || mt('unnamed'))
       const detailId = escHtml((itemSourceKey === 'ip51122' && item._detailUrl) ? item._detailUrl : (item.vod_id || item._detailUrl || ''))
-      const poster = renderPosterImg(item.vod_pic || '', item.vod_name || '', itemSourceKey, itemApi || (source.key === 'yinghua' ? YINGHUA_BASE : source.key === 'a_napp03' ? NAPP03_BASE : IP51122_DETAIL_BASE), '影')
+      const poster = renderPosterImg(item.vod_pic || '', item.vod_name || '', itemSourceKey, itemApi || (source.key === 'yinghua' ? YINGHUA_BASE : source.key === 'a_napp03' ? CZ_BASE : IP51122_DETAIL_BASE), '影')
       const note = escHtml(item.vod_remarks || item.type_name || item.vod_year || '')
       const followed = isFollowed({ sourceKey: itemSourceKey, api: itemApi, detailId: itemSourceKey === 'ip51122' && item._detailUrl ? item._detailUrl : (item.vod_id || item._detailUrl || ''), name: item.vod_name || item.name, sourceName: itemSourceName })
       const isTopicEntry = item._libraryAction === 'napp03-url-list'
@@ -3713,7 +3415,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
           const result = await withLibraryTimeout(loadNapp03UrlList(detail, title, ''), 12000)
           const pics = []
           for (const item of (result.list || [])) {
-            for (const pic of buildPicCandidates(item.vod_pic || item.pic || '', item._srcKey || 'a_napp03', item._api || NAPP03_API_CACHE_BASE)) {
+            for (const pic of buildPicCandidates(item.vod_pic || item.pic || '', item._srcKey || 'a_napp03', item._api || CZ_BASE)) {
               if (pic && !pics.includes(pic)) pics.push(pic)
               if (pics.length >= 8) break
             }
@@ -4110,18 +3812,12 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
       if (!box) return
       box.innerHTML = '<div class="tvbox-loading"><div class="tvbox-loading-icon"></div><span class="tvbox-loading-text">正在加载实时片库...</span></div>'
       try {
-        let result = libraryQuery ? { list: [], total: 0, page: libraryPage } : null
+        let result
         if (libraryQuery) {
           result = await withLibraryTimeout(searchLibraryFallbackSources(libraryQuery), 18000).catch(() => ({ list: [] }))
           result.page = libraryPage
-        } else if (source.key === 'a_napp03' && activeCategory?.typeId !== 'home') {
-          if (!libraryPaging || libraryPaging.mode !== 'napp03-category') {
-            libraryPaging = { mode: 'napp03-category', sourceKey: source.key, items: [], nextCursor: '', exhausted: false }
-          }
-          await loadPagedLibraryResult(box, source)
-          return
         } else {
-          result = await withLibraryTimeout(source.list(activeCategory.typeId, libraryPage, {}), 18000)
+          result = await withLibraryTimeout(source.list(activeCategory.typeId, libraryPage, napp03Filters), 18000)
           result.page = libraryPage
         }
         const allItems = Array.isArray(result?.list) ? result.list : []
