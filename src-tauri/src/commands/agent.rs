@@ -421,9 +421,6 @@ pub async fn write_agent_file(id: String, name: String, content: String) -> Resu
     ensure_allowed_agent_file(&name)?;
     let config = super::config::load_openclaw_json()?;
     let dir = resolve_agent_workspace_path(&id, &config);
-    if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {e}"))?;
-    }
     let path = confined_workspace_write_path(&dir, &dir.join(&name))?;
     fs::write(path, content).map_err(|e| format!("写入文件失败: {e}"))?;
     Ok(json!({ "ok": true }))

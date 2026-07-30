@@ -109,4 +109,6 @@ test('memory and agent workspace paths reject symlink escapes', () => {
   assert.match(agent, /resolved\.starts_with\(&root\)/)
   assert.match(agent, /resolved_parent\.starts_with\(&canonical_root\)/)
   assert.match(agent, /target\.exists\(\).*confined_workspace_existing_path/s)
+  assert.match(agent, /let path = confined_workspace_existing_path\(&workspace, &path\)/)
+  assert.match(agent, /let path = confined_workspace_write_path\(&dir, &dir\.join\(&name\)\)/)
 })
