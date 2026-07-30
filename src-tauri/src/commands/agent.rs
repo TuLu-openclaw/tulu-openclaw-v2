@@ -465,7 +465,10 @@ pub async fn list_agent_workspace_entries(
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
-            let meta = entry.metadata().ok()?;
+            let meta = fs::symlink_metadata(&path).ok()?;
+            if meta.file_type().is_symlink() {
+                return None;
+            }
             let is_dir = meta.is_dir();
             let name = entry.file_name().to_string_lossy().to_string();
             let relative = to_workspace_relative_path(&workspace_dir, &path);

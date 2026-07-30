@@ -104,6 +104,7 @@ test('memory and agent workspace paths reject symlink escapes', () => {
   assert.match(memory, /resolved\.starts_with\(&root\)/)
   assert.match(memory, /resolved_parent\.starts_with\(&root\)/)
   assert.match(memory, /target\.exists\(\).*confined_existing_path/s)
+  assert.match(agent, /fs::symlink_metadata/)
   assert.match(agent, /confined_workspace_existing_path/)
   assert.match(agent, /resolved\.starts_with\(&root\)/)
   assert.match(agent, /resolved_parent\.starts_with\(&canonical_root\)/)
