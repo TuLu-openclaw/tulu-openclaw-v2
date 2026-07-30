@@ -2,6 +2,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
+#[cfg(test)]
 use std::path::{Component, Path};
 
 /// 前端热更新目录 (~/.openclaw/星枢OpenClaw/web-update/)
@@ -125,6 +126,7 @@ fn full_update_manifest_url() -> Result<&'static str, String> {
     Ok(url)
 }
 
+#[cfg(test)]
 fn safe_archive_path(root: &Path, raw_name: &str) -> Result<PathBuf, String> {
     let normalized = raw_name.replace('\\', "/");
     let relative = Path::new(&normalized);
