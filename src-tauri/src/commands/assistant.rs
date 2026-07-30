@@ -1895,6 +1895,7 @@ try {{
     }
 }
 
+#[cfg(target_os = "windows")]
 fn validate_cz_play_page_url(raw: &str) -> Result<reqwest::Url, String> {
     let parsed = reqwest::Url::parse(raw).map_err(|_| "厂长播放页地址无效".to_string())?;
     let host = parsed.host_str().unwrap_or("");
@@ -1907,6 +1908,7 @@ fn validate_cz_play_page_url(raw: &str) -> Result<reqwest::Url, String> {
     Ok(parsed)
 }
 
+#[cfg(target_os = "windows")]
 fn extract_cz_media_url(raw: &str) -> Option<String> {
     let normalized = raw.replace("\\/", "/");
     let pattern =
@@ -1926,6 +1928,7 @@ fn extract_cz_media_url(raw: &str) -> Option<String> {
     None
 }
 
+#[cfg(target_os = "windows")]
 fn is_direct_media_url(raw: &str) -> bool {
     reqwest::Url::parse(raw)
         .ok()
