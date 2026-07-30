@@ -406,10 +406,12 @@ pub async fn list_agent_files(id: String) -> Result<Value, String> {
 pub async fn read_agent_file(id: String, name: String) -> Result<Value, String> {
     ensure_allowed_agent_file(&name)?;
     let config = super::config::load_openclaw_json()?;
-    let path = resolve_agent_workspace_path(&id, &config).join(&name);
+    let workspace = resolve_agent_workspace_path(&id, &config);
+    let path = workspace.join(&name);
     if !path.exists() {
         return Ok(json!({ "exists": false, "content": "" }));
     }
+    let path = confined_workspace_existing_path(&workspace, &path)?;
     let content = fs::read_to_string(&path).map_err(|e| format!("读取文件失败: {e}"))?;
     Ok(json!({ "exists": true, "content": content }))
 }
@@ -422,7 +424,8 @@ pub async fn write_agent_file(id: String, name: String, content: String) -> Resu
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {e}"))?;
     }
-    fs::write(dir.join(&name), content).map_err(|e| format!("写入文件失败: {e}"))?;
+    let path = confined_workspace_write_path(&dir, &dir.join(&name))?;
+    fs::write(path, content).map_err(|e| format!("写入文件失败: {e}"))?;
     Ok(json!({ "ok": true }))
 }
 
@@ -502,7 +505,8 @@ pub async fn read_agent_workspace_file(id: String, relative_path: String) -> Res
         return Err("文件路径不能为空".to_string());
     }
 
-    let file_path = workspace_dir.join(&normalized);
+    let file_path =
+        confined_workspace_existing_path(&workspace_dir, &workspace_dir.join(&normalized))?;
     if !file_path.exists() {
         return Err("文件不存在".to_string());
     }
@@ -552,10 +556,8 @@ pub async fn write_agent_workspace_file(
         return Err("文件路径不能为空".to_string());
     }
 
-    let file_path = workspace_dir.join(&normalized);
-    if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
-    }
+    let file_path =
+        confined_workspace_write_path(&workspace_dir, &workspace_dir.join(&normalized))?;
 
     fs::write(&file_path, content.as_bytes()).map_err(|e| format!("写入文件失败: {e}"))?;
 
@@ -1115,7 +1117,50 @@ fn resolve_workspace_target_path(
     relative_path: Option<&str>,
 ) -> Result<PathBuf, String> {
     let normalized = normalize_workspace_relative_path(relative_path.unwrap_or_default())?;
-    Ok(root.join(normalized))
+    let target = root.join(normalized);
+    if target.exists() {
+        return confined_workspace_existing_path(root, &target);
+    }
+    Ok(target)
+}
+
+fn canonical_workspace_root(root: &Path) -> Result<PathBuf, String> {
+    fs::canonicalize(root).map_err(|e| format!("无法解析工作区: {e}"))
+}
+
+fn confined_workspace_existing_path(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    let root = canonical_workspace_root(root)?;
+    let resolved = fs::canonicalize(target).map_err(|e| format!("无法解析工作区路径: {e}"))?;
+    if !resolved.starts_with(&root) {
+        return Err("拒绝访问工作区外部路径".into());
+    }
+    Ok(resolved)
+}
+
+fn confined_workspace_write_path(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    fs::create_dir_all(root).map_err(|e| format!("创建工作区失败: {e}"))?;
+    if target.exists() {
+        return confined_workspace_existing_path(root, target);
+    }
+    let canonical_root = canonical_workspace_root(root)?;
+    let mut ancestor = target.parent().ok_or("写入路径缺少父目录")?;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or("无法解析写入路径")?;
+    }
+    let resolved_ancestor =
+        fs::canonicalize(ancestor).map_err(|e| format!("无法解析父目录: {e}"))?;
+    if !resolved_ancestor.starts_with(&canonical_root) {
+        return Err("拒绝写入工作区外部路径".into());
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        let resolved_parent =
+            fs::canonicalize(parent).map_err(|e| format!("无法解析父目录: {e}"))?;
+        if !resolved_parent.starts_with(&canonical_root) {
+            return Err("拒绝写入工作区外部路径".into());
+        }
+    }
+    Ok(target.to_path_buf())
 }
 
 fn to_workspace_relative_path(root: &Path, path: &Path) -> String {

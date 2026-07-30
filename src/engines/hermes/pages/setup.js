@@ -360,12 +360,12 @@ export function render() {
         const detailEl = el.querySelector('#hm-preset-detail')
         if (detailEl && preset) {
           const envLine = preset.apiKeyEnvVars && preset.apiKeyEnvVars.length
-            ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetWriteEnv', { env: `<code>${preset.apiKeyEnvVars[0]}</code>` })}</div>`
+            ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetWriteEnv', { env: `<code>${esc(preset.apiKeyEnvVars[0])}</code>` })}</div>`
             : ''
           const modelsPreview = preset.models && preset.models.length
             ? `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetKnownModels', { count: preset.models.length })}</div>`
             : `<div style="color:var(--text-tertiary);font-size:11px;margin-top:2px">${t('engine.presetAggregatorHint')}</div>`
-          detailEl.innerHTML = `<div style="color:var(--text-secondary);line-height:1.5">${preset.name}</div>${envLine}${modelsPreview}`
+          detailEl.innerHTML = `<div style="color:var(--text-secondary);line-height:1.5">${esc(preset.name)}</div>${envLine}${modelsPreview}`
           detailEl.style.display = 'block'
         }
       })

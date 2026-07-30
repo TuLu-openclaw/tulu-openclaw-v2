@@ -1,8 +1,8 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::Read;
 use std::path::PathBuf;
+use std::path::{Component, Path};
 
 /// 前端热更新目录 (~/.openclaw/星枢OpenClaw/web-update/)
 pub fn update_dir() -> PathBuf {
@@ -11,11 +11,9 @@ pub fn update_dir() -> PathBuf {
         .join("web-update")
 }
 
-/// 前端热更新由正式更新清单提供。旧版 GitHub 入口已停用，避免把内部源地址
-/// 传播到客户端或用户可见错误。
-/// 全量客户端更新：走屠戮自定义更新清单。
-const FULL_UPDATE_MANIFEST_URL: &str =
-    "http://124.220.22.11:9002/1772156650257000000//屠戮龙虾更新.txt";
+/// The release pipeline must inject a trusted HTTPS manifest URL. Builds without
+/// one fail closed instead of falling back to an insecure embedded endpoint.
+const FULL_UPDATE_MANIFEST_URL: Option<&str> = option_env!("XINGSHU_FULL_UPDATE_MANIFEST_URL");
 
 fn platform_key() -> &'static str {
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
@@ -83,7 +81,7 @@ fn version_gt(left: &str, right: &str) -> bool {
 
 fn hash_ok(bytes: &[u8], expected_hash: &str) -> Result<(), String> {
     if expected_hash.trim().is_empty() {
-        return Ok(());
+        return Err("更新清单缺少 SHA-256 摘要，已拒绝下载".into());
     }
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -97,6 +95,59 @@ fn hash_ok(bytes: &[u8], expected_hash: &str) -> Result<(), String> {
     } else {
         Err(format!("哈希校验失败: 期望 {expected}，实际 {actual}"))
     }
+}
+
+fn validate_update_url(raw: &str) -> Result<(), String> {
+    let url = reqwest::Url::parse(raw.trim()).map_err(|_| "更新地址不是有效 URL".to_string())?;
+    if url.scheme() != "https" || url.host_str().is_none() {
+        return Err("更新地址必须使用 HTTPS".into());
+    }
+    Ok(())
+}
+
+fn validate_final_update_url(expected: &str, actual: &reqwest::Url) -> Result<(), String> {
+    validate_update_url(actual.as_str())?;
+    let trusted =
+        reqwest::Url::parse(expected.trim()).map_err(|_| "受信更新地址不是有效 URL".to_string())?;
+    if trusted.host_str() != actual.host_str()
+        || trusted.port_or_known_default() != actual.port_or_known_default()
+    {
+        return Err("更新请求被重定向到非受信主机，已拒绝继续".into());
+    }
+    Ok(())
+}
+
+fn full_update_manifest_url() -> Result<&'static str, String> {
+    let url = FULL_UPDATE_MANIFEST_URL
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "此构建未配置受信 HTTPS 更新清单，自动更新已安全停用".to_string())?;
+    validate_update_url(url)?;
+    Ok(url)
+}
+
+fn safe_archive_path(root: &Path, raw_name: &str) -> Result<PathBuf, String> {
+    let normalized = raw_name.replace('\\', "/");
+    let relative = Path::new(&normalized);
+    let has_drive_prefix = normalized
+        .as_bytes()
+        .get(1)
+        .is_some_and(|value| *value == b':');
+    if normalized.is_empty()
+        || normalized.starts_with('/')
+        || normalized.contains('\0')
+        || has_drive_prefix
+    {
+        return Err(format!("压缩包包含非法路径: {raw_name}"));
+    }
+    if relative.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(format!("压缩包路径越界: {raw_name}"));
+    }
+    Ok(root.join(relative))
 }
 
 fn find_platform_entry(manifest: &Value, key: &str) -> Option<Value> {
@@ -130,7 +181,7 @@ fn find_platform_entry(manifest: &Value, key: &str) -> Option<Value> {
 
 fn entry_url_hash(entry: &Value) -> Result<(String, String, String), String> {
     if let Some(s) = entry.as_str() {
-        return Ok((s.to_string(), String::new(), String::new()));
+        return Err(format!("更新清单条目缺少 SHA-256 摘要: {s}"));
     }
     let url = entry
         .get("url")
@@ -145,6 +196,10 @@ fn entry_url_hash(entry: &Value) -> Result<(String, String, String), String> {
         .or_else(|| entry.get("sha256").and_then(|v| v.as_str()))
         .unwrap_or("")
         .to_string();
+    if hash.trim().is_empty() {
+        return Err(format!("更新清单条目缺少 SHA-256 摘要: {url}"));
+    }
+    validate_update_url(&url)?;
     let name = entry
         .get("name")
         .and_then(|v| v.as_str())
@@ -171,89 +226,22 @@ pub async fn check_frontend_update() -> Result<Value, String> {
 /// 下载并解压前端热更新包。GitHub 访问慢，超时延长到 10 分钟。
 #[tauri::command]
 pub async fn download_frontend_update(url: String, expected_hash: String) -> Result<Value, String> {
-    if url.trim().is_empty() {
-        return Err("缺少前端热更新下载地址".into());
-    }
-    let client =
-        super::build_http_client(std::time::Duration::from_secs(600), Some("星枢OpenClaw"))
-            .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
-    let resp = client
-        .get(&url)
-        .header("User-Agent", "XingShuOpenClaw")
-        .send()
-        .await
-        .map_err(|e| format!("下载失败: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("下载失败: HTTP {}", resp.status()));
-    }
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("读取数据失败: {e}"))?;
-    hash_ok(bytes.as_ref(), &expected_hash)?;
-
-    let dir = update_dir();
-    if dir.exists() {
-        fs::remove_dir_all(&dir).map_err(|e| format!("清理旧更新失败: {e}"))?;
-    }
-    fs::create_dir_all(&dir).map_err(|e| format!("创建更新目录失败: {e}"))?;
-
-    let cursor = std::io::Cursor::new(bytes.as_ref());
-    let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("解压失败: {e}"))?;
-    let mut root_prefix: Option<String> = None;
-    for i in 0..archive.len() {
-        let name = archive
-            .by_index(i)
-            .map_err(|e| format!("读取压缩条目失败: {e}"))?
-            .name()
-            .replace('\\', "/");
-        if name.ends_with("index.html") {
-            root_prefix = name.strip_suffix("index.html").map(|s| s.to_string());
-            break;
-        }
-    }
-    for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| format!("读取压缩条目失败: {e}"))?;
-        let mut name = file.name().replace('\\', "/");
-        if let Some(prefix) = &root_prefix {
-            if !prefix.is_empty() && name.starts_with(prefix) {
-                name = name[prefix.len()..].to_string();
-            }
-        }
-        if name.is_empty() {
-            continue;
-        }
-        let target = dir.join(&name);
-        if file.name().ends_with('/') {
-            fs::create_dir_all(&target).map_err(|e| format!("创建子目录失败: {e}"))?;
-        } else {
-            if let Some(parent) = target.parent() {
-                fs::create_dir_all(parent).map_err(|e| format!("创建父目录失败: {e}"))?;
-            }
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf)
-                .map_err(|e| format!("读取文件内容失败: {e}"))?;
-            fs::write(&target, &buf).map_err(|e| format!("写入文件失败: {e}"))?;
-        }
-    }
-    fs::write(dir.join(".version"), env!("CARGO_PKG_VERSION")).ok();
-    Ok(
-        serde_json::json!({ "success": true, "files": archive.len(), "path": dir.to_string_lossy() }),
-    )
+    let _ = (url, expected_hash);
+    Err("前端热更新尚未接入签名清单，已安全停用；请使用受信的完整安装包升级".into())
 }
 
 /// 检查全量客户端更新：只走屠戮自定义清单，自动匹配当前平台安装包。
 #[tauri::command]
 pub async fn check_full_app_update() -> Result<Value, String> {
+    let manifest_url = full_update_manifest_url()?;
     let client = super::build_http_client(std::time::Duration::from_secs(60), Some("星枢OpenClaw"))
         .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
     let resp = client
-        .get(FULL_UPDATE_MANIFEST_URL)
+        .get(manifest_url)
         .send()
         .await
         .map_err(|e| format!("请求全量更新清单失败: {e}"))?;
+    validate_final_update_url(manifest_url, resp.url())?;
     if !resp.status().is_success() {
         return Err(format!("全量更新清单返回 {}", resp.status()));
     }
@@ -274,7 +262,7 @@ pub async fn check_full_app_update() -> Result<Value, String> {
     let (url, hash, name) = entry_url_hash(&entry)?;
     Ok(serde_json::json!({
         "source": "custom-full",
-        "manifestUrl": FULL_UPDATE_MANIFEST_URL,
+        "manifestUrl": manifest_url,
         "platform": key,
         "currentVersion": current,
         "latestVersion": latest,
@@ -294,14 +282,43 @@ pub async fn download_full_app_update(
     if url.trim().is_empty() {
         return Err("缺少全量安装包下载地址".into());
     }
+    validate_update_url(&url)?;
+    let manifest_url = full_update_manifest_url()?;
     let client =
         super::build_http_client(std::time::Duration::from_secs(900), Some("星枢OpenClaw"))
             .map_err(|e| format!("HTTP 客户端错误: {e}"))?;
+    let manifest_resp = client
+        .get(manifest_url)
+        .send()
+        .await
+        .map_err(|e| format!("重新验证更新清单失败: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("重新验证更新清单失败: {e}"))?;
+    validate_final_update_url(manifest_url, manifest_resp.url())?;
+    let manifest: Value = manifest_resp
+        .json()
+        .await
+        .map_err(|e| format!("解析更新清单失败: {e}"))?;
+    let trusted_entry = find_platform_entry(&manifest, platform_key())
+        .ok_or_else(|| format!("更新清单缺少当前平台 {}", platform_key()))?;
+    let (trusted_url, trusted_hash, _) = entry_url_hash(&trusted_entry)?;
+    let normalize_hash = |value: &str| {
+        value
+            .trim()
+            .strip_prefix("sha256:")
+            .unwrap_or(value.trim())
+            .to_ascii_lowercase()
+    };
+    if url.trim() != trusted_url || normalize_hash(&expected_hash) != normalize_hash(&trusted_hash)
+    {
+        return Err("下载参数与受信更新清单不一致，已拒绝安装".into());
+    }
     let resp = client
-        .get(&url)
+        .get(&trusted_url)
         .send()
         .await
         .map_err(|e| format!("下载安装包失败: {e}"))?;
+    validate_final_update_url(&trusted_url, resp.url())?;
     if !resp.status().is_success() {
         return Err(format!("下载安装包失败: HTTP {}", resp.status()));
     }
@@ -386,5 +403,50 @@ pub fn mime_from_path(path: &str) -> &'static str {
         "ttf" => "font/ttf",
         "wasm" => "application/wasm",
         _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_hash_is_mandatory() {
+        assert!(hash_ok(b"release", "").is_err());
+    }
+
+    #[test]
+    fn update_urls_must_use_https() {
+        assert!(validate_update_url("http://updates.example/release.zip").is_err());
+        assert!(validate_update_url("file:///tmp/release.zip").is_err());
+        assert!(validate_update_url("https://updates.example/release.zip").is_ok());
+    }
+
+    #[test]
+    fn update_redirects_must_stay_on_the_trusted_host() {
+        let expected = "https://updates.example.test/releases/latest.json";
+        let same_host = reqwest::Url::parse("https://updates.example.test/v1/latest.json").unwrap();
+        let other_host = reqwest::Url::parse("https://cdn.example.test/latest.json").unwrap();
+        let downgraded = reqwest::Url::parse("http://updates.example.test/latest.json").unwrap();
+        assert!(validate_final_update_url(expected, &same_host).is_ok());
+        assert!(validate_final_update_url(expected, &other_host).is_err());
+        assert!(validate_final_update_url(expected, &downgraded).is_err());
+    }
+
+    #[test]
+    fn archive_paths_cannot_escape_the_staging_directory() {
+        let root = Path::new("staging");
+        assert!(safe_archive_path(root, "assets/app.js").is_ok());
+        for unsafe_name in [
+            "../outside",
+            "assets/../../outside",
+            "/absolute",
+            "C:/outside",
+        ] {
+            assert!(
+                safe_archive_path(root, unsafe_name).is_err(),
+                "accepted unsafe archive path: {unsafe_name}"
+            );
+        }
     }
 }

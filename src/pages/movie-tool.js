@@ -3554,7 +3554,7 @@ async function parsePageDetailFromHtml(html, baseUrl, detailId, name, pic) {
   async function openPlayerVod(name, url, id, source, epName, pic, fallbackUrls, startProgress, allEps, allLines, activeLineIndex, meta) {
     if (!url || url === '#') return
     let playableUrl = url
-    let resolvedForStandalone = false
+    let resolvedForStandalone = /4kcz\.com\/v_play\//i.test(url)
     try {
       playableUrl = await resolvePlayableUrl(url)
       resolvedForStandalone = playableUrl !== url || isDirectVideoUrl(playableUrl)

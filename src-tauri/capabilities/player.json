@@ -1,0 +1,11 @@
+{
+  "identifier": "player",
+  "description": "星枢影视播放器最小权限",
+  "windows": ["player_window", "player_window_*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-close"
+  ]
+}

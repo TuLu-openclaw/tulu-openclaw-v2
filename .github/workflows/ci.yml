@@ -4,6 +4,7 @@
 on:
   push:
     branches: [main, 'preview/**']
+    tags: ['v*']
   pull_request:
     branches: [main]
   repository_dispatch:
@@ -105,7 +106,7 @@ jobs:
           cache: npm
 
       - name: Install runtime prepare dependencies
-        run: npm install
+        run: npm ci
 
       - name: Linux system dependencies
         if: runner.os == 'Linux'
@@ -157,7 +158,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: TypeScript type check
         run: |
@@ -205,7 +206,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install Playwright
         run: npx playwright install --with-deps chromium
@@ -238,7 +239,7 @@ jobs:
           cache: npm
 
       - name: Install npm audit
-        run: npm install
+        run: npm ci
 
       - name: npm dependency security audit
         run: npm audit --audit-level=moderate
@@ -271,7 +272,7 @@ jobs:
   build:
     name: Build App (${{ matrix.platform.name }})
     runs-on: ${{ matrix.platform.os }}
-    needs: [lint, frontend]
+    needs: [lint, rust-check, frontend, e2e, security]
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     strategy:
@@ -324,7 +325,7 @@ jobs:
             libayatana-appindicator3-dev
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
       - name: Prepare bundled runtime from verified official sources
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
@@ -332,9 +333,8 @@ jobs:
       - name: Frontend build
         run: npm run build
 
-      - name: Rust compile (Release)
-        working-directory: src-tauri
-        run: cargo build --release --target ${{ matrix.platform.target }}
+      - name: Build Tauri installer
+        run: npm run tauri build -- --target ${{ matrix.platform.target }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5

@@ -1175,7 +1175,7 @@ async function loadConfigEditor(page) {
         btnSave.disabled = !changed
         btnSaveOnly.disabled = !changed
       } catch (e) {
-        status.innerHTML = `<span style="color:var(--error)">${t('services.configJsonError')}: ${e.message.split(' at ')[0]}</span>`
+        status.innerHTML = `<span style="color:var(--error)">${t('services.configJsonError')}: ${escapeHtml(e.message.split(' at ')[0])}</span>`
         btnSave.disabled = true
         btnSaveOnly.disabled = true
       }

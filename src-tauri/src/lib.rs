@@ -575,6 +575,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             assistant::fetch_page_js,
             #[cfg(target_os = "windows")]
+            assistant::cz_resolve_play_url,
+            #[cfg(target_os = "windows")]
             assistant::movie_player_report_progress,
             #[cfg(target_os = "windows")]
             assistant::movie_player_get_resume,

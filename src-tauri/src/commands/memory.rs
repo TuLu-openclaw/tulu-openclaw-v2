@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 /// 缓存 agent workspace 路径，避免每次操作都调 CLI（Windows 上 spawn Node.js 进程很慢）
@@ -32,6 +32,45 @@ fn is_unsafe_path(path: &str) -> bool {
         || path.starts_with('/')
         || path.starts_with('\\')
         || (path.len() >= 2 && path.as_bytes()[1] == b':') // Windows 绝对路径 C:\
+}
+
+fn canonical_root(base: &Path) -> Result<PathBuf, String> {
+    fs::canonicalize(base).map_err(|e| format!("无法解析记忆目录: {e}"))
+}
+
+fn confined_existing_path(base: &Path, target: &Path) -> Result<PathBuf, String> {
+    let root = canonical_root(base)?;
+    let resolved = fs::canonicalize(target).map_err(|e| format!("无法解析文件路径: {e}"))?;
+    if !resolved.starts_with(&root) {
+        return Err("拒绝访问记忆目录外部路径".into());
+    }
+    Ok(resolved)
+}
+
+fn confined_write_path(base: &Path, target: &Path) -> Result<PathBuf, String> {
+    fs::create_dir_all(base).map_err(|e| format!("创建记忆目录失败: {e}"))?;
+    if target.exists() {
+        return confined_existing_path(base, target);
+    }
+    let root = canonical_root(base)?;
+    let mut ancestor = target.parent().ok_or("写入路径缺少父目录")?;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or("无法解析写入路径")?;
+    }
+    let resolved_ancestor =
+        fs::canonicalize(ancestor).map_err(|e| format!("无法解析父目录: {e}"))?;
+    if !resolved_ancestor.starts_with(&root) {
+        return Err("拒绝写入记忆目录外部路径".into());
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+        let resolved_parent =
+            fs::canonicalize(parent).map_err(|e| format!("无法解析父目录: {e}"))?;
+        if !resolved_parent.starts_with(&root) {
+            return Err("拒绝写入记忆目录外部路径".into());
+        }
+    }
+    Ok(target.to_path_buf())
 }
 
 /// 根据 agent_id 获取 workspace 路径（直接读 openclaw.json，带缓存）
@@ -162,7 +201,11 @@ fn collect_files(
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) if !metadata.file_type().is_symlink() => metadata,
+            _ => continue,
+        };
+        if metadata.is_dir() {
             // core 类别只读根目录的 .md 文件
             if category != "core" {
                 collect_files(base, &path, files, category)?;
@@ -197,7 +240,8 @@ pub async fn read_memory_file(path: String, agent_id: Option<String>) -> Result<
     for dir in candidates.iter().flatten() {
         let full = dir.join(&path);
         if full.exists() {
-            return fs::read_to_string(&full).map_err(|e| format!("读取失败: {e}"));
+            let safe = confined_existing_path(dir, &full)?;
+            return fs::read_to_string(&safe).map_err(|e| format!("读取失败: {e}"));
         }
     }
 
@@ -219,10 +263,7 @@ pub async fn write_memory_file(
     let cat = category.unwrap_or_else(|| "memory".to_string());
     let base = memory_dir_for_agent(aid, &cat).await?;
 
-    let full_path = base.join(&path);
-    if let Some(parent) = full_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
-    }
+    let full_path = confined_write_path(&base, &base.join(&path))?;
     fs::write(&full_path, &content).map_err(|e| format!("写入失败: {e}"))
 }
 
@@ -242,7 +283,8 @@ pub async fn delete_memory_file(path: String, agent_id: Option<String>) -> Resul
     for dir in candidates.iter().flatten() {
         let full = dir.join(&path);
         if full.exists() {
-            return fs::remove_file(&full).map_err(|e| format!("删除失败: {e}"));
+            let safe = confined_existing_path(dir, &full)?;
+            return fs::remove_file(&safe).map_err(|e| format!("删除失败: {e}"));
         }
     }
 
@@ -281,6 +323,7 @@ pub async fn export_memory_zip(
 
     for rel_path in &files {
         let full_path = dir.join(rel_path);
+        let full_path = confined_existing_path(&dir, &full_path)?;
         let content =
             fs::read_to_string(&full_path).map_err(|e| format!("读取 {rel_path} 失败: {e}"))?;
         zip.start_file(rel_path, options)

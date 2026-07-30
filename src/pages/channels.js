@@ -2218,25 +2218,39 @@ async function openConfigDialog(pid, page, state, accountId) {
     }
     btnVerify.disabled = true
     btnVerify.textContent = t('channels.verifying')
-    resultEl.innerHTML = ''
+    resultEl.replaceChildren()
     try {
       const res = await api.verifyBotToken(pid, form)
       if (res.valid) {
         const details = (res.details || []).join(' · ')
-        resultEl.innerHTML = `
-          <div style="background:var(--success-muted);color:var(--success);padding:10px 14px;border-radius:var(--radius-md);font-size:var(--font-size-sm)">
-            ${icon('check', 14)} ${t('channels.credentialsValid')}${details ? ' — ' + details : ''}
-          </div>
-          ${pid === 'qqbot' ? `<div class="form-hint" style="margin-top:8px;line-height:1.55">${t('channels.qqVerifyNote')}</div>` : ''}`
+        resultEl.replaceChildren()
+        const success = document.createElement('div')
+        success.style.cssText = 'background:var(--success-muted);color:var(--success);padding:10px 14px;border-radius:var(--radius-md);font-size:var(--font-size-sm)'
+        success.innerHTML = icon('check', 14)
+        success.append(document.createTextNode(` ${t('channels.credentialsValid')}${details ? ` — ${details}` : ''}`))
+        resultEl.append(success)
+        if (pid === 'qqbot') {
+          const note = document.createElement('div')
+          note.className = 'form-hint'
+          note.style.cssText = 'margin-top:8px;line-height:1.55'
+          note.textContent = t('channels.qqVerifyNote')
+          resultEl.append(note)
+        }
       } else {
-        const errs = (res.errors || [t('channels.verifyFailed')]).join('<br>')
-        resultEl.innerHTML = `
-          <div style="background:var(--error-muted, #fee2e2);color:var(--error);padding:10px 14px;border-radius:var(--radius-md);font-size:var(--font-size-sm)">
-            ${icon('x', 14)} ${errs}
-          </div>`
+        const errs = res.errors || [t('channels.verifyFailed')]
+        resultEl.replaceChildren()
+        const failure = document.createElement('div')
+        failure.style.cssText = 'background:var(--error-muted, #fee2e2);color:var(--error);padding:10px 14px;border-radius:var(--radius-md);font-size:var(--font-size-sm)'
+        failure.innerHTML = icon('x', 14)
+        failure.append(document.createTextNode(` ${errs.join(' · ')}`))
+        resultEl.append(failure)
       }
     } catch (e) {
-      resultEl.innerHTML = `<div style="color:var(--error);font-size:var(--font-size-sm)">${t('channels.verifyRequestFailed')}: ${e}</div>`
+      resultEl.replaceChildren()
+      const failure = document.createElement('div')
+      failure.style.cssText = 'color:var(--error);font-size:var(--font-size-sm)'
+      failure.textContent = `${t('channels.verifyRequestFailed')}: ${String(e)}`
+      resultEl.append(failure)
     } finally {
       btnVerify.disabled = false
       btnVerify.textContent = t('channels.verifyCredentials')

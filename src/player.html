@@ -330,9 +330,20 @@
     if(epSelect&&allEps.length){epSelect.textContent='';allEps.forEach(function(e,i){var opt=document.createElement('option');opt.value=String(i);opt.textContent=normalizeEpisodeName(e,i);if(e&&e.url===activeUrl)opt.selected=true;epSelect.appendChild(opt)})}
     if(urlSelect&&allUrls.length){urlSelect.textContent='';allUrls.forEach(function(u,i){var opt=document.createElement('option');opt.value=String(i);var ep=getEpisodeByUrl(u);opt.textContent=urlsAreEpisodes?normalizeEpisodeName(ep,i):tr('lineOption',{number:i+1});if(u===activeUrl)opt.selected=true;urlSelect.appendChild(opt)})}
   }
+  function appendCardLabel(btn,label,meta){
+    var strong=document.createElement('strong')
+    var small=document.createElement('small')
+    strong.textContent=String(label||'')
+    small.textContent=String(meta||'')
+    btn.appendChild(strong);btn.appendChild(small)
+  }
+  function appendEmptyState(panel,message){
+    var empty=document.createElement('div')
+    empty.className='side-empty';empty.textContent=message;panel.appendChild(empty)
+  }
   function renderSidePanels(){
-    episodePanel.innerHTML=''
-    linePanel.innerHTML=''
+    episodePanel.replaceChildren()
+    linePanel.replaceChildren()
     var normalizedLines=(Array.isArray(allLines)?allLines:[]).filter(function(line){return line&&Array.isArray(line.urls)&&line.urls.length})
     if(normalizedLines.length&&!allEps.length)setCurrentLine(normalizedLines[getCurrentLineIndex()]||normalizedLines[0])
     if(!allEps.length&&activeUrl)allEps=[{epName:title||tr('episodeOption',{number:1}),url:activeUrl,pic:pic}]
@@ -341,12 +352,12 @@
       allEps.forEach(function(ep,i){
         var btn=document.createElement('button')
         btn.type='button';btn.className='episode-card'
-        btn.innerHTML='<strong>'+normalizeEpisodeName(ep,i)+'</strong><small>'+(i+1)+'/'+allEps.length+'</small>'
+        appendCardLabel(btn,normalizeEpisodeName(ep,i),(i+1)+'/'+allEps.length)
         if(ep&&ep.url===activeUrl)btn.classList.add('active')
         btn.addEventListener('click',function(){if(!ep||!ep.url)return;hideSidePanel();playUrl(ep.url,syncEpisodeContext(ep.url,ep.epName||ep.name),ep.pic||pic)})
         episodePanel.appendChild(btn)
       })
-    }else episodePanel.innerHTML='<div class="side-empty">暂无选集数据</div>'
+    }else appendEmptyState(episodePanel,'暂无选集数据')
     if(normalizedLines.length){
       var epIdx=getCurrentEpisodeIndex()
       normalizedLines.forEach(function(line,i){
@@ -354,7 +365,7 @@
         var isActive=line.urls.some(function(ep){return ep&&ep.url===activeUrl})
         var btn=document.createElement('button')
         btn.type='button';btn.className='line-card'
-        btn.innerHTML='<strong>'+(line.name||tr('lineOption',{number:i+1}))+'</strong><small>'+(isActive?'当前':(line.urls.length+' 集'))+'</small>'
+        appendCardLabel(btn,line.name||tr('lineOption',{number:i+1}),isActive?'当前':(line.urls.length+' 集'))
         if(isActive)btn.classList.add('active')
         btn.addEventListener('click',function(){if(!target||!target.url)return;hideSidePanel();setCurrentLine(line);refreshLegacySelects();playUrl(target.url,syncEpisodeContext(target.url,target.epName||target.name||title),target.pic||pic)})
         linePanel.appendChild(btn)
@@ -366,12 +377,12 @@
           var ep=getEpisodeByUrl(u)
           var btn=document.createElement('button')
           btn.type='button';btn.className='line-card'
-          btn.innerHTML='<strong>'+(urlsAreEpisodes?normalizeEpisodeName(ep,i):tr('lineOption',{number:i+1}))+'</strong><small>'+(u===activeUrl?'当前':'可切换')+'</small>'
+          appendCardLabel(btn,urlsAreEpisodes?normalizeEpisodeName(ep,i):tr('lineOption',{number:i+1}),u===activeUrl?'当前':'可切换')
           if(u===activeUrl)btn.classList.add('active')
           btn.addEventListener('click',function(){hideSidePanel();playUrl(u,syncEpisodeContext(u,title),pic)})
           linePanel.appendChild(btn)
         })
-      }else linePanel.innerHTML='<div class="side-empty">暂无线路数据</div>'
+      }else appendEmptyState(linePanel,'暂无线路数据')
     }
   }
   function syncEpisodeContext(epUrl,fallbackTitle){
@@ -387,6 +398,21 @@
   function getTauriInvoke(){
     var tauri=window.__TAURI__
     return tauri&&((tauri.core&&tauri.core.invoke)||tauri.invoke)
+  }
+  function isCzPlayPage(value){return /https?:\/\/(?:www\.)?4kcz\.com\/v_play\//i.test(String(value||''))}
+  function replaceResolvedEpisode(sourceUrl,mediaUrl){
+    allEps.forEach(function(ep){if(ep&&ep.url===sourceUrl)ep.url=mediaUrl})
+    allLines.forEach(function(line){if(line&&Array.isArray(line.urls))line.urls.forEach(function(ep){if(ep&&ep.url===sourceUrl)ep.url=mediaUrl})})
+    allUrls=allUrls.map(function(value){return value===sourceUrl?mediaUrl:value})
+  }
+  async function resolvePlaybackTarget(sourceUrl){
+    if(!isCzPlayPage(sourceUrl))return sourceUrl
+    var invoke=getTauriInvoke()
+    if(typeof invoke!=='function')throw new Error('当前环境无法解析厂长资源播放页')
+    var media=await invoke('cz_resolve_play_url',{url:sourceUrl})
+    if(!media)throw new Error('厂长资源受站点防护限制，未解析到真实媒体地址')
+    replaceResolvedEpisode(sourceUrl,media)
+    return media
   }
   function setTopSub(text){
     topSub.textContent=''
@@ -823,6 +849,8 @@
     if(!newUrl)return
     qualityBtn.style.display='none'
     qualityMenu.classList.remove('open')
+    var sourceUrl=newUrl
+    try{newUrl=await resolvePlaybackTarget(sourceUrl)}catch(e){showFinalError((e&&e.message)||String(e));return}
     activeUrl=newUrl
     vid._lastUrl=newUrl
     var effectiveTitle=syncEpisodeContext(newUrl,newTitle)
@@ -1062,23 +1090,6 @@
   vid.addEventListener('play',function(){playBtn.textContent='暂停';playBtn.classList.add('active');showChrome()})
   vid.addEventListener('pause',function(){playBtn.textContent='播放';playBtn.classList.remove('active');showChrome()})
   vid.addEventListener('ended',function(){playBtn.textContent='播放';playBtn.classList.remove('active');reportEnded();if(autoNextEnabled.checked)playNextFromCurrent()})
-  var bridgeFrame=null
-  function ensureProgressBridge(){
-    try{
-      if(bridgeFrame&&bridgeFrame.contentWindow)return bridgeFrame
-      bridgeFrame=document.createElement('iframe')
-      bridgeFrame.src='http://localhost:1420/player-bridge.html'
-      bridgeFrame.style.cssText='position:absolute;width:1px;height:1px;left:-9999px;top:-9999px;border:0;opacity:0;pointer-events:none;'
-      document.body.appendChild(bridgeFrame)
-      return bridgeFrame
-    }catch(e){return null}
-  }
-  function postToProgressBridge(payload){
-    try{
-      var frame=ensureProgressBridge()
-      if(frame&&frame.contentWindow)frame.contentWindow.postMessage({channel:'xingshu-player-progress',data:payload}, '*')
-    }catch(e){}
-  }
   function postPlayerEvent(payload){
     var tauri=window.__TAURI__
     var fallback=function(){
@@ -1086,12 +1097,10 @@
       try{if(window.opener&&!window.opener.closed){window.opener.postMessage(payload,'*')}}catch(e){}
     }
     try{
-      if(location.protocol!=='file:'){
-        var invoke=tauri&&((tauri.core&&tauri.core.invoke)||tauri.invoke)
-        if(typeof invoke==='function'){
-          invoke('player_report_event',{payload:payload}).catch(function(){fallback()})
-          return
-        }
+      var invoke=tauri&&((tauri.core&&tauri.core.invoke)||tauri.invoke)
+      if(typeof invoke==='function'){
+        invoke('player_report_event',{payload:payload}).catch(function(){fallback()})
+        return
       }
     }catch(e){}
     fallback()
@@ -1102,7 +1111,6 @@
   function reportPlaybackProgress(ct,dur){
     if(!(ct>5)||ct===999)return
     var payload=makeProgressPayload(ct,dur)
-    postToProgressBridge(payload)
     postPlayerEvent(payload)
   }
   function reportProgress(ct,dur){

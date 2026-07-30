@@ -440,7 +440,15 @@ pub async fn assistant_delete_image(id: String) -> Result<(), String> {
 
 /// 执行 shell 命令，返回 stdout + stderr
 #[tauri::command]
-pub async fn assistant_exec(command: String, cwd: Option<String>) -> Result<String, String> {
+pub async fn assistant_exec(
+    window: tauri::WebviewWindow,
+    command: String,
+    cwd: Option<String>,
+) -> Result<String, String> {
+    if window.label() != "main" {
+        audit_log("EXEC_BLOCKED", &format!("window={}", window.label()));
+        return Err("当前窗口无权执行系统命令".into());
+    }
     let work_dir = cwd.unwrap_or_else(|| {
         dirs::home_dir()
             .unwrap_or_default()
@@ -1673,7 +1681,7 @@ pub async fn fetch_page(url: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn fetch_page_js(url: String) -> Result<String, String> {
     use std::process::Command;
-    if !url.starts_with("http://") && !url.starts_with("https://") {
+    if url.len() > 4096 || (!url.starts_with("http://") && !url.starts_with("https://")) {
         return Err("URL 必须以 http:// 或 https:// 开头".into());
     }
 
@@ -1782,6 +1790,7 @@ pub async fn fetch_page_js(url: String) -> Result<String, String> {
 
     // Base64 编码避免转义问题
     let extract_b64 = base64::engine::general_purpose::STANDARD.encode(extract_js);
+    let url_b64 = base64::engine::general_purpose::STANDARD.encode(url.as_bytes());
 
     let ps = format!(
         r#"
@@ -1794,9 +1803,10 @@ New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
 $dbgPort = {port}
 $userDirArg = "--user-data-dir=`"$tmpDir`""
+$targetUrl = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{url_b64}'))
 
 # 启动 Edge headless + CDP
-$proc = Start-Process '{browser}' -ArgumentList "--headless=new","--no-sandbox","--disable-gpu","--remote-debugging-port=$dbgPort",$userDirArg,'{url}' -PassThru -WindowStyle Hidden
+$proc = Start-Process '{browser}' -ArgumentList "--headless=new","--no-sandbox","--disable-gpu","--remote-debugging-port=$dbgPort",$userDirArg,$targetUrl -PassThru -WindowStyle Hidden
 
 Start-Sleep 3
 
@@ -1854,8 +1864,8 @@ try {{
 }}
 "#,
         browser = browser_exe,
-        url = url,
         port = 9222,
+        url_b64 = url_b64,
         extract_b64 = extract_b64
     );
 
@@ -1883,6 +1893,78 @@ try {{
     } else {
         Err(format!("fetch_page_js 未返回有效结果: {}", out))
     }
+}
+
+fn validate_cz_play_page_url(raw: &str) -> Result<reqwest::Url, String> {
+    let parsed = reqwest::Url::parse(raw).map_err(|_| "厂长播放页地址无效".to_string())?;
+    let host = parsed.host_str().unwrap_or("");
+    if parsed.scheme() != "https"
+        || !(host.eq_ignore_ascii_case("4kcz.com") || host.eq_ignore_ascii_case("www.4kcz.com"))
+        || !parsed.path().starts_with("/v_play/")
+    {
+        return Err("仅允许解析厂长资源 HTTPS 播放页".into());
+    }
+    Ok(parsed)
+}
+
+fn extract_cz_media_url(raw: &str) -> Option<String> {
+    let normalized = raw.replace("\\/", "/");
+    let pattern =
+        regex::Regex::new(r#"https?://[^\s'\"<>\\]+\.(?:m3u8|mp4|mpd)(?:[^\s'\"<>\\]*)?"#).ok()?;
+    for candidate in pattern.find_iter(&normalized).map(|m| m.as_str()) {
+        if let Ok(parsed) = reqwest::Url::parse(candidate) {
+            if let Some(wrapped) = parsed.query_pairs().find_map(|(key, value)| {
+                (key == "url" && is_direct_media_url(&value)).then(|| value.into_owned())
+            }) {
+                return Some(wrapped);
+            }
+            if is_direct_media_url(candidate) {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn is_direct_media_url(raw: &str) -> bool {
+    reqwest::Url::parse(raw)
+        .ok()
+        .filter(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
+        .is_some_and(|url| {
+            let path = url.path().to_ascii_lowercase();
+            path.ends_with(".m3u8") || path.ends_with(".mp4") || path.ends_with(".mpd")
+        })
+}
+
+/// Resolve one factory play page. The caller cannot choose headers or another
+/// host; failures remain explicit when the upstream anti-bot challenge blocks us.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn cz_resolve_play_url(url: String) -> Result<String, String> {
+    validate_cz_play_page_url(&url)?;
+
+    if let Ok(html) = vod_fetch(url.clone(), Some(30)).await {
+        if let Some(media) = extract_cz_media_url(&html) {
+            return Ok(media);
+        }
+    }
+
+    if let Ok(rendered) = fetch_page_js(url).await {
+        if let Some(media) = extract_cz_media_url(&rendered) {
+            return Ok(media);
+        }
+        if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&rendered) {
+            if let Some(media) = entries
+                .iter()
+                .filter_map(|entry| entry.get("url").and_then(|value| value.as_str()))
+                .find(|candidate| is_direct_media_url(candidate))
+            {
+                return Ok(media.to_string());
+            }
+        }
+    }
+
+    Err("厂长资源当前被源站防护拦截，未取得可验证的媒体地址；请稍后重试".into())
 }
 
 #[cfg(target_os = "windows")]
@@ -2026,41 +2108,6 @@ pub async fn open_player_window(
         return Err("视频URL不能为空".into());
     }
 
-    // 保持 file:// 播放器入口：很多影视线路依赖 file:// WebView 的宽松来源环境。
-    // 播放器只负责播放和上报观看进度。
-    let exe_path = std::env::current_exe().map_err(|e| format!("获取程序路径失败: {}", e))?;
-    let base_dir = exe_path
-        .parent()
-        .ok_or_else(|| String::from("无法获取程序目录"))?;
-    let cwd = std::env::current_dir().unwrap_or_else(|_| base_dir.to_path_buf());
-    let mut html_candidates = vec![
-        cwd.join("src").join("player.html"),
-        cwd.join("src-tauri").join("resources").join("player.html"),
-        cwd.join("src-tauri").join("player.html"),
-        cwd.join("player.html"),
-        base_dir.join("src").join("player.html"),
-        base_dir.join("player.html"),
-        base_dir.join("resources").join("player.html"),
-    ];
-    if let Ok(res_dir) = app.path().resource_dir() {
-        html_candidates.push(res_dir.join("src").join("player.html"));
-        html_candidates.push(res_dir.join("player.html"));
-    }
-    let html_path = html_candidates
-        .iter()
-        .find(|path| path.exists())
-        .cloned()
-        .ok_or_else(|| {
-            format!(
-                "未找到播放器文件 player.html，已查找: {}",
-                html_candidates
-                    .iter()
-                    .map(|p| p.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(" | ")
-            )
-        })?;
-
     // 构建 player.html URL 参数
     let encoded_url = urlencoding_encode(&url);
     let encoded_title = urlencoding_encode(&title);
@@ -2073,65 +2120,31 @@ pub async fn open_player_window(
 
     let effective_resume = 0.0;
 
-    let player_url = if url.starts_with("tauri://localhost/hls-proxy") {
-        format!(
-            "player.html?url={}&title={}&resume={}&lang={}&all_eps={}&all_urls={}&all_lines={}&playback_ctx={}&pic={}",
-            encoded_url,
-            encoded_title,
-            effective_resume,
-            encoded_lang,
-            encoded_alleps,
-            encoded_allurls,
-            encoded_alllines,
-            encoded_ctx,
-            encoded_pic,
-        )
-    } else {
-        format!(
-            "file:///{}?url={}&title={}&resume={}&lang={}&all_eps={}&all_urls={}&all_lines={}&playback_ctx={}&pic={}",
-            html_path.to_string_lossy().replace('\\', "/"),
-            encoded_url,
-            encoded_title,
-            effective_resume,
-            encoded_lang,
-            encoded_alleps,
-            encoded_allurls,
-            encoded_alllines,
-            encoded_ctx,
-            encoded_pic,
-        )
-    };
-
-    let bridge_label = "player_bridge_window";
-    if app.get_webview_window(bridge_label).is_none() {
-        let bridge_url = "player-bridge.html";
-        let _ = WebviewWindowBuilder::new(&app, bridge_label, WebviewUrl::App(bridge_url.into()))
-            .title("Player Bridge")
-            .inner_size(1.0, 1.0)
-            .visible(false)
-            .decorations(false)
-            .build();
-    }
+    let player_url = format!(
+        "src/player.html?url={}&title={}&resume={}&lang={}&all_eps={}&all_urls={}&all_lines={}&playback_ctx={}&pic={}",
+        encoded_url,
+        encoded_title,
+        effective_resume,
+        encoded_lang,
+        encoded_alleps,
+        encoded_allurls,
+        encoded_alllines,
+        encoded_ctx,
+        encoded_pic,
+    );
 
     let window_label = format!("player_window_{}", chrono::Utc::now().timestamp_millis());
 
     // 创建播放器窗口
-    let win = if player_url.starts_with("file://") {
-        let parsed: url::Url = player_url
-            .parse()
-            .map_err(|e| format!("播放器 URL 无效: {e}"))?;
-        WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::External(parsed))
-    } else {
-        WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(player_url.into()))
-    }
-    .title(&title)
-    .inner_size(960.0, 600.0)
-    .min_inner_size(640.0, 400.0)
-    .resizable(true)
-    .decorations(true)
-    .center()
-    .build()
-    .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
+    let win = WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(player_url.into()))
+        .title(&title)
+        .inner_size(960.0, 600.0)
+        .min_inner_size(640.0, 400.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .build()
+        .map_err(|e| format!("创建播放器窗口失败: {}", e))?;
 
     let _win_label = win.label().to_string();
 
