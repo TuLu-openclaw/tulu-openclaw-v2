@@ -2112,7 +2112,9 @@ mod cz_movie_tests {
 
         assert_eq!(
             extract_cz_media_url(&plain).as_deref(),
-            Some("https://media.example.com/中文 电影/index.m3u8?token=abc")
+            Some(
+                "https://media.example.com/%E4%B8%AD%E6%96%87%20%E7%94%B5%E5%BD%B1/index.m3u8?token=abc"
+            )
         );
     }
 
