@@ -85,14 +85,15 @@ fn reject_link_root(path: &Path, label: &str, blockers: &mut Vec<String>) {
 fn reject_link_ancestors(path: &Path, label: &str, blockers: &mut Vec<String>) {
     let mut current = Some(path);
     while let Some(candidate) = current {
-        if candidate.exists()
-            && fs::symlink_metadata(candidate)
+        if candidate.exists() {
+            if fs::symlink_metadata(candidate)
                 .map(|metadata| is_link_or_reparse(&metadata))
                 .unwrap_or(false)
-        {
-            let message = format!("{label}不能位于符号链接或重解析目录中");
-            if !blockers.contains(&message) {
-                blockers.push(message);
+            {
+                let message = format!("{label}不能位于符号链接或重解析目录中");
+                if !blockers.contains(&message) {
+                    blockers.push(message);
+                }
             }
             return;
         }
@@ -233,6 +234,29 @@ mod tests {
         fs::write(target.join("occupied"), b"x").unwrap();
         let occupied = preflight_impl(&target, &source).unwrap();
         assert_eq!(occupied["ready"], false);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preflight_blocks_a_direct_symlink_parent() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root("symlink-parent");
+        let source = root.join("source");
+        let real_target = root.join("real-target");
+        let linked_target = root.join("linked-target");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&real_target).unwrap();
+        symlink(&real_target, &linked_target).unwrap();
+
+        let result = preflight_impl(&linked_target.join("portable"), &source).unwrap();
+        assert_eq!(result["ready"], false);
+        assert!(result["blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value.as_str().unwrap().contains("符号链接")));
         fs::remove_dir_all(root).unwrap();
     }
 }
