@@ -124,10 +124,20 @@ jobs:
         run: npm run runtime:prepare -- ${{ matrix.platform.runtimeTarget }}
 
       - name: Rust compile check
+        shell: pwsh
         working-directory: src-tauri
         env:
           OPENCLAW_ALLOW_RUNTIME_PLACEHOLDER: "1"
-        run: cargo check --all-targets
+        run: |
+          $output = cargo check --all-targets 2>&1 | ForEach-Object { $_.ToString() }
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Output $_ }
+          if ($exitCode -ne 0) {
+            $tail = ($output | Select-Object -Last 60) -join "`n"
+            $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Rust compile check failed::$escaped"
+            exit $exitCode
+          }
 
       - name: Rust unit tests
         if: runner.os != 'Windows'
