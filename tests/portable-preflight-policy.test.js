@@ -7,7 +7,7 @@ const lib = fs.readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url),
 const productionRust = rust.split('#[cfg(test)]')[0]
 
 test('portable migration exposure is read-only and registered as preflight only', () => {
-  assert.match(lib, /portable::preflight_portable_migration/)
+  assert.match(lib, /commands::portable::preflight_portable_migration/)
   assert.doesNotMatch(lib, /portable::(?:migrate|execute|apply)_portable/)
   assert.match(rust, /"readOnly": true/)
   assert.match(rust, /"freeSpaceVerified": false/)
