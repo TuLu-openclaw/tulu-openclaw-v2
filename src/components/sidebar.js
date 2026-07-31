@@ -10,6 +10,7 @@ import { version as APP_VERSION } from '../../package.json'
 import { t, getLang, setLang, getAvailableLangs } from '../lib/i18n.js'
 import { getActiveEngine, getActiveEngineId, listEngines, switchEngine } from '../lib/engine-manager.js'
 import { getKernelSnapshot, onKernelChange } from '../lib/kernel.js'
+import { humanizeErrorText } from '../lib/humanize-error.js'
 
 const GLOBAL_BUILTIN_ROUTE = '/coming-soon'
 
@@ -21,7 +22,7 @@ async function _openGlobalBuiltinInIndependentWindow() {
     toast(t('sidebar.globalBuiltinOpenOk'), 'success')
     return true
   } catch (err) {
-    toast(err?.message || t('sidebar.globalBuiltinOpenFailed'), 'error')
+    toast(humanizeErrorText(err, t('sidebar.globalBuiltinOpenFailed')), 'error')
     return false
   }
 }
@@ -32,7 +33,7 @@ async function _openXingshuChatInIndependentWindow() {
     toast(t('sidebar.xingshuChatOpenOk'), 'success')
     return true
   } catch (err) {
-    toast(err?.message || t('sidebar.xingshuChatOpenFailed'), 'error')
+    toast(humanizeErrorText(err, t('sidebar.xingshuChatOpenFailed')), 'error')
     navigate('/xingshu-chat')
     return false
   }

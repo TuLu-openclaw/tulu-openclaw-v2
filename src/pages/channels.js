@@ -9,6 +9,8 @@ import { icon } from '../lib/icons.js'
 import { CHANNEL_LABELS } from '../lib/channel-labels.js'
 import { t } from '../lib/i18n.js'
 import { wsClient } from '../lib/ws-client.js'
+import { humanizeError, humanizeErrorText } from '../lib/humanize-error.js'
+import { formatRuntimeAge, getChannelRuntimeSummary, normalizeChannelRuntimeStatus } from '../lib/channel-runtime.js'
 
 function formatPluginTime(value) {
   if (!value) return ''
@@ -388,6 +390,9 @@ export async function render() {
       <div class="tab" data-ch-tab="agents">${t('channels.tabAgents')}</div>
     </div>
     <div id="channels-panel-list" class="channels-tab-panel">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-sm)">
+        <button class="btn btn-sm btn-secondary" id="btn-refresh-channel-runtime">${icon('refresh-cw', 14)} ${t('common.refresh')}</button>
+      </div>
       <div id="platforms-configured" style="margin-bottom:var(--space-lg)"></div>
       <div class="config-section">
         <div class="config-section-title">${t('channels.available')}</div>
@@ -409,7 +414,15 @@ export async function render() {
     routeIntent: parseChannelsRouteIntent(),
     routeIntentConsumed: false,
     routeIntentHintShown: false,
+    runtimeStatus: normalizeChannelRuntimeStatus(null),
+    runtimeStatusError: '',
+    runtimeRequestSeq: 0,
   }
+  page.querySelector('#btn-refresh-channel-runtime')?.addEventListener('click', async event => {
+    const button = event.currentTarget
+    button.disabled = true
+    try { await refreshChannelRuntimeStatus(page, state) } finally { button.disabled = false }
+  })
   await loadPlatforms(page, state)
 
   return page
@@ -451,6 +464,22 @@ async function loadPlatforms(page, state) {
   renderAvailable(page, state)
   renderAgentBindings(page, state)
   applyRouteIntent(page, state)
+  void refreshChannelRuntimeStatus(page, state)
+}
+
+async function refreshChannelRuntimeStatus(page, state) {
+  const requestSeq = ++state.runtimeRequestSeq
+  state.runtimeStatusError = ''
+  try {
+    const raw = await wsClient.request('channels.status', { probe: true, timeoutMs: 5000 }, { timeoutMs: 7000 })
+    if (requestSeq !== state.runtimeRequestSeq) return
+    state.runtimeStatus = normalizeChannelRuntimeStatus(raw)
+  } catch (error) {
+    if (requestSeq !== state.runtimeRequestSeq) return
+    state.runtimeStatus = normalizeChannelRuntimeStatus(null)
+    state.runtimeStatusError = humanizeError(error).raw
+  }
+  renderConfigured(page, state)
 }
 
 function applyRouteIntent(page, state) {
@@ -514,6 +543,19 @@ function renderConfigured(page, state) {
           const accounts = Array.isArray(p.accounts) ? p.accounts : []
           const hasAccounts = accounts.length > 0
           const supportsMulti = MULTI_INSTANCE_PLATFORMS.includes(p.id)
+          const runtime = getChannelRuntimeSummary(state.runtimeStatus, channelKey, p)
+          const runtimeLabel = runtime.state === 'error'
+            ? t('common.error')
+            : runtime.state === 'connected'
+              ? t('common.connected')
+              : runtime.state === 'disabled'
+                ? t('common.disabled')
+                : runtime.state === 'unsupported'
+                  ? (p.enabled ? t('channels.configured') : t('common.disabled'))
+                  : t('channels.configured')
+          const runtimeActivity = formatRuntimeAge(Math.max(runtime.lastInboundAt || 0, runtime.lastOutboundAt || 0))
+          const runtimeTitle = humanizeError(runtime.lastError || state.runtimeStatusError).raw
+          const runtimeBadge = `<span class="channel-runtime-badge ${runtime.state}" title="${escapeAttr(runtimeTitle)}">${escapeAttr(runtimeLabel)}${runtimeActivity ? ` · ${runtimeActivity}` : ''}</span>`
 
           if (hasAccounts) {
             const accountsHtml = accounts.map(acc => {
@@ -545,6 +587,7 @@ function renderConfigured(page, state) {
                   <span class="platform-emoji">${ic}</span>
                   <span class="platform-name">${label}</span>
                   <span class="account-count">${t('channels.accountCount', { count: accounts.length })}</span>
+                  ${runtimeBadge}
                   <span class="platform-status-dot ${p.enabled ? 'on' : 'off'}"></span>
                 </div>
                 <div class="platform-accounts">${accountsHtml}</div>
@@ -570,6 +613,7 @@ function renderConfigured(page, state) {
                 <span class="platform-emoji">${ic}</span>
                 <span class="platform-name">${label}</span>
                 ${agentBadges}
+                ${runtimeBadge}
                 <span class="platform-status-dot ${p.enabled ? 'on' : 'off'}"></span>
               </div>
               <div class="platform-card-actions">
@@ -1596,7 +1640,7 @@ async function runChannelTestForBinding(binding, btnEl) {
       toast(t('channels.testFailed') + ': ' + errs, 'error')
     }
   } catch (e) {
-    toast((channel === 'qqbot' ? t('channels.diagFailed') : t('channels.testFailed')) + ': ' + e, 'error')
+    toast(humanizeErrorText(e, channel === 'qqbot' ? t('channels.diagFailed') : t('channels.testFailed')), 'error')
   } finally {
     if (btnEl) {
       btnEl.disabled = false
@@ -1674,14 +1718,15 @@ async function handleGatewayWhatsAppLogin(btn, resultEl, actionDef) {
         </div>`
     }
   } catch (e) {
-    const msg = String(e?.message || e)
+    const friendly = humanizeError(e, t('channels.scanLoginFailed'))
+    const msg = friendly.raw
     // web login provider is not available = WhatsApp 插件未加载
     const hint = /not available|not supported/i.test(msg)
       ? '. ' + t('channels.whatsappNotAvailableHint')
       : ''
     resultEl.innerHTML = `
       <div style="background:var(--error-muted, #fee2e2);color:var(--error);padding:14px;border-radius:var(--radius-md);font-size:var(--font-size-sm);line-height:1.6">
-        ${icon('x', 14)} ${t('channels.scanLoginFailed')}: ${escapeAttr(msg)}${hint}
+        ${icon('x', 14)} ${escapeAttr(friendly.message)}${hint}
       </div>`
   } finally {
     btn.disabled = false

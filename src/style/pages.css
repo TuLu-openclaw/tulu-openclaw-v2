@@ -1062,6 +1062,20 @@
 .platform-status-dot.off {
   background: var(--text-tertiary);
 }
+.channel-runtime-badge {
+  flex-shrink: 0;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+.channel-runtime-badge.connected { color: var(--success, #22c55e); }
+.channel-runtime-badge.error { color: var(--danger, #ef4444); }
 
 .platform-card-actions {
   display: flex;

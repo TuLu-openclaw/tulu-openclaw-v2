@@ -9,6 +9,7 @@ const _engines = {}
 let _activeEngine = null
 let _listeners = []
 let _switchPromise = Promise.resolve()
+let _engineSetupChoice = null
 
 /** 注册引擎 */
 export function registerEngine(engine) {
@@ -40,6 +41,33 @@ export function getEngine(id) {
   return _engines[id] || null
 }
 
+/** Return whether the user has explicitly selected an engine. */
+export function getEngineSetupState() {
+  return {
+    hasChoice: !!_engineSetupChoice,
+    choice: _engineSetupChoice,
+  }
+}
+
+export function resolveEngineSetup(config, registeredIds) {
+  const cfg = config && typeof config === 'object' ? config : {}
+  const ids = new Set(registeredIds)
+  const explicit = typeof cfg.engineSetupChoice === 'string' && ids.has(cfg.engineSetupChoice)
+    ? cfg.engineSetupChoice
+    : null
+  const deferred = cfg.engineMode === 'deferred'
+  const configured = typeof cfg.engineMode === 'string' && ids.has(cfg.engineMode)
+    ? cfg.engineMode
+    : null
+  const choice = deferred ? null : explicit
+  return {
+    mode: deferred ? 'openclaw' : (configured || choice || 'openclaw'),
+    choice,
+    hasChoice: !!choice,
+    deferred,
+  }
+}
+
 /** 监听引擎切换事件 */
 export function onEngineChange(fn) {
   _listeners.push(fn)
@@ -51,14 +79,13 @@ export function onEngineChange(fn) {
  * 在 main.js boot() 中调用
  */
 export async function initEngineManager() {
-  let mode = 'openclaw'
+  let setup = resolveEngineSetup(null, Object.keys(_engines))
   try {
     const cfg = await api.readPanelConfig()
-    if (cfg?.engineMode && _engines[cfg.engineMode]) {
-      mode = cfg.engineMode
-    }
+    setup = resolveEngineSetup(cfg, Object.keys(_engines))
   } catch {}
-  await activateEngine(mode, false)
+  _engineSetupChoice = setup.choice
+  await activateEngine(setup.mode, false)
 }
 
 /**
@@ -99,11 +126,13 @@ export async function activateEngine(id, persist = true) {
   if (persist) {
     void (async () => {
       try {
-        const cfg = await api.readPanelConfig()
-        if (cfg.engineMode !== id) {
+        const cfg = await api.readPanelConfig() || {}
+        if (cfg.engineMode !== id || cfg.engineSetupChoice !== id) {
           cfg.engineMode = id
+          cfg.engineSetupChoice = id
           await api.writePanelConfig(cfg)
         }
+        _engineSetupChoice = id
       } catch (e) {
         console.warn('[engine-manager] 保存 engineMode 失败:', e)
       }
@@ -121,12 +150,26 @@ export async function activateEngine(id, persist = true) {
  */
 export async function switchEngine(id, { navigateToDefault = true } = {}) {
   const transition = _switchPromise.then(async () => {
-    if (_activeEngine?.id === id) return
-    await activateEngine(id, true)
+    if (_activeEngine?.id === id) {
+      if (_engineSetupChoice !== id) await persistEngineChoice(id)
+      return
+    }
+    await activateEngine(id, false)
+    await persistEngineChoice(id)
     if (navigateToDefault && _activeEngine?.id === id) navigate(_activeEngine.getDefaultRoute())
   })
   _switchPromise = transition.catch(() => {})
   return transition
+}
+
+async function persistEngineChoice(id) {
+  const cfg = await api.readPanelConfig() || {}
+  if (cfg.engineMode !== id || cfg.engineSetupChoice !== id) {
+    cfg.engineMode = id
+    cfg.engineSetupChoice = id
+    await api.writePanelConfig(cfg)
+  }
+  _engineSetupChoice = id
 }
 
 function withTimeout(promise, ms, message) {

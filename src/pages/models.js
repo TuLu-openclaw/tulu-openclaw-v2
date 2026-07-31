@@ -12,8 +12,10 @@ import {
   createModelChannelPatchPlan,
   parseModelChannelBundle,
   summarizeModelChannelPatchPlan,
+  verifyModelChannelPatchReceipt,
 } from '../lib/model-channels.js'
 import { t } from '../lib/i18n.js'
+import { humanizeErrorText } from '../lib/humanize-error.js'
 
 export async function render() {
   const page = document.createElement('div')
@@ -905,7 +907,7 @@ async function importModelConfig(file, page, state) {
     const bundle = parseModelChannelBundle(JSON.parse(await file.text()))
     plan = createModelChannelPatchPlan(state.config, bundle)
   } catch (e) {
-    toast(`${t('models.importFailed')}: ${e?.message || e}`, 'error')
+    toast(humanizeErrorText(e, t('models.importFailed')), 'error')
     return
   }
   if (!plan.operations.length) {
@@ -920,14 +922,19 @@ async function importModelConfig(file, page, state) {
         operation.providerId,
         state.config?.models?.providers?.[operation.providerId] ?? null,
       ]))
-      await api.writeModelChannelPatch(expectedProviders, plan.operations)
-      state.config = applyModelChannelPatchPlan(state.config, plan)
+      const expectedConfig = applyModelChannelPatchPlan(state.config, plan)
+      const receipt = await api.writeModelChannelPatch(expectedProviders, plan.operations)
+      const verification = verifyModelChannelPatchReceipt(receipt, expectedConfig, plan.operations)
+      if (!verification.verified) {
+        throw new Error(`model channel receipt mismatch: ${verification.mismatches.join(', ')}`)
+      }
+      state.config = expectedConfig
     } catch (error) {
       try { state.config = await api.readOpenclawConfig() } catch {}
       renderModelInventory(page, state)
       renderDefaultBar(page, state)
       updateUndoBtn(page, state)
-      toast(`模型渠道未应用：${error?.message || error}。配置可能已被其他操作修改，请刷新后重试。`, 'error')
+      toast(humanizeErrorText(error, t('common.saveFailed')), 'error')
       return
     }
   } else {

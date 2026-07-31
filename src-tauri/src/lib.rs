@@ -484,6 +484,7 @@ pub fn run() {
             config::invalidate_path_cache,
             config::clear_usage_cost_cache,
             config::get_status_summary,
+            portable::preflight_portable_migration,
             route_graph::get_route_graph,
             config::doctor_fix,
             config::doctor_check,

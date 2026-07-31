@@ -29,6 +29,7 @@ pub mod messaging;
 pub mod music;
 pub mod openmontage;
 pub mod pairing;
+pub mod portable;
 pub mod proxy;
 pub mod route_graph;
 pub mod service;

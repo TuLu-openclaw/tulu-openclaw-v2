@@ -217,6 +217,32 @@ export function applyModelChannelPatchPlan(currentConfig, plan) {
   return next
 }
 
+export function verifyModelChannelPatchReceipt(receipt, expectedConfig, operations) {
+  if (!isRecord(receipt)) return { verified: false, mismatches: ['receipt'] }
+  const expectedProviders = isRecord(expectedConfig?.models?.providers) ? expectedConfig.models.providers : {}
+  const mismatches = []
+  for (const operation of operations || []) {
+    const providerId = operation?.providerId
+    if (!providerId) continue
+    if (operation.op === 'delete-provider') {
+      if (Object.hasOwn(receipt, providerId)) mismatches.push(providerId)
+      continue
+    }
+    if (!sameJsonValue(receipt[providerId], expectedProviders[providerId])) mismatches.push(providerId)
+  }
+  return { verified: mismatches.length === 0, mismatches }
+}
+
+function sameJsonValue(left, right) {
+  return JSON.stringify(sortJsonValue(left)) === JSON.stringify(sortJsonValue(right))
+}
+
+function sortJsonValue(value) {
+  if (Array.isArray(value)) return value.map(sortJsonValue)
+  if (!isRecord(value)) return value
+  return Object.fromEntries(Object.keys(value).sort().map(key => [key, sortJsonValue(value[key])]))
+}
+
 export function maskSensitiveFields(value) {
   if (Array.isArray(value)) return value.map(maskSensitiveFields)
   if (!isRecord(value)) return value

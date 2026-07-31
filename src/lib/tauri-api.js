@@ -419,6 +419,7 @@ export const api = {
     })
   },
   getBundledRuntimeStatus: () => invoke('get_bundled_runtime_status'),
+  preflightPortableMigration: (targetRoot) => invoke('preflight_portable_migration', { targetRoot }),
   deployBundledNode: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_node', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   deployBundledGit: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_git', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },
   deployBundledRuntime: () => { invalidateInstallationCaches(); return invoke('deploy_bundled_runtime', {}, 300000).then(r => { invalidateInstallationCaches(); return r }) },

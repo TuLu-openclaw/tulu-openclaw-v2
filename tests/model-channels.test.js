@@ -9,6 +9,7 @@ import {
   maskSensitiveFields,
   parseModelChannelBundle,
   summarizeModelChannelPatchPlan,
+  verifyModelChannelPatchReceipt,
 } from '../src/lib/model-channels.js'
 
 const current = {
@@ -153,4 +154,21 @@ test('legacy provider import preserves environment and SecretRef credentials', (
   assert.equal(env.channels[0].provider.credential, '$LEGACY_KEY')
   const ref = parseModelChannelBundle({ models: { providers: { legacy: { baseUrl: 'https://legacy.example/v1', api: 'openai-completions', apiKey: { source: 'env', id: 'LEGACY_KEY' }, models: [] } } } })
   assert.deepEqual(ref.channels[0].provider.credential, { source: 'env', id: 'LEGACY_KEY' })
+})
+
+test('model channel write receipt verifies only committed target providers', () => {
+  const plan = createModelChannelPatchPlan(current, bundle())
+  const expected = applyModelChannelPatchPlan(current, plan)
+  const receipt = structuredClone(expected.models.providers)
+  receipt.unrelated = { value: true }
+  assert.deepEqual(verifyModelChannelPatchReceipt(receipt, expected, plan.operations), { verified: true, mismatches: [] })
+  receipt.alpha.baseUrl = 'https://drift.example/v1'
+  assert.deepEqual(verifyModelChannelPatchReceipt(receipt, expected, plan.operations), { verified: false, mismatches: ['alpha'] })
+})
+
+test('model channel delete receipt rejects a provider that still exists', () => {
+  const plan = createModelChannelPatchPlan(current, { schemaVersion: 1, channels: [], deleteProviderIds: ['alpha'] })
+  const expected = applyModelChannelPatchPlan(current, plan)
+  assert.equal(verifyModelChannelPatchReceipt(current.models.providers, expected, plan.operations).verified, false)
+  assert.equal(verifyModelChannelPatchReceipt({ beta: current.models.providers.beta }, expected, plan.operations).verified, true)
 })
