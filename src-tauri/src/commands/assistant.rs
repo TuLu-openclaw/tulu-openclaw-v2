@@ -2120,7 +2120,10 @@ mod cz_movie_tests {
 
     #[test]
     fn rejects_aes_payload_with_wrong_key_or_padding() {
-        let page = aes_page("4IKXx/w9r4PAwsi3u3Nyrg==", "0000000000000000");
+        let page = aes_page(
+            "ruk6rdouXK1okGItGix7TMQ2OVBxF8CQ2Pr/cORcqD+tWG6UyslZUpMLiZlnAzEWqZGWXSAz+x61M7RHuwgWHtpCSpXgZdP192db19y0Bc+PGgc1EqIXrAcnpadfms5a",
+            "0000000000000000",
+        );
         let error = decrypt_cz_aes_payload(&page).expect_err("wrong key must fail closed");
         assert!(error.contains("解密失败"));
     }
