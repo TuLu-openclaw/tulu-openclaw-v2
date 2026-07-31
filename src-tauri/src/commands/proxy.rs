@@ -80,18 +80,18 @@ pub struct ProxyResponse {
 /// 在页面刷新/代理 iframe 场景下会频繁拉起 powershell.exe；这里改为 Rust HTTP 客户端。
 #[tauri::command]
 pub async fn proxy_url(url: String, cookie: Option<String>) -> Result<ProxyResponse, String> {
-    if !url.starts_with("http://") && !url.starts_with("https://") {
+    if let Err(error) = super::validate_public_http_url(&url).await {
         return Ok(ProxyResponse {
             ok: false,
             status: 0,
             content_type: None,
             html: None,
-            error: Some("URL 必须以 http:// 或 https:// 开头".into()),
+            error: Some(error),
             set_cookie: None,
         });
     }
 
-    let client = super::build_http_client(
+    let client = super::build_http_client_no_redirect(
         std::time::Duration::from_secs(20),
         Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
     )

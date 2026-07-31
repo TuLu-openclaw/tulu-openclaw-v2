@@ -34,8 +34,14 @@ pub async fn tvbox_req(
     body: Option<String>,
     timeout: Option<u64>,
 ) -> Result<ReqResult, String> {
+    let parsed_url = super::validate_public_http_url(&url).await?;
+    let request_host = parsed_url
+        .host_str()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout.unwrap_or(30)))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -85,13 +91,8 @@ pub async fn tvbox_req(
 
     if let Some(ck) = &cookie {
         if let Ok(mut store) = COOKIE_STORE.write() {
-            for pair in ck.split(';') {
-                if let Some(eq) = pair.find('=') {
-                    let (k, v) = (&pair[..eq], pair[eq + 1..].trim());
-                    if !k.is_empty() {
-                        store.insert(k.to_string(), v.to_string());
-                    }
-                }
+            if !request_host.is_empty() {
+                store.insert(request_host, ck.clone());
             }
         }
     }
@@ -175,14 +176,17 @@ pub fn tvbox_store_del(key: String) -> Result<(), String> {
 /// 获取保存的 cookie
 #[command]
 pub fn tvbox_cookie_get(domain: String) -> Result<String, String> {
+    let domain = domain.trim().to_ascii_lowercase();
+    if domain.is_empty() {
+        return Err("Cookie 域不能为空".into());
+    }
     COOKIE_STORE
         .read()
         .map(|s| {
             s.iter()
-                .filter(|(k, _)| domain.is_empty() || k.contains(&domain))
-                .map(|(k, v)| format!("{}={}", k, v))
-                .collect::<Vec<_>>()
-                .join("; ")
+                .find(|(host, _)| host.eq_ignore_ascii_case(&domain))
+                .map(|(_, cookie)| cookie.clone())
+                .unwrap_or_default()
         })
         .map_err(|e| e.to_string())
 }

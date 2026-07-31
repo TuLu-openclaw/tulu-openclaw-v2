@@ -7,8 +7,6 @@ import { t } from '../lib/i18n.js'
 
 const STORAGE_KEY = 'xingshu_chat_state_v1'
 const DEFAULT_SERVER = 'wss://www.aiyu.jx.cn/xingshu-chat'
-const ADMIN_PASS = '2552667173'
-
 const ROOMS = [
   { id: 'lobby', nameKey: 'roomLobbyName', icon: '✨', descKey: 'roomLobbyDesc', levelKey: 'levelPublic' },
   { id: 'support', nameKey: 'roomSupportName', icon: '🛠️', descKey: 'roomSupportDesc', levelKey: 'levelPublic' },
@@ -76,7 +74,7 @@ function loadState() {
       activeRoom: getValidRoomId(saved.activeRoom),
       nickname: String(saved.nickname || t('xingshuChat.defaultNickname')),
       serverUrl: String(saved.serverUrl || DEFAULT_SERVER),
-      admin: !!saved.admin,
+      admin: false,
       muted: !!saved.muted,
       messages: normalizeMessages(saved.messages),
       bannedWords: normalizeBannedWords(saved.bannedWords),
@@ -102,7 +100,7 @@ let socketStatus = 'offline'
 let rootEl = null
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, admin: undefined }))
 }
 
 function sendPresence() {
@@ -145,7 +143,13 @@ function handleServerEvent(event) {
     }
     return true
   }
-  if (event.type === 'role' || event.type === 'online' || event.type === 'kick') return true
+  if (event.type === 'role') {
+    const role = String(event.role || event.value || '').toLowerCase()
+    state.admin = role === 'admin' || role === 'administrator'
+    render(rootEl)
+    return true
+  }
+  if (event.type === 'online' || event.type === 'kick') return true
   return false
 }
 
@@ -200,11 +204,7 @@ function renderAdminPanel() {
         <label class="xs-label">${esc(t('xingshuChat.bannedWordsLabel'))}</label>
         <input class="xs-input" id="xs-banned" value="${esc(state.bannedWords.join('，'))}" />
         <button class="xs-btn full" data-action="save-banned">${esc(t('xingshuChat.saveBannedWords'))}</button>
-      ` : `
-        <div class="xs-muted">${esc(t('xingshuChat.adminUnlockHint'))}</div>
-        <input class="xs-input" id="xs-admin-pass" type="password" placeholder="${esc(t('xingshuChat.adminPasswordPlaceholder'))}" />
-        <button class="xs-btn full" data-action="admin-login">${esc(t('xingshuChat.unlockAdmin'))}</button>
-      `}
+      ` : `<div class="xs-muted">${esc(t('xingshuChat.adminRequired'))}</div>`}
     </div>`
 }
 
@@ -282,11 +282,6 @@ async function handleAction(action) {
   if (action === 'send') return sendMessage()
   if (action === 'connect') return connectServer()
   if (action === 'open-window') return openStandalone()
-  if (action === 'admin-login') {
-    const pass = document.getElementById('xs-admin-pass')?.value
-    if (pass === ADMIN_PASS) { state.admin = true; saveState(); addMessage('admin', { system: true, user: t('xingshuChat.systemUser'), text: t('xingshuChat.adminUnlocked') }) }
-    else alert(t('xingshuChat.adminPasswordWrong'))
-  }
   if (!state.admin) return alert(t('xingshuChat.adminRequired'))
   if (action === 'announce') {
     const text = prompt(t('xingshuChat.announcementPrompt'), state.announcement)
@@ -332,7 +327,7 @@ function connectServer() {
       catch { addMessage(state.activeRoom, { user: t('xingshuChat.serverUser'), text: ev.data }) }
     }
     socket.onerror = () => { socketStatus = 'offline'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.serverNoResponse') }) }
-    socket.onclose = () => { socketStatus = 'offline'; render(rootEl) }
+    socket.onclose = () => { socketStatus = 'offline'; state.admin = false; render(rootEl) }
   } catch (e) {
     socketStatus = 'offline'; addMessage(state.activeRoom, { system: true, user: t('xingshuChat.serverUser'), text: t('xingshuChat.connectFailed', { error: e.message }) })
   }

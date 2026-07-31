@@ -6,12 +6,12 @@ const page = fs.readFileSync(new URL('../src/pages/browser-use.js', import.meta.
 const guard = fs.readFileSync(new URL('../src-tauri/resources/browser-use/browser_use_guard.py', import.meta.url), 'utf8')
 const backend = fs.readFileSync(new URL('../src-tauri/src/commands/browser_use.rs', import.meta.url), 'utf8')
 const api = fs.readFileSync(new URL('../src/lib/tauri-api.js', import.meta.url), 'utf8')
-const main = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+const openclawEngine = fs.readFileSync(new URL('../src/engines/openclaw/index.js', import.meta.url), 'utf8')
 const sidebar = fs.readFileSync(new URL('../src/components/sidebar.js', import.meta.url), 'utf8')
 
 test('browser-use is exposed as a customer-facing route', () => {
-  assert.match(main, /registerRoute\('\/browser-use'/)
-  assert.match(main, /browser-use\.css/)
+  assert.match(openclawEngine, /path: '\/browser-use'/)
+  assert.match(openclawEngine, /browser-use\.js/)
   assert.match(sidebar, /route: '\/browser-use'/)
   assert.match(page, /客户使用教程/)
   assert.match(page, /故障排查/)

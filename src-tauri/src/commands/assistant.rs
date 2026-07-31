@@ -1,5 +1,5 @@
 #[cfg(target_os = "windows")]
-use aes::Aes256;
+use aes::{Aes128, Aes256};
 use base64::{engine::general_purpose, Engine as _};
 #[cfg(target_os = "windows")]
 use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
@@ -12,6 +12,8 @@ use sha1::Sha1;
 use tauri::Emitter;
 #[cfg(target_os = "windows")]
 type Aes256CbcDec = cbc::Decryptor<Aes256>;
+#[cfg(target_os = "windows")]
+type Aes128CbcDec = cbc::Decryptor<Aes128>;
 #[cfg(target_os = "windows")]
 type HmacSha1 = Hmac<Sha1>;
 #[cfg(target_os = "windows")]
@@ -516,7 +518,13 @@ pub async fn assistant_exec(
 
 /// 读取文件内容
 #[tauri::command]
-pub async fn assistant_read_file(path: String) -> Result<String, String> {
+pub async fn assistant_read_file(
+    window: tauri::WebviewWindow,
+    path: String,
+) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("当前窗口无权读取本地文件".into());
+    }
     audit_log("READ", &path);
     let content = tokio::fs::read_to_string(&path)
         .await
@@ -535,7 +543,14 @@ pub async fn assistant_read_file(path: String) -> Result<String, String> {
 
 /// 写入文件
 #[tauri::command]
-pub async fn assistant_write_file(path: String, content: String) -> Result<String, String> {
+pub async fn assistant_write_file(
+    window: tauri::WebviewWindow,
+    path: String,
+    content: String,
+) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("当前窗口无权写入本地文件".into());
+    }
     audit_log("WRITE", &format!("{path} ({} bytes)", content.len()));
     if let Some(parent) = PathBuf::from(&path).parent() {
         tokio::fs::create_dir_all(parent)
@@ -1911,9 +1926,18 @@ fn validate_cz_play_page_url(raw: &str) -> Result<reqwest::Url, String> {
 #[cfg(target_os = "windows")]
 fn extract_cz_media_url(raw: &str) -> Option<String> {
     let normalized = raw.replace("\\/", "/");
-    let pattern =
+    let quoted_pattern =
+        regex::Regex::new(r#"[\"'](https?://[^\"'<>]+\.(?:m3u8|mp4|mpd)(?:[^\"'<>]*))[\"']"#)
+            .ok()?;
+    let bare_pattern =
         regex::Regex::new(r#"https?://[^\s'\"<>\\]+\.(?:m3u8|mp4|mpd)(?:[^\s'\"<>\\]*)?"#).ok()?;
-    for candidate in pattern.find_iter(&normalized).map(|m| m.as_str()) {
+    let quoted = quoted_pattern
+        .captures_iter(&normalized)
+        .filter_map(|captures| captures.get(1).map(|value| value.as_str()));
+    let bare = bare_pattern
+        .find_iter(&normalized)
+        .map(|value| value.as_str());
+    for candidate in quoted.chain(bare) {
         if let Ok(parsed) = reqwest::Url::parse(candidate) {
             if let Some(wrapped) = parsed.query_pairs().find_map(|(key, value)| {
                 (key == "url" && is_direct_media_url(&value)).then(|| value.into_owned())
@@ -1929,6 +1953,127 @@ fn extract_cz_media_url(raw: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
+fn decrypt_cz_aes_payload(raw: &str) -> Result<Option<String>, String> {
+    let pattern = regex::Regex::new(
+        r#"(?s)var\s+[A-Za-z0-9_$]+\s*=\s*[\"']([A-Za-z0-9+/=]{32,})[\"']\s*;\s*var\s+[A-Za-z0-9_$]+\s*=\s*function\s+dncry.*?Utf8\.parse\(\s*[\"']([^\"']{16})[\"']\s*\).*?Utf8\.parse\(\s*[\"']?([A-Za-z0-9]{16})[\"']?\s*\)"#,
+    )
+    .map_err(|e| format!("厂长 AES 解析器初始化失败: {e}"))?;
+    let Some(captures) = pattern.captures(raw) else {
+        return Ok(None);
+    };
+    let cipher_text = captures.get(1).map(|m| m.as_str()).unwrap_or_default();
+    let key = captures.get(2).map(|m| m.as_str()).unwrap_or_default();
+    let iv = captures.get(3).map(|m| m.as_str()).unwrap_or_default();
+    let cipher = general_purpose::STANDARD
+        .decode(cipher_text)
+        .map_err(|_| "厂长 AES 密文不是有效 Base64".to_string())?;
+    let plain = Aes128CbcDec::new_from_slices(key.as_bytes(), iv.as_bytes())
+        .map_err(|_| "厂长 AES key 或 IV 长度无效".to_string())?
+        .decrypt_padded_vec_mut::<Pkcs7>(&cipher)
+        .map_err(|_| "厂长 AES 页面解密失败，源站结构可能已变化".to_string())?;
+    String::from_utf8(plain)
+        .map(Some)
+        .map_err(|_| "厂长 AES 解密结果不是 UTF-8".to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn extract_cz_iframe_url(raw: &str, base: &reqwest::Url) -> Result<Option<reqwest::Url>, String> {
+    let pattern = regex::Regex::new(r#"(?i)<iframe[^>]+src=[\"']([^\"']+)[\"']"#)
+        .map_err(|e| format!("厂长 iframe 解析器初始化失败: {e}"))?;
+    let Some(candidate) = pattern
+        .captures(raw)
+        .and_then(|captures| captures.get(1))
+        .map(|value| value.as_str().replace("&amp;", "&"))
+    else {
+        return Ok(None);
+    };
+    let parsed = base
+        .join(candidate.trim())
+        .map_err(|_| "厂长 iframe 地址无效".to_string())?;
+    Ok(Some(parsed))
+}
+
+#[cfg(target_os = "windows")]
+fn validate_cz_media_url(raw: &str) -> Result<String, String> {
+    let parsed = reqwest::Url::parse(raw).map_err(|_| "厂长媒体地址无效".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err("厂长媒体地址仅允许 HTTP(S)".into());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("厂长媒体地址不允许包含身份信息".into());
+    }
+    let host = parsed
+        .host_str()
+        .unwrap_or_default()
+        .trim_matches(['[', ']']);
+    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".local") {
+        return Err("厂长媒体地址禁止指向本机或局域网".into());
+    }
+    if host
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(super::is_non_public_ip)
+    {
+        return Err("厂长媒体地址禁止指向私网或保留 IP".into());
+    }
+    if !is_direct_media_url(parsed.as_str()) {
+        return Err("厂长页面未返回受支持的媒体格式".into());
+    }
+    Ok(parsed.to_string())
+}
+
+#[cfg(target_os = "windows")]
+async fn resolve_cz_html_media(raw: &str, base: &reqwest::Url) -> Result<Option<String>, String> {
+    if let Some(media) = extract_cz_media_url(raw) {
+        let media = validate_cz_media_url(&media)?;
+        super::validate_public_http_url(&media).await?;
+        return Ok(Some(media));
+    }
+    if let Some(plain) = decrypt_cz_aes_payload(raw)? {
+        let media = extract_cz_media_url(&plain)
+            .ok_or_else(|| "厂长 AES 解密成功，但未找到媒体地址".to_string())?;
+        let media = validate_cz_media_url(&media)?;
+        super::validate_public_http_url(&media).await?;
+        return Ok(Some(media));
+    }
+    let Some(iframe) = extract_cz_iframe_url(raw, base)? else {
+        return Ok(None);
+    };
+    super::validate_public_http_url(iframe.as_str()).await?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| format!("厂长 iframe HTTP 客户端初始化失败: {e}"))?;
+    let response = client
+        .get(iframe.clone())
+        .header("Accept", "text/html,application/xhtml+xml")
+        .header("Referer", base.as_str())
+        .send()
+        .await
+        .map_err(|e| format!("厂长 iframe 请求失败: {e}"))?;
+    if response.status().is_redirection() {
+        return Err("厂长 iframe 返回重定向，已按安全策略停止跟随".into());
+    }
+    if !response.status().is_success() {
+        return Err(format!("厂长 iframe HTTP {}", response.status()));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("厂长 iframe 响应读取失败: {e}"))?;
+    if bytes.len() > 1_048_576 {
+        return Err("厂长 iframe 响应过大".into());
+    }
+    let html = String::from_utf8_lossy(&bytes);
+    let media = extract_cz_media_url(&html)
+        .ok_or_else(|| "厂长 iframe 未返回受支持的媒体地址".to_string())?;
+    let media = validate_cz_media_url(&media)?;
+    super::validate_public_http_url(&media).await?;
+    Ok(Some(media))
+}
+
+#[cfg(target_os = "windows")]
 fn is_direct_media_url(raw: &str) -> bool {
     reqwest::Url::parse(raw)
         .ok()
@@ -1939,35 +2084,132 @@ fn is_direct_media_url(raw: &str) -> bool {
         })
 }
 
+#[cfg(all(test, target_os = "windows"))]
+mod cz_movie_tests {
+    use super::{
+        decrypt_cz_aes_payload, extract_cz_iframe_url, extract_cz_media_url, validate_cz_media_url,
+        validate_cz_play_page_url,
+    };
+
+    fn aes_page(cipher_text: &str, key: &str) -> String {
+        format!(
+            r#"<script>var payload = "{cipher_text}"; var decode = function dncry() {{
+              var key = CryptoJS.enc.Utf8.parse("{key}");
+              var iv = CryptoJS.enc.Utf8.parse("1234567890983456");
+            }};</script>"#
+        )
+    }
+
+    #[test]
+    fn decrypts_factory_aes_payload_and_preserves_full_hls_url() {
+        let page = aes_page(
+            "ruk6rdouXK1okGItGix7TMQ2OVBxF8CQ2Pr/cORcqD9h3nB00Srz2t+5KSGue+VsMsh+fTkLi0Wh2KlW+RPibTViSSdQTtEbEywuNnoGZuo=",
+            "e752eedeab6ac5ab",
+        );
+        let plain = decrypt_cz_aes_payload(&page)
+            .expect("AES fixture should decrypt")
+            .expect("AES fixture should be detected");
+
+        assert_eq!(
+            extract_cz_media_url(&plain).as_deref(),
+            Some("https://media.example.com/中文 电影/index.m3u8?token=abc")
+        );
+    }
+
+    #[test]
+    fn rejects_aes_payload_with_wrong_key_or_padding() {
+        let page = aes_page("4IKXx/w9r4PAwsi3u3Nyrg==", "0000000000000000");
+        let error = decrypt_cz_aes_payload(&page).expect_err("wrong key must fail closed");
+        assert!(error.contains("解密失败"));
+    }
+
+    #[test]
+    fn resolves_relative_iframe_against_factory_play_page() {
+        let base = reqwest::Url::parse("https://www.4kcz.com/v_play/example.html").unwrap();
+        let iframe = extract_cz_iframe_url(
+            r#"<iframe src='../player/index.html?id=1&amp;token=two'></iframe>"#,
+            &base,
+        )
+        .unwrap()
+        .expect("iframe should be detected");
+
+        assert_eq!(
+            iframe.as_str(),
+            "https://www.4kcz.com/player/index.html?id=1&token=two"
+        );
+    }
+
+    #[test]
+    fn factory_entrypoint_is_https_host_and_path_allowlisted() {
+        assert!(validate_cz_play_page_url("https://4kcz.com/v_play/example.html").is_ok());
+        for url in [
+            "http://4kcz.com/v_play/example.html",
+            "https://4kcz.com/movie/90.html",
+            "https://evil.example/v_play/example.html",
+        ] {
+            assert!(validate_cz_play_page_url(url).is_err(), "accepted {url}");
+        }
+    }
+
+    #[test]
+    fn media_validation_rejects_credentials_private_hosts_and_unknown_formats() {
+        for url in [
+            "https://user:secret@media.example/video.mp4",
+            "http://127.0.0.1/video.mp4",
+            "http://192.168.1.2/video.m3u8",
+            "https://media.example/video.exe",
+        ] {
+            assert!(validate_cz_media_url(url).is_err(), "accepted {url}");
+        }
+        assert!(validate_cz_media_url("https://media.example/video.mpd?token=short").is_ok());
+    }
+}
+
 /// Resolve one factory play page. The caller cannot choose headers or another
 /// host; failures remain explicit when the upstream anti-bot challenge blocks us.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn cz_resolve_play_url(url: String) -> Result<String, String> {
-    validate_cz_play_page_url(&url)?;
+    let page_url = validate_cz_play_page_url(&url)?;
 
-    if let Ok(html) = vod_fetch(url.clone(), Some(30)).await {
-        if let Some(media) = extract_cz_media_url(&html) {
-            return Ok(media);
-        }
-    }
+    let direct_error = match vod_fetch(url.clone(), Some(30)).await {
+        Ok(html) => match resolve_cz_html_media(&html, &page_url).await {
+            Ok(Some(media)) => return Ok(media),
+            Ok(None) => Some("直连页面未包含可识别媒体".to_string()),
+            Err(error) => Some(error),
+        },
+        Err(error) => Some(format!("厂长播放页请求失败: {error}")),
+    };
 
-    if let Ok(rendered) = fetch_page_js(url).await {
-        if let Some(media) = extract_cz_media_url(&rendered) {
-            return Ok(media);
-        }
-        if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&rendered) {
-            if let Some(media) = entries
-                .iter()
-                .filter_map(|entry| entry.get("url").and_then(|value| value.as_str()))
-                .find(|candidate| is_direct_media_url(candidate))
-            {
-                return Ok(media.to_string());
+    let mut rendered_error = None;
+    match fetch_page_js(url).await {
+        Ok(rendered) => {
+            if let Some(media) = extract_cz_media_url(&rendered) {
+                let media = validate_cz_media_url(&media)?;
+                super::validate_public_http_url(&media).await?;
+                return Ok(media);
             }
+            if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(&rendered) {
+                if let Some(media) = entries
+                    .iter()
+                    .filter_map(|entry| entry.get("url").and_then(|value| value.as_str()))
+                    .find(|candidate| is_direct_media_url(candidate))
+                {
+                    let media = validate_cz_media_url(media)?;
+                    super::validate_public_http_url(&media).await?;
+                    return Ok(media);
+                }
+            }
+            rendered_error = Some("浏览器渲染结果未包含可识别媒体".to_string());
         }
+        Err(error) => rendered_error = Some(format!("浏览器渲染失败: {error}")),
     }
 
-    Err("厂长资源当前被源站防护拦截，未取得可验证的媒体地址；请稍后重试".into())
+    Err(format!(
+        "厂长播放地址解析失败（{}；{}）",
+        direct_error.unwrap_or_else(|| "直连解析失败".to_string()),
+        rendered_error.unwrap_or_else(|| "浏览器渲染失败".to_string())
+    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -2448,7 +2690,13 @@ pub async fn open_xingshu_skill_security_window(app: tauri::AppHandle) -> Result
 
 /// 列出目录内容
 #[tauri::command]
-pub async fn assistant_list_dir(path: String) -> Result<String, String> {
+pub async fn assistant_list_dir(
+    window: tauri::WebviewWindow,
+    path: String,
+) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("当前窗口无权读取本地目录".into());
+    }
     let mut entries = tokio::fs::read_dir(&path)
         .await
         .map_err(|e| format!("读取目录失败 {path}: {e}"))?;
@@ -2887,9 +3135,10 @@ pub async fn save_recording(
 /// fetch_live_sources - 深度递归扫描：无论资源在任何页任何层都必须扫到
 #[tauri::command]
 pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, String> {
+    super::validate_public_http_url(&url).await?;
     let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
         .timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -3675,19 +3924,24 @@ pub async fn fetch_live_sources(url: String) -> Result<Vec<serde_json::Value>, S
 /// navigate_window — 导航指定窗口到新 URL
 #[tauri::command]
 pub async fn navigate_window(
+    window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     label: String,
     url: String,
 ) -> Result<(), String> {
     use tauri::Manager;
-    if let Some(win) = app.get_webview_window(&label) {
-        win.eval(format!(
-            "window.location.href = '{}';",
-            url.replace("'", "\\'")
-        ))
-        .map_err(|e| format!("Navigate failed: {}", e))?;
+    if window.label() != label {
+        return Err("当前窗口无权导航其他窗口".into());
     }
-    Ok(())
+    let parsed = url::Url::parse(url.trim()).map_err(|_| "Navigate URL 无效".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("Navigate 仅允许 HTTP(S) URL".into());
+    }
+    let win = app
+        .get_webview_window(&label)
+        .ok_or_else(|| format!("窗口不存在: {label}"))?;
+    win.navigate(parsed)
+        .map_err(|e| format!("Navigate failed: {e}"))
 }
 
 /// get_window_by_label — 检查窗口是否存在

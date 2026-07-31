@@ -1087,6 +1087,7 @@ async function fetchTextWithFallback(url, options = {}) {
   const proxyTimeoutMs = Math.min(timeoutMs, options.proxyTimeoutMs || 9000)
   const headers = options.headers || { 'Accept': 'text/html,application/xhtml+xml' }
   const cacheKey = 'text:' + url
+  const failures = []
   const cached = getCachedMovieRequest(cacheKey)
   if (cached) return cached
   if (isBadMovieUrl(cacheKey) && !options.forceRetry) throw new Error('最近请求失败，暂时跳过慢源')
@@ -1106,6 +1107,7 @@ async function fetchTextWithFallback(url, options = {}) {
         }
       }
     } catch (tauriError) {
+      failures.push('Tauri: ' + (tauriError?.message || tauriError || 'request failed'))
       console.warn('[fetchTextWithFallback] Tauri 优先请求失败:', tauriError?.message || tauriError, url.slice(0, 80))
     }
   }
@@ -1124,6 +1126,7 @@ async function fetchTextWithFallback(url, options = {}) {
     setCachedMovieRequest(cacheKey, result)
     return result
   } catch (directError) {
+    failures.push('Direct: ' + (directError?.message || directError || 'request failed'))
     console.warn('[fetchTextWithFallback] 直接请求失败:', directError?.message || directError, url.slice(0, 80))
   }
 
@@ -1141,6 +1144,7 @@ async function fetchTextWithFallback(url, options = {}) {
       }
     }
   } catch (tauriError) {
+    failures.push('Tauri: ' + (tauriError?.message || tauriError || 'request failed'))
     console.warn('[fetchTextWithFallback] Tauri 请求失败:', tauriError?.message || tauriError, url.slice(0, 80))
   }
 
@@ -1159,13 +1163,16 @@ async function fetchTextWithFallback(url, options = {}) {
         setCachedMovieRequest(cacheKey, result)
         return result
       }
+      failures.push('Proxy ' + new URL(proxy).host + ': HTTP ' + resp.status)
     } catch (proxyError) {
+      failures.push('Proxy ' + new URL(proxy).host + ': ' + (proxyError?.message || proxyError || 'request failed'))
       console.warn('[fetchTextWithFallback] 代理请求失败:', proxy, proxyError?.message || proxyError)
     }
   }
 
   markBadMovieUrl(cacheKey)
-  throw new Error('Failed to fetch')
+  const detail = [...new Set(failures)].join('; ')
+  throw new Error(detail ? `影视源请求失败（${detail}）` : '影视源请求失败')
 }
 
 // 普通请求（非 JSON）
@@ -1885,54 +1892,34 @@ function initApp(el) {
 
   // 模式切换（library / vod / crawl）
   let mode = 'library'
-  let missavUnlocked = false
-  const showMissavPasswordDialog = () => new Promise(resolve => {
+  let restrictedContentConfirmed = false
+  const showRestrictedContentDialog = () => new Promise(resolve => {
     const existing = el.querySelector('.tvbox-auth-overlay')
     if (existing) existing.remove()
     const overlay = document.createElement('div')
     overlay.className = 'tvbox-auth-overlay'
     overlay.innerHTML = '<div class="tvbox-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="missav-auth-title">' +
       '<div class="tvbox-auth-glow"></div>' +
-      '<div class="tvbox-auth-head"><div class="tvbox-auth-logo">影</div><div><div class="tvbox-auth-kicker">ENTERPRISE ACCESS</div><h3 id="missav-auth-title">精品专区授权验证</h3><p>该功能为高级内容入口，请输入授权密码后继续访问。</p></div></div>' +
-      '<div class="tvbox-auth-field"><label for="missav-auth-password">访问密码</label><div class="tvbox-auth-input-wrap"><input id="missav-auth-password" type="password" autocomplete="current-password" placeholder="请输入精品专区访问密码" /><button type="button" id="missav-auth-toggle">显示</button></div><div class="tvbox-auth-error" id="missav-auth-error"></div></div>' +
-      '<div class="tvbox-auth-foot"><button type="button" class="tvbox-auth-cancel" id="missav-auth-cancel">取消</button><button type="button" class="tvbox-auth-submit" id="missav-auth-submit">验证进入</button></div>' +
+      '<div class="tvbox-auth-head"><div class="tvbox-auth-logo">影</div><div><div class="tvbox-auth-kicker">RESTRICTED CONTENT</div><h3 id="missav-auth-title">受限内容确认</h3><p>该区域可能包含仅适合成年人的内容。请确认你已年满 18 周岁，并遵守所在地法律法规。</p></div></div>' +
+      '<div class="tvbox-auth-foot"><button type="button" class="tvbox-auth-cancel" id="missav-auth-cancel">返回</button><button type="button" class="tvbox-auth-submit" id="missav-auth-submit">我已年满 18 周岁</button></div>' +
       '</div>'
     el.appendChild(overlay)
-    const input = overlay.querySelector('#missav-auth-password')
-    const error = overlay.querySelector('#missav-auth-error')
     const finish = value => { overlay.remove(); resolve(value) }
-    const submit = () => {
-      if (input.value === '2552667173') finish(true)
-      else {
-        error.textContent = '密码错误，请核对后重新输入'
-        overlay.classList.remove('tvbox-auth-shake')
-        void overlay.offsetWidth
-        overlay.classList.add('tvbox-auth-shake')
-        input.select()
-      }
-    }
-    overlay.querySelector('#missav-auth-submit').addEventListener('click', submit)
+    overlay.querySelector('#missav-auth-submit').addEventListener('click', () => finish(true))
     overlay.querySelector('#missav-auth-cancel').addEventListener('click', () => finish(false))
-    overlay.querySelector('#missav-auth-toggle').addEventListener('click', e => {
-      const showing = input.type === 'text'
-      input.type = showing ? 'password' : 'text'
-      e.currentTarget.textContent = showing ? '显示' : '隐藏'
-      input.focus()
-    })
     overlay.addEventListener('click', e => { if (e.target === overlay) finish(false) })
     overlay.addEventListener('keydown', e => {
-      if (e.key === 'Enter') submit()
       if (e.key === 'Escape') finish(false)
     })
-    setTimeout(() => input.focus(), 30)
+    setTimeout(() => overlay.querySelector('#missav-auth-submit')?.focus(), 30)
   })
-  const ensureMissavUnlocked = async () => {
-    try { if (sessionStorage.getItem('tulu-missav-unlocked') === '1') return true } catch {}
-    if (missavUnlocked) return true
-    const ok = await showMissavPasswordDialog()
+  const ensureRestrictedContentConfirmed = async () => {
+    try { if (sessionStorage.getItem('tulu-restricted-content-confirmed') === '1') return true } catch {}
+    if (restrictedContentConfirmed) return true
+    const ok = await showRestrictedContentDialog()
     if (ok) {
-      missavUnlocked = true
-      try { sessionStorage.setItem('tulu-missav-unlocked', '1') } catch {}
+      restrictedContentConfirmed = true
+      try { sessionStorage.setItem('tulu-restricted-content-confirmed', '1') } catch {}
       return true
     }
     return false
@@ -1941,7 +1928,7 @@ function initApp(el) {
     btn.addEventListener('click', async () => {
       let newMode = btn.dataset.mode
       if (newMode === 'live' || newMode === 'tvboxjson') newMode = 'library'
-      if ((newMode === 'missav' || newMode === 'myavlive') && !await ensureMissavUnlocked()) return
+      if ((newMode === 'missav' || newMode === 'myavlive') && !await ensureRestrictedContentConfirmed()) return
       if (newMode === mode) return
       mode = newMode
       el.classList.toggle('tvbox-library-mode', mode === 'library')

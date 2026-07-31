@@ -5,7 +5,7 @@
 // 模块已加载，取消 splash 超时回退（防止假阳性的 "页面加载失败" 提示）
 if (window._splashTimer) { clearTimeout(window._splashTimer); window._splashTimer = null }
 
-import { registerRoute, initRouter, navigate, setDefaultRoute } from './router.js'
+import { initRouter, navigate, setDefaultRoute } from './router.js'
 import { renderSidebar, openMobileSidebar } from './components/sidebar.js'
 import { initTheme } from './lib/theme.js'
 import { detectOpenclawStatus, isOpenclawReady, isUpgrading, isGatewayRunning, isGatewayForeign, onGatewayChange, startGatewayPoll, boostGatewayPolling, onGuardianGiveUp, resetAutoRestart, loadActiveInstance, getActiveInstance, onInstanceChange, getGatewayHealthState, refreshGatewayStatus } from './lib/app-state.js'
@@ -529,33 +529,6 @@ async function boot() {
   try { await initEngineManager() } catch (e) { console.warn('[boot] initEngineManager 失败:', e) }
   initKernelGates()
 
-  // 先注册所有路由，立即渲染 UI（不等后端检测）
-  registerRoute('/dashboard', () => import('./pages/dashboard.js'))
-  registerRoute('/chat', () => import('./pages/chat.js'))
-  registerRoute('/chat-debug', () => import('./pages/chat-debug.js'))
-  registerRoute('/services', () => import('./pages/services.js'))
-  registerRoute('/logs', () => import('./pages/logs.js'))
-  registerRoute('/models', () => import('./pages/models.js'))
-  registerRoute('/agents', () => import('./pages/agents.js'))
-  registerRoute('/route-graph', () => Promise.all([
-    import('./pages/route-graph.js'),
-    import('./style/route-graph.css'),
-  ]).then(([page]) => page))
-  registerRoute('/agency-agents', () => import('./pages/agency-agents.js'))
-  registerRoute('/agent-detail', () => import('./pages/agent-detail.js'))
-  registerRoute('/gateway', () => import('./pages/gateway.js'))
-  registerRoute('/memory', () => import('./pages/memory.js'))
-  registerRoute('/skills', () => import('./pages/skills.js'))
-  registerRoute('/miaogu-verify', () => import('./pages/miaogu-verify.js'))
-  registerRoute('/weiyan-verify', () => import('./pages/weiyan-verify.js'))
-  registerRoute('/movie-tool', () => import('./pages/movie-tool.js'))
-  registerRoute('/openmontage', () => import('./pages/openmontage.js'))
-  registerRoute('/cli-anything', () => import('./pages/cli-anything.js'))
-  registerRoute('/browser-use', () => import('./pages/browser-use.js'))
-  registerRoute('/music-player', () => import('./pages/music-player.js'))
-  registerRoute('/xingshu-chat', () => import('./pages/xingshu-chat.js'))
-  registerRoute('/xingshu-skill-center', () => import('./pages/xingshu-skill-center.js'))
-  registerRoute('/xingshu-skill-security', () => import('./pages/xingshu-skill-security.js'))
 // ── 龙虾办公室状态同步 ─────────────────────────────────
 // 供所有页面调用的全局函数，写入 localStorage 供龙虾窗口轮询
 const LOBSTER_PHASE_PRESETS = {
@@ -686,18 +659,6 @@ window.addEventListener('lobster-work-end', () => {
   const detail = normalizeLobsterDetail({ phase: 'done' })
   window.updateLobsterState('idle', detail.message, { phase: detail.phase, emoji: detail.emoji })
 })
-  registerRoute('/lobster-office', () => import('./pages/lobster-office.js'))
-  registerRoute('/coming-soon', () => import('./pages/coming-soon.js'))
-  registerRoute('/security', () => import('./pages/security.js'))
-  registerRoute('/about', () => import('./pages/about.js'))
-  registerRoute('/assistant', () => import('./pages/assistant.js'))
-  registerRoute('/setup', () => import('./pages/setup.js'))
-  registerRoute('/channels', () => import('./pages/channels.js'))
-  registerRoute('/cron', () => import('./pages/cron.js'))
-  registerRoute('/usage', () => import('./pages/usage.js'))
-  registerRoute('/communication', () => import('./pages/communication.js'))
-  registerRoute('/settings', () => import('./pages/settings.js'))
-
   renderSidebar(sidebar)
   initRouter()
 

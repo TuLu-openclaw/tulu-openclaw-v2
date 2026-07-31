@@ -5,5 +5,5 @@
   "remote": {
     "urls": ["https://www.aiyu.jx.cn/*"]
   },
-  "permissions": ["core:default"]
+  "permissions": []
 }

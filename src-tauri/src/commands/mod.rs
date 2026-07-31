@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
@@ -217,12 +217,126 @@ fn should_bypass_proxy_host(host: &str) -> bool {
     false
 }
 
+pub(crate) fn is_non_public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            v4.is_unspecified()
+                || v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_multicast()
+                || octets[0] == 0
+                || octets[0] >= 240
+                || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+                || (octets[0] == 198 && (18..=19).contains(&octets[1]))
+        }
+        IpAddr::V6(v6) => {
+            v6.is_unspecified()
+                || v6.is_loopback()
+                || v6.is_unique_local()
+                || v6.is_unicast_link_local()
+                || v6.is_multicast()
+                || matches!(v6.to_ipv4_mapped(), Some(v4) if is_non_public_ip(IpAddr::V4(v4)))
+                || v6 == Ipv6Addr::LOCALHOST
+        }
+    }
+}
+
+fn is_tun_fake_ip(ip: IpAddr) -> bool {
+    matches!(ip, IpAddr::V4(v4) if {
+        let octets = v4.octets();
+        octets[0] == 198 && (18..=19).contains(&octets[1])
+    })
+}
+
+/// Validate an outbound HTTP target before a privileged Tauri command requests it.
+/// DNS is resolved here so hostnames that point at local/private ranges are rejected too.
+pub async fn validate_public_http_url(raw: &str) -> Result<reqwest::Url, String> {
+    if raw.len() > 4096 {
+        return Err("URL 过长".into());
+    }
+    let parsed = reqwest::Url::parse(raw).map_err(|_| "URL 无效".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("仅允许 HTTP(S) URL".into());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("URL 不允许包含身份信息".into());
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "URL 缺少主机名".to_string())?;
+    let lower = host.trim_matches(['[', ']']).to_ascii_lowercase();
+    if lower == "localhost" || lower.ends_with(".localhost") || lower.ends_with(".local") {
+        return Err("拒绝访问本机或局域网地址".into());
+    }
+    if let Ok(ip) = lower.parse::<IpAddr>() {
+        if is_non_public_ip(ip) {
+            return Err("拒绝访问本机、私网或保留地址".into());
+        }
+        return Ok(parsed);
+    }
+
+    let port = parsed
+        .port_or_known_default()
+        .ok_or_else(|| "URL 端口无效".to_string())?;
+    let host_for_lookup = lower.clone();
+    let resolved = tokio::task::spawn_blocking(move || {
+        (host_for_lookup.as_str(), port)
+            .to_socket_addrs()
+            .map(|items| items.map(|item| item.ip()).collect::<Vec<_>>())
+    })
+    .await
+    .map_err(|_| "DNS 解析任务失败".to_string())?
+    .map_err(|e| format!("DNS 解析失败: {e}"))?;
+    // TUN clients commonly synthesize 198.18.0.0/15 results for public hostnames.
+    // Literal addresses in that range remain rejected above; only DNS results may
+    // use the synthetic range so VPN users are not locked out of public services.
+    if resolved.is_empty()
+        || resolved
+            .into_iter()
+            .any(|ip| is_non_public_ip(ip) && !is_tun_fake_ip(ip))
+    {
+        return Err("拒绝访问解析到本机、私网或保留地址的目标".into());
+    }
+    Ok(parsed)
+}
+
 /// 构建 HTTP 客户端，use_proxy=true 时走用户配置的代理
 pub fn build_http_client(
     timeout: Duration,
     user_agent: Option<&str>,
 ) -> Result<reqwest::Client, String> {
     build_http_client_opt(timeout, user_agent, true)
+}
+
+/// Build a client for caller-controlled URLs. Redirects stay disabled so the
+/// command can validate every next hop before any additional request is sent.
+pub fn build_http_client_no_redirect(
+    timeout: Duration,
+    user_agent: Option<&str>,
+) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder()
+        .timeout(timeout)
+        .gzip(true)
+        .redirect(reqwest::redirect::Policy::none());
+    if let Some(ua) = user_agent {
+        builder = builder.user_agent(ua);
+    }
+    if let Some(proxy_url) = configured_proxy_url() {
+        let proxy_value = proxy_url.clone();
+        builder = builder.proxy(reqwest::Proxy::custom(move |url| {
+            let host = url.host_str().unwrap_or("");
+            if should_bypass_proxy_host(host) {
+                None
+            } else {
+                Some(proxy_value.clone())
+            }
+        }));
+    }
+    builder.build().map_err(|e| e.to_string())
 }
 
 /// 构建模型请求用的 HTTP 客户端

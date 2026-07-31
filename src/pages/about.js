@@ -732,44 +732,20 @@ const PROJECTS = [
 function renderProjects(page) {
   const el = page.querySelector('#projects-list')
   el.innerHTML = `
-    <div class="locked-section" id="projects-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
-      <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
-      <input type="password" id="projects-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button id="projects-unlock-btn" type="button" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
-      <div id="projects-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
-    </div>
-    <div id="projects-content" style="display:none"></div>
-  `
-
-  function unlockProjects() {
-    const pwd = el.querySelector('#projects-pwd').value
-    if (pwd === '2552667173') {
-      el.querySelector('#projects-locked').style.display = 'none'
-      const content = el.querySelector('#projects-content')
-      content.style.display = ''
-      content.innerHTML = PROJECTS.map(p => `
-        <div class="service-card">
-          <div class="service-info">
-            <div>
-              <div class="service-name">${p.name}</div>
-              <div class="service-desc">${p.desc}</div>
-            </div>
-          </div>
-          <div class="service-actions">
-            <a class="btn btn-secondary btn-sm" href="${p.url}" target="_blank" rel="noopener">GitHub</a>
+    ${PROJECTS.map(p => `
+      <div class="service-card">
+        <div class="service-info">
+          <div>
+            <div class="service-name">${p.name}</div>
+            <div class="service-desc">${p.desc}</div>
           </div>
         </div>
-      `).join('')
-    } else {
-      const err = el.querySelector('#projects-error')
-      err.style.display = ''
-      setTimeout(() => { err.style.display = 'none' }, 2000)
-    }
-  }
-
-  el.querySelector('#projects-unlock-btn')?.addEventListener('click', unlockProjects)
-  el.querySelector('#projects-pwd')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockProjects() })
+        <div class="service-actions">
+          <a class="btn btn-secondary btn-sm" href="${p.url}" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    `).join('')}
+  `
 }
 
 const LINKS = [
@@ -779,68 +755,24 @@ const LINKS = [
 function renderContribute(page) {
   const el = page.querySelector('#contribute-section')
   el.innerHTML = `
-    <div class="locked-section" id="contribute-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
-      <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
-      <input type="password" id="contribute-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button id="contribute-unlock-btn" type="button" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
-      <div id="contribute-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
-    </div>
-    <div id="contribute-content" style="display:none">
+    <div>
       <div style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:12px">${t('about.contributeDesc')}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
         <span style="color:var(--text-tertiary);font-size:var(--font-size-sm)">${t('about.officialSupport')}</span>
       </div>
     </div>
   `
-
-  function unlockContribute() {
-    const pwd = el.querySelector('#contribute-pwd').value
-    if (pwd === '2552667173') {
-      el.querySelector('#contribute-locked').style.display = 'none'
-      el.querySelector('#contribute-content').style.display = ''
-    } else {
-      const err = el.querySelector('#contribute-error')
-      err.style.display = ''
-      setTimeout(() => { err.style.display = 'none' }, 2000)
-    }
-  }
-
-  el.querySelector('#contribute-unlock-btn')?.addEventListener('click', unlockContribute)
-  el.querySelector('#contribute-pwd')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockContribute() })
 }
 
 function renderLinks(page) {
   const el = page.querySelector('#links-list')
   el.innerHTML = `
-    <div class="locked-section" id="links-locked" style="text-align:center;padding:24px;color:var(--text-tertiary)">
-      <div style="font-size:32px;margin-bottom:8px">🔒</div>
-      <div style="font-size:var(--font-size-sm);margin-bottom:12px">${t('about.projectLocked')}</div>
-      <input type="password" id="links-pwd" placeholder="${t('about.projectUnlockPlaceholder')}" style="padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);width:180px;text-align:center">
-      <button id="links-unlock-btn" type="button" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:var(--font-size-sm);cursor:pointer;margin-left:4px">${t('about.projectUnlockButton')}</button>
-      <div id="links-error" style="color:var(--error);font-size:var(--font-size-xs);margin-top:6px;display:none">${t('about.projectPasswordError')}</div>
-    </div>
-    <div id="links-content" style="display:none">
+    <div>
       <div style="display:flex;flex-wrap:wrap;gap:var(--space-sm)">
         ${LINKS.map(l => `<a class="btn ${l.primary ? 'btn-primary' : 'btn-secondary'} btn-sm" href="${l.url}" target="_blank" rel="noopener">${l.label}</a>`).join('')}
       </div>
     </div>
   `
-
-  function unlockLinks() {
-    const pwd = el.querySelector('#links-pwd').value
-    if (pwd === '2552667173') {
-      el.querySelector('#links-locked').style.display = 'none'
-      el.querySelector('#links-content').style.display = ''
-    } else {
-      const err = el.querySelector('#links-error')
-      err.style.display = ''
-      setTimeout(() => { err.style.display = 'none' }, 2000)
-    }
-  }
-
-  el.querySelector('#links-unlock-btn')?.addEventListener('click', unlockLinks)
-  el.querySelector('#links-pwd')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockLinks() })
 }
 
 function renderCompany(page) {
